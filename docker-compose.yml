@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    container_name: test_energy_container
+    working_dir: /code/src
+    command: ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
+    volumes:
+      - .:/code
+    ports:
+      - "8888:8888"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  stonkapp:

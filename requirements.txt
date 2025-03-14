@@ -1,0 +1,14 @@
+jupyter
+numpy
+pandas
+polars
+gymnasium
+opencv-python-headless
+stable-baselines3
+imageio
+datasets
+transformers
+tqdm
+matplotlib
+requests
+
