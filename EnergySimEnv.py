@@ -6,6 +6,9 @@ from gymnasium import spaces, error, utils
 import numpy as np
 import pandas as pd
 
+from batterydeg import static_degradation, dynamic_degradation
+
+
 class SolarBatteryEnv(gym.Env):
     """
     A gym environment for solar-battery-grid energy management.
@@ -26,6 +29,7 @@ class SolarBatteryEnv(gym.Env):
         max_step=1000,
         render_mode=None,
         battery_deg_cost=0.02  # cost per kWh cycled in degradation
+        correction_interval = 100 # steps before dynamic correction
     ):
         super(SolarBatteryEnv, self).__init__()
         self.df = df.reset_index(drop=True)
@@ -37,7 +41,12 @@ class SolarBatteryEnv(gym.Env):
         self.max_grid_flow = max_grid_flow
         self.render_mode = render_mode
         self.battery_deg_cost = battery_deg_cost
+        self.correction_interval = correction_interval
 
+        # Initialize state of charge history for dynamic correction
+        self.soc_history = []
+        self.correction_factor = 1.0
+        
         # Action space (2D): battery_flow, grid_flow (both normalized to [-1,1])
         self.action_space = spaces.Box(
             low=np.array([-1.0, -1.0]),
@@ -55,6 +64,8 @@ class SolarBatteryEnv(gym.Env):
     def reset(self, seed=None, **kwargs):
         self.current_step = 0
         self.battery_level = min(self.battery_capacity, self.battery_level)
+        self.soc_history = []
+        self.correction_factor = 1.0
         return self._next_observation(), {}
 
     def _next_observation(self):
@@ -104,6 +115,24 @@ class SolarBatteryEnv(gym.Env):
 
         # Battery degradation penalty based on the absolute energy flow
         battery_deg_penalty = self.battery_deg_cost * abs(battery_flow)
+
+        # Battery degradation penalty based on the static degradation model
+        Id = abs(battery_flow / self.battery_capacity)
+        Ich = abs(battery_flow / self.battery_capacity)
+        SoC = (self.battery_level / self.battery_capacity) * 100
+        DoD = abs(battery_flow / self.battery_capacity) * 100
+
+        battery_deg_penalty = static_degradation(Id, Ich, SoC, DoD, self.correction_factor)
+
+        # Save SoC history for dynamic correction
+        self.soc_history.append(SoC)
+
+        # Perform dynamic correction at specified intervals
+        if self.current_step > 0 and self.current_step % self.correction_interval == 0:
+            dynamic_deg = dynamic_degradation(self.soc_history)
+            static_deg = sum(static_degradation(abs(flow / self.battery_capacity), abs(flow / self.battery_capacity), soc, abs(flow / self.battery_capacity) * 100, self.correction_factor) for flow, soc in zip(self.soc_history, self.soc_history))
+            self.correction_factor = dynamic_deg / static_deg if static_deg > 0 else 1.0
+            self.soc_history = []  # Reset SoC history for the next interval
 
         # Final reward accounts for grid energy cost/profit, battery degradation, and any violation penalty.
         reward = grid_reward - battery_deg_penalty - violation_penalty
