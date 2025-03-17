@@ -9,6 +9,8 @@ Ich_nom = 0.125  # Nominal charge current (C-rate)
 SoC_nom = 50  # Nominal state of charge (%)
 DoD_nom = 100  # Nominal depth of discharge (%)
 
+# The following parameters are derived from "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management (2015)" 
+# by V. Muenzel, J. D. Hoog, M. Brazil, A. Vishwanath, and S. Kalya-naraman
 # Normalized cycle life functions
 def nCL_Id(Id):
     e, f, g, h = 4464, -0.1382, -1519, -0.4305

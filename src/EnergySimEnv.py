@@ -68,17 +68,21 @@ class SolarBatteryEnv(gym.Env):
         self.correction_factor = 1.0
         return self._next_observation(), {}
 
-    def _next_observation(self):
+    def _next_observation(self, grid_flow=0.0):
         row = self.df.iloc[self.current_step]
         # Example columns: 'SolarGen', 'HouseLoad'
         solar = row['SolarGen']
         load = row['HouseLoad']
+        predicted_solar = row['PredictedSolar']
+        predicted_load = row['PredictedLoad']
 
         obs = np.array([
             solar,
             load,
+            predicted_solar,
+            predicted_load,
             self.battery_level,
-            0.0  # placeholder for net grid flow, if desired
+            grid_flow  # placeholder for net grid flow, if desired
         ], dtype=np.float32)
         return obs
 
@@ -92,6 +96,20 @@ class SolarBatteryEnv(gym.Env):
         solar = row['SolarGen']
         load = row['HouseLoad']
         energy_price = row['EnergyPrice']  # time-based energy price in $/kWh
+
+        # Energy conservation check:
+        # When battery_flow > 0, it charges the battery (energy sink),
+        # whereas battery_flow < 0 represents battery discharge (energy source).
+        battery_charge = max(0, battery_flow)
+        battery_discharge = max(0, -battery_flow)
+        supply = solar + grid_flow + battery_discharge
+        demand = load + battery_charge
+        tolerance = 1e-3
+        if abs(supply - demand) > tolerance:
+            large_penalty = 1000  # large negative reward for energy conservation violation
+            obs = self._next_observation()
+            # Terminate the episode
+            return obs, -large_penalty, True, False, {"energy_conservation_violation": True}
         
         # Update battery with physical limits
         new_battery_level = self.battery_level + battery_flow
@@ -144,12 +162,7 @@ class SolarBatteryEnv(gym.Env):
         terminated = False
 
         # Next observation includes energy price, e.g.:
-        obs = np.array([
-            solar,
-            load,
-            self.battery_level,
-            energy_price
-        ], dtype=np.float32)
+        obs = self._next_observation(grid_flow)
 
         return obs, reward, terminated, truncated, {}
 
