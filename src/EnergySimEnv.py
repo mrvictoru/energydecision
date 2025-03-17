@@ -96,83 +96,89 @@ class SolarBatteryEnv(gym.Env):
         return obs
 
     def step(self, action):
-        # Scale action values to actual flow rates
-        battery_flow = np.clip(action[0] * self.max_battery_flow, -self.max_battery_flow, self.max_battery_flow)
-        grid_flow = np.clip(action[1] * self.max_grid_flow, -self.max_grid_flow, self.max_grid_flow)
+        # ----- Scale Actions -----
+        battery_flow = np.clip(
+            action[0] * self.max_battery_flow,
+            -self.max_battery_flow,
+            self.max_battery_flow
+        )
+        grid_flow = np.clip(
+            action[1] * self.max_grid_flow,
+            -self.max_grid_flow,
+            self.max_grid_flow
+        )
 
-        # Get current environmental data
+        # ----- Retrieve Current Data -----
         row = self.df.iloc[self.current_step]
         solar = row['SolarGen']
         load = row['HouseLoad']
-        energy_price = row['EnergyPrice']  # time-based energy price in $/kWh
+        energy_price = row['EnergyPrice']
 
-        # Energy conservation check:
-        # When battery_flow > 0, it charges the battery (energy sink),
-        # whereas battery_flow < 0 represents battery discharge (energy source).
+        # ----- Energy Conservation Check -----
+        # Determine energy going into or out of battery
         battery_charge = max(0, battery_flow)
         battery_discharge = max(0, -battery_flow)
         supply = solar + grid_flow + battery_discharge
         demand = load + battery_charge
         tolerance = 1e-3
+
         if abs(supply - demand) > tolerance:
-            large_penalty = 1000  # large negative reward for energy conservation violation
+            # Return a large negative reward and flag violation
+            large_penalty = 1000
             obs = self._next_observation()
-            # Terminate the episode
             return obs, -large_penalty, True, False, {"energy_conservation_violation": True}
-        
-        # Update battery with physical limits
+
+        # ----- Update Battery Level & Check Constraints -----
         new_battery_level = self.battery_level + battery_flow
         new_battery_level = np.clip(new_battery_level, 0, self.battery_capacity)
-        battery_constraint_violation = (
+
+        is_constraint_violated = (
             (self.battery_level == self.battery_capacity and battery_flow > 0) or
             (self.battery_level == 0 and battery_flow < 0)
         )
-        if battery_constraint_violation:
-            # Severe penalty if physical constraint is violated
-            violation_penalty = 100
-        else:
-            violation_penalty = 0
+        violation_penalty = 100 if is_constraint_violated else 0
 
-        # Compute grid cost/profit:
-        # If grid_flow > 0 then energy is imported (cost incurred),
-        # if grid_flow < 0 then energy is exported (profit earned)
-        grid_cost = grid_flow * energy_price  
-        # Negative grid_cost (from export) results in a reward boost.
+        # ----- Compute Grid Reward -----
+        grid_cost = grid_flow * energy_price  # cost if import, profit if export
         grid_reward = -grid_cost
 
-        # Battery degradation penalty based on the absolute energy flow
-        battery_deg_penalty = self.battery_deg_cost * abs(battery_flow)
-
-        # Battery degradation penalty based on the static degradation model
+        # ----- Calculate Battery Degradation Penalty -----
+        soc = (self.battery_level / self.battery_capacity) * 100  # State of Charge in %
+        DoD = abs(battery_flow / self.battery_capacity) * 100    # Depth of Discharge in %
         Id = abs(battery_flow / self.battery_capacity)
         Ich = abs(battery_flow / self.battery_capacity)
-        SoC = (self.battery_level / self.battery_capacity) * 100
-        DoD = abs(battery_flow / self.battery_capacity) * 100
 
-        battery_deg_penalty = static_degradation(Id, Ich, SoC, DoD, self.correction_factor)
+        battery_deg_penalty = static_degradation(Id, Ich, soc, DoD, self.correction_factor)
 
-        # Save SoC history for dynamic correction
-        self.soc_history.append(SoC)
+        # Record SoC for dynamic degradation correction
+        self.soc_history.append(soc)
 
-        # Perform dynamic correction at specified intervals
+        # ----- Dynamic Degradation Correction -----
         if self.current_step > 0 and self.current_step % self.correction_interval == 0:
             dynamic_deg = dynamic_degradation(self.soc_history)
-            static_deg = sum(static_degradation(abs(flow / self.battery_capacity), abs(flow / self.battery_capacity), soc, abs(flow / self.battery_capacity) * 100, self.correction_factor) for flow, soc in zip(self.soc_history, self.soc_history))
+            static_deg = sum(
+                static_degradation(
+                    abs(flow / self.battery_capacity),
+                    abs(flow / self.battery_capacity),
+                    soc_val,
+                    abs(flow / self.battery_capacity) * 100,
+                    self.correction_factor
+                )
+                for flow, soc_val in zip(self.soc_history, self.soc_history)
+            )
             self.correction_factor = dynamic_deg / static_deg if static_deg > 0 else 1.0
-            self.soc_history = []  # Reset SoC history for the next interval
+            self.soc_history = []  # Reset history after correction
 
-        # Final reward accounts for grid energy cost/profit, battery degradation, and any violation penalty.
+        # ----- Compute Final Reward -----
         reward = grid_reward - battery_deg_penalty - violation_penalty
 
-        # Advance simulation
+        # ----- Advance Simulation Step -----
         self.battery_level = new_battery_level
         self.current_step += 1
         truncated = (self.current_step >= self.max_step)
         terminated = False
 
-        # Next observation includes energy price, e.g.:
         obs = self._next_observation(grid_flow)
-
         return obs, reward, terminated, truncated, {}
 
     def render(self, **kwargs):
