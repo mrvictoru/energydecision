@@ -18,14 +18,23 @@ class SolarBatteryEnv(gym.Env):
     Observation: [Time, SolarGen, HouseLoad, BatteryLevel, GridFlow, ...]
     """
     metadata = {'render.modes': ['human', 'file', 'None']}
+    
+    # The environment expects a DataFrame with columns:
+    # - 'Time': timestamp
+    # - 'SolarGen': solar energy generation (kWh)
+    # - 'HouseLoad': household energy consumption (kWh)
+    # - 'EnergyPrice': time-based energy price ($/kWh)
+    # - 'PredictedSolar': forecasted solar generation (kWh)
+    # - 'PredictedLoad': forecasted household load (kWh)
+    # - 'EnergyPrice': time-based energy price ($/kWh)
 
     def __init__(
         self,
         df,
-        battery_capacity=10.0,
-        max_battery_flow=2.0,
-        max_grid_flow=2.0,
-        init_battery_level=5.0,
+        battery_capacity=10.0, #kWh
+        max_battery_flow=2.0, #kW
+        max_grid_flow=2.0, #kW
+        init_battery_level=5.0, #kWh
         max_step=1000,
         render_mode=None,
         battery_deg_cost=0.02,  # cost per kWh cycled in degradation
