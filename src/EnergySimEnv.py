@@ -28,7 +28,7 @@ class SolarBatteryEnv(gym.Env):
         init_battery_level=5.0,
         max_step=1000,
         render_mode=None,
-        battery_deg_cost=0.02  # cost per kWh cycled in degradation
+        battery_deg_cost=0.02,  # cost per kWh cycled in degradation
         correction_interval = 100 # steps before dynamic correction
     ):
         super(SolarBatteryEnv, self).__init__()
