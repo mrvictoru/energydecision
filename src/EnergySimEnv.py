@@ -23,13 +23,14 @@ class SolarBatteryEnv(gym.Env):
     metadata = {'render.modes': ['human', 'file', 'None']}
     
     # The environment expects a DataFrame with columns:
-    # - 'Time': timestamp
+    # - 'Time': timestamp (as index)
     # - 'SolarGen': solar energy generation (kWh)
     # - 'HouseLoad': household energy consumption (kWh)
-    # - 'EnergyPrice': time-based energy price ($/kWh)
     # - 'PredictedSolar': forecasted solar generation (kWh)
     # - 'PredictedLoad': forecasted household load (kWh)
-    # - 'EnergyPrice': time-based energy price ($/kWh)
+    # - 'ImportEnergyPrice': time-based energy price ($/kWh)
+    # - 'ExportEnergyPrice': time-based energy price ($/kWh)
+    # - Additional columns can be included for custom observations
 
     def __init__(
         self,
@@ -52,7 +53,7 @@ class SolarBatteryEnv(gym.Env):
         self.max_battery_flow = max_battery_flow
         self.max_grid_flow = max_grid_flow
         self.render_mode = render_mode
-        self.battery_deg_cost = battery_deg_cost
+        self.battery_life_cost = battery_life_cost
         self.correction_interval = correction_interval
 
         # Initialize state of charge history for dynamic correction
@@ -65,11 +66,11 @@ class SolarBatteryEnv(gym.Env):
             high=np.array([1.0]),
             dtype=np.float32
         )
-        # Observation: [SolarGen, HouseLoad, predicted solar, predicted_load, BatteryLevel, grid flow, EnergyPrice]
+        num_features = self.df.shape[1] + 2  # adding grid flow and battery level
         self.observation_space = spaces.Box(
             low=0.0,
             high=np.inf,
-            shape=(7,),
+            shape=(num_features,),
             dtype=np.float32
         )
 
@@ -83,15 +84,9 @@ class SolarBatteryEnv(gym.Env):
     def _next_observation(self, grid_flow=0.0):
         row = self.df.iloc[self.current_step]
 
-        obs = np.array([
-            row['SolarGen'],
-            row['HouseLoad'],
-            row['PredictedSolar'],
-            row['PredictedLoad'],
-            self.battery_level,
-            grid_flow,  # placeholder for net grid flow, if desired
-            row['EnergyPrice']
-        ], dtype=np.float32)
+        row_array = row.to_numpy(dtype=np.float32)
+        extra_features = np.array([self.battery_level, grid_flow], dtype=np.float32)
+        obs = np.concatenate((row_array, extra_features))
         return obs
 
     def step(self, action):
@@ -170,7 +165,7 @@ class SolarBatteryEnv(gym.Env):
             self.soc_history = []  # Reset history after correction
 
         # ----- Compute Final Reward -----
-        reward = grid_reward - battery_deg_penalty*self.battery_deg_cost
+        reward = grid_reward - battery_deg_penalty*self.battery_life_cost
 
         # ----- Advance Simulation Step -----
         self.battery_level = new_battery_level
