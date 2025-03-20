@@ -1,6 +1,5 @@
 import math
 import numpy as np
-from scipy.signal import find_peaks
 
 # Parameters (example values, adjust as needed)
 CL_nom = 3650  # Nominal cycle life
@@ -46,11 +45,31 @@ CL_nom = 3650  # Nominal cycle life
 B = 5.0        # Battery capacity (kWh)
 DoD_nom = 100  # Nominal depth of discharge (%)
 
+def custom_find_peaks(data: np.array) -> np.array:
+    """
+    Finds indices of local peaks in a 1D NumPy array.
+    A peak is defined as a point where the derivative changes from positive to negative.
+    """
+    # Compute the difference between consecutive elements.
+    diff = np.diff(data)
+    # Identify where the diff changes sign (from positive to negative).
+    peaks = np.where((np.hstack([diff, 0]) > 0) & (np.hstack([0, diff]) < 0))[0]
+    return peaks
+
+def custom_find_troughs(data: np.array) -> np.array:
+    """
+    Finds indices of local troughs in a 1D NumPy array.
+    A trough is defined as a point where the derivative changes from negative to positive.
+    """
+    diff = np.diff(data)
+    troughs = np.where((np.hstack([diff, 0]) < 0) & (np.hstack([0, diff]) > 0))[0]
+    return troughs
+
 # Rain-flow cycle counting (optimized for np.array soc_history)
 def rainflow_counting(soc_history: np.array):
     # soc_history is expected to be a numpy array
-    peaks, _ = find_peaks(soc_history)
-    troughs, _ = find_peaks(-soc_history)
+    peaks = custom_find_peaks(soc_history)
+    troughs = custom_find_troughs(soc_history)
     extrema = np.sort(np.concatenate((peaks, troughs)))
     
     # Ensure an even number of extrema by discarding the last one if necessary

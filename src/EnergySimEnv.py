@@ -45,7 +45,7 @@ class SolarBatteryEnv(gym.Env):
         correction_interval = 100 # steps before dynamic correction
     ):
         super(SolarBatteryEnv, self).__init__()
-        self.df = df.reset_index(drop=True)
+        self.df = df
         self.current_step = 0
         self.max_step = max_step
         self.battery_capacity = battery_capacity
