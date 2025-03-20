@@ -4,7 +4,7 @@ from gymnasium.envs.registration import register
 from gymnasium import spaces, error, utils
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from batterydeg import static_degradation, dynamic_degradation
 
@@ -34,10 +34,10 @@ class SolarBatteryEnv(gym.Env):
 
     def __init__(
         self,
-        df,
+        df: pl.DataFrame,
         battery_capacity=13.5, #kWh (default Tesla Powerwall 2)
         max_battery_flow=5.0, #kW
-        max_grid_flow=5.0, #kW
+        max_grid_flow=7.0, #kW
         init_battery_level=5.0, #kWh
         max_step=1000,
         render_mode=None,
@@ -74,6 +74,11 @@ class SolarBatteryEnv(gym.Env):
             dtype=np.float32
         )
 
+    # Helper method to retrieve a row from the Polars DataFrame as a dictionary.
+    def _get_row(self, index: int) -> dict:
+        row_tuple = self.df.row(index)  # Polars returns a tuple for the row.
+        return dict(zip(self.df.columns, row_tuple))
+
     def reset(self, seed=None, **kwargs):
         self.current_step = 0
         self.battery_level = min(self.battery_capacity, self.battery_level)
@@ -82,9 +87,10 @@ class SolarBatteryEnv(gym.Env):
         return self._next_observation(), {}
 
     def _next_observation(self, grid_flow=0.0):
-        row = self.df.iloc[self.current_step]
-
-        row_array = row.to_numpy(dtype=np.float32)
+        # Retrieve the current row as a dictionary using Polars.
+        row = self._get_row(self.current_step)
+        # Convert the dictionary values to a numpy array.
+        row_array = np.array(list(row.values()), dtype=np.float32)
         extra_features = np.array([self.battery_level, grid_flow], dtype=np.float32)
         obs = np.concatenate((row_array, extra_features))
         return obs
@@ -107,10 +113,10 @@ class SolarBatteryEnv(gym.Env):
         new_battery_level = self.battery_level + battery_flow
 
         # ----- Retrieve Current Data -----
-        row = self.df.iloc[self.current_step]
+        row = self._get_row(self.current_step)
         solar = row['SolarGen']
         load = row['HouseLoad']
-        energy_price = row['EnergyPrice']
+        energy_price = row['ImportEnergyPrice'] if battery_flow >= 0 else row['ExportEnergyPrice']
 
         # ----- Determine battery charge and discharge -----
         battery_charge = max(0, battery_flow)
