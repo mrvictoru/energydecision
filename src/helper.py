@@ -1,0 +1,188 @@
+import polars as pl
+import re
+from datetime import datetime
+
+# Helper: parse a time string like "7am" or "7:30am" into minutes since midnight.
+def parse_time(time_str: str) -> int:
+    time_str = time_str.strip().lower()
+    try:
+        if ":" in time_str:
+            dt = datetime.strptime(time_str, "%I:%M%p")
+        else:
+            dt = datetime.strptime(time_str, "%I%p")
+    except Exception:
+        raise ValueError(f"Time format not recognized: {time_str}")
+    return dt.hour * 60 + dt.minute
+
+def transform_polars_df(
+    df: pl.DataFrame,
+    import_energy_price: float = 0.1,
+    export_energy_price: float = 0.05,
+    price_periods: str = None,  # Expects string in format "7am – 10am | 4pm – 9pm"
+    default_import_energy_price: float = 0.1,
+    default_export_energy_price: float = 0.05
+) -> pl.DataFrame:
+    """
+    Transforms an input Polars DataFrame into a format for the SolarBatteryEnv.
+    
+    Assumptions:
+      - The input dataframe has these known columns: 'Customer', 'Generator Capacity', 
+        'Postcode', 'Consumption Category', 'date', 'Row Quality'
+      - Other columns are time columns containing measurements.
+      - 'Consumption Category' indicates:
+            'GG' : solar production in kWh  -> mapped to SolarGen
+            'GC' : electricity consumption in kWh 
+            'CL' : off-peak consumption in kWh 
+        HouseLoad will be computed as the sum of 'GC' and 'CL'
+    
+    The resulting dataframe will have the following columns:
+      - 'Time': a datetime combining 'date' and the time from the unpivoted column name
+      - 'SolarGen': sum of GG values per time step
+      - 'HouseLoad': sum of GC and CL values per time step
+      - 'FutureSolar': defaulted to the next SolarGen
+      - 'FutureLoad': defaulted to the next HouseLoad
+      - 'ImportEnergyPrice': set based on time-of-day. If the time falls within any specified
+         period (if provided) uses import_energy_price; otherwise, default_import_energy_price.
+      - 'ExportEnergyPrice': set based on time-of-day. If the time falls within any specified
+         period (if provided) uses export_energy_price; otherwise, default_export_energy_price.
+    
+    Parameters:
+      df (pl.DataFrame): The input Polars dataframe.
+      import_energy_price (float): Price to assign for import energy during the period(s).
+      export_energy_price (float): Price to assign for export energy during the period(s).
+      price_periods (str, optional): Daily time periods (separated by "|") in a format such as 
+          "7am – 10am | 4pm – 9pm". If provided, custom prices will be applied in any of these intervals.
+      default_import_energy_price (float): Price to be used outside the specified period(s).
+      default_export_energy_price (float): Price to be used outside the specified period(s).
+      
+    Returns:
+      pl.DataFrame: The transformed dataframe.
+    """
+    # use regex to check if price_periods is in the correct format
+    if price_periods is not None:
+        if not re.match(r"(\d{1,2}(:\d{2})?[ap]m\s*–\s*\d{1,2}(:\d{2})?[ap]m\s*\|?\s*)+", price_periods):
+            raise ValueError("price_periods should be in the format '7am – 10am | 4pm – 9pm'")
+
+    # Define the known columns present in the input
+    known_cols = {'Customer', 'Generator Capacity', 'Postcode', 'Consumption Category', 'date', 'Row Quality'}
+
+    # check if the known columns are present in the input
+    if not all(col in df.columns for col in known_cols):
+        raise ValueError("Input DataFrame is missing required columns")
+
+    # Identify time columns (all columns not in known_cols)
+    time_cols = [col for col in df.columns if col not in known_cols]
+    
+    # Unpivot the dataframe so that all time columns become rows.
+    unpivoted = df.unpivot(index=["date", "Consumption Category"], on=time_cols,
+                           variable_name="time", value_name="measurement")
+
+    # Create a 'Time' column by concatenating 'date' and 'time'
+    unpivoted = unpivoted.with_columns(
+        (pl.col("date").cast(pl.Utf8) + " " + pl.col("time")).alias("Time")
+    )
+
+    # Convert the 'Time' column from string to datetime using the given format.
+    unpivoted = unpivoted.with_columns(
+        pl.col("Time").str.strptime(pl.Datetime, format="%d/%m/%Y %H:%M", strict=False)
+    )
+
+    # Remove rows where time conversion failed.
+    unpivoted = unpivoted.filter(pl.col("Time").is_not_null())
+
+    # Preaggregate: for each Time and Consumption Category, sum the measurements.
+    aggregated = unpivoted.group_by(["Time", "Consumption Category"]).agg(
+        pl.col("measurement").sum().alias("measurement")
+    )
+    
+    # Pivot the aggregated data so that each 'Consumption Category' becomes its own column.
+    pivot = aggregated.pivot(
+        index="Time",
+        on="Consumption Category",
+        values="measurement"
+    )
+    
+    # Create SolarGen from 'GG'
+    pivot = pivot.with_columns(
+        pl.col("GG").fill_null(0.0).alias("SolarGen")
+    )
+    
+    # Create HouseLoad by summing 'GC' and 'CL'
+    pivot = pivot.with_columns([
+        (pl.col("GC").fill_null(0.0) + pl.col("CL").fill_null(0.0)).alias("HouseLoad")
+    ])
+    
+    # Apply custom energy pricing based on the provided daily time periods.
+    if price_periods is not None:
+        # Extract minutes from the Time column.
+        pivot = pivot.with_columns(
+            (pl.col("Time").dt.hour() * 60 + pl.col("Time").dt.minute()).alias("minutes")
+        )
+        
+        # Parse the provided periods.
+        periods = []
+        for period in price_periods.split("|"):
+            period = period.strip()
+            # Split on the en-dash
+            period_parts = period.split("–")
+            if len(period_parts) != 2:
+                raise ValueError(f"Period format not recognized: {period}. Expected format like '7am – 10am'")
+            start_minutes = parse_time(period_parts[0])
+            end_minutes = parse_time(period_parts[1])
+            periods.append((start_minutes, end_minutes))
+        
+        # Build a condition that checks if the current minute falls within any of the periods.
+        condition = pl.lit(False)
+        for start, end in periods:
+            condition = condition | ((pl.col("minutes") >= start) & (pl.col("minutes") <= end))
+        
+        # Apply the custom prices when the condition is met.
+        pivot = pivot.with_columns([
+            pl.when(condition)
+              .then(import_energy_price)
+              .otherwise(default_import_energy_price)
+              .alias("ImportEnergyPrice"),
+            pl.when(condition)
+              .then(export_energy_price)
+              .otherwise(default_export_energy_price)
+              .alias("ExportEnergyPrice")
+        ])
+
+        # Remove the helper "minutes" column.
+        pivot = pivot.drop("minutes")
+    else:
+        pivot = pivot.with_columns([
+            pl.lit(import_energy_price).alias("ImportEnergyPrice"),
+            pl.lit(export_energy_price).alias("ExportEnergyPrice")
+        ])
+    
+    # Optionally drop original consumption category columns if they exist.
+    pivot = pivot.drop(["GG", "GC", "CL"])
+    
+    # Sort by Time.
+    pivot = pivot.sort("Time")
+
+    # Add future columns defaulting to next values
+    pivot = pivot.with_columns([
+        pl.col("SolarGen").shift(-1).alias("FutureSolar"),
+        pl.col("HouseLoad").shift(-1).alias("FutureLoad")
+    ])
+
+    # regroup the columns
+    pivot = pivot.select([
+        "Time", "SolarGen", "HouseLoad", "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice"
+    ])
+    
+    return pivot
+
+# Example usage:
+# import polars as pl
+# df_polars = pl.read_csv("path/to/your/data.csv")
+# solar_df_polars = transform_polars_df(
+#     df_polars,
+#     import_energy_price=0.15,
+#     export_energy_price=0.08,
+#     price_periods="7am – 10am | 4pm – 9pm",
+#     default_import_energy_price=0.1,
+#     default_export_energy_price=0.05
+# )
