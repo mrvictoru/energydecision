@@ -87,15 +87,22 @@ def rainflow_counting(soc_history: np.array):
 def normalized_cycle_life(DoD, avg_SoC):
     # Assume degradation increases with depth of discharge and deviates with SoC
     degradation_factor = (DoD / DoD_nom) ** 1.5 * (1 + 0.1 * abs(avg_SoC - 50) / 50)
+    if degradation_factor == 0:
+        return float('inf')
     return 1 / degradation_factor
 
 # Dynamic degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
-def dynamic_degradation(soc_history: np.array):
+def dynamic_degradation(soc_history: list):
+    # convert to numpy array
+    soc_history = np.array(soc_history)
     cycles = rainflow_counting(soc_history)
     total_degradation = 0
     for DoD, avg_SoC in cycles:
         nCL = normalized_cycle_life(DoD, avg_SoC)
-        degradation_per_cycle = 1 / (CL_nom * nCL)
+        if math.isinf(nCL):
+            degradation_per_cycle = 0
+        else:
+            degradation_per_cycle = 1 / (CL_nom * nCL)
         total_degradation += degradation_per_cycle
     return total_degradation
   

@@ -26,11 +26,11 @@ class SolarBatteryEnv(gym.Env):
     # - 'Timestamp': timestamp (as index)
     # - 'SolarGen': solar energy generation (kWh)
     # - 'HouseLoad': household energy consumption (kWh)
-    # - 'PredictedSolar': forecasted solar generation (kWh)
-    # - 'PredictedLoad': forecasted household load (kWh)
+    # - 'FutureSolar': forecasted solar generation (kWh)
+    # - 'FutureLoad': forecasted household load (kWh)
     # - 'ImportEnergyPrice': time-based energy price ($/kWh)
     # - 'ExportEnergyPrice': time-based energy price ($/kWh)
-    # - 'Time': original time column (for reference in datetime format)
+    # - 'Time': original time column (for reference in datetime format, should be dropped in obs)
     # - Additional columns can be included for custom observations
 
     def __init__(
@@ -67,7 +67,7 @@ class SolarBatteryEnv(gym.Env):
             high=np.array([1.0]),
             dtype=np.float32
         )
-        num_features = self.df.shape[1] + 2  # adding grid flow and battery level
+        num_features = self.df.shape[1] -1 + 2  # adding grid flow and battery level and removing 'Time'
         self.observation_space = spaces.Box(
             low=0.0,
             high=np.inf,
