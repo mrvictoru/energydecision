@@ -23,13 +23,14 @@ class SolarBatteryEnv(gym.Env):
     metadata = {'render.modes': ['human', 'file', 'None']}
     
     # The environment expects a DataFrame with columns:
-    # - 'Time': timestamp (as index)
+    # - 'Timestamp': timestamp (as index)
     # - 'SolarGen': solar energy generation (kWh)
     # - 'HouseLoad': household energy consumption (kWh)
     # - 'PredictedSolar': forecasted solar generation (kWh)
     # - 'PredictedLoad': forecasted household load (kWh)
     # - 'ImportEnergyPrice': time-based energy price ($/kWh)
     # - 'ExportEnergyPrice': time-based energy price ($/kWh)
+    # - 'Time': original time column (for reference in datetime format)
     # - Additional columns can be included for custom observations
 
     def __init__(
@@ -89,7 +90,8 @@ class SolarBatteryEnv(gym.Env):
     def _next_observation(self, grid_flow=0.0):
         # Retrieve the current row as a dictionary using Polars.
         row = self._get_row(self.current_step)
-        # Convert the dictionary values to a numpy array.
+        # Drop the 'Time' column and convert the remaining dictionary values to a numpy array.
+        row.pop('Time', None)  # Remove the 'Time' column if it exists.
         row_array = np.array(list(row.values()), dtype=np.float32)
         extra_features = np.array([self.battery_level, grid_flow], dtype=np.float32)
         obs = np.concatenate((row_array, extra_features))

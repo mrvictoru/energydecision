@@ -172,9 +172,14 @@ def transform_polars_df(
         pl.col("HouseLoad").shift(-1).alias("FutureLoad")
     ])
 
-    # regroup the columns
+    # Add a column with numerical timestamps while keeping the original Time column
+    pivot = pivot.with_columns(
+        pl.col("Time").dt.timestamp().alias("Timestamp")
+    )
+    
+    # Regroup the columns
     pivot = pivot.select([
-        "Time", "SolarGen", "HouseLoad", "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice"
+        "Timestamp", "SolarGen", "HouseLoad", "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice", "Time"
     ])
     
     return pivot
