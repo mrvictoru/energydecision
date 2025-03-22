@@ -27,7 +27,11 @@ def nCL_SoC_DoD(SoC, DoD):
 # Static multi-factor degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
 def static_degradation(Id, Ich, SoC, DoD, correction_factor = 1.0):
     nCL = correction_factor * (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC, DoD))
-    return 0.5 / (CL_nom * nCL)
+    denom = CL_nom * nCL
+    if abs(denom) < 1e-12:
+        return 0
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return 0.5 / denom
 
 """
 # Example usage

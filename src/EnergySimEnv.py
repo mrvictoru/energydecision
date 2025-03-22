@@ -159,16 +159,14 @@ class SolarBatteryEnv(gym.Env):
         # ----- Dynamic Degradation Correction -----
         if self.current_step > 0 and self.current_step % self.correction_interval == 0:
             dynamic_deg = dynamic_degradation(self.soc_history)
-            static_deg = sum(
-                static_degradation(
+            static_deg_list = [static_degradation(
                     abs(flow / self.battery_capacity),
                     abs(flow / self.battery_capacity),
                     soc_val,
                     abs(flow / self.battery_capacity) * 100,
                     self.correction_factor
-                )
-                for flow, soc_val in zip(self.soc_history, self.soc_history)
-            )
+                ) for flow, soc_val in zip(self.soc_history, self.soc_history)]
+            static_deg = np.sum(static_deg_list, dtype=np.float64)
             self.correction_factor = dynamic_deg / static_deg if static_deg > 0 else 1.0
             self.soc_history = []  # Reset history after correction
 

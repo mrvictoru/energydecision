@@ -171,6 +171,8 @@ def transform_polars_df(
         pl.col("SolarGen").shift(-1).alias("FutureSolar"),
         pl.col("HouseLoad").shift(-1).alias("FutureLoad")
     ])
+    # Remove last row to avoid NaN values in future columns
+    pivot = pivot.head(pivot.height - 1)
 
     # Add a column with numerical timestamps while keeping the original Time column
     pivot = pivot.with_columns(
