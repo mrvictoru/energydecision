@@ -43,7 +43,8 @@ class SolarBatteryEnv(gym.Env):
         max_step=1000,
         render_mode=None,
         battery_life_cost=15300,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
-        correction_interval = 100 # steps before dynamic correction
+        correction_interval = 100, # steps before dynamic correction
+        step_duration = 0.5 # duration of each step in hours (default half an hour)
     ):
         super(SolarBatteryEnv, self).__init__()
         self.df = df
@@ -52,10 +53,11 @@ class SolarBatteryEnv(gym.Env):
         self.battery_capacity = battery_capacity
         self.battery_level = init_battery_level
         self.max_battery_flow = max_battery_flow
-        self.max_grid_flow = max_grid_flow
+        self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
         self.battery_life_cost = battery_life_cost
         self.correction_interval = correction_interval
+        self.step_duration = step_duration
 
         # Initialize state of charge history for dynamic correction
         self.soc_history = []
@@ -96,60 +98,67 @@ class SolarBatteryEnv(gym.Env):
         extra_features = np.array([self.battery_level, grid_flow], dtype=np.float32)
         obs = np.concatenate((row_array, extra_features))
         return obs
+    
+    def get_observation_header(self):
+        row = self._get_row(0)
+        return list(row.keys()) + ['BatteryLevel', 'GridFlow']
 
     def step(self, action):
         # ----- Scale Actions -----
-        battery_flow = np.clip(
+        battery_flow_rate = np.clip(
             action[0] * self.max_battery_flow,
             -self.max_battery_flow,
             self.max_battery_flow
         )
 
+        # Convert power (kW) to energy (kWh) over the step duration.
+        battery_flow_energy = battery_flow_rate * self.step_duration
+
         # ----- Check if battery level can support battery flow action -----
-        if battery_flow < 0:  # Discharging action: ensure sufficient battery level
-            battery_flow = max(battery_flow, -self.battery_level)
+        if battery_flow_energy < 0:  # Discharging action: ensure sufficient battery level
+            battery_flow_energy = max(battery_flow_energy, -self.battery_level)
         else:  # Charging action: ensure battery does not exceed its capacity
-            battery_flow = min(battery_flow, self.battery_capacity - self.battery_level)
+            battery_flow_energy = min(battery_flow_energy, self.battery_capacity - self.battery_level)
 
         # ----- Update Battery Level & Check Constraints -----
-        new_battery_level = self.battery_level + battery_flow
+        new_battery_level = self.battery_level + battery_flow_energy
 
         # ----- Retrieve Current Data -----
         row = self._get_row(self.current_step)
         solar = row['SolarGen']
         load = row['HouseLoad']
-        energy_price = row['ImportEnergyPrice'] if battery_flow >= 0 else row['ExportEnergyPrice']
+        energy_price = row['ImportEnergyPrice'] if battery_flow_energy >= 0 else row['ExportEnergyPrice']
 
         # ----- Determine battery charge and discharge -----
-        battery_charge = max(0, battery_flow)
-        battery_discharge = max(0, -battery_flow)
+        battery_charge = max(0, battery_flow_energy)
+        battery_discharge = max(0, -battery_flow_energy)
 
         # ----- Compute grid_flow automatically -----
         demand = load + battery_charge
         supply = solar + battery_discharge
-        grid_flow_needed = demand - supply  # If positive, importing; if negative, exporting
+        grid_energy_needed = demand - supply  # If positive, importing; if negative, exporting
 
         # Clip the grid flow if needed and flag a violation penalty if limits are exceeded
-        grid_violation_penalty = VIOLATION_PENALTY if abs(grid_flow_needed) > self.max_grid_flow else 0
-        grid_flow = np.clip(grid_flow_needed, -self.max_grid_flow, self.max_grid_flow)
+        grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy_needed) > self.max_grid_energy else 0
+        grid_energy = np.clip(grid_energy_needed, -self.max_grid_energy, self.max_grid_energy)
 
         # Check if this clipping breaks energy conservation
-        actual_supply = solar + battery_discharge + grid_flow
+        actual_supply = supply + grid_energy
         tolerance = 1e-2  # Tolerance for energy conservation check
         if abs(actual_supply - demand) > tolerance:
             # Return a large negative reward and flag violation
             large_penalty = 1000
-            obs = self._next_observation(grid_flow=grid_flow)
+            obs = self._next_observation(grid_flow=grid_energy)
             return obs, -large_penalty, True, False, {"energy_conservation_violation": True}
         
         # ----- Compute Grid Reward -----
-        grid_reward = -(grid_flow * energy_price) - grid_violation_penalty
+        grid_reward = -(grid_energy * energy_price) - grid_violation_penalty
 
         # ----- Calculate Battery Degradation Penalty -----
         soc = (self.battery_level / self.battery_capacity) * 100  # State of Charge in %
-        DoD = abs(battery_flow / self.battery_capacity) * 100    # Depth of Discharge in %
-        Id = abs(battery_flow / self.battery_capacity)
-        Ich = abs(battery_flow / self.battery_capacity)
+        DoD = abs(battery_flow_energy / self.battery_capacity) * 100    # Depth of Discharge in %
+        Id = abs(battery_flow_energy / self.battery_capacity)
+        Ich = abs(battery_flow_energy / self.battery_capacity)
 
         battery_deg_penalty = static_degradation(Id, Ich, soc, DoD, self.correction_factor)
 
@@ -173,20 +182,35 @@ class SolarBatteryEnv(gym.Env):
         # ----- Compute Final Reward -----
         reward = grid_reward - battery_deg_penalty*self.battery_life_cost
 
+        # Log reward calculation details
+        reward_info = {
+            "battery_charge": battery_charge,
+            "battery_discharge": battery_discharge,
+            "demand": demand,
+            "supply": supply,
+            "grid_energy": grid_energy,
+            "energy_price": energy_price,
+            "grid_violation_penalty": grid_violation_penalty,
+            "grid_reward": grid_reward,
+            "battery_deg_penalty": battery_deg_penalty,
+            "battery_life_cost": self.battery_life_cost,
+            "final_reward": reward
+        }
+
         # ----- Advance Simulation Step -----
         self.battery_level = new_battery_level
         self.current_step += 1
         truncated = (self.current_step >= self.max_step)
         terminated = False
 
-        obs = self._next_observation(grid_flow)
-        return obs, reward, terminated, truncated, {}
+        obs = self._next_observation(grid_flow=grid_energy)
+        return obs, reward, terminated, truncated, {"reward_info": reward_info}
 
     def render(self, **kwargs):
         if self.render_mode == 'human':
-            print(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh")
+            print(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh")
         elif self.render_mode == 'file':
             filename = kwargs.get('filename', 'render.txt')
             with open(filename, 'a+') as f:
-                f.write(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh\n")
+                f.write(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh\n")
 
