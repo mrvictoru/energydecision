@@ -103,6 +103,20 @@ class SolarBatteryEnv(gym.Env):
         row = self._get_row(0)
         return list(row.keys()) + ['BatteryLevel', 'GridFlow']
 
+    def _calculate_grid_reward(self, grid_energy, energy_price):
+        # If grid energy exceeds limits, add a violation penalty.
+        grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy) > self.max_grid_energy else 0
+        # Grid reward: negative cost for importing energy (or reward for exporting)
+        grid_reward = -(grid_energy * energy_price) - grid_violation_penalty
+        return grid_reward, grid_violation_penalty
+
+    def _calculate_battery_degradation(self, battery_flow_energy, soc):
+        DoD = abs(battery_flow_energy / self.battery_capacity) * 100    # Depth of Discharge in %
+        Id = abs(battery_flow_energy / self.battery_capacity)
+        Ich = abs(battery_flow_energy / self.battery_capacity)
+        battery_deg_penalty = static_degradation(Id, Ich, soc, DoD, self.correction_factor)
+        return battery_deg_penalty
+
     def step(self, action):
         # ----- Scale Actions -----
         battery_flow_rate = np.clip(
@@ -154,13 +168,10 @@ class SolarBatteryEnv(gym.Env):
         # ----- Compute Grid Reward -----
         grid_reward = -(grid_energy * energy_price) - grid_violation_penalty
 
-        # ----- Calculate Battery Degradation Penalty -----
-        soc = (self.battery_level / self.battery_capacity) * 100  # State of Charge in %
-        DoD = abs(battery_flow_energy / self.battery_capacity) * 100    # Depth of Discharge in %
-        Id = abs(battery_flow_energy / self.battery_capacity)
-        Ich = abs(battery_flow_energy / self.battery_capacity)
-
-        battery_deg_penalty = static_degradation(Id, Ich, soc, DoD, self.correction_factor)
+        # ----- Compute Rewards -----
+        grid_reward, grid_violation_penalty = self._calculate_grid_reward(grid_energy, energy_price)
+        soc = (self.battery_level / self.battery_capacity) * 100  # Battery state of charge (%) before updating.
+        battery_deg_penalty = self._calculate_battery_degradation(battery_flow_energy, soc)
 
         # Record SoC for dynamic degradation correction
         self.soc_history.append(soc)

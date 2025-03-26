@@ -11,4 +11,4 @@ transformers
 tqdm
 matplotlib
 requests
-
+optuna
