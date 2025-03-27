@@ -9,7 +9,7 @@ import polars as pl
 from batterydeg import static_degradation, dynamic_degradation
 
 # global variables
-VIOLATION_PENALTY = 100
+VIOLATION_PENALTY = -1000
 
 
 class SolarBatteryEnv(gym.Env):
@@ -69,7 +69,7 @@ class SolarBatteryEnv(gym.Env):
             high=np.array([1.0]),
             dtype=np.float32
         )
-        num_features = self.df.shape[1] -1 + 2  # adding grid flow and battery level and removing 'Time'
+        num_features = self.df.shape[1] -1 + 2  # adding battery level, battery degradation cost and removing 'Time'
         self.observation_space = spaces.Box(
             low=0.0,
             high=np.inf,
@@ -89,25 +89,27 @@ class SolarBatteryEnv(gym.Env):
         self.correction_factor = 1.0
         return self._next_observation(), {}
 
-    def _next_observation(self, grid_flow=0.0):
+    def _next_observation(self, battery_deg_penalty=0.0):
         # Retrieve the current row as a dictionary using Polars.
         row = self._get_row(self.current_step)
         # Drop the 'Time' column and convert the remaining dictionary values to a numpy array.
         row.pop('Time', None)  # Remove the 'Time' column if it exists.
         row_array = np.array(list(row.values()), dtype=np.float32)
-        extra_features = np.array([self.battery_level, grid_flow], dtype=np.float32)
+        extra_features = np.array([self.battery_level, battery_deg_penalty], dtype=np.float32)
         obs = np.concatenate((row_array, extra_features))
         return obs
     
     def get_observation_header(self):
         row = self._get_row(0)
-        return list(row.keys()) + ['BatteryLevel', 'GridFlow']
+        # drop the 'Time' column
+        row = {k: v for k, v in row.items() if k != 'Time'}
+        return list(row.keys()) + ['BatteryLevel', 'BatteryDegCost']
 
     def _calculate_grid_reward(self, grid_energy, energy_price):
         # If grid energy exceeds limits, add a violation penalty.
         grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy) > self.max_grid_energy else 0
         # Grid reward: negative cost for importing energy (or reward for exporting)
-        grid_reward = -(grid_energy * energy_price) - grid_violation_penalty
+        grid_reward = -(grid_energy * energy_price) + grid_violation_penalty
         return grid_reward, grid_violation_penalty
 
     def _calculate_battery_degradation(self, battery_flow_energy, soc):
@@ -161,20 +163,21 @@ class SolarBatteryEnv(gym.Env):
         tolerance = 1e-2  # Tolerance for energy conservation check
         if abs(actual_supply - demand) > tolerance:
             # Return a large negative reward and flag violation
-            large_penalty = 1000
-            obs = self._next_observation(grid_flow=grid_energy)
-            return obs, -large_penalty, True, False, {"energy_conservation_violation": True}
-        
-        # ----- Compute Grid Reward -----
-        grid_reward = -(grid_energy * energy_price) - grid_violation_penalty
+            obs = self._next_observation()
+            return obs, VIOLATION_PENALTY, True, False, {"energy_conservation_violation": True}
 
         # ----- Compute Rewards -----
         grid_reward, grid_violation_penalty = self._calculate_grid_reward(grid_energy, energy_price)
-        soc = (self.battery_level / self.battery_capacity) * 100  # Battery state of charge (%) before updating.
-        battery_deg_penalty = self._calculate_battery_degradation(battery_flow_energy, soc)
+        # SoC_avg = 100 · ((q_t) − 0.5 · (b_t) / B)
+        # where
+        # q_t is the battery energy (in kWh) before the operation,
+        # b_t is the energy discharged (kWh) , and
+        # B is the nominal battery capacity (kWh).
+        avg_soc = (self.battery_level-0.5*(-battery_flow_energy))/self.battery_capacity * 100 
+        battery_deg_penalty = self._calculate_battery_degradation(battery_flow_energy, avg_soc)
 
         # Record SoC for dynamic degradation correction
-        self.soc_history.append(soc)
+        self.soc_history.append(self.battery_level/self.battery_capacity * 100)
 
         # ----- Dynamic Degradation Correction -----
         if self.current_step > 0 and self.current_step % self.correction_interval == 0:
@@ -214,7 +217,7 @@ class SolarBatteryEnv(gym.Env):
         truncated = (self.current_step >= self.max_step)
         terminated = False
 
-        obs = self._next_observation(grid_flow=grid_energy)
+        obs = self._next_observation(battery_deg_penalty=battery_deg_penalty*self.battery_life_cost)
         return obs, reward, terminated, truncated, {"reward_info": reward_info}
 
     def render(self, **kwargs):
