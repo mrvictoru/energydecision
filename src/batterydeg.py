@@ -71,6 +71,45 @@ def custom_find_troughs(data: np.array) -> np.array:
 
 # Rain-flow cycle counting (optimized for np.array soc_history)
 def rainflow_counting(soc_history: np.array):
+    """
+    Compute rainflow cycle metrics for a state-of-charge (SoC) history array.
+    This function implements the rainflow counting algorithm to identify charge-discharge 
+    cycles from a given SoC time series. It first identifies local peaks and troughs in the 
+    data, pairs consecutive extrema to define cycles, and then computes the depth of discharge 
+    (DoD) and the average SoC for each cycle.
+    Detailed Steps:
+        1. Peak and Trough Detection:
+           - The function calls custom_find_peaks to obtain indices of local maxima.
+           - It calls custom_find_troughs to obtain indices of local minima.
+           - These indices represent potential turning points (extrema) in the SoC data.
+        2. Extrema Consolidation:
+           - The indices from peaks and troughs are concatenated and then sorted. This ensures
+             that the extrema are in chronological order, reflecting the actual progression 
+             of the SoC history.
+        3. Pairing Extrema:
+           - To ensure an even number of extrema (a necessity for pairing), if there's an odd 
+             number of extrema, the last one is discarded.
+           - The resulting list of indices is reshaped into pairs. Each pair of consecutive 
+             extrema represents one complete cycle of charge and discharge.
+        4. Cycle Metrics Calculation:
+           - The depth of discharge (DoD) for each cycle is computed as the absolute difference 
+             between the SoC values at the two extrema of the pair.
+           - The average SoC for each cycle is calculated as the arithmetic mean of the two 
+             corresponding SoC values.
+           - These metrics convey the cycle's severity and its midpoint charge level.
+        5. Result Assembly:
+           - The cycle DoDs and average SoCs are combined into a 2-column numpy array, where 
+             each row corresponds to one identified cycle.
+             - Column 1: Cycle DoD (absolute difference between the two associated SoC values).
+             - Column 2: Average SoC for that cycle.
+    Parameters:
+        soc_history (np.array): A numpy array representing the state-of-charge history over time. 
+                                It is expected to contain the SoC values that will be analyzed.
+    Returns:
+        np.ndarray: A 2-column array where each row corresponds to a cycle:
+                    - The first column contains the depth of discharge (DoD) for each cycle.
+                    - The second column contains the average state-of-charge (SoC) for that cycle.
+    """
     # soc_history is expected to be a numpy array
     peaks = custom_find_peaks(soc_history)
     troughs = custom_find_troughs(soc_history)
