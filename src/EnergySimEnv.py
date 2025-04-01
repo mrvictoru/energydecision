@@ -200,6 +200,7 @@ class SolarBatteryEnv(gym.Env):
         reward_info = {
             "battery_charge": battery_charge,
             "battery_discharge": battery_discharge,
+            "battery_level": new_battery_level,
             "demand": demand,
             "supply": supply,
             "grid_energy": grid_energy,
@@ -207,7 +208,7 @@ class SolarBatteryEnv(gym.Env):
             "grid_violation_penalty": grid_violation_penalty,
             "grid_reward": grid_reward,
             "battery_deg_penalty": battery_deg_penalty,
-            "battery_life_cost": self.battery_life_cost,
+            "correction_factor": self.correction_factor,
             "final_reward": reward
         }
 
