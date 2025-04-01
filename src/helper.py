@@ -119,8 +119,17 @@ def transform_polars_df(
     # Apply custom energy pricing based on the provided daily time periods.
     if price_periods is not None:
         # Extract minutes from the Time column.
-        pivot = pivot.with_columns(
-            (pl.col("Time").dt.hour() * 60 + pl.col("Time").dt.minute()).alias("minutes")
+        pivot = pivot.with_columns([
+            pl.col("Time")
+            .dt.strftime("%H")
+            .cast(pl.Int32)
+            .alias("hour"),
+            pl.col("Time")
+            .dt.strftime("%M")
+            .cast(pl.Int32)
+            .alias("minute")
+        ]).with_columns(
+            (pl.col("hour") * 60 + pl.col("minute")).alias("minutes")
         )
         
         # Parse the provided periods.
@@ -128,7 +137,7 @@ def transform_polars_df(
         for period in price_periods.split("|"):
             period = period.strip()
             # Split on the en-dash
-            period_parts = period.split("–")
+            period_parts = re.split(r"[-–]", period)
             if len(period_parts) != 2:
                 raise ValueError(f"Period format not recognized: {period}. Expected format like '7am – 10am'")
             start_minutes = parse_time(period_parts[0])
@@ -155,6 +164,7 @@ def transform_polars_df(
         # Remove the helper "minutes" column.
         pivot = pivot.drop("minutes")
     else:
+        print("No price periods provided, using default prices.")
         pivot = pivot.with_columns([
             pl.lit(import_energy_price).alias("ImportEnergyPrice"),
             pl.lit(export_energy_price).alias("ExportEnergyPrice")
