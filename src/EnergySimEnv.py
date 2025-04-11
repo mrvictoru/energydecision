@@ -38,7 +38,7 @@ class SolarBatteryEnv(gym.Env):
         df: pl.DataFrame,
         battery_capacity=13.5, #kWh (default Tesla Powerwall 2)
         max_battery_flow=5.0, #kW
-        max_grid_flow=7.0, #kW
+        max_grid_flow=10.0, #kW
         init_battery_level=5.0, #kWh
         max_step=1000,
         render_mode=None,
@@ -61,6 +61,7 @@ class SolarBatteryEnv(gym.Env):
 
         # Initialize state of charge history for dynamic correction
         self.soc_history = []
+        self.static_deg_history = []
         self.correction_factor = 1.0
         
         # Action space (1D): battery_flow(normalized to [-1,1])
@@ -86,6 +87,7 @@ class SolarBatteryEnv(gym.Env):
         self.current_step = 0
         self.battery_level = min(self.battery_capacity, self.battery_level)
         self.soc_history = []
+        self.static_deg_history = []
         self.correction_factor = 1.0
         return self._next_observation(), {}
 
@@ -97,6 +99,8 @@ class SolarBatteryEnv(gym.Env):
         row_array = np.array(list(row.values()), dtype=np.float32)
         extra_features = np.array([self.battery_level, battery_deg_penalty], dtype=np.float32)
         obs = np.concatenate((row_array, extra_features))
+        # the observation is a 1D array with the following features:
+        # [Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, BatteryLevel, BatteryDegCost]
         return obs
     
     def get_observation_header(self):
@@ -112,12 +116,12 @@ class SolarBatteryEnv(gym.Env):
         grid_reward = -(grid_energy * energy_price) + grid_violation_penalty
         return grid_reward, grid_violation_penalty
 
-    def _calculate_battery_degradation(self, battery_flow_energy, soc):
-        DoD = abs(battery_flow_energy / self.battery_capacity) * 100    # Depth of Discharge in %
-        Id = abs(battery_flow_energy / self.battery_capacity)
-        Ich = abs(battery_flow_energy / self.battery_capacity)
-        battery_deg_penalty = static_degradation(Id, Ich, soc, DoD, self.correction_factor)
-        return battery_deg_penalty
+    def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
+        # battery flow rate is negative for discharge and positive for charge
+        Id = abs(max(0, -battery_flow_rate) / self.battery_capacity) # discharge c rate
+        Ich = abs(max(0, battery_flow_rate) / self.battery_capacity)
+        battery_deg_penalty = static_degradation(Id, Ich, soc, DoD)
+        return battery_deg_penalty*self.correction_factor, battery_deg_penalty
 
     def step(self, action):
         # ----- Scale Actions -----
@@ -173,25 +177,21 @@ class SolarBatteryEnv(gym.Env):
         # q_t is the battery energy (in kWh) before the operation,
         # b_t is the energy discharged (kWh) , and
         # B is the nominal battery capacity (kWh).
-        avg_soc = (self.battery_level-0.5*(-battery_flow_energy))/self.battery_capacity * 100 
-        battery_deg_penalty = self._calculate_battery_degradation(battery_flow_energy, avg_soc)
+        avg_soc = (self.battery_level-0.5*(-battery_flow_energy))/self.battery_capacity * 100
+        DoD = abs(battery_flow_energy / self.battery_capacity) * 100  # Depth of discharge in percentage
+        battery_deg_penalty, static_deg = self._calculate_battery_degradation(DoD, battery_flow_rate, avg_soc)
 
         # Record SoC for dynamic degradation correction
         self.soc_history.append(self.battery_level/self.battery_capacity * 100)
-
+        self.static_deg_history.append(battery_deg_penalty)
+        dynamic_deg = -999 # Placeholder for dynamic degradation calculation
         # ----- Dynamic Degradation Correction -----
         if self.current_step > 0 and self.current_step % self.correction_interval == 0:
             dynamic_deg = dynamic_degradation(self.soc_history)
-            static_deg_list = [static_degradation(
-                    abs(flow / self.battery_capacity),
-                    abs(flow / self.battery_capacity),
-                    soc_val,
-                    abs(flow / self.battery_capacity) * 100,
-                    self.correction_factor
-                ) for flow, soc_val in zip(self.soc_history, self.soc_history)]
-            static_deg = np.sum(static_deg_list, dtype=np.float64)
+            static_deg = np.sum(self.static_deg_history, dtype=np.float64)
             self.correction_factor = dynamic_deg / static_deg if static_deg > 0 else 1.0
             self.soc_history = []  # Reset history after correction
+            self.static_deg_history = [] # Reset history after correction
 
         # ----- Compute Final Reward -----
         reward = grid_reward - battery_deg_penalty*self.battery_life_cost
@@ -208,6 +208,8 @@ class SolarBatteryEnv(gym.Env):
             "grid_violation_penalty": grid_violation_penalty,
             "grid_reward": grid_reward,
             "battery_deg_penalty": battery_deg_penalty,
+            "dynamic_deg": dynamic_deg,
+            "static_deg": static_deg,
             "correction_factor": self.correction_factor,
             "final_reward": reward
         }

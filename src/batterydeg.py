@@ -25,8 +25,8 @@ def nCL_SoC_DoD(SoC, DoD):
     return CL4(DoD, SoC) / CL4(DoD_nom, SoC_nom)
 
 # Static multi-factor degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
-def static_degradation(Id, Ich, SoC, DoD, correction_factor = 1.0):
-    nCL = correction_factor * (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC, DoD))
+def static_degradation(Id, Ich, SoC, DoD):
+    nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC, DoD))
     denom = CL_nom * nCL
     if abs(denom) < 1e-12:
         return 0
