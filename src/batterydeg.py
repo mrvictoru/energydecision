@@ -44,11 +44,6 @@ degradation = static_degradation(Id, Ich, SoC, DoD)
 print(f"Degradation for this cycle: {degradation:.6f}")
 """
 
-# Example parameters for degradation
-CL_nom = 3650  # Nominal cycle life
-B = 5.0        # Battery capacity (kWh)
-DoD_nom = 90  # Nominal depth of discharge (%)
-
 # Four-point rainflow counting algorithm
 def rainflow_counting(soc_profile: np.array):
     """
@@ -119,7 +114,7 @@ def dynamic_degradation(soc_profile):
     total_degradation = 0
     for SoC_avg, DoD in cycles:
         total_degradation += degradation_per_cycle(SoC_avg, DoD)
-    return total_degradation
+    return total_degradation, len(cycles)
   
 """
 # Example usage
