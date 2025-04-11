@@ -184,7 +184,7 @@ class SolarBatteryEnv(gym.Env):
         # Record SoC for dynamic degradation correction
         self.soc_history.append(self.battery_level/self.battery_capacity * 100)
         self.static_deg_history.append(battery_deg_penalty)
-        dynamic_deg = -999 # Placeholder for dynamic degradation calculation
+        dynamic_deg = -1 # Placeholder for dynamic degradation calculation
         # ----- Dynamic Degradation Correction -----
         if self.current_step > 0 and self.current_step % self.correction_interval == 0:
             dynamic_deg = dynamic_degradation(self.soc_history)

@@ -6,7 +6,7 @@ CL_nom = 3650  # Nominal cycle life
 Id_nom = 0.25  # Nominal discharge current (C-rate)
 Ich_nom = 0.125  # Nominal charge current (C-rate)
 SoC_nom = 50  # Nominal state of charge (%)
-DoD_nom = 100  # Nominal depth of discharge (%)
+DoD_nom = 90  # Nominal depth of discharge (%)
 
 # The following parameters are derived from "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management (2015)" 
 # by V. Muenzel, J. D. Hoog, M. Brazil, A. Vishwanath, and S. Kalya-naraman
@@ -47,106 +47,78 @@ print(f"Degradation for this cycle: {degradation:.6f}")
 # Example parameters for degradation
 CL_nom = 3650  # Nominal cycle life
 B = 5.0        # Battery capacity (kWh)
-DoD_nom = 100  # Nominal depth of discharge (%)
+DoD_nom = 90  # Nominal depth of discharge (%)
 
-def custom_find_peaks(data: np.array) -> np.array:
+# Four-point rainflow counting algorithm
+def rainflow_counting(soc_profile: np.array):
     """
-    Finds indices of local peaks in a 1D NumPy array.
-    A peak is defined as a point where the derivative changes from positive to negative.
+    Identifies charge-discharge cycles using the rainflow counting algorithm.
+    Returns a list of cycles with their DoD and SoC_avg.
     """
-    # Compute the difference between consecutive elements.
-    diff = np.diff(data)
-    # Identify where the diff changes sign (from positive to negative).
-    peaks = np.where((np.hstack([diff, 0]) > 0) & (np.hstack([0, diff]) < 0))[0]
-    return peaks
+    turning_points = []
+    for i in range(1, len(soc_profile) - 1):
+        if (soc_profile[i] > soc_profile[i - 1] and soc_profile[i] > soc_profile[i + 1]) or \
+           (soc_profile[i] < soc_profile[i - 1] and soc_profile[i] < soc_profile[i + 1]):
+            turning_points.append(soc_profile[i])
 
-def custom_find_troughs(data: np.array) -> np.array:
-    """
-    Finds indices of local troughs in a 1D NumPy array.
-    A trough is defined as a point where the derivative changes from negative to positive.
-    """
-    diff = np.diff(data)
-    troughs = np.where((np.hstack([diff, 0]) < 0) & (np.hstack([0, diff]) > 0))[0]
-    return troughs
-
-# Rain-flow cycle counting (optimized for np.array soc_history)
-def rainflow_counting(soc_history: np.array):
-    """
-    Compute rainflow cycle metrics for a state-of-charge (SoC) history array.
-    This function implements the rainflow counting algorithm to identify charge-discharge 
-    cycles from a given SoC time series. It first identifies local peaks and troughs in the 
-    data, pairs consecutive extrema to define cycles, and then computes the depth of discharge 
-    (DoD) and the average SoC for each cycle.
-    Detailed Steps:
-        1. Peak and Trough Detection:
-           - The function calls custom_find_peaks to obtain indices of local maxima.
-           - It calls custom_find_troughs to obtain indices of local minima.
-           - These indices represent potential turning points (extrema) in the SoC data.
-        2. Extrema Consolidation:
-           - The indices from peaks and troughs are concatenated and then sorted. This ensures
-             that the extrema are in chronological order, reflecting the actual progression 
-             of the SoC history.
-        3. Pairing Extrema:
-           - To ensure an even number of extrema (a necessity for pairing), if there's an odd 
-             number of extrema, the last one is discarded.
-           - The resulting list of indices is reshaped into pairs. Each pair of consecutive 
-             extrema represents one complete cycle of charge and discharge.
-        4. Cycle Metrics Calculation:
-           - The depth of discharge (DoD) for each cycle is computed as the absolute difference 
-             between the SoC values at the two extrema of the pair.
-           - The average SoC for each cycle is calculated as the arithmetic mean of the two 
-             corresponding SoC values.
-           - These metrics convey the cycle's severity and its midpoint charge level.
-        5. Result Assembly:
-           - The cycle DoDs and average SoCs are combined into a 2-column numpy array, where 
-             each row corresponds to one identified cycle.
-             - Column 1: Cycle DoD (absolute difference between the two associated SoC values).
-             - Column 2: Average SoC for that cycle.
-    Parameters:
-        soc_history (np.array): A numpy array representing the state-of-charge history over time. 
-                                It is expected to contain the SoC values that will be analyzed.
-    Returns:
-        np.ndarray: A 2-column array where each row corresponds to a cycle:
-                    - The first column contains the depth of discharge (DoD) for each cycle.
-                    - The second column contains the average state-of-charge (SoC) for that cycle.
-    """
-    # soc_history is expected to be a numpy array
-    peaks = custom_find_peaks(soc_history)
-    troughs = custom_find_troughs(soc_history)
-    extrema = np.sort(np.concatenate((peaks, troughs)))
-    
-    # Ensure an even number of extrema by discarding the last one if necessary
-    n = len(extrema) - (len(extrema) % 2)
-    paired = extrema[:n].reshape(-1, 2)
-    
-    # Vectorized computation of cycle depth (DoD) and average SoC
-    cycle_DoDs = np.abs(soc_history[paired[:, 1]] - soc_history[paired[:, 0]])
-    avg_SoCs = (soc_history[paired[:, 1]] + soc_history[paired[:, 0]]) / 2.0
-    cycles = np.column_stack((cycle_DoDs, avg_SoCs))
-    
+    # Apply the rainflow counting
+    cycles = []
+    stack = []
+    for tp in turning_points:
+        stack.append(tp)
+        while len(stack) >= 4:
+            r1 = abs(stack[-1] - stack[-2])
+            r2 = abs(stack[-2] - stack[-3])
+            r3 = abs(stack[-3] - stack[-4])
+            if r2 <= r1 and r2 <= r3:
+                SoC_max = max(stack[-3], stack[-2])
+                SoC_min = min(stack[-3], stack[-2])
+                DoD = SoC_max - SoC_min
+                SoC_avg = (SoC_max + SoC_min) / 2
+                cycles.append((SoC_avg, DoD))
+                stack.pop(-3)
+                stack.pop(-2)
+            else:
+                break
     return cycles
 
+
 # Normalized cycle life function for a cycle
-def normalized_cycle_life(DoD, avg_SoC):
-    # Assume degradation increases with depth of discharge and deviates with SoC
-    degradation_factor = (DoD / DoD_nom) ** 1.5 * (1 + 0.1 * abs(avg_SoC - 50) / 50)
-    if degradation_factor == 0:
-        return float('inf')
-    return 1 / degradation_factor
+# Function to calculate normalized cycle life (nCL)
+def normalized_cycle_life(DoD, SoC_avg):
+    """
+    Calculates normalized cycle life as a function of SoC_avg and DoD.
+    """
+    # Fitting coefficients for nCL(SOC_avg, DoD) from the paper
+    q, s, t, u, v = 1471, 214.3, 0.6111, 0.3369, -2.295
+    CL = (
+        q +
+        s * SoC_avg +
+        t * DoD**2 +
+        u * DoD * SoC_avg +
+        v * SoC_avg**2
+    )
+    # Normalize the cycle life by dividing by CL_nom
+    return CL / (q + s * SoC_nom + t * DoD_nom**2 + u * DoD_nom * SoC_nom + v * SoC_nom**2)
+
+# Function to compute degradation per cycle
+def degradation_per_cycle(SoC_avg, DoD):
+    """
+    Calculates the fractional degradation caused by a single cycle.
+    """
+    nCL = normalized_cycle_life(DoD, SoC_avg)
+    return 1 / nCL
 
 # Dynamic degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
-def dynamic_degradation(soc_history: list):
-    # convert to numpy array
-    soc_history = np.array(soc_history)
-    cycles = rainflow_counting(soc_history)
+# Total degradation calculation
+def dynamic_degradation(soc_profile):
+    """
+    Calculates the total degradation over a given SoC profile.
+    """
+    cycles = rainflow_counting(soc_profile)
     total_degradation = 0
-    for DoD, avg_SoC in cycles:
-        nCL = normalized_cycle_life(DoD, avg_SoC)
-        if math.isinf(nCL):
-            degradation_per_cycle = 0
-        else:
-            degradation_per_cycle = 1 / (CL_nom * nCL)
-        total_degradation += degradation_per_cycle
+    for SoC_avg, DoD in cycles:
+        total_degradation += degradation_per_cycle(SoC_avg, DoD)
     return total_degradation
   
 """
