@@ -44,6 +44,7 @@ class SolarBatteryEnv(gym.Env):
         render_mode=None,
         battery_life_cost=15300.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         correction_interval = 100, # steps before dynamic correction
+        init_correction_steps = [10, 20, 50 ,75, 120, 150],
         step_duration = 0.5 # duration of each step in hours (default half an hour)
     ):
         super(SolarBatteryEnv, self).__init__()
@@ -58,6 +59,7 @@ class SolarBatteryEnv(gym.Env):
         self.battery_life_cost = battery_life_cost
         self.correction_interval = correction_interval
         self.step_duration = step_duration
+        self.init_correction_steps = init_correction_steps
 
         # Initialize state of charge history for dynamic correction
         self.soc_history = []
@@ -186,12 +188,26 @@ class SolarBatteryEnv(gym.Env):
         self.static_deg_history.append(battery_deg_penalty)
         num_cycles = 0 # Placeholder for number of cycles
         dynamic_deg = -1.0 # Placeholder for dynamic degradation percentage
+
         # ----- Dynamic Degradation Correction -----
-        # only happen if the current step is a multiple of the correction interval
-        if self.current_step > 0 and self.current_step % self.correction_interval == 0:
+        # Check if the current step is one of the initial frequent steps OR
+        # if it's past the initial phase and meets the regular interval condition.
+        dynamic_correct = False
+        if self.current_step in self.initial_correction_steps:
+            dynamic_correct = True
+        elif self.current_step > (self.initial_correction_steps[-1] if self.initial_correction_steps else 0) and \
+            self.current_step % self.correction_interval == 0:
+            dynamic_correct = True
+
+        if dynamic_correct:
             dynamic_deg, num_cycles = dynamic_degradation(self.soc_history, self.step_duration)
             static_deg_sum = np.sum(self.static_deg_history, dtype=np.float64)
-            self.correction_factor = dynamic_deg / static_deg_sum
+            # Avoid division by zero or near-zero
+            if abs(static_deg_sum) > 1e-9: 
+                self.correction_factor = dynamic_deg / static_deg_sum
+            else:
+                # Handle case where static sum is zero (e.g., set factor to 1 or log a warning)
+                self.correction_factor = 1.0
 
 
         # ----- Compute Final Reward -----
