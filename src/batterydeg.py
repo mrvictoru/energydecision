@@ -80,12 +80,21 @@ def rainflow_counting(soc_profile, step_duration=1.0):
                 delta_time = abs(idx2 - idx1) * step_duration
                 # Avoid division by zero
                 if delta_time == 0:
-                    rate = 0.0
+                    Id_cycle = Ich_cycle = 0.0
                 else:
-                    rate = DoD / (100.0 * delta_time)
-                # Here we assign the same rate for both discharge and charge
-                Id_cycle = rate
-                Ich_cycle = rate
+                    # Determine the direction of the half-cycle
+                    if soc2 > soc1:
+                        # Charging half-cycle: rising SoC -> charge current nonzero
+                        Ich_cycle = (soc2 - soc1) / (100.0 * delta_time)
+                        Id_cycle = 0.0
+                    elif soc2 < soc1:
+                        # Discharging half-cycle: falling SoC -> discharge current nonzero
+                        Id_cycle = (soc1 - soc2) / (100.0 * delta_time)
+                        Ich_cycle = 0.0
+                    else:
+                        # No change
+                        Id_cycle = Ich_cycle = 0.0
+
                 cycles.append((SoC_avg, DoD, Id_cycle, Ich_cycle))
                 # Remove the middle two turning points from the stack
                 del stack[-3:-1]
