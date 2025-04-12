@@ -44,7 +44,7 @@ class SolarBatteryEnv(gym.Env):
         render_mode=None,
         battery_life_cost=15300.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         correction_interval = 100, # steps before dynamic correction
-        init_correction_steps = [10, 20, 50 ,75, 120, 150],
+        init_correction_steps = [10, 20, 40 ,70, 110, 160],
         step_duration = 0.5 # duration of each step in hours (default half an hour)
     ):
         super(SolarBatteryEnv, self).__init__()
@@ -193,9 +193,9 @@ class SolarBatteryEnv(gym.Env):
         # Check if the current step is one of the initial frequent steps OR
         # if it's past the initial phase and meets the regular interval condition.
         dynamic_correct = False
-        if self.current_step in self.initial_correction_steps:
+        if self.current_step in self.init_correction_steps:
             dynamic_correct = True
-        elif self.current_step > (self.initial_correction_steps[-1] if self.initial_correction_steps else 0) and \
+        elif self.current_step > (self.init_correction_steps[-1] if self.init_correction_steps else 0) and \
             self.current_step % self.correction_interval == 0:
             dynamic_correct = True
 
