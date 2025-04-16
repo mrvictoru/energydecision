@@ -87,47 +87,92 @@ class Agent:
         soc_states = np.linspace(0, self.env.battery_capacity, self.soc_resolution)
         closest_state_idx = np.argmin(np.abs(soc_states - battery_level))
         return [self.policy[0, closest_state_idx]]
+    
+    def _sdp_optimization(self, scenario_dfs, scenario_probs=None, cvar_alpha=None, terminal_soc_target=None, terminal_soc_penalty=0):
+        """
+        Computes the value function and policy using stochastic DP optimization.
+        scenario_dfs: list of DataFrames, one per scenario, each with columns ['HouseLoad', 'SolarGen', 'ImportEnergyPrice', 'ExportEnergyPrice']
+        scenario_probs: list of probabilities for each scenario (should sum to 1). If None, uniform.
+        cvar_alpha: if not None, use CVaR at this alpha (e.g., 0.95) instead of expectation.
+        terminal_soc_target: if not None, penalize deviation from this SoC at the end.
+        terminal_soc_penalty: penalty per unit deviation from terminal_soc_target.
+        """
+        num_scenarios = len(scenario_dfs)
+        if scenario_probs is None:
+            # If scenario probabilities are not provided, assume uniform probability
+            scenario_probs = [1.0 / num_scenarios] * num_scenarios
 
-    def _sdp_optimization(self):
-        """
-        Computes the value function and policy using SDP optimization.
-        """
+        # Discretize the state-of-charge (SoC) space
         soc_states = np.linspace(0, self.env.battery_capacity, self.soc_resolution)
+        # Initialize value function and policy arrays
         value_function = np.zeros((self.horizon, len(soc_states)))
         policy = np.zeros((self.horizon, len(soc_states)))
 
+        # Backward induction over the time horizon
         for t in reversed(range(self.horizon)):
             for i, soc in enumerate(soc_states):
                 costs = []
                 actions = []
+                # Discretize possible actions (battery flows)
                 for action in np.linspace(-self.env.max_battery_flow, self.env.max_battery_flow, 20):
                     battery_flow_energy = action * self.env.step_duration
+                    # Skip infeasible actions (over-discharge or over-charge)
                     if action < 0 and abs(battery_flow_energy) > soc:
                         continue
                     if action > 0 and soc + battery_flow_energy > self.env.battery_capacity:
                         continue
 
-                    soc_next = soc + battery_flow_energy
-                    soc_next = np.clip(soc_next, 0, self.env.battery_capacity)
-                    next_value = 0 if t == self.horizon - 1 else np.interp(soc_next, soc_states, value_function[t + 1])
+                    scenario_costs = []
+                    # Evaluate cost for each scenario
+                    for s, df in enumerate(scenario_dfs):
+                        # Compute next SoC after applying action
+                        soc_next = soc + battery_flow_energy
+                        soc_next = np.clip(soc_next, 0, self.env.battery_capacity)
+                        if t == self.horizon - 1:
+                            # Terminal cost at the end of the horizon
+                            if terminal_soc_target is not None:
+                                terminal_cost = terminal_soc_penalty * abs(soc_next - terminal_soc_target)
+                            else:
+                                terminal_cost = 0
+                            next_value = terminal_cost
+                        else:
+                            # Interpolate value function for next state
+                            next_value = np.interp(soc_next, soc_states, value_function[t + 1])
 
-                    avg_soc = (soc - 0.5 * (-battery_flow_energy)) / self.env.battery_capacity * 100
-                    degradation_cost = self.env._calculate_battery_degradation(battery_flow_energy, avg_soc) * self.env.battery_life_cost
-                    grid_energy = battery_flow_energy + self.env.df['HouseLoad'][t] - self.env.df['SolarGen'][t]
-                    energy_price = self.env.df['ImportEnergyPrice'][t] if battery_flow_energy >= 0 else self.env.df['ExportEnergyPrice'][t]
-                    grid_reward, _ = self.env._calculate_grid_reward(grid_energy, energy_price)
-                    total_cost = -grid_reward + degradation_cost + next_value
+                        # Estimate battery degradation cost
+                        avg_soc = (soc - 0.5 * (-battery_flow_energy)) / self.env.battery_capacity * 100
+                        degradation_cost = self.env._calculate_battery_degradation(battery_flow_energy, avg_soc) * self.env.battery_life_cost
+                        # Compute grid energy exchanged
+                        grid_energy = battery_flow_energy + df['HouseLoad'][t] - df['SolarGen'][t]
+                        # Select appropriate energy price (import or export)
+                        energy_price = df['ImportEnergyPrice'][t] if battery_flow_energy >= 0 else df['ExportEnergyPrice'][t]
+                        # Compute grid reward (negative cost)
+                        grid_reward, _ = self.env._calculate_grid_reward(grid_energy, energy_price)
+                        # Total cost for this scenario and action
+                        total_cost = -grid_reward + degradation_cost + next_value
+                        scenario_costs.append(total_cost)
 
-                    costs.append(total_cost)
-                    actions.append(action)
+                    # Risk measure: expectation or CVaR
+                    if cvar_alpha is not None:
+                        # Compute Conditional Value at Risk (CVaR) at alpha
+                        sorted_costs = np.sort(scenario_costs)
+                        idx = int(np.ceil(cvar_alpha * num_scenarios)) - 1
+                        cvar = np.mean(sorted_costs[idx:])
+                        costs.append(cvar)
+                    else:
+                        # Compute expected cost (weighted average)
+                        expected_cost = np.dot(scenario_probs, scenario_costs)
+                        costs.append(expected_cost)
+                        actions.append(action)
 
-                if costs:
-                    best_action_idx = np.argmin(costs)
-                    value_function[t, i] = costs[best_action_idx]
-                    policy[t, i] = actions[best_action_idx]
+            # Select the action with the minimum cost
+            if costs:
+                best_action_idx = np.argmin(costs)
+                value_function[t, i] = costs[best_action_idx]
+                policy[t, i] = actions[best_action_idx]
 
         return value_function, policy
-
+    
     def run_episode(self, render=False):
         obs, _ = self.env.reset()
         logs = []
