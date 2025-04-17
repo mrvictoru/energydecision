@@ -207,3 +207,34 @@ def transform_polars_df(
 #     default_import_energy_price=0.1,
 #     default_export_energy_price=0.05
 # )
+
+def scenario_provider_from_df(current_step, horizon, main_df, num_scenarios=1, scenario_noise_std=0.0):
+    """
+    Provides a list of scenario DataFrames for the receding-horizon SDP agent.
+
+    Args:
+        current_step (int): The current step in the environment.
+        horizon (int): The lookahead window for optimization.
+        main_df (pl.DataFrame): The main DataFrame with all columns needed.
+        num_scenarios (int): Number of scenarios to generate (default: 1).
+        scenario_noise_std (float): Standard deviation of noise to add for scenario generation.
+
+    Returns:
+        List[dict-like]: List of scenario DataFrames (or dicts) for the SDP agent.
+    """
+    scenarios = []
+    # Extract the rolling window for the current horizon
+    for i in range(num_scenarios):
+        # Optionally add noise for scenario diversity
+        df_window = main_df.slice(current_step, horizon).clone()
+        if scenario_noise_std > 0:
+            # Add noise to SolarGen and HouseLoad for scenario diversity
+            df_window = df_window.with_columns([
+                (pl.col("SolarGen") + pl.Series(np.random.normal(0, scenario_noise_std, df_window.height))).alias("SolarGen"),
+                (pl.col("HouseLoad") + pl.Series(np.random.normal(0, scenario_noise_std, df_window.height))).alias("HouseLoad"),
+            ])
+        scenarios.append(df_window)
+    return scenarios
+
+# Example usage in your Agent:
+# agent = Agent(env, algorithm='sdp', scenario_provider=lambda step, horizon: scenario_provider(step, horizon, main_df, num_scenarios=5, scenario_noise_std=0.2))

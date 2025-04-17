@@ -18,7 +18,7 @@ class SolarBatteryEnv(gym.Env):
     Action space: (battery_flow, grid_flow)
         battery_flow > 0 -> battery charge, < 0 -> battery discharge
         grid_flow > 0 -> import from grid,   < 0 -> export to grid
-    Observation: [Time, SolarGen, HouseLoad, BatteryLevel, GridFlow, ...]
+    Observation: [Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, BatteryLevel, BatteryDegCost]
     """
     metadata = {'render.modes': ['human', 'file', 'None']}
     

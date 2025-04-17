@@ -4,13 +4,14 @@ import polars as pl
 from EnergySimEnv import SolarBatteryEnv
 
 class Agent:
-    def __init__(self, env:SolarBatteryEnv , algorithm='rule', model=None, horizon=48, soc_resolution=20):
+    def __init__(self, env:SolarBatteryEnv , algorithm='rule', model=None, horizon=48, soc_resolution=20, scenario_provider=None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
         model: For RL algorithm, a trained model with a predict method (e.g., from stable_baselines3).
         horizon: Time horizon for SDP optimization (default: 48 steps).
         soc_resolution: Resolution of state-of-charge discretization (default: 20 levels).
+        scenario_provider: function(current_step, horizon) -> list of scenario DataFrames for receding horizon.
         """
         self.env = env
         self.algorithm = algorithm.lower()
@@ -20,6 +21,7 @@ class Agent:
         self.value_function = None
         self.policy = None
         self.rule_presistence = False  # Preset for rule-based action persistence
+        self.scenario_provider = scenario_provider
 
     def choose_action(self, obs):
         if self.algorithm == 'rule':
@@ -42,8 +44,12 @@ class Agent:
             action = act_preds[0, 0].detach().cpu().numpy().tolist()
             return action
         elif self.algorithm == 'sdp':
-            if self.value_function is None or self.policy is None:
-                self.value_function, self.policy = self._sdp_optimization()
+            # Recompute policy at each step using receding horizon
+            if self.scenario_provider is None:
+                raise ValueError("scenario_provider function must be provided for receding-horizon SDP.")
+            current_step = getattr(self.env, 'current_step', 0)
+            scenario_dfs = self.scenario_provider(current_step, self.horizon)
+            self.value_function, self.policy = self._sdp_optimization(scenario_dfs)
             return self.sdp_action(obs)
         else:
             raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
