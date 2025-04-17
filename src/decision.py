@@ -2,9 +2,10 @@ import numpy as np
 import torch
 import polars as pl
 from EnergySimEnv import SolarBatteryEnv
+from helper import scenario_provider_from_df
 
 class Agent:
-    def __init__(self, env:SolarBatteryEnv , algorithm='rule', model=None, horizon=48, soc_resolution=20, scenario_provider=None):
+    def __init__(self, env:SolarBatteryEnv , algorithm='rule', model=None, horizon=48, soc_resolution=20, scenario_provider=scenario_provider_from_df):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
