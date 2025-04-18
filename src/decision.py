@@ -49,7 +49,7 @@ class Agent:
             if self.scenario_provider is None:
                 raise ValueError("scenario_provider function must be provided for receding-horizon SDP.")
             current_step = getattr(self.env, 'current_step', 0)
-            scenario_dfs = self.scenario_provider(current_step, self.horizon)
+            scenario_dfs = self.scenario_provider(current_step, self.horizon, self.env.df)
             self.value_function, self.policy = self._sdp_optimization(scenario_dfs)
             return self.sdp_action(obs)
         else:
