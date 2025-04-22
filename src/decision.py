@@ -3,6 +3,7 @@ import torch
 import polars as pl
 from EnergySimEnv import SolarBatteryEnv
 from helper import scenario_provider_from_df
+from batterydeg import degradation_per_cycle
 
 class Agent:
     def __init__(self, env:SolarBatteryEnv , algorithm='rule', model=None, horizon=48, soc_resolution=20, scenario_provider=scenario_provider_from_df):
@@ -146,9 +147,20 @@ class Agent:
                             # Interpolate value function for next state
                             next_value = np.interp(soc_next, soc_states, value_function[t + 1])
 
-                        # Estimate battery degradation cost
-                        avg_soc = (soc - 0.5 * (-battery_flow_energy)) / self.env.battery_capacity * 100
-                        degradation_cost = self.env._calculate_battery_degradation(battery_flow_energy, avg_soc) * self.env.battery_life_cost
+                        # Approximate half‐cycle degradation
+                        SoC_curr = soc / self.env.battery_capacity * 100.0
+                        SoC_nxt  = soc_next / self.env.battery_capacity * 100.0
+                        DoD      = abs(SoC_nxt - SoC_curr)
+                        SoC_avg  = 0.5 * (SoC_curr + SoC_nxt)
+
+                        if SoC_nxt > SoC_curr:
+                            Ich = (SoC_nxt - SoC_curr) / (100.0 * self.env.step_duration)
+                            Id  = 0.0
+                        else:
+                            Id  = (SoC_curr - SoC_nxt) / (100.0 * self.env.step_duration)
+                            Ich = 0.0
+
+                        degradation_cost = degradation_per_cycle(Id, Ich, SoC_avg, DoD) * self.env.battery_life_cost
                         # Compute grid energy exchanged
                         grid_energy = battery_flow_energy + df['HouseLoad'][t] - df['SolarGen'][t]
                         # Select appropriate energy price (import or export)

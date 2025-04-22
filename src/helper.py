@@ -1,4 +1,5 @@
 import polars as pl
+import numpy as np
 import re
 from datetime import datetime
 
