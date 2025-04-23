@@ -96,7 +96,7 @@ class Agent:
         closest_state_idx = np.argmin(np.abs(soc_states - battery_level))
         policy_action = self.policy[0, closest_state_idx]
         # normalize the action to be between -1 and 1
-        return policy_action / self.env.max_battery_flow
+        return [policy_action / self.env.max_battery_flow]
 
     def _sdp_optimization(self, scenario_dfs, scenario_probs=None, cvar_alpha=None, terminal_soc_target=None, terminal_soc_penalty=0):
         """
