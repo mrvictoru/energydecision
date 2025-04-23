@@ -116,8 +116,11 @@ class Agent:
         value_function = np.zeros((self.horizon, len(soc_states)))
         policy = np.zeros((self.horizon, len(soc_states)))
 
+        min_length = min(len(df) for df in scenario_dfs)
+        horizon = min(self.horizon, min_length)
+
         # Backward induction over the time horizon
-        for t in reversed(range(self.horizon)):
+        for t in reversed(range(horizon)):
             for i, soc in enumerate(soc_states):
                 costs = []
                 actions = []
@@ -136,7 +139,7 @@ class Agent:
                         # Compute next SoC after applying action
                         soc_next = soc + battery_flow_energy
                         soc_next = np.clip(soc_next, 0, self.env.battery_capacity)
-                        if t == self.horizon - 1:
+                        if t == horizon - 1:
                             # Terminal cost at the end of the horizon
                             if terminal_soc_target is not None:
                                 terminal_cost = terminal_soc_penalty * abs(soc_next - terminal_soc_target)
