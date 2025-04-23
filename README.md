@@ -14,6 +14,7 @@ This project explores different algorithms for optimizing energy management in a
 *   **Scenario Generation:** Supports scenario-based optimization using forecast data ([`src/helper.py`](src/helper.py)).
 
 ## ToDo
+*   **Improve SDP algo:** Make sure it works and improve computation speed
 *   **Online learning loop:** Training loop using stablebaselines3
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
 

@@ -15,9 +15,9 @@ VIOLATION_PENALTY = -1000
 class SolarBatteryEnv(gym.Env):
     """
     A gym environment for solar-battery-grid energy management.
-    Action space: (battery_flow, grid_flow)
-        battery_flow > 0 -> battery charge, < 0 -> battery discharge
-        grid_flow > 0 -> import from grid,   < 0 -> export to grid
+    Action space: (battery_flow)
+        battery_flow > 0 -> battery charge, < 0 -> battery discharge; normalized to [-1, 1]
+
     Observation: [Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, BatteryLevel, BatteryDegCost]
     """
     metadata = {'render.modes': ['human', 'file', 'None']}

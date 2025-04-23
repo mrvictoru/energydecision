@@ -94,8 +94,10 @@ class Agent:
         battery_level = obs[-2]
         soc_states = np.linspace(0, self.env.battery_capacity, self.soc_resolution)
         closest_state_idx = np.argmin(np.abs(soc_states - battery_level))
-        return [self.policy[0, closest_state_idx]]
-    
+        policy_action = self.policy[0, closest_state_idx]
+        # normalize the action to be between -1 and 1
+        return policy_action / self.env.max_battery_flow
+
     def _sdp_optimization(self, scenario_dfs, scenario_probs=None, cvar_alpha=None, terminal_soc_target=None, terminal_soc_penalty=0):
         """
         Computes the value function and policy using stochastic DP optimization.
@@ -132,6 +134,9 @@ class Agent:
                         continue
                     if action > 0 and soc + battery_flow_energy > self.env.battery_capacity:
                         continue
+
+                    # ***** Action should be appended BEFORE cost calculation branch *****
+                    actions.append(action) # Append the action being evaluated
 
                     scenario_costs = []
                     # Evaluate cost for each scenario
@@ -185,7 +190,7 @@ class Agent:
                         # Compute expected cost (weighted average)
                         expected_cost = np.dot(scenario_probs, scenario_costs)
                         costs.append(expected_cost)
-                        actions.append(action)
+
 
             # Select the action with the minimum cost
             if costs:
