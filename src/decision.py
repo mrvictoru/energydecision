@@ -7,7 +7,7 @@ from batterydeg import static_degradation
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                 horizon=48, soc_resolution=20, action_resolution=11): # Added SDP params
+                horizon=48, soc_resolution=20, action_resolution=11): # Added SDP params
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
@@ -41,6 +41,9 @@ class Agent:
             # self.sdp_policy_cache = None
             # self.cache_step = -1
 
+            # debugging log
+            self.sdp_debug_log = []
+
     def choose_action(self, obs):
         if self.algorithm == 'rule':
             return self.rule_based_action(obs)
@@ -69,8 +72,8 @@ class Agent:
             # 1. Get Forecasts
             forecasts = self._get_forecasts(current_step_env, self.horizon)
             if not forecasts: # Handle case where horizon goes beyond data
-                 print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
-                 return self.rule_based_action(obs) # Fallback action
+                print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
+                return self.rule_based_action(obs) # Fallback action
 
             # 2. Solve SDP for the horizon
             policy_table = self._solve_sdp(forecasts)
@@ -82,9 +85,9 @@ class Agent:
             optimal_action_idx = policy_table[0, soc_idx]
             if optimal_action_idx == -1: # Handle cases where no valid action was found (e.g., all lead to penalties)
                 print(f"Warning: No optimal action found for SoC {current_soc_kwh:.2f} at step {current_step_env}. Using zero action.")
-                action_value = 0.0
+                action_value = 0.0008964
             else:
-                 action_value = self.action_levels_norm[optimal_action_idx]
+                action_value = self.action_levels_norm[optimal_action_idx]
 
             return [action_value]
         else:
@@ -141,17 +144,17 @@ class Agent:
                     # Ensure battery doesn't go below 0 or above capacity
                     potential_next_soc = soc_kwh + battery_flow_energy
                     if potential_next_soc < -1e-6 or potential_next_soc > self.battery_capacity + 1e-6:
-                         continue # Skip infeasible action for this state
+                        continue # Skip infeasible action for this state
 
                     # Apply actual limits (clamp)
                     actual_battery_flow_energy = np.clip(battery_flow_energy, -soc_kwh, self.battery_capacity - soc_kwh)
                     if abs(actual_battery_flow_energy - battery_flow_energy) > 1e-6:
-                         # If clamping was needed, recalculate rate (or decide how to handle)
-                         # This might indicate the action wasn't truly feasible from the start
-                         # For simplicity, we might just use the clamped energy for cost calculation
-                         # but this could be refined. Let's use the original intended rate for degradation cost
-                         # and the clamped energy for transition.
-                         pass
+                        # If clamping was needed, recalculate rate (or decide how to handle)
+                        # This might indicate the action wasn't truly feasible from the start
+                        # For simplicity, we might just use the clamped energy for cost calculation
+                        # but this could be refined. Let's use the original intended rate for degradation cost
+                        # and the clamped energy for transition.
+                        pass
 
 
                     next_soc_kwh = soc_kwh + actual_battery_flow_energy
@@ -168,9 +171,46 @@ class Agent:
 
                     future_cost = cost_to_go[t + 1, next_soc_idx]
                     if future_cost == np.inf:
-                         continue # Skip if the next state is unreachable or leads to infinite cost
+                        continue # Skip if the next state is unreachable or leads to infinite cost
 
                     total_cost = stage_cost + future_cost
+                    
+                    # Check costs specifically for the first step (t=0) and the current actual SoC index
+                    current_actual_soc_idx = self._soc_to_idx(self.env.battery_level) # Get current actual SoC index
+                    if t == 0 and soc_idx == current_actual_soc_idx:
+                        # Store debug info for later analysis/plotting.
+                        # This helps diagnose why the SDP policy may always select zero action.
+                        # Example of abnormal results that would lead to zero action [0.0]:
+                        #   - All nonzero actions have stage_cost or future_cost as np.inf (e.g., grid violation or unreachable state)
+                        #   - Degradation cost is so high that total_cost for any nonzero action is much higher than for action_norm == 0.0
+                        #   - Grid price difference is too small to justify battery use (total_cost for nonzero actions > total_cost for zero)
+                        #   - All actions except zero are skipped due to infeasibility (e.g., battery full/empty, or max_grid_energy too low)
+                        self.sdp_debug_log.append({
+                            't': t,
+                            'soc_idx': soc_idx,
+                            'action_idx': action_idx,
+                            'action_norm': action_norm,
+                            'stage_cost': stage_cost,
+                            'future_cost': future_cost,
+                            'total_cost': total_cost
+                        })
+                    
+                    # All nonzero actions have infinite cost due to grid violation:
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 5, 'action_norm': 0.0, 'stage_cost': 0.0, 'future_cost': 0.0, 'total_cost': 0.0}
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 6, 'action_norm': 0.2, 'stage_cost': inf, 'future_cost': inf, 'total_cost': inf}
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 7, 'action_norm': 0.4, 'stage_cost': inf, 'future_cost': inf, 'total_cost': inf}
+                    # Only zero action is feasible.
+
+                    # Degradation cost dominates:
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 5, 'action_norm': 0.0, 'stage_cost': 0.0, 'future_cost': 0.0, 'total_cost': 0.0}
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 6, 'action_norm': 0.2, 'stage_cost': 10.0, 'future_cost': 0.0, 'total_cost': 10.0}
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 7, 'action_norm': 0.4, 'stage_cost': 20.0, 'future_cost': 0.0, 'total_cost': 20.0}
+                    # Zero action is much cheaper due to high degradation cost.
+
+                    # Grid price difference too small:
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 5, 'action_norm': 0.0, 'stage_cost': 0.0, 'future_cost': 0.0, 'total_cost': 0.0}
+                    #{'t': 0, 'soc_idx': 10, 'action_idx': 6, 'action_norm': 0.2, 'stage_cost': 0.1, 'future_cost': 0.0, 'total_cost': 0.1}
+                    # Small cost difference, so zero action is still optimal.
 
                     # --- Update Best Action ---
                     if total_cost < min_total_cost:
@@ -187,53 +227,53 @@ class Agent:
 
 
     def _calculate_sdp_stage_cost(self, t, soc_kwh, battery_flow_rate, battery_flow_energy, forecast_step):
-         """Calculates the cost for a single step in the SDP."""
-         solar = forecast_step['SolarGen']
-         load = forecast_step['HouseLoad']
-         import_price = forecast_step['ImportEnergyPrice']
-         export_price = forecast_step['ExportEnergyPrice']
+        """Calculates the cost for a single step in the SDP."""
+        solar = forecast_step['SolarGen']
+        load = forecast_step['HouseLoad']
+        import_price = forecast_step['ImportEnergyPrice']
+        export_price = forecast_step['ExportEnergyPrice']
 
-         # --- Grid Cost ---
-         battery_charge_energy = max(0, battery_flow_energy)
-         battery_discharge_energy = max(0, -battery_flow_energy)
-         grid_energy = load + battery_charge_energy - solar - battery_discharge_energy
+        # --- Grid Cost ---
+        battery_charge_energy = max(0, battery_flow_energy)
+        battery_discharge_energy = max(0, -battery_flow_energy)
+        grid_energy = load + battery_charge_energy - solar - battery_discharge_energy
 
-         grid_cost = 0
-         # Check grid limits (using energy directly)
-         if abs(grid_energy) > self.max_grid_energy + 1e-6: # Add tolerance
-             grid_cost = np.inf # Penalize grid violation heavily
-         else:
-             if grid_energy > 0: # Importing
-                 grid_cost = grid_energy * import_price
-             else: # Exporting (grid_energy is negative)
-                 grid_cost = grid_energy * export_price # Export price might be lower
+        grid_cost = 0
+        # Check grid limits (using energy directly)
+        if abs(grid_energy) > self.max_grid_energy + 1e-6: # Add tolerance
+            grid_cost = np.inf # Penalize grid violation heavily
+        else:
+            if grid_energy > 0: # Importing
+                grid_cost = grid_energy * import_price
+            else: # Exporting (grid_energy is negative)
+                grid_cost = grid_energy * export_price # Export price might be lower
 
-         if grid_cost == np.inf:
-              return np.inf # Return early if grid violated
+        if grid_cost == np.inf:
+            return np.inf # Return early if grid violated
 
-         # --- Degradation Cost ---
-         # Use the *intended* flow rate for degradation calculation
-         Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
-         Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
+        # --- Degradation Cost ---
+        # Use the *intended* flow rate for degradation calculation
+        Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
+        Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
 
-         # DoD based on the *actual* energy moved
-         DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
+        # DoD based on the *actual* energy moved
+        DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
 
-         # Average SoC for the step
-         # If discharging (flow_energy < 0), avg is current - half_discharged
-         # If charging (flow_energy > 0), avg is current + half_charged
-         SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
-         SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100) # Ensure valid range
+        # Average SoC for the step
+        # If discharging (flow_energy < 0), avg is current - half_discharged
+        # If charging (flow_energy > 0), avg is current + half_charged
+        SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
+        SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100) # Ensure valid range
 
-         # Handle zero DoD case (no degradation)
-         if DoD_percent < 1e-6:
-              degradation_fraction = 0.0
-         else:
-              degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)
+        # Handle zero DoD case (no degradation)
+        if DoD_percent < 1e-6:
+            degradation_fraction = 0.0
+        else:
+            degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)
 
-         degradation_cost = degradation_fraction * self.battery_life_cost
+        degradation_cost = degradation_fraction * self.battery_life_cost
 
-         return grid_cost + degradation_cost
+        return grid_cost + degradation_cost
 
     def rule_based_action(self, obs):
         diff = obs[1] - obs[2] # difference between solar generation (obs[1]) and house load (obs[2])
