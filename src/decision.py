@@ -7,7 +7,8 @@ from batterydeg import static_degradation
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor = 0.3): # Added SDP params
+                horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor = 0.01,# Added SDP params
+                degradation_model = 'linear', linear_deg_cost_p_kwh=None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
@@ -26,6 +27,16 @@ class Agent:
             self.soc_resolution = soc_resolution
             self.action_resolution = action_resolution
             self.static_deg_correction_factor = static_deg_correction_factor
+
+            self.degradation_model = degradation_model
+            if self.degradation_model == 'linear':
+                # If not provided, default to battery_life_cost / (battery_capacity * cycle_life)
+                if linear_deg_cost_p_kwh is not None:
+                    self.linear_deg_cost_per_kwh = linear_deg_cost_p_kwh
+                else:
+                    # Example: assume 3650 cycles (10 years daily), adjust as needed
+                    cycle_life = 3650
+                    self.linear_deg_cost_per_kwh = env.battery_life_cost / (env.battery_capacity * cycle_life)
 
             # Store env parameters needed for SDP calculations
             self.battery_capacity = env.battery_capacity
@@ -195,23 +206,6 @@ class Agent:
                             'future_cost': future_cost,
                             'total_cost': total_cost
                         })
-                    
-                    # All nonzero actions have infinite cost due to grid violation:
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 5, 'action_norm': 0.0, 'stage_cost': 0.0, 'future_cost': 0.0, 'total_cost': 0.0}
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 6, 'action_norm': 0.2, 'stage_cost': inf, 'future_cost': inf, 'total_cost': inf}
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 7, 'action_norm': 0.4, 'stage_cost': inf, 'future_cost': inf, 'total_cost': inf}
-                    # Only zero action is feasible.
-
-                    # Degradation cost dominates:
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 5, 'action_norm': 0.0, 'stage_cost': 0.0, 'future_cost': 0.0, 'total_cost': 0.0}
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 6, 'action_norm': 0.2, 'stage_cost': 10.0, 'future_cost': 0.0, 'total_cost': 10.0}
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 7, 'action_norm': 0.4, 'stage_cost': 20.0, 'future_cost': 0.0, 'total_cost': 20.0}
-                    # Zero action is much cheaper due to high degradation cost.
-
-                    # Grid price difference too small:
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 5, 'action_norm': 0.0, 'stage_cost': 0.0, 'future_cost': 0.0, 'total_cost': 0.0}
-                    #{'t': 0, 'soc_idx': 10, 'action_idx': 6, 'action_norm': 0.2, 'stage_cost': 0.1, 'future_cost': 0.0, 'total_cost': 0.1}
-                    # Small cost difference, so zero action is still optimal.
 
                     # --- Update Best Action ---
                     if total_cost < min_total_cost:
@@ -253,27 +247,31 @@ class Agent:
             return np.inf # Return early if grid violated
 
         # --- Degradation Cost ---
-        # Use the *intended* flow rate for degradation calculation
-        Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
-        Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
-
-        # DoD based on the *actual* energy moved
-        DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
-
-        # Average SoC for the step
-        # If discharging (flow_energy < 0), avg is current - half_discharged
-        # If charging (flow_energy > 0), avg is current + half_charged
-        SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
-        SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100) # Ensure valid range
-
-        # Handle zero DoD case (no degradation)
-        if DoD_percent < 1e-6:
-            degradation_fraction = 0.0
+        if self.degradation_model == 'linear':
+            # Linear throughput-based degradation (from the paper)
+            degradation_cost = self.linear_deg_cost_per_kwh * abs(battery_flow_energy)
         else:
-            # Calculate degradation fraction using the static degradation model and apply correction factor
-            degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)*self.static_deg_correction_factor
+            # Use the *intended* flow rate for degradation calculation
+            Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
+            Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
 
-        degradation_cost = degradation_fraction * self.battery_life_cost
+            # DoD based on the *actual* energy moved
+            DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
+
+            # Average SoC for the step
+            # If discharging (flow_energy < 0), avg is current - half_discharged
+            # If charging (flow_energy > 0), avg is current + half_charged
+            SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
+            SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100) # Ensure valid range
+
+            # Handle zero DoD case (no degradation)
+            if DoD_percent < 1e-6:
+                degradation_fraction = 0.0
+            else:
+                # Calculate degradation fraction using the static degradation model and apply correction factor
+                degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)*self.static_deg_correction_factor
+
+            degradation_cost = degradation_fraction * self.battery_life_cost
 
         return grid_cost + degradation_cost
 
