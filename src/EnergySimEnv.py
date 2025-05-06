@@ -123,7 +123,7 @@ class SolarBatteryEnv(gym.Env):
         Id = abs(max(0, -battery_flow_rate) / self.battery_capacity) # discharge c rate
         Ich = abs(max(0, battery_flow_rate) / self.battery_capacity)
         battery_deg_penalty = static_degradation(Id, Ich, soc, DoD)
-        return battery_deg_penalty*self.correction_factor, battery_deg_penalty
+        return battery_deg_penalty*self.correction_factor, battery_deg_penalty # return degradation after correction factor and static degradation
 
     def step(self, action):
         # ----- Scale Actions -----

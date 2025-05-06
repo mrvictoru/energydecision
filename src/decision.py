@@ -7,7 +7,7 @@ from batterydeg import static_degradation
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                horizon=48, soc_resolution=20, action_resolution=11): # Added SDP params
+                horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor = 0.3): # Added SDP params
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
@@ -25,6 +25,7 @@ class Agent:
             self.horizon = horizon
             self.soc_resolution = soc_resolution
             self.action_resolution = action_resolution
+            self.static_deg_correction_factor = static_deg_correction_factor
 
             # Store env parameters needed for SDP calculations
             self.battery_capacity = env.battery_capacity
@@ -269,7 +270,8 @@ class Agent:
         if DoD_percent < 1e-6:
             degradation_fraction = 0.0
         else:
-            degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)
+            # Calculate degradation fraction using the static degradation model and apply correction factor
+            degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)*self.static_deg_correction_factor
 
         degradation_cost = degradation_fraction * self.battery_life_cost
 
