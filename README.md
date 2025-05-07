@@ -14,7 +14,7 @@ This project explores different algorithms for optimizing energy management in a
 *   **Scenario Generation:** Supports scenario-based optimization using forecast data ([`src/helper.py`](src/helper.py)).
 
 ## ToDo
-*   **Improve SDP algo:** Make sure it works and improve computation speed
+*   **Improve SDP algo:** Improve computation speed
 *   **Online learning loop:** Training loop using stablebaselines3
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
 
@@ -72,9 +72,17 @@ energydecision/
 
     # Initialize environment
     env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
-
+    
+    resolution  = 20
     # Initialize agent (e.g., SDP)
-    agent = Agent(env, algorithm='sdp')
+    SDPagent = Agent(
+        env,
+        algorithm='sdp',
+        soc_resolution=resolution,
+        action_resolution=int(resolution+1),
+        degradation_model='linear',
+        linear_deg_cost_p_kwh=0.2 # based on 5000 cycles life and capcacity of 13.5kWh and replacement cost of $15,300
+    )
 
     # Run a simulation episode
     results_df = agent.run_episode()
