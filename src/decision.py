@@ -118,7 +118,7 @@ class Agent:
         forecast_df = self.env.df.slice(current_step, horizon)
         # Convert to a list of dictionaries for easier access in _solve_sdp
         # Adjust columns as needed based on your actual forecast columns
-        required_cols = ['SolarGen', 'HouseLoad', 'ImportEnergyPrice', 'ExportEnergyPrice']
+        required_cols = ['FutureSolar', 'FutureLoad', 'ImportEnergyPrice', 'ExportEnergyPrice']
         forecast_list = forecast_df.select(required_cols).to_dicts()
         return forecast_list
 
