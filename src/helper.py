@@ -17,11 +17,11 @@ def parse_time(time_str: str) -> int:
 
 def transform_polars_df(
     df: pl.DataFrame,
-    import_energy_price: float = 0.1,
-    export_energy_price: float = 0.05,
+    import_energy_price: float = 0.23, #in USD
+    export_energy_price: float = 0.04, #in USD
     price_periods: str = None,  # Expects string in format "7am – 10am | 4pm – 9pm"
-    default_import_energy_price: float = 0.1,
-    default_export_energy_price: float = 0.05
+    default_import_energy_price: float = 0.1, #in USD
+    default_export_energy_price: float = 0.02 #in USD
 ) -> pl.DataFrame:
     """
     Transforms an input Polars DataFrame into a format for the SolarBatteryEnv.
