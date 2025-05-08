@@ -100,7 +100,9 @@ class Agent:
                 action_value = 0.0008964
             else:
                 action_value = self.action_levels_norm[optimal_action_idx]
-
+            # add small noise to the action
+            noise = np.random.normal(-0.01, 0.01)
+            action_value = min(max(action_value + noise, -1.0), 1.0)
             return [action_value]
         else:
             raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
@@ -108,18 +110,24 @@ class Agent:
      # --- SDP Helper Methods ---
 
     def _get_forecasts(self, current_step, horizon):
-        """Retrieves forecast data for the SDP horizon."""
+        """Retrieves forecast data for the SDP horizon using FutureGen/FutureLoad if available."""
         end_step = current_step + horizon
         if end_step > len(self.env.df):
-            # Not enough data for the full horizon
-            return [] # Or handle partial horizon if desired
+            return []
 
-        # Select the relevant slice and columns
-        forecast_df = self.env.df.slice(current_step, horizon)
-        # Convert to a list of dictionaries for easier access in _solve_sdp
-        # Adjust columns as needed based on your actual forecast columns
-        required_cols = ['FutureSolar', 'FutureLoad', 'ImportEnergyPrice', 'ExportEnergyPrice']
-        forecast_list = forecast_df.select(required_cols).to_dicts()
+        # Use FutureGen/FutureLoad if available, otherwise fallback to SolarGen/HouseLoad
+        df = self.env.df.slice(current_step, horizon)
+        required_cols = ['ImportEnergyPrice', 'ExportEnergyPrice']
+
+        # Check if FutureGen/FutureLoad exist in the DataFrame
+        use_future = all(col in df.columns for col in ['FutureGen', 'FutureLoad'])
+        if use_future:
+            forecast_df = df.select(['FutureGen', 'FutureLoad'] + required_cols)
+            forecast_df = forecast_df.rename({'FutureGen': 'SolarGen', 'FutureLoad': 'HouseLoad'})
+        else:
+            forecast_df = df.select(['SolarGen', 'HouseLoad'] + required_cols)
+
+        forecast_list = forecast_df.to_dicts()
         return forecast_list
 
     def _soc_to_idx(self, soc_kwh):
@@ -139,85 +147,74 @@ class Agent:
         # Terminal cost is zero
         cost_to_go[horizon, :] = 0.0
 
+        # Precompute battery flow energies for all actions
+        battery_flow_energies = self.action_levels_norm * self.max_battery_flow * self.step_duration
+
+
         # Backward iteration
         for t in range(horizon - 1, -1, -1):
             forecast_step = forecasts[t]
-            for soc_idx in range(num_soc_levels):
-                soc_kwh = self.soc_levels_kwh[soc_idx]
+            for soc_idx, soc_kwh in enumerate(self.soc_levels_kwh):
                 min_total_cost = np.inf
                 best_action_idx = -1
 
-                for action_idx in range(num_action_levels):
-                    action_norm = self.action_levels_norm[action_idx]
-                    battery_flow_rate = action_norm * self.max_battery_flow
-                    battery_flow_energy = battery_flow_rate * self.step_duration
+                # Vectorized feasibility check
+                potential_next_socs = soc_kwh + battery_flow_energies
+                feasible_mask = (potential_next_socs >= -1e-6) & (potential_next_socs <= self.battery_capacity + 1e-6)
 
-                    # --- Check Action Feasibility ---
-                    # Ensure battery doesn't go below 0 or above capacity
-                    potential_next_soc = soc_kwh + battery_flow_energy
-                    if potential_next_soc < -1e-6 or potential_next_soc > self.battery_capacity + 1e-6:
-                        continue # Skip infeasible action for this state
+                # Iterate over all feasible actions for this SoC
+                for action_idx in np.where(feasible_mask)[0]:
+                    battery_flow_energy = battery_flow_energies[action_idx]
+                    # Clip battery flow to ensure SoC stays within bounds
+                    actual_battery_flow_energy = np.clip(
+                        battery_flow_energy, -soc_kwh, self.battery_capacity - soc_kwh
+                    )
+                    # Compute the battery flow rate (normalized action * max flow)
+                    battery_flow_rate = self.action_levels_norm[action_idx] * self.max_battery_flow
 
-                    # Apply actual limits (clamp)
-                    actual_battery_flow_energy = np.clip(battery_flow_energy, -soc_kwh, self.battery_capacity - soc_kwh)
-                    if abs(actual_battery_flow_energy - battery_flow_energy) > 1e-6:
-                        # If clamping was needed, recalculate rate (or decide how to handle)
-                        # This might indicate the action wasn't truly feasible from the start
-                        # For simplicity, we might just use the clamped energy for cost calculation
-                        # but this could be refined. Let's use the original intended rate for degradation cost
-                        # and the clamped energy for transition.
-                        pass
-
-
+                    # Compute next SoC after applying the action
                     next_soc_kwh = soc_kwh + actual_battery_flow_energy
                     next_soc_idx = self._soc_to_idx(next_soc_kwh)
 
-                    # --- Calculate Costs ---
+                    # Calculate immediate (stage) cost for this action
                     stage_cost = self._calculate_sdp_stage_cost(
                         t, soc_kwh, battery_flow_rate, actual_battery_flow_energy, forecast_step
                     )
-
-                    # Check for infinite stage cost (e.g., grid violation)
                     if stage_cost == np.inf:
-                        continue
+                        continue  # Skip infeasible actions
 
+                    # Get cost-to-go from the next state
                     future_cost = cost_to_go[t + 1, next_soc_idx]
                     if future_cost == np.inf:
-                        continue # Skip if the next state is unreachable or leads to infinite cost
+                        continue  # Skip if next state is unreachable
 
+                    # Total cost for this action (stage cost + future cost)
                     total_cost = stage_cost + future_cost
-                    
-                    # Check costs specifically for the first step (t=0) and the current actual SoC index
-                    current_actual_soc_idx = self._soc_to_idx(self.env.battery_level) # Get current actual SoC index
+
+                    # Debug logging for the current actual SoC at t=0
+                    current_actual_soc_idx = self._soc_to_idx(self.env.battery_level)
                     if t == 0 and soc_idx == current_actual_soc_idx:
-                        # Store debug info for later analysis/plotting.
-                        # This helps diagnose why the SDP policy may always select zero action.
-                        # Example of abnormal results that would lead to zero action [0.0]:
-                        #   - All nonzero actions have stage_cost or future_cost as np.inf (e.g., grid violation or unreachable state)
-                        #   - Degradation cost is so high that total_cost for any nonzero action is much higher than for action_norm == 0.0
-                        #   - Grid price difference is too small to justify battery use (total_cost for nonzero actions > total_cost for zero)
-                        #   - All actions except zero are skipped due to infeasibility (e.g., battery full/empty, or max_grid_energy too low)
                         self.sdp_debug_log.append({
                             't': t,
                             'soc_idx': soc_idx,
                             'action_idx': action_idx,
-                            'action_norm': action_norm,
+                            'action_norm': self.action_levels_norm[action_idx],
                             'stage_cost': stage_cost,
                             'future_cost': future_cost,
                             'total_cost': total_cost
                         })
 
-                    # --- Update Best Action ---
+                    # Update minimum cost and best action if this action is better
                     if total_cost < min_total_cost:
                         min_total_cost = total_cost
                         best_action_idx = action_idx
 
-                # Store results for this state and time
+                # Store the best action and its cost for this SoC at this time step
                 if best_action_idx != -1:
                     cost_to_go[t, soc_idx] = min_total_cost
                     policy_table[t, soc_idx] = best_action_idx
-                # else: state remains unreachable / leads to inf cost
 
+        # Return the computed policy table (action indices for each time/SoC)
         return policy_table
 
 
