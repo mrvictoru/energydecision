@@ -101,8 +101,8 @@ class Agent:
             else:
                 action_value = self.action_levels_norm[optimal_action_idx]
             # add small noise to the action
-            noise = np.random.normal(-0.01, 0.01)
-            action_value = min(max(action_value + noise, -1.0), 1.0)
+            #noise = np.random.normal(-0.01, 0.01)
+            #action_value = min(max(action_value + noise, -1.0), 1.0)
             return [action_value]
         else:
             raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
@@ -135,85 +135,84 @@ class Agent:
         return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
 
     def _solve_sdp(self, forecasts):
-        """Implements the backward induction algorithm."""
+        """Implements the backward induction algorithm with vectorized feasibility checks and action effects."""
         num_soc_levels = len(self.soc_levels_kwh)
-        num_action_levels = len(self.action_levels_norm)
         horizon = len(forecasts)
-
+    
         # Initialize cost-to-go (J) and policy tables
         cost_to_go = np.full((horizon + 1, num_soc_levels), np.inf)
-        policy_table = np.full((horizon, num_soc_levels), -1, dtype=int) # Store action indices, -1 for invalid/unreachable
-
+        policy_table = np.full((horizon, num_soc_levels), -1, dtype=int)  # Store action indices
+    
         # Terminal cost is zero
         cost_to_go[horizon, :] = 0.0
-
+    
         # Precompute battery flow energies for all actions
         battery_flow_energies = self.action_levels_norm * self.max_battery_flow * self.step_duration
-
-
-        # Backward iteration
+    
+        # Backward induction: iterate over each time step in reverse (from horizon-1 to 0)
         for t in range(horizon - 1, -1, -1):
             forecast_step = forecasts[t]
+            # For each discretized state-of-charge (SoC) level
             for soc_idx, soc_kwh in enumerate(self.soc_levels_kwh):
-                min_total_cost = np.inf
-                best_action_idx = -1
-
-                # Vectorized feasibility check
+            
+                # Feasibility Check: Compute all possible next SoC values for all actions
                 potential_next_socs = soc_kwh + battery_flow_energies
                 feasible_mask = (potential_next_socs >= -1e-6) & (potential_next_socs <= self.battery_capacity + 1e-6)
-
-                # Iterate over all feasible actions for this SoC
-                for action_idx in np.where(feasible_mask)[0]:
-                    battery_flow_energy = battery_flow_energies[action_idx]
-                    # Clip battery flow to ensure SoC stays within bounds
-                    actual_battery_flow_energy = np.clip(
-                        battery_flow_energy, -soc_kwh, self.battery_capacity - soc_kwh
+                feasible_action_indices = np.where(feasible_mask)[0]
+            
+                if feasible_action_indices.size == 0:
+                    continue  # No feasible actions from this SoC
+            
+                # Clip battery flow energies to ensure SoC stays within bounds
+                actual_battery_flow_energies = np.clip(
+                    battery_flow_energies[feasible_action_indices],
+                    -soc_kwh,
+                    self.battery_capacity - soc_kwh
+                )
+                
+                # Compute next SoC values and map to nearest discrete SoC indices
+                next_soc_kwhs = soc_kwh + actual_battery_flow_energies
+                next_soc_indices = np.abs(self.soc_levels_kwh[None, :] - next_soc_kwhs[:, None]).argmin(axis=1)
+            
+                # Compute battery flow rates for feasible actions
+                battery_flow_rates = self.action_levels_norm[feasible_action_indices] * self.max_battery_flow
+            
+                # Calculate stage costs for all feasible actions at this step
+                stage_costs = np.array([
+                    self._calculate_sdp_stage_cost(
+                        t, soc_kwh,
+                        battery_flow_rates[i],
+                        actual_battery_flow_energies[i],
+                        forecast_step
                     )
-                    # Compute the battery flow rate (normalized action * max flow)
-                    battery_flow_rate = self.action_levels_norm[action_idx] * self.max_battery_flow
-
-                    # Compute next SoC after applying the action
-                    next_soc_kwh = soc_kwh + actual_battery_flow_energy
-                    next_soc_idx = self._soc_to_idx(next_soc_kwh)
-
-                    # Calculate immediate (stage) cost for this action
-                    stage_cost = self._calculate_sdp_stage_cost(
-                        t, soc_kwh, battery_flow_rate, actual_battery_flow_energy, forecast_step
-                    )
-                    if stage_cost == np.inf:
-                        continue  # Skip infeasible actions
-
-                    # Get cost-to-go from the next state
-                    future_cost = cost_to_go[t + 1, next_soc_idx]
-                    if future_cost == np.inf:
-                        continue  # Skip if next state is unreachable
-
-                    # Total cost for this action (stage cost + future cost)
-                    total_cost = stage_cost + future_cost
-
-                    # Debug logging for the current actual SoC at t=0
+                    for i in range(len(feasible_action_indices))
+                ])
+                # Get future cost-to-go for each possible next SoC
+                future_costs = cost_to_go[t + 1, next_soc_indices]
+                total_costs = stage_costs + future_costs
+            
+                # Select the action with the minimum total cost (stage + future)
+                valid_mask = (stage_costs != np.inf) & (future_costs != np.inf)
+                if np.any(valid_mask):
+                    min_idx = np.argmin(total_costs[valid_mask])
+                    min_total_cost = total_costs[valid_mask][min_idx]
+                    best_action_idx = feasible_action_indices[valid_mask][min_idx]
+                    cost_to_go[t, soc_idx] = min_total_cost
+                    policy_table[t, soc_idx] = best_action_idx
+            
+                    # Debug logging for the current actual SoC at t=0 (optional)
                     current_actual_soc_idx = self._soc_to_idx(self.env.battery_level)
                     if t == 0 and soc_idx == current_actual_soc_idx:
                         self.sdp_debug_log.append({
                             't': t,
                             'soc_idx': soc_idx,
-                            'action_idx': action_idx,
-                            'action_norm': self.action_levels_norm[action_idx],
-                            'stage_cost': stage_cost,
-                            'future_cost': future_cost,
-                            'total_cost': total_cost
+                            'action_idx': best_action_idx,
+                            'action_norm': self.action_levels_norm[best_action_idx],
+                            'stage_cost': stage_costs[valid_mask][min_idx],
+                            'future_cost': future_costs[valid_mask][min_idx],
+                            'total_cost': min_total_cost
                         })
-
-                    # Update minimum cost and best action if this action is better
-                    if total_cost < min_total_cost:
-                        min_total_cost = total_cost
-                        best_action_idx = action_idx
-
-                # Store the best action and its cost for this SoC at this time step
-                if best_action_idx != -1:
-                    cost_to_go[t, soc_idx] = min_total_cost
-                    policy_table[t, soc_idx] = best_action_idx
-
+        
         # Return the computed policy table (action indices for each time/SoC)
         return policy_table
 
