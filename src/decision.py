@@ -321,3 +321,24 @@ class Agent:
                 self.env.render()
 
         return pl.DataFrame(logs)
+
+import concurrent.futures
+
+# this can be used to run multiple episodes in parallel
+def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=None):
+    """
+    Runs one episode per environment in parallel.
+    agent_class: The Agent class to instantiate.
+    envs: List of SolarBatteryEnv instances.
+    agent_kwargs: Dict of kwargs for Agent constructor.
+    Returns: List of DataFrames (one per environment).
+    """
+    agent_kwargs = agent_kwargs or {}
+
+    def run_single(env):
+        agent = agent_class(env, **agent_kwargs)
+        return agent.run_episode(render=render)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(run_single, envs))
+    return results

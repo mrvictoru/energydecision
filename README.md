@@ -14,7 +14,7 @@ This project explores different algorithms for optimizing energy management in a
 *   **Scenario Generation:** Supports scenario-based optimization using forecast data ([`src/helper.py`](src/helper.py)).
 
 ## ToDo
-*   **Improve SDP algo:** Improve computation speed
+*   **Improve SDP algo:** Improve computation speed and run algo in different envs in parallel
 *   **Online learning loop:** Training loop using stablebaselines3
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
 
@@ -68,25 +68,79 @@ energydecision/
 
     # Load data
     df = pl.read_csv("data/your_data.csv") # Replace with your data file
-    dataset = transform_polars_df(df, import_energy_price=0.15, export_energy_price=0.1, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.1, default_export_energy_price=0.08)
+    dataset = transform_polars_df(df, import_energy_price=0.15, export_energy_price=0.1, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.1, default_export_energy_price=0.08) # transform the data into dataset which can be used to build the simulation environment
 
     # Initialize environment
     env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
     
     resolution  = 20
     # Initialize agent (e.g., SDP)
-    SDPagent = Agent(
+    agent = Agent(
         env,
-        algorithm='sdp',
-        soc_resolution=resolution,
-        action_resolution=int(resolution+1),
-        degradation_model='linear',
-        linear_deg_cost_p_kwh=0.2 # based on 5000 cycles life and capcacity of 13.5kWh and replacement cost of $15,300
+        algorithm='rule'
     )
 
     # Run a simulation episode
     results_df = agent.run_episode()
     print(results_df)
+    ```
+
+*   if there are mulitple environments, simulation can be run in parallel using ['run_episodes_parallel'](src/decision.py)
+
+    ```python
+    # Example (Conceptual)
+    import polars as pl
+    from src.EnergySimEnv import SolarBatteryEnv
+    from src.decision import Agent, run_episodes_parallel
+    from src.helper import transform_polars_df # Or your custom provider
+
+    # Load data
+    datapath = '../data/2011-2012 Solar home electricity data v2.csv'
+    # skip the first line in csv and read the next line as column
+    # then read the rest of the file and store as dataframe
+    df = pl.read_csv(datapath, skip_rows=1)
+    # get all the unique customers as their own dataframes
+    customers = df['Customer'].unique()
+    # pick 10% of the random customers as testing data
+    testing_customers = np.random.choice(customers, int(0.1*len(customers)), replace=False)
+    # transform the data into dataset which can be used build simulation environments
+    testing_dataset = []
+    for customer in testing_customers:
+        customer_df = df.filter(pl.col('Customer') == customer)
+        try:
+            newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
+        except Exception as e:
+            print(f"Error with customer as testing dataset: {customer}")
+            print(e)
+            break
+        testing_dataset.append(newcustomerdf)
+
+    # Helper: create an environment instance from a dataset.
+    def make_env(dataset):
+        def _init(max_step = None):
+            if max_step is not None:
+                env = SolarBatteryEnv(dataset, max_step=max_step)
+            else:
+                env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
+            return env
+        return _init
+
+    testing_env_fns = [make_env(ds) for ds in testing_dataset]
+    # Initialize environments and SDP agent parameters
+    sdp_agent_kwargs = {
+        'algorithm': 'sdp',
+        'soc_resolution': 20,
+        'action_resolution': 41,  # or whatever you want
+        'degradation_model': 'linear',
+        'linear_deg_cost_p_kwh': 0.2
+    }
+
+    test_envs = [env_fn(500) for env_fn in testing_env_fns]
+
+    # Run all episodes in parallel
+    sdp_episode_logs = run_episodes_parallel(Agent, test_envs, agent_kwargs=sdp_agent_kwargs, max_workers=8)
+
+    print(sdp_episode_logs)
     ```
 
 ## Dependencies
