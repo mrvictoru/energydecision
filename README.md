@@ -14,7 +14,7 @@ This project explores different algorithms for optimizing energy management in a
 *   **Scenario Generation:** Supports scenario-based optimization using forecast data ([`src/helper.py`](src/helper.py)).
 
 ## ToDo
-*   **Improve SDP algo:** Improve computation speed and run algo in different envs in parallel
+~~*   **Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
 *   **Online learning loop:** Training loop using stablebaselines3
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
 
@@ -49,10 +49,10 @@ energydecision/
     cd energydecision
     ```
 2.  **Using Docker:**
-    *   Build and run the container:
-        ```bash
-        sudo docker-compose up --build
-        ```
+*   Build and run the container:
+     ```bash
+     sudo docker compose up --build
+     ```
 
 ## Usage
 
