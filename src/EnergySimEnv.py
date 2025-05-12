@@ -245,7 +245,23 @@ class SolarBatteryEnv(gym.Env):
         if self.render_mode == 'human':
             print(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh")
         elif self.render_mode == 'file':
-            filename = kwargs.get('filename', 'render.txt')
+            # Use a filename based on the dataset if possible
+            # Auto-generate dataset name based on meta data columns if available
+            try:
+                customer = self.df.select("Customer").item() if "Customer" in self.df.columns else "unknown"
+                postcode = self.df.select("Postcode").item() if "Postcode" in self.df.columns else "unknown"
+                daterange = self.df.select("DateRange").item() if "DateRange" in self.df.columns else "unknown"
+                dataset_name = f"{customer}_{postcode}_{daterange}"
+            except Exception:
+                dataset_name = kwargs.get('dataset_name', 'default_dataset')
+            filename = kwargs.get('filename', f'render_{dataset_name}.txt')
+            # Store the current observation as well
+            obs = self._next_observation()
             with open(filename, 'a+') as f:
-                f.write(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh\n")
+                f.write(
+                    f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, "
+                    f"Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, "
+                    f"Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh, "
+                    f"Obs: {obs.tolist()}\n"
+            )
 

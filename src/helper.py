@@ -25,39 +25,7 @@ def transform_polars_df(
 ) -> pl.DataFrame:
     """
     Transforms an input Polars DataFrame into a format for the SolarBatteryEnv.
-    
-    Assumptions:
-      - The input dataframe has these known columns: 'Customer', 'Generator Capacity', 
-        'Postcode', 'Consumption Category', 'date', 'Row Quality'
-      - Other columns are time columns containing measurements.
-      - 'Consumption Category' indicates:
-            'GG' : solar production in kWh  -> mapped to SolarGen
-            'GC' : electricity consumption in kWh 
-            'CL' : off-peak consumption in kWh 
-        HouseLoad will be computed as the sum of 'GC' and 'CL'
-    
-    The resulting dataframe will have the following columns:
-      - 'Time': a datetime combining 'date' and the time from the unpivoted column name
-      - 'SolarGen': sum of GG values per time step
-      - 'HouseLoad': sum of GC and CL values per time step
-      - 'FutureSolar': defaulted to the next SolarGen
-      - 'FutureLoad': defaulted to the next HouseLoad
-      - 'ImportEnergyPrice': set based on time-of-day. If the time falls within any specified
-         period (if provided) uses import_energy_price; otherwise, default_import_energy_price.
-      - 'ExportEnergyPrice': set based on time-of-day. If the time falls within any specified
-         period (if provided) uses export_energy_price; otherwise, default_export_energy_price.
-    
-    Parameters:
-      df (pl.DataFrame): The input Polars dataframe.
-      import_energy_price (float): Price to assign for import energy during the period(s).
-      export_energy_price (float): Price to assign for export energy during the period(s).
-      price_periods (str, optional): Daily time periods (separated by "|") in a format such as 
-          "7am – 10am | 4pm – 9pm". If provided, custom prices will be applied in any of these intervals.
-      default_import_energy_price (float): Price to be used outside the specified period(s).
-      default_export_energy_price (float): Price to be used outside the specified period(s).
-      
-    Returns:
-      pl.DataFrame: The transformed dataframe.
+    Adds meta data columns: Customer, Postcode, DateRange.
     """
     # use regex to check if price_periods is in the correct format
     if price_periods is not None:
@@ -189,9 +157,33 @@ def transform_polars_df(
     pivot = pivot.with_columns(
         pl.col("Time").dt.timestamp().alias("Timestamp")
     )
-    
+
+    # --- Add meta data columns ---
+    # Get unique values for Customer and Postcode
+    customer = df["Customer"][0] if "Customer" in df.columns else None
+    postcode = df["Postcode"][0] if "Postcode" in df.columns else None
+    # Get date range
+    dates = df["date"].unique().to_list()
+    if dates:
+        try:
+            date_objs = [datetime.strptime(d, "%d/%m/%Y") for d in dates]
+            min_date = min(date_objs).strftime("%d/%m/%Y")
+            max_date = max(date_objs).strftime("%d/%m/%Y")
+            date_range = f"{min_date} - {max_date}"
+        except Exception:
+            date_range = ""
+    else:
+        date_range = ""
+
+    pivot = pivot.with_columns([
+        pl.lit(customer).alias("Customer"),
+        pl.lit(postcode).alias("Postcode"),
+        pl.lit(date_range).alias("DateRange")
+    ])
+
     # Regroup the columns
     pivot = pivot.select([
+        "Customer", "Postcode", "DateRange",
         "Timestamp", "SolarGen", "HouseLoad", "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice", "Time"
     ])
     
