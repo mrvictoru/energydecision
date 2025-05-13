@@ -101,8 +101,8 @@ class Agent:
             else:
                 action_value = self.action_levels_norm[optimal_action_idx]
             # add small noise to the action
-            #noise = np.random.normal(-0.01, 0.01)
-            #action_value = min(max(action_value + noise, -1.0), 1.0)
+            noise = np.random.normal(-0.01, 0.01)
+            action_value = min(max(action_value + noise, -1.0), 1.0)
             return [action_value]
         else:
             raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
@@ -323,9 +323,10 @@ class Agent:
         return pl.DataFrame(logs)
 
 import concurrent.futures
+from tqdm.notebook import tqdm
 
 # this can be used to run multiple episodes in parallel
-def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=None):
+def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4):
     """
     Runs one episode per environment in parallel.
     agent_class: The Agent class to instantiate.
@@ -339,6 +340,10 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
         agent = agent_class(env, **agent_kwargs)
         return agent.run_episode(render=render)
 
+    results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(run_single, envs))
+        # Use as_completed to update progress as each finishes
+        futures = [executor.submit(run_single, env) for env in envs]
+        for f in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
+            results.append(f.result())
     return results

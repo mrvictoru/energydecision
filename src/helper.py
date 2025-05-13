@@ -157,7 +157,7 @@ def transform_polars_df(
     pivot = pivot.with_columns(
         pl.col("Time").dt.timestamp().alias("Timestamp")
     )
-
+    """"
     # --- Add meta data columns ---
     # Get unique values for Customer and Postcode
     customer = df["Customer"][0] if "Customer" in df.columns else None
@@ -180,10 +180,10 @@ def transform_polars_df(
         pl.lit(postcode).alias("Postcode"),
         pl.lit(date_range).alias("DateRange")
     ])
-
+    """
     # Regroup the columns
     pivot = pivot.select([
-        "Customer", "Postcode", "DateRange",
+        #"Customer", "Postcode", "DateRange",
         "Timestamp", "SolarGen", "HouseLoad", "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice", "Time"
     ])
     

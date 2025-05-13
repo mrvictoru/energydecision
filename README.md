@@ -50,9 +50,9 @@ energydecision/
     ```
 2.  **Using Docker:**
 *   Build and run the container:
-     ```bash
-     sudo docker compose up --build
-     ```
+    ```bash
+    sudo docker compose up
+    ```
 
 ## Usage
 
@@ -85,7 +85,7 @@ energydecision/
     print(results_df)
     ```
 
-*   if there are mulitple environments, simulation can be run in parallel using ['run_episodes_parallel'](src/decision.py)
+*   if there are mulitple environments, simulation can be run in parallel using [`run_episodes_parallel`](src/decision.py)
 
     ```python
     # Example (Conceptual)

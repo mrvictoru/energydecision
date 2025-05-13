@@ -244,6 +244,7 @@ class SolarBatteryEnv(gym.Env):
     def render(self, **kwargs):
         if self.render_mode == 'human':
             print(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh")
+            """
         elif self.render_mode == 'file':
             # Use a filename based on the dataset if possible
             # Auto-generate dataset name based on meta data columns if available
@@ -264,4 +265,5 @@ class SolarBatteryEnv(gym.Env):
                     f"Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh, "
                     f"Obs: {obs.tolist()}\n"
             )
+            """
 
