@@ -239,7 +239,7 @@ class SolarBatteryEnv(gym.Env):
         terminated = False
 
         obs = self._next_observation(battery_deg_penalty=battery_deg_penalty*self.battery_life_cost)
-        return obs, reward, terminated, truncated, {"reward_info": reward_info}
+        return obs, float(reward), terminated, truncated, {"reward_info": reward_info}
 
     def render(self, **kwargs):
         if self.render_mode == 'human':

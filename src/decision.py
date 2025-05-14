@@ -325,6 +325,10 @@ class Agent:
 import concurrent.futures
 from tqdm.notebook import tqdm
 
+def run_single(agent_class, env, agent_kwargs, render):
+    agent = agent_class(env, **agent_kwargs)
+    return agent.run_episode(render=render)
+
 # this can be used to run multiple episodes in parallel
 def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4):
     """
@@ -336,14 +340,10 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     """
     agent_kwargs = agent_kwargs or {}
 
-    def run_single(env):
-        agent = agent_class(env, **agent_kwargs)
-        return agent.run_episode(render=render)
-
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         # Use as_completed to update progress as each finishes
-        futures = [executor.submit(run_single, env) for env in envs]
+        futures = [executor.submit(run_single, agent_class, env, agent_kwargs, render) for env in envs]
         for f in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             results.append(f.result())
     return results
