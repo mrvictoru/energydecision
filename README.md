@@ -17,6 +17,7 @@ This project explores different algorithms for optimizing energy management in a
 *   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
 *   **Online learning loop:** Training loop using stablebaselines3
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
+*   **Plot the simulation:** modify render function from env to plot key metrics
 
 
 ## Project Structure
@@ -130,12 +131,12 @@ energydecision/
     sdp_agent_kwargs = {
         'algorithm': 'sdp',
         'soc_resolution': 20,
-        'action_resolution': 41,  # or whatever you want
-        'degradation_model': 'linear',
-        'linear_deg_cost_p_kwh': 0.2
+        'action_resolution': 41,  # best to be 2*soc_resolution + 1
+        'degradation_model': 'linear', # the other option being static degradation 'static'
+        'linear_deg_cost_p_kwh': 0.2 # only needed if using linear
     }
-
-    test_envs = [env_fn(500) for env_fn in testing_env_fns]
+    num_step = None # pick the number of step for the simulation
+    test_envs = [env_fn(num_step) for env_fn in testing_env_fns]
 
     # Run all episodes in parallel
     sdp_episode_logs = run_episodes_parallel(Agent, test_envs, agent_kwargs=sdp_agent_kwargs, max_workers=8)
