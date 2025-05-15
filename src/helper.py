@@ -2,6 +2,7 @@ import polars as pl
 import numpy as np
 import re
 from datetime import datetime
+from EnergySimEnv import SolarBatteryEnv
 
 # Helper: parse a time string like "7am" or "7:30am" into minutes since midnight.
 def parse_time(time_str: str) -> int:
@@ -200,3 +201,13 @@ def transform_polars_df(
 #     default_import_energy_price=0.1,
 #     default_export_energy_price=0.05
 # )
+
+# Helper: create an environment instance from a dataset.
+def make_env(dataset):
+    def _init(max_step = None):
+        if max_step is not None:
+            env = SolarBatteryEnv(dataset, max_step=max_step)
+        else:
+            env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
+        return env
+    return _init

@@ -58,7 +58,22 @@ class SolarBatteryEnv(gym.Env):
         self.render_mode = render_mode
         self.battery_life_cost = battery_life_cost
         self.correction_interval = correction_interval
-        self.step_duration = step_duration
+        # Automatically determine step_duration from the DataFrame's 'Time' column
+        # Assumes 'Time' is in a format compatible with numpy.datetime64 or pandas.Timestamp
+        timestamps = self.df['Time'].to_numpy()
+        if len(timestamps) >= 2:
+            # Try to infer step duration in hours
+            try:
+                # Convert to numpy.datetime64 if not already
+                t0 = np.datetime64(timestamps[0])
+                t1 = np.datetime64(timestamps[1])
+                delta_hours = (t1 - t0) / np.timedelta64(1, 'h')
+                self.step_duration = float(delta_hours)
+            except Exception:
+                # Fallback to default if conversion fails
+                self.step_duration = step_duration
+        else:
+            self.step_duration = step_duration
         self.init_correction_steps = init_correction_steps
 
         # Initialize state of charge history for dynamic correction
