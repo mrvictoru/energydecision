@@ -15,7 +15,8 @@ This project explores different algorithms for optimizing energy management in a
 
 ## ToDo
 *   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
-*   **Online learning loop:** Training loop using stablebaselines3
+*   ~~**Online learning loop:** Training loop using stablebaselines3~~
+*   **Refactor Agent class** Refactor Agent class to be less spaghetti
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
 *   **Plot the simulation:** modify render function from env to plot key metrics
 
@@ -93,7 +94,7 @@ energydecision/
     import polars as pl
     from src.EnergySimEnv import SolarBatteryEnv
     from src.decision import Agent, run_episodes_parallel
-    from src.helper import transform_polars_df # Or your custom provider
+    from src.helper import transform_polars_df, make_env
 
     # Load data
     datapath = '../data/2011-2012 Solar home electricity data v2.csv'
@@ -116,16 +117,6 @@ energydecision/
             break
         testing_dataset.append(newcustomerdf)
 
-    # Helper: create an environment instance from a dataset.
-    def make_env(dataset):
-        def _init(max_step = None):
-            if max_step is not None:
-                env = SolarBatteryEnv(dataset, max_step=max_step)
-            else:
-                env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
-            return env
-        return _init
-
     testing_env_fns = [make_env(ds) for ds in testing_dataset]
     # Initialize environments and SDP agent parameters
     sdp_agent_kwargs = {
@@ -143,6 +134,65 @@ energydecision/
 
     print(sdp_episode_logs)
     ```
+
+*   Utilise [`train_model`](src/sb3train.py) to train policy using reinforcement learning library stable_baselines3 against the environment
+
+    ```python
+    import polars as pl
+    from stable_baselines3 import PPO, A2C, DDPG, SAC, TD3
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    from src.helper import transform_polars_df, make_env
+    from sb3train import train_model
+    from EnergySimEnv import SolarBatteryEnv
+
+    # Load data
+    datapath = '../data/2011-2012 Solar home electricity data v2.csv'
+    # skip the first line in csv and read the next line as column
+    # then read the rest of the file and store as dataframe
+    df = pl.read_csv(datapath, skip_rows=1)
+    # get all the unique customers as their own dataframes
+    customers = df['Customer'].unique()
+    # get all the unique customers as their own dataframes
+    customers = df['Customer'].unique()
+    # pick 80% of the random customers as training data
+    training_customers = np.random.choice(customers, int(0.8*len(customers)), replace=False)
+    # the rest of the customers are testing data
+    testing_customers = np.setdiff1d(customers, training_customers)
+
+    # loop through each customer and use transform_polars_df to get the dataframe and store it in a list call dataset
+    training_dataset = []
+    for customer in training_customers:
+        customer_df = df.filter(pl.col('Customer') == customer)
+        try:
+            newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
+        except Exception as e:
+            print(f"Error with customer as training dataset: {customer}")
+            print(e)
+            break
+        training_dataset.append(newcustomerdf)
+
+    testing_dataset = []
+    for customer in testing_customers:
+        customer_df = df.filter(pl.col('Customer') == customer)
+        try:
+            newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
+        except Exception as e:
+            print(f"Error with customer as testing dataset: {customer}")
+            print(e)
+            break
+        testing_dataset.append(newcustomerdf)
+    
+    # Create a list of environment creation functions to build a vectorized environment.
+    training_env_fns = [make_env(ds) for ds in training_dataset]
+    training_vec_env = DummyVecEnv(training_env_fns)
+
+    num_total_steps = len(training_dataset[0])*len(training_dataset)
+    print(f"Total number of steps possible in training dataset: {num_total_steps}")
+
+    testing_env_fns = [make_env(ds) for ds in testing_dataset]
+
+    # Create and train a PPO model
+    ppo_model, _ = train_model(model_class=PPO, vec_env=training_vec_env, total_timesteps=num_total_steps, eval_env_fn=testing_env_fns[0])
 
 ## Dependencies
 
