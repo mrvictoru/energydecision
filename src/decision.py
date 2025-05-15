@@ -22,7 +22,9 @@ class Agent:
         self.model = model
         self.rule_presistence = False  # Preset for rule-based action persistence
 
-        if self.algorithm == 'sdp':
+        if self.algorithm == 'sdp': # Stochastic Dynamic Programming
+        # The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
+        # by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge 
             self.horizon = horizon
             self.soc_resolution = soc_resolution
             self.action_resolution = action_resolution
@@ -53,7 +55,7 @@ class Agent:
             # self.sdp_policy_cache = None
             # self.cache_step = -1
 
-            # debugging log
+            # debugging log when using SDP, it tracks the steps solving SDP
             self.sdp_debug_log = []
 
     def choose_action(self, obs):
