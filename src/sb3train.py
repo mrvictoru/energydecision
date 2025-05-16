@@ -1,4 +1,5 @@
 import optuna
+import inspect
 import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO, A2C, DDPG, SAC, TD3
@@ -217,21 +218,27 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
     else:
         net_arch = [400, 300]   
     
-    model = model_class(
-        "MlpPolicy", 
-        vec_env, 
-        verbose=0, 
-        learning_rate=best_params["learning_rate"],
-        gamma=best_params["gamma"],
-        clip_range=best_params.get("clip_range", 0.2),
-        ent_coef=best_params.get("ent_coef", 0.0),
-        vf_coef=best_params.get("vf_coef", 0.0),
-        tau=best_params.get("tau", 0.0),
-        batch_size=best_params.get("batch_size", 64),
-        policy_kwargs=dict(net_arch=net_arch),
-        device="cpu" if model_class != DDPG else "cuda",  # Use GPU for DDPG
-        action_noise=best_params.get("action_noise", None)
-    )
+# Build the argument dictionary
+    model_args = {
+        "policy": "MlpPolicy",
+        "env": vec_env,
+        "verbose": 0,
+        "learning_rate": best_params["learning_rate"],
+        "gamma": best_params["gamma"],
+        "policy_kwargs": dict(net_arch=net_arch),
+        "device": "cpu" if model_class != DDPG else "cuda"
+    }
+    # Optionally add arguments if present in best_params
+    optional_args = ["clip_range", "ent_coef", "vf_coef", "tau", "batch_size", "action_noise"]
+    for arg in optional_args:
+        if arg in best_params:
+            model_args[arg] = best_params[arg]
+
+    # Filter out arguments not in the model's __init__ signature
+    valid_args = inspect.signature(model_class.__init__).parameters
+    filtered_args = {k: v for k, v in model_args.items() if k in valid_args}
+
+    model = model_class(**filtered_args)
 
     # evaluate the model before training
     mean_reward, std_reward = evaluate_policy(model, Monitor(eval_env_fn()), n_eval_episodes=5, deterministic=False)
@@ -246,14 +253,15 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
     eval_result['Post_training']={'mean_reward': mean_reward, 'std_reward': std_reward}
     
     print("training complete.")
+
     # plot the pre training mean_reward and std_reward against the post training mean_reward and std_reward
-    x = np.arrange(len(eval_result))
+    x = np.arange(len(eval_result))
     y = np.array([eval_result[key]['mean_reward'] for key in eval_result])
     yerr = np.array([eval_result[key]['std_reward'] for key in eval_result])
-    plt.errorbar(x, y, yerr=yerr, fmt='o')
-    plt.title("Pre and Post Training Mean Reward")
+    plt.bar(x, y, yerr=yerr, capsize=5)
     plt.xticks(x, list(eval_result.keys()))
-    plt.ylabel("Mean Reward")
+    plt.ylabel('Mean Reward')
+    plt.title('Pre and Post Training Mean Reward')
     plt.show()
 
     return model, eval_result
