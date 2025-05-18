@@ -154,7 +154,7 @@ def ddpg_model_kwargs_fn(trial, vec_env=None):
     )
 
 
-def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10):
+def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model = False):
     """
     Trains a reinforcement learning model using Stable Baselines3, with hyperparameter tuning via Optuna,
     and evaluates its performance before and after training.
@@ -175,70 +175,75 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         - The function performs hyperparameter tuning using Optuna.
         - It plots the model before and after training and plots the results.
     """
-    # Check if model_class is one of the supported algorithms
-    if model_class not in [PPO, A2C, DDPG, SAC, TD3]:
-        raise ValueError("model_class must be one of [PPO, A2C, DDPG, SAC, TD3]")
-    if model_class == PPO:
-        model_kwargs_fn = ppo_model_kwargs_fn
-    elif model_class == A2C:
-        model_kwargs_fn = a2c_model_kwargs_fn
-    elif model_class == DDPG:
-        model_kwargs_fn = ddpg_model_kwargs_fn
-    elif model_class == SAC:
-        model_kwargs_fn = sac_model_kwargs_fn
-    elif model_class == TD3:
-        model_kwargs_fn = td3_model_kwargs_fn
-    else:
-        raise ValueError("model_class must be one of [PPO, A2C, DDPG, SAC, TD3]")
-    if not callable(eval_env_fn):
-        raise ValueError("eval_env_fn must be a callable function that returns a new environment instance.")
-    
     eval_result = {}
-    
-    print("Tuning hyperparameters for class {}...".format(model_class.__name__))
-    study = optuna.create_study(direction="maximize")
-    study.optimize(
-        lambda trial: optimize_sb3(
-            trial, 
-            model_class, 
-            vec_env, 
-            eval_env_fn, 
-            model_kwargs_fn,
-            total_timesteps=test_timesteps
-        ), n_trials=n_trials, n_jobs=n_jobs
-    )
-    best_params = study.best_trial.params
-    print("Best trial for class {}:".format(model_class.__name__))
-    print(best_params)
+    if default_model is False:
+        # Check if model_class is one of the supported algorithms
+        if model_class not in [PPO, A2C, DDPG, SAC, TD3]:
+            raise ValueError("model_class must be one of [PPO, A2C, DDPG, SAC, TD3]")
+        if model_class == PPO:
+            model_kwargs_fn = ppo_model_kwargs_fn
+        elif model_class == A2C:
+            model_kwargs_fn = a2c_model_kwargs_fn
+        elif model_class == DDPG:
+            model_kwargs_fn = ddpg_model_kwargs_fn
+        elif model_class == SAC:
+            model_kwargs_fn = sac_model_kwargs_fn
+        elif model_class == TD3:
+            model_kwargs_fn = td3_model_kwargs_fn
+        else:
+            raise ValueError("model_class must be one of [PPO, A2C, DDPG, SAC, TD3]")
+        if not callable(eval_env_fn):
+            raise ValueError("eval_env_fn must be a callable function that returns a new environment instance.")
+        
+        
+        
+        print("Tuning hyperparameters for class {}...".format(model_class.__name__))
+        study = optuna.create_study(direction="maximize")
+        study.optimize(
+            lambda trial: optimize_sb3(
+                trial, 
+                model_class, 
+                vec_env, 
+                eval_env_fn, 
+                model_kwargs_fn,
+                total_timesteps=test_timesteps
+            ), n_trials=n_trials, n_jobs=n_jobs
+        )
+        best_params = study.best_trial.params
+        print("Best trial for class {}:".format(model_class.__name__))
+        print(best_params)
 
-    if best_params["net_arch"] == "small":
-        net_arch = [64, 64]
-    elif best_params["net_arch"] == "medium":   
-        net_arch = [256, 256]
+        if best_params["net_arch"] == "small":
+            net_arch = [64, 64]
+        elif best_params["net_arch"] == "medium":   
+            net_arch = [256, 256]
+        else:
+            net_arch = [400, 300]   
+        
+        # Build the argument dictionary
+        model_args = {
+            "policy": "MlpPolicy",
+            "env": vec_env,
+            "verbose": 0,
+            "learning_rate": best_params["learning_rate"],
+            "gamma": best_params["gamma"],
+            "policy_kwargs": dict(net_arch=net_arch),
+            "device": "cpu" if model_class != DDPG else "cuda"
+        }
+        # Optionally add arguments if present in best_params
+        optional_args = ["clip_range", "ent_coef", "vf_coef", "tau", "batch_size", "action_noise"]
+        for arg in optional_args:
+            if arg in best_params:
+                model_args[arg] = best_params[arg]
+
+        # Filter out arguments not in the model's __init__ signature
+        valid_args = inspect.signature(model_class.__init__).parameters
+        filtered_args = {k: v for k, v in model_args.items() if k in valid_args}
+
+        model = model_class(**filtered_args)
     else:
-        net_arch = [400, 300]   
-    
-# Build the argument dictionary
-    model_args = {
-        "policy": "MlpPolicy",
-        "env": vec_env,
-        "verbose": 0,
-        "learning_rate": best_params["learning_rate"],
-        "gamma": best_params["gamma"],
-        "policy_kwargs": dict(net_arch=net_arch),
-        "device": "cpu" if model_class != DDPG else "cuda"
-    }
-    # Optionally add arguments if present in best_params
-    optional_args = ["clip_range", "ent_coef", "vf_coef", "tau", "batch_size", "action_noise"]
-    for arg in optional_args:
-        if arg in best_params:
-            model_args[arg] = best_params[arg]
-
-    # Filter out arguments not in the model's __init__ signature
-    valid_args = inspect.signature(model_class.__init__).parameters
-    filtered_args = {k: v for k, v in model_args.items() if k in valid_args}
-
-    model = model_class(**filtered_args)
+        # Use default model parameters
+        model = model_class("MlpPolicy", vec_env, verbose=0)
 
     # evaluate the model before training
     mean_reward, std_reward = evaluate_policy(model, Monitor(eval_env_fn()), n_eval_episodes=5, deterministic=False)

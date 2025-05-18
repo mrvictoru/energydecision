@@ -64,8 +64,12 @@ class Agent:
         elif self.algorithm == 'rl':
             if self.model is None:
                 raise ValueError("RL algorithm selected but no model provided.")
-            obs_batch = obs[None, ...] if isinstance(obs, np.ndarray) else obs
-            action, _ = self.model.predict(obs_batch, deterministic=True)
+            if not isinstance(obs, np.ndarray):
+                warnings.warn("Observation is not a numpy array. RL model expects a numpy array input.")
+                # return specific values for action 
+                return [0.0008964] # Example value, adjust as needed
+            
+            action, _ = self.model.predict(obs, deterministic=True)
             return action[0] if isinstance(action, np.ndarray) and action.ndim > 1 else action
         elif self.algorithm == 'dt':
             if self.model is None:
@@ -326,6 +330,7 @@ class Agent:
 
 import concurrent.futures
 from tqdm.notebook import tqdm
+import warnings
 
 def run_single(agent_class, env, agent_kwargs, render):
     agent = agent_class(env, **agent_kwargs)
