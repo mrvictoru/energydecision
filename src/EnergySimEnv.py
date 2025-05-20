@@ -87,9 +87,13 @@ class SolarBatteryEnv(gym.Env):
             high=np.array([1.0]),
             dtype=np.float32
         )
-        num_features = self.df.shape[1] -1 + 2  # adding battery level, battery degradation cost and removing 'Time'
+        # Calculate the number of features for the observation space:
+        # - Remove 'Time' and 'Timestamp' columns (-2)
+        # - Add 4 cyclical time features (+4)
+        # - Add battery level and battery degradation cost (+2)
+        num_features = self.df.shape[1] - 2 + 4 + 2
         self.observation_space = spaces.Box(
-            low=0.0,
+            low=-1.0,  # cyclical features can be negative
             high=np.inf,
             shape=(num_features,),
             dtype=np.float32
@@ -109,15 +113,27 @@ class SolarBatteryEnv(gym.Env):
         return self._next_observation(), {}
 
     def _next_observation(self, battery_deg_penalty=0.0):
-        # Retrieve the current row as a dictionary using Polars.
         row = self._get_row(self.current_step)
-        # Drop the 'Time' column and convert the remaining dictionary values to a numpy array.
-        row.pop('Time', None)  # Remove the 'Time' column if it exists.
+        time_str = row.pop('Time', None)  # Remove and get the 'Time' column if it exists.
+    
+        # Cyclical encoding for time features
+        if time_str is not None:
+            # Convert to numpy.datetime64 (adjust format if needed)
+            dt = np.datetime64(time_str)
+            hour = dt.astype('datetime64[h]').astype(int) % 24
+            day_of_year = (dt - dt.astype('datetime64[Y]')).astype('timedelta64[D]').astype(int) + 1
+            hour_sin = np.sin(2 * np.pi * hour / 24)
+            hour_cos = np.cos(2 * np.pi * hour / 24)
+            day_sin = np.sin(2 * np.pi * day_of_year / 365)
+            day_cos = np.cos(2 * np.pi * day_of_year / 365)
+            cyclical_time = np.array([hour_sin, hour_cos, day_sin, day_cos], dtype=np.float32)
+        else:
+            cyclical_time = np.zeros(4, dtype=np.float32)
+    
+        row.pop('Timestamp', None)  # Optionally remove 'Timestamp' if not needed
         row_array = np.array(list(row.values()), dtype=np.float32)
         extra_features = np.array([self.battery_level, battery_deg_penalty], dtype=np.float32)
-        obs = np.concatenate((row_array, extra_features))
-        # the observation is a 1D array with the following features:
-        # [Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, BatteryLevel, BatteryDegCost]
+        obs = np.concatenate((cyclical_time, row_array, extra_features))
         return obs
     
     def get_observation_header(self):
