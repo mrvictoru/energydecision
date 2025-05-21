@@ -10,7 +10,8 @@ from batterydeg import static_degradation, dynamic_degradation
 
 # global variables
 VIOLATION_PENALTY = -1000
-
+MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR = 0.01  # 1% of battery_life_cost per step
+MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM = 0.001  # 0.1% of battery_life_cost per step
 
 class SolarBatteryEnv(gym.Env):
     """
@@ -18,7 +19,18 @@ class SolarBatteryEnv(gym.Env):
     Action space: (battery_flow)
         battery_flow > 0 -> battery charge, < 0 -> battery discharge; normalized to [-1, 1]
 
-    Observation: [Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, BatteryLevel, BatteryDegCost]
+    Observation (if normalized): 
+    [
+        hour_sin, hour_cos, day_sin, day_cos,  # Cyclical time features [-1, 1]
+        NormalizedSolarGen, NormalizedHouseLoad, ... , # DF features [0, 1]
+        NormalizedBatteryLevel, NormalizedBatteryDegCost # Extra features [0, 1]
+    ]
+    Observation (if not normalized):
+    [
+        hour_sin, hour_cos, day_sin, day_cos,  # Cyclical time features [-1, 1]
+        RawSolarGen, RawHouseLoad, ... ,        # DF features (raw values)
+        RawBatteryLevel, RawBatteryDegCost      # Extra features (raw values)
+    ]
     """
     metadata = {'render.modes': ['human', 'file', 'None']}
     
@@ -45,7 +57,8 @@ class SolarBatteryEnv(gym.Env):
         battery_life_cost=15300.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         correction_interval = 100, # steps before dynamic correction
         init_correction_steps = [10, 20, 40 ,70, 110, 160],
-        step_duration = 0.5 # duration of each step in hours (default half an hour)
+        step_duration = 0.5, # duration of each step in hours (default half an hour)
+        normalize_obs: bool = True
     ):
         super(SolarBatteryEnv, self).__init__()
         self.df = df
@@ -87,38 +100,80 @@ class SolarBatteryEnv(gym.Env):
             high=np.array([1.0]),
             dtype=np.float32
         )
-        # Calculate the number of features for the observation space:
-        # - Remove 'Time' and 'Timestamp' columns (-2)
-        # - Add 4 cyclical time features (+4)
-        # - Add battery level and battery degradation cost (+2)
-        num_features = self.df.shape[1] - 2 + 4 + 2
+
+        # ... (rest of your __init__ assignments) ...
+        self.normalize_obs = normalize_obs # Store the preference
+
+        # --- Normalization Parameters ---
+        self.ordered_df_cols_for_obs = [col for col in self.df.columns if col not in ['Time', 'Timestamp']]
+        
+        self.df_mins_for_obs = np.array([self.df.select(pl.min(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        self.df_maxs_for_obs = np.array([self.df.select(pl.max(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        self.df_ranges_for_obs = self.df_maxs_for_obs - self.df_mins_for_obs
+        self.df_ranges_for_obs[self.df_ranges_for_obs == 0] = 1.0
+
+        self.battery_level_min_raw = 0.0
+        self.battery_level_max_raw = self.battery_capacity
+
+        self.battery_deg_cost_min_raw = 0.0
+        # Max raw degradation cost for observation space if not normalizing
+        # (Used if raw obs is primary, or for the raw_obs in info dict)
+        self.battery_deg_cost_max_raw_obs_bound = MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR * self.battery_life_cost
+        if self.battery_deg_cost_max_raw_obs_bound == 0: self.battery_deg_cost_max_raw_obs_bound = 1.0
+
+        # Max degradation cost for normalization purposes (used if norm_obs is primary)
+        self.battery_deg_cost_max_for_norm = MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM * self.battery_life_cost
+        if self.battery_deg_cost_max_for_norm == 0: self.battery_deg_cost_max_for_norm = 1.0
+        
+        # --- Observation Space Definition (for the primary observation) ---
+        num_cyclical_features = 4
+        num_df_obs_features = len(self.ordered_df_cols_for_obs)
+        num_extra_obs_features = 2 # battery_level, battery_deg_cost
+        total_obs_features = num_cyclical_features + num_df_obs_features + num_extra_obs_features
+        
+        obs_space_low = np.zeros(total_obs_features, dtype=np.float32)
+        obs_space_high = np.zeros(total_obs_features, dtype=np.float32)
+
+        obs_space_low[0:num_cyclical_features] = -1.0
+        obs_space_high[0:num_cyclical_features] = 1.0
+        
+        start_idx = num_cyclical_features
+        end_idx = start_idx + num_df_obs_features
+        if self.normalize_obs: # Primary observation will be normalized
+            obs_space_low[start_idx:end_idx] = 0.0
+            obs_space_high[start_idx:end_idx] = 1.0
+            obs_space_low[end_idx:end_idx+num_extra_obs_features] = 0.0
+            obs_space_high[end_idx:end_idx+num_extra_obs_features] = 1.0
+        else: # Primary observation will be raw
+            obs_space_low[start_idx:end_idx] = self.df_mins_for_obs
+            obs_space_high[start_idx:end_idx] = self.df_maxs_for_obs
+            obs_space_low[end_idx] = self.battery_level_min_raw
+            obs_space_high[end_idx] = self.battery_level_max_raw
+            obs_space_low[end_idx+1] = self.battery_deg_cost_min_raw
+            obs_space_high[end_idx+1] = self.battery_deg_cost_max_raw_obs_bound
+
         self.observation_space = spaces.Box(
-            low=-1.0,  # cyclical features can be negative
-            high=np.inf,
-            shape=(num_features,),
+            low=obs_space_low,
+            high=obs_space_high,
+            shape=(total_obs_features,),
             dtype=np.float32
         )
 
-    # Helper method to retrieve a row from the Polars DataFrame as a dictionary.
-    def _get_row(self, index: int) -> dict:
-        row_tuple = self.df.row(index)  # Polars returns a tuple for the row.
-        return dict(zip(self.df.columns, row_tuple))
+    def _get_observation_components(self, current_step_actual_deg_cost=0.0):
+        """
+        Helper to compute all components for both raw and normalized observations.
+        Returns:
+            cyclical_time_features (np.array): Shape (4,)
+            raw_df_values (np.array): Raw values from DF for obs.
+            normalized_df_values (np.array): Normalized DF values.
+            raw_extra_features (np.array): Raw [battery_level, deg_cost]. Shape (2,)
+            normalized_extra_features (np.array): Normalized [battery_level, deg_cost]. Shape (2,)
+        """
+        row_dict = self._get_row(self.current_step)
+        time_str = row_dict.pop('Time', None)
+        row_dict.pop('Timestamp', None)
 
-    def reset(self, seed=None, **kwargs):
-        self.current_step = 0
-        self.battery_level = min(self.battery_capacity, self.battery_level)
-        self.soc_history = []
-        self.static_deg_history = []
-        self.correction_factor = 1.0
-        return self._next_observation(), {}
-
-    def _next_observation(self, battery_deg_penalty=0.0):
-        row = self._get_row(self.current_step)
-        time_str = row.pop('Time', None)  # Remove and get the 'Time' column if it exists.
-    
-        # Cyclical encoding for time features
         if time_str is not None:
-            # Convert to numpy.datetime64 (adjust format if needed)
             dt = np.datetime64(time_str)
             hour = dt.astype('datetime64[h]').astype(int) % 24
             day_of_year = (dt - dt.astype('datetime64[Y]')).astype('timedelta64[D]').astype(int) + 1
@@ -126,21 +181,61 @@ class SolarBatteryEnv(gym.Env):
             hour_cos = np.cos(2 * np.pi * hour / 24)
             day_sin = np.sin(2 * np.pi * day_of_year / 365)
             day_cos = np.cos(2 * np.pi * day_of_year / 365)
-            cyclical_time = np.array([hour_sin, hour_cos, day_sin, day_cos], dtype=np.float32)
+            cyclical_time_features = np.array([hour_sin, hour_cos, day_sin, day_cos], dtype=np.float32)
         else:
-            cyclical_time = np.zeros(4, dtype=np.float32)
-    
-        row.pop('Timestamp', None)  # Optionally remove 'Timestamp' if not needed
-        row_array = np.array(list(row.values()), dtype=np.float32)
-        extra_features = np.array([self.battery_level, battery_deg_penalty], dtype=np.float32)
-        obs = np.concatenate((cyclical_time, row_array, extra_features))
-        return obs
-    
+            cyclical_time_features = np.zeros(4, dtype=np.float32)
+
+        raw_df_values = np.array([row_dict[col] for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        normalized_df_values = (raw_df_values - self.df_mins_for_obs) / self.df_ranges_for_obs
+        normalized_df_values = np.clip(normalized_df_values, 0.0, 1.0)
+
+        raw_battery_level = np.float32(self.battery_level)
+        raw_battery_deg_cost = np.float32(current_step_actual_deg_cost)
+        raw_extra_features = np.array([raw_battery_level, raw_battery_deg_cost], dtype=np.float32)
+
+        norm_battery_level = (raw_battery_level - self.battery_level_min_raw) / (self.battery_level_max_raw - self.battery_level_min_raw + 1e-9)
+        norm_battery_level = np.clip(norm_battery_level, 0.0, 1.0)
+        
+        norm_battery_deg_cost = (raw_battery_deg_cost - self.battery_deg_cost_min_raw) / (self.battery_deg_cost_max_for_norm - self.battery_deg_cost_min_raw + 1e-9)
+        norm_battery_deg_cost = np.clip(norm_battery_deg_cost, 0.0, 1.0)
+        normalized_extra_features = np.array([norm_battery_level, norm_battery_deg_cost], dtype=np.float32)
+        
+        return cyclical_time_features, raw_df_values, normalized_df_values, raw_extra_features, normalized_extra_features
+
+    # Helper method to retrieve a row from the Polars DataFrame as a dictionary.
+    def _get_row(self, index: int) -> dict:
+        row_tuple = self.df.row(index)  # Polars returns a tuple for the row.
+        return dict(zip(self.df.columns, row_tuple))
+
+    def reset(self, seed=None, **kwargs):
+        super().reset(seed=seed) # Important for Gymnasium compatibility
+        self.current_step = 0
+        self.battery_level = np.clip(self.init_battery_level, 0, self.battery_capacity)
+        self.soc_history = []
+        self.static_deg_history = []
+        self.correction_factor = 1.0
+        
+        components = self._get_observation_components(current_step_actual_deg_cost=0.0)
+        ctf, rdfv, ndfv, ref, nef = components
+
+        info = {}
+        if self.normalize_obs:
+            primary_obs = np.concatenate((ctf, ndfv, nef))
+            info['raw_obs'] = np.concatenate((ctf, rdfv, ref))
+        else:
+            primary_obs = np.concatenate((ctf, rdfv, ref))
+            info['norm_obs'] = np.concatenate((ctf, ndfv, nef))
+            
+        return primary_obs, info
+
+    # ... (get_observation_header, _calculate_grid_reward, _calculate_battery_degradation, render) ...
+    # Make sure get_observation_header also reflects the primary observation format
     def get_observation_header(self):
-        row = self._get_row(0)
-        # drop the 'Time' column
-        row = {k: v for k, v in row.items() if k != 'Time'}
-        return list(row.keys()) + ['BatteryLevel', 'BatteryDegCost']
+        header = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
+        prefix = "Norm_" if self.normalize_obs else "" # Add prefix if primary obs is normalized
+        header.extend([f"{prefix}{col}" for col in self.ordered_df_cols_for_obs])
+        header.extend([f'{prefix}BatteryLevel', f'{prefix}BatteryDegCost'])
+        return header
 
     def _calculate_grid_reward(self, grid_energy, energy_price):
         # If grid energy exceeds limits, add a violation penalty.
@@ -242,7 +337,8 @@ class SolarBatteryEnv(gym.Env):
 
 
         # ----- Compute Final Reward -----
-        reward = grid_reward - battery_deg_penalty*self.battery_life_cost
+        current_step_deg_cost = battery_deg_penalty * self.battery_life_cost
+        reward = grid_reward - current_step_deg_cost
 
         # Log reward calculation details
         reward_info = {
@@ -269,8 +365,18 @@ class SolarBatteryEnv(gym.Env):
         truncated = (self.current_step >= self.max_step)
         terminated = False
 
-        obs = self._next_observation(battery_deg_penalty=battery_deg_penalty*self.battery_life_cost)
-        return obs, float(reward), terminated, truncated, {"reward_info": reward_info}
+        components = self._get_observation_components(current_step_actual_deg_cost=current_step_deg_cost)
+        ctf, rdfv, ndfv, ref, nef = components
+
+        info_dict_for_return = {"reward_info": reward_info} # Start with reward_info
+        if self.normalize_obs:
+            primary_obs = np.concatenate((ctf, ndfv, nef))
+            info_dict_for_return['raw_obs'] = np.concatenate((ctf, rdfv, ref))
+        else:
+            primary_obs = np.concatenate((ctf, rdfv, ref))
+            info_dict_for_return['norm_obs'] = np.concatenate((ctf, ndfv, nef))
+
+        return primary_obs, float(reward), terminated, truncated, info_dict_for_return
 
     def render(self, **kwargs):
         if self.render_mode == 'human':
