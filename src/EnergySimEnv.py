@@ -66,6 +66,7 @@ class SolarBatteryEnv(gym.Env):
         self.max_step = max_step
         self.battery_capacity = battery_capacity
         self.battery_level = init_battery_level
+        self.init_battery_level = init_battery_level
         self.max_battery_flow = max_battery_flow
         self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
@@ -201,6 +202,22 @@ class SolarBatteryEnv(gym.Env):
         normalized_extra_features = np.array([norm_battery_level, norm_battery_deg_cost], dtype=np.float32)
         
         return cyclical_time_features, raw_df_values, normalized_df_values, raw_extra_features, normalized_extra_features
+    
+    def get_norms_obs(self):
+        """
+        Returns the normalized observation components.
+        This is useful for getting the normalized observation without stepping the environment.
+        """
+        ctf, rdv, ndv, ref, nef = self._get_observation_components()
+        return np.concatenate((ctf, ndv, nef))
+    
+    def get_raw_obs(self):
+        """
+        Returns the raw observation components.
+        This is useful for getting the raw observation without stepping the environment.
+        """
+        ctf, rdfv, ndfv, ref, nef = self._get_observation_components()
+        return np.concatenate((ctf, rdfv, ref))
 
     # Helper method to retrieve a row from the Polars DataFrame as a dictionary.
     def _get_row(self, index: int) -> dict:
@@ -368,15 +385,12 @@ class SolarBatteryEnv(gym.Env):
         components = self._get_observation_components(current_step_actual_deg_cost=current_step_deg_cost)
         ctf, rdfv, ndfv, ref, nef = components
 
-        info_dict_for_return = {"reward_info": reward_info} # Start with reward_info
         if self.normalize_obs:
             primary_obs = np.concatenate((ctf, ndfv, nef))
-            info_dict_for_return['raw_obs'] = np.concatenate((ctf, rdfv, ref))
         else:
             primary_obs = np.concatenate((ctf, rdfv, ref))
-            info_dict_for_return['norm_obs'] = np.concatenate((ctf, ndfv, nef))
 
-        return primary_obs, float(reward), terminated, truncated, info_dict_for_return
+        return primary_obs, float(reward), terminated, truncated, reward_info
 
     def render(self, **kwargs):
         if self.render_mode == 'human':

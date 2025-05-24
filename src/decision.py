@@ -315,10 +315,10 @@ class Agent:
         # Decide which obs to use based on agent type
         if self.algorithm in ['rule', 'sdp']:
             # Use raw_obs if available, else fallback to obs
-            current_obs = info.get('raw_obs', obs)
+            current_obs = self.env.get_raw_obs()
         else:  # 'rl', 'dt', etc.
             # Use norm_obs if available, else fallback to obs
-            current_obs = info.get('norm_obs', obs)
+            current_obs = self.env.get_norms_obs()
 
         while not (terminated or truncated):
             action = self.choose_action(current_obs)
@@ -326,9 +326,9 @@ class Agent:
             next_obs, reward, terminated, truncated, info = self.env.step(action)
             # Select the correct next_obs for the next step
             if self.algorithm in ['rule', 'sdp']:
-                current_obs = info.get('raw_obs', next_obs)
+                current_obs = self.env.get_raw_obs()
             else:
-                current_obs = info.get('norm_obs', next_obs)
+                current_obs = self.env.get_norms_obs()
             
             logs.append({
                 'observation': norm_obs.tolist() if isinstance(norm_obs, np.ndarray) else norm_obs,
