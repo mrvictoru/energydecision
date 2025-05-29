@@ -102,8 +102,8 @@ class SolarBatteryEnv(gym.Env):
             dtype=np.float32
         )
 
-        # ... (rest of your __init__ assignments) ...
-        self.normalize_obs = normalize_obs # Store the preference
+        # always use normalized observations
+        self.normalize_obs = True
 
         # --- Normalization Parameters ---
         self.ordered_df_cols_for_obs = [col for col in self.df.columns if col not in ['Time', 'Timestamp']]
@@ -203,13 +203,11 @@ class SolarBatteryEnv(gym.Env):
         
         return cyclical_time_features, raw_df_values, normalized_df_values, raw_extra_features, normalized_extra_features
     
-    def get_norms_obs(self):
-        """
-        Returns the normalized observation components.
-        This is useful for getting the normalized observation without stepping the environment.
-        """
-        ctf, rdv, ndv, ref, nef = self._get_observation_components()
-        return np.concatenate((ctf, ndv, nef))
+
+    # Helper method to retrieve a row from the Polars DataFrame as a dictionary.
+    def _get_row(self, index: int) -> dict:
+        row_tuple = self.df.row(index)  # Polars returns a tuple for the row.
+        return dict(zip(self.df.columns, row_tuple))
     
     def get_raw_obs(self):
         """
@@ -218,11 +216,6 @@ class SolarBatteryEnv(gym.Env):
         """
         ctf, rdfv, ndfv, ref, nef = self._get_observation_components()
         return np.concatenate((ctf, rdfv, ref))
-
-    # Helper method to retrieve a row from the Polars DataFrame as a dictionary.
-    def _get_row(self, index: int) -> dict:
-        row_tuple = self.df.row(index)  # Polars returns a tuple for the row.
-        return dict(zip(self.df.columns, row_tuple))
 
     def reset(self, seed=None, **kwargs):
         super().reset(seed=seed) # Important for Gymnasium compatibility
@@ -236,12 +229,9 @@ class SolarBatteryEnv(gym.Env):
         ctf, rdfv, ndfv, ref, nef = components
 
         info = {}
-        if self.normalize_obs:
-            primary_obs = np.concatenate((ctf, ndfv, nef))
-            info['raw_obs'] = np.concatenate((ctf, rdfv, ref))
-        else:
-            primary_obs = np.concatenate((ctf, rdfv, ref))
-            info['norm_obs'] = np.concatenate((ctf, ndfv, nef))
+
+        primary_obs = np.concatenate((ctf, ndfv, nef))
+
             
         return primary_obs, info
 
@@ -385,10 +375,7 @@ class SolarBatteryEnv(gym.Env):
         components = self._get_observation_components(current_step_actual_deg_cost=current_step_deg_cost)
         ctf, rdfv, ndfv, ref, nef = components
 
-        if self.normalize_obs:
-            primary_obs = np.concatenate((ctf, ndfv, nef))
-        else:
-            primary_obs = np.concatenate((ctf, rdfv, ref))
+        primary_obs = np.concatenate((ctf, ndfv, nef))
 
         return primary_obs, float(reward), terminated, truncated, reward_info
 

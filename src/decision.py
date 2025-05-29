@@ -318,24 +318,25 @@ class Agent:
             current_obs = self.env.get_raw_obs()
         else:  # 'rl', 'dt', etc.
             # Use norm_obs if available, else fallback to obs
-            current_obs = self.env.get_norms_obs()
+            current_obs = obs
 
         while not (terminated or truncated):
             action = self.choose_action(current_obs)
-            norm_obs = info.get('norm_obs', current_obs)
+
             next_obs, reward, terminated, truncated, info = self.env.step(action)
-            # Select the correct next_obs for the next step
-            if self.algorithm in ['rule', 'sdp']:
-                current_obs = self.env.get_raw_obs()
-            else:
-                current_obs = self.env.get_norms_obs()
             
             logs.append({
-                'observation': norm_obs.tolist() if isinstance(norm_obs, np.ndarray) else norm_obs,
+                'observation': current_obs.tolist() if isinstance(current_obs, np.ndarray) else current_obs,
                 'action': action,
                 'reward': reward,
                 'info': info
             })
+
+            # Select the correct next_obs for the next step
+            if self.algorithm in ['rule', 'sdp']:
+                current_obs = self.env.get_raw_obs()
+            else:
+                current_obs = next_obs
             if render:
                 self.env.render()
 
