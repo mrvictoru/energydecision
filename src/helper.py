@@ -2,7 +2,9 @@ import polars as pl
 import numpy as np
 import re
 from datetime import datetime
+import matplotlib.pyplot as plt
 from EnergySimEnv import SolarBatteryEnv
+
 
 # Helper: parse a time string like "7am" or "7:30am" into minutes since midnight.
 def parse_time(time_str: str) -> int:
@@ -211,3 +213,80 @@ def make_env(dataset):
             env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
         return env
     return _init
+
+# Helper: plot a 48-hour window from agent logs.
+def plot_48h_from_logs(
+    logs_df,
+    step_duration=0.5,
+    start_step=0,
+    logs_df2=None,
+    label1="Agent 1",
+    label2="Agent 2"
+):
+    """
+    Plots battery, solar, load, grid, and action for a 48-hour window from agent logs.
+    Optionally overlays battery level and agent action from a second logs DataFrame.
+    
+    logs_df: pandas or polars DataFrame with 'raw_observation', 'action', 'info' columns.
+    step_duration: duration of each step in hours (default 0.5).
+    start_step: index to start the 48-hour window (default 0).
+    logs_df2: optional, second logs DataFrame for overlay.
+    label1: legend label for first agent.
+    label2: legend label for second agent.
+    """
+    # Convert to pandas if it's a polars DataFrame
+    if hasattr(logs_df, "to_pandas"):
+        df = logs_df.to_pandas()
+    else:
+        df = logs_df
+
+    steps_per_hour = int(1 / step_duration)
+    steps_48h = 48 * steps_per_hour
+    end_step = start_step + steps_48h
+
+    df_48h = df.iloc[start_step:end_step]
+
+    battery = [obs[-2] for obs in df_48h['raw_observation']]
+    solar = [obs[5] for obs in df_48h['raw_observation']]
+    load = [obs[6] for obs in df_48h['raw_observation']]
+    action = [a[0] for a in df_48h['action']]
+    grid = [info.get('grid_energy', None) for info in df_48h['info']]
+
+    # If overlay logs provided, extract their 48h window
+    if logs_df2 is not None:
+        if hasattr(logs_df2, "to_pandas"):
+            df2 = logs_df2.to_pandas()
+        else:
+            df2 = logs_df2
+        df2_48h = df2.iloc[start_step:end_step]
+        battery2 = [obs[-2] for obs in df2_48h['raw_observation']]
+        action2 = [a[0] for a in df2_48h['action']]
+    else:
+        battery2 = None
+        action2 = None
+
+    plt.figure(figsize=(12, 8))
+    plt.subplot(4, 1, 1)
+    plt.plot(battery, label=f"Battery Level ({label1})", color="tab:blue")
+    if battery2 is not None:
+        plt.plot(battery2, label=f"Battery Level ({label2})", color="tab:orange", linestyle="--")
+    plt.legend()
+
+    plt.subplot(4, 1, 2)
+    plt.plot(solar, label="Solar Generation (kWh)", color="tab:green")
+    plt.plot(load, label="House Load (kWh)", color="tab:red")
+    plt.legend()
+
+    plt.subplot(4, 1, 3)
+    plt.plot(grid, label="Grid Energy (kWh)", color="tab:purple")
+    plt.legend()
+
+    plt.subplot(4, 1, 4)
+    plt.plot(action, label=f"Agent Action ({label1})", color="tab:blue")
+    if action2 is not None:
+        plt.plot(action2, label=f"Agent Action ({label2})", color="tab:orange", linestyle="--")
+    plt.legend()
+    plt.xlabel(f"Step ({step_duration}h intervals)")
+
+    plt.tight_layout()
+    plt.show()

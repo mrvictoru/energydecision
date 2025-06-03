@@ -310,31 +310,33 @@ class Agent:
     
     def run_episode(self, render=False):
         obs, info = self.env.reset()
+        raw_obs = self.env.get_raw_obs()  # Get raw observation if available
         logs = []
         terminated, truncated = False, False
         # Decide which obs to use based on agent type
         if self.algorithm in ['rule', 'sdp']:
             # Use raw_obs if available, else fallback to obs
-            current_obs = self.env.get_raw_obs()
+            current_obs = raw_obs
         else:  # 'rl', 'dt', etc.
             # Use norm_obs if available, else fallback to obs
             current_obs = obs
 
         while not (terminated or truncated):
             action = self.choose_action(current_obs)
-
             next_obs, reward, terminated, truncated, info = self.env.step(action)
             
             logs.append({
                 'observation': current_obs.tolist() if isinstance(current_obs, np.ndarray) else current_obs,
+                'raw_observation': raw_obs.tolist() if isinstance(raw_obs, np.ndarray) else raw_obs,
                 'action': action,
                 'reward': reward,
                 'info': info
             })
 
             # Select the correct next_obs for the next step
+            raw_obs = self.env.get_raw_obs()  # Get raw observation if available
             if self.algorithm in ['rule', 'sdp']:
-                current_obs = self.env.get_raw_obs()
+                current_obs = raw_obs
             else:
                 current_obs = next_obs
             if render:
