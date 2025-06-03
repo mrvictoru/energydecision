@@ -302,8 +302,11 @@ class SolarBatteryEnv(gym.Env):
         tolerance = 1e-2  # Tolerance for energy conservation check
         if abs(actual_supply - demand) > tolerance:
             # Return a large negative reward and flag violation
-            obs = self._next_observation()
-            return obs, VIOLATION_PENALTY, True, False, {"energy_conservation_violation": True}
+            components = self._get_observation_components()
+            ctf, rdfv, ndfv, ref, nef = components
+            primary_obs = np.concatenate((ctf, ndfv, nef))
+
+            return primary_obs, VIOLATION_PENALTY, True, False, {"energy_conservation_violation": True}
 
         # ----- Compute Rewards -----
         grid_reward, grid_violation_penalty = self._calculate_grid_reward(grid_energy, energy_price)
