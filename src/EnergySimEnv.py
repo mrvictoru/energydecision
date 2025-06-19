@@ -187,7 +187,15 @@ class SolarBatteryEnv(gym.Env):
             cyclical_time_features = np.zeros(4, dtype=np.float32)
 
         raw_df_values = np.array([row_dict[col] for col in self.ordered_df_cols_for_obs], dtype=np.float32)
-        normalized_df_values = (raw_df_values - self.df_mins_for_obs) / self.df_ranges_for_obs
+        # Normalize selected columns by battery_capacity, others by min-max
+        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
+        normalized_df_values = []
+        for i, col in enumerate(self.ordered_df_cols_for_obs):
+            if col in norm_by_capacity_cols:
+                normalized_df_values.append(raw_df_values[i] / (self.battery_capacity + 1e-9))
+            else:
+                normalized_df_values.append((raw_df_values[i] - self.df_mins_for_obs[i]) / self.df_ranges_for_obs[i])
+        normalized_df_values = np.array(normalized_df_values, dtype=np.float32)
         normalized_df_values = np.clip(normalized_df_values, 0.0, 1.0)
 
         raw_battery_level = np.float32(self.battery_level)

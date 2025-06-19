@@ -34,9 +34,14 @@ def transform_polars_df(
     if price_periods is not None:
         if not re.match(r"(\d{1,2}(:\d{2})?[ap]m\s*–\s*\d{1,2}(:\d{2})?[ap]m\s*\|?\s*)+", price_periods):
             raise ValueError("price_periods should be in the format '7am – 10am | 4pm – 9pm'")
+        
+    # check if columns 'Row Quality' exists
+    if "Row Quality" in df.columns:
+        # if so remove the column
+        df = df.drop("Row Quality")
 
     # Define the known columns present in the input
-    known_cols = {'Customer', 'Generator Capacity', 'Postcode', 'Consumption Category', 'date', 'Row Quality'}
+    known_cols = {'Customer', 'Generator Capacity', 'Postcode', 'Consumption Category', 'date'}
 
     # check if the known columns are present in the input
     if not all(col in df.columns for col in known_cols):
@@ -54,10 +59,20 @@ def transform_polars_df(
         (pl.col("date").cast(pl.Utf8) + " " + pl.col("time")).alias("Time")
     )
 
-    # Convert the 'Time' column from string to datetime using the given format.
-    unpivoted = unpivoted.with_columns(
-        pl.col("Time").str.strptime(pl.Datetime, format="%d/%m/%Y %H:%M", strict=False)
-    )
+    # check which string format is used for the date "%d-%b-%y %H:%M" or "%d/%m/%Y %H:%M"
+    # get the one value of column 'Time' to check the format
+    sample_time = unpivoted["Time"][0]
+    if re.match(r"\d{1,2}-[a-zA-Z]{3}-\d{2} \d{1,2}:\d{2}", sample_time):
+        unpivoted = unpivoted.with_columns(
+            pl.col("Time").str.strptime(pl.Datetime, format="%d-%b-%y %H:%M", strict=False)
+        )
+    elif re.match(r"\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}", sample_time):
+        # Convert the 'Time' column from string to datetime using the given format.
+        unpivoted = unpivoted.with_columns(
+            pl.col("Time").str.strptime(pl.Datetime, format="%d/%m/%Y %H:%M", strict=False)
+        )
+    else:
+        raise ValueError(f"Time format not recognized: {sample_time}. Expected format like '%d-%b-%y %H:%M' or '%d/%m/%Y %H:%M'.")
 
     # Remove rows where time conversion failed.
     unpivoted = unpivoted.filter(pl.col("Time").is_not_null())
@@ -73,6 +88,7 @@ def transform_polars_df(
         on="Consumption Category",
         values="measurement"
     )
+    
     
     # Create SolarGen from 'GG'
     pivot = pivot.with_columns(

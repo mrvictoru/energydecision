@@ -19,29 +19,30 @@ This project explores different algorithms for optimizing energy management in a
 *   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
 *   **Refactor Agent class** Refactor Agent class to be less spaghetti
 *   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
-*   **Plot the simulation:** modify render function from env to plot key metrics
+*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
 
 
 ## Project Structure
 
 ```
 energydecision/
-├── data/                  # Data files (CSV, PDF)
-├── src/                   # Source code
-│   ├── EnergySimEnv.py    # Gym environment for the simulation
-│   ├── decision.py        # Agent class implementing control algorithms
-│   ├── batterydeg.py      # Battery degradation models
-│   ├── helper.py          # Utility functions (e.g., scenario provider)
-│   ├── transformer.py     # Decision Transformer model definition
-│   ├── *.zip              # Pre-trained RL models
-│   └── ...
+├── data/                      # Data files (CSV, PDF, etc.)
+├── src/                       # Source code
+│   ├── EnergySimEnv.py        # Gymnasium environment for simulation
+│   ├── decision.py            # Agent class and control algorithms
+│   ├── batterydeg.py          # Battery degradation models
+│   ├── helper.py              # Utility and scenario generation functions
+│   ├── transformer.py         # Decision Transformer model
+│   ├── sb3train.py            # RL training utilities (Stable-Baselines3)
+│   ├── *.zip                  # Pre-trained RL model weights
+│   └── ...                    # Other modules/utilities
 ├── .gitignore
-├── docker-compose.yml     # Docker Compose configuration
-├── Dockerfile             # Dockerfile for building the environment
-├── README.md              # This file
-├── requirements.txt       # Python package requirements
-├── testrun.ipynb          # Jupyter notebook for testing/running simulations
-└── torch_req.txt          # PyTorch specific requirements
+├── docker-compose.yml         # Docker Compose configuration
+├── Dockerfile                 # Dockerfile for building the environment
+├── README.md                  # Project documentation (this file)
+├── requirements.txt           # Python package requirements
+├── testrun.ipynb              # Example Jupyter notebook for running simulations
+└── torch_req.txt              # PyTorch-specific requirements
 ```
 
 ## Installation
