@@ -313,8 +313,21 @@ class SolarBatteryEnv(gym.Env):
             components = self._get_observation_components()
             ctf, rdfv, ndfv, ref, nef = components
             primary_obs = np.concatenate((ctf, ndfv, nef))
+            reward_info = {
+                "battery_flow_energy": battery_flow_energy,
+                "battery_level": new_battery_level,
+                "grid_energy": grid_energy,
+                "energy_price": energy_price,
+                "grid_reward": 0.0,  # No reward due to violation
+                "battery_deg_penalty": 0.0,  # No degradation cost due to violation
+                "dynamic_deg": -1.0,  # Placeholder for dynamic degradation
+                "static_deg": -1.0,  # Placeholder for static degradation
+                "num_cycles": 0,  # Placeholder for number of cycles
+                "correction_factor": self.correction_factor,
+                "energy_conservation_violation": True
+            }
 
-            return primary_obs, VIOLATION_PENALTY, True, False, {"energy_conservation_violation": True}
+            return primary_obs, VIOLATION_PENALTY, True, False, reward_info
 
         # ----- Compute Rewards -----
         grid_reward, grid_violation_penalty = self._calculate_grid_reward(grid_energy, energy_price)
@@ -360,21 +373,17 @@ class SolarBatteryEnv(gym.Env):
 
         # Log reward calculation details
         reward_info = {
-            "battery_charge": battery_charge,
-            "battery_discharge": battery_discharge,
+            "battery_flow_energy": battery_flow_energy,
             "battery_level": new_battery_level,
-            "demand": demand,
-            "supply": supply,
             "grid_energy": grid_energy,
             "energy_price": energy_price,
-            "grid_violation_penalty": grid_violation_penalty,
             "grid_reward": grid_reward,
             "battery_deg_penalty": battery_deg_penalty,
             "dynamic_deg": dynamic_deg,
             "static_deg": static_deg,
             "num_cycles": num_cycles,
             "correction_factor": self.correction_factor,
-            "final_reward": reward
+            "energy_conservation_violation": False
         }
 
         # ----- Advance Simulation Step -----

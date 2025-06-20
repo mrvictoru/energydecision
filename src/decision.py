@@ -109,7 +109,7 @@ class Agent:
             # add small noise to the action
             noise = np.random.normal(-0.01, 0.01)
             action_value = min(max(action_value + noise, -1.0), 1.0)
-            return [action_value]
+            return [np.float32(action_value)]
         else:
             raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
         
@@ -285,28 +285,27 @@ class Agent:
         # this is to check
         if self.rule_presistence and battery_level < 0.9:  # battery is not full
             #continue charging.
-            return [min((0.5 + noise, 0.5))]
+            result = min((0.5 + noise, 0.5))
         elif self.rule_presistence and battery_level > 0.9:  # battery is not empty
             self.rule_presistence = False
-            return [max((-0.1 + noise, -0.1))]
+            result = max((-0.1 + noise, -0.1))
         elif battery_level < 0.1:  # battery is empty
             self.rule_presistence = True
-            return [min((0.5 + noise, 0.5))]
+            result = min((0.5 + noise, 0.5))
         
         elif diff > 0 and battery_level < 0.9:  # surplus energy
             # Compute the recommended charging power as a fraction of the maximum battery flow;
             # ensure it does not exceed 1.0 (100% of max battery flow)
-            action_value = min((diff / max_flow)+noise, 1.0)
-            return [action_value]
+            result = min((diff / max_flow)+noise, 1.0)            
         elif diff < 0 and battery_level > 0.1:  # deficit energy
             # Compute the recommended discharging power as a fraction of the maximum battery flow;
             # ensure it does not exceed 1.0 (100% of max battery flow)
-            action_value = max((diff / max_flow)+noise, -1.0)
-            return [action_value]
+            result = max((diff / max_flow)+noise, -1.0)           
         else:
             # No action needed; add noise to zero action.
-            return [0.0 + noise]
+            result = 0.0 + noise
     
+        return [np.float32(result)]  # Return as a list to match expected action format
     
     def run_episode(self, render=False):
         obs, info = self.env.reset()
