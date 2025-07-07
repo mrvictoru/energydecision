@@ -327,7 +327,7 @@ class SolarBatteryEnv(gym.Env):
                 "energy_conservation_violation": True
             }
 
-            return primary_obs, VIOLATION_PENALTY, True, False, reward_info
+            return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
 
         # ----- Compute Rewards -----
         grid_reward, grid_violation_penalty = self._calculate_grid_reward(grid_energy, energy_price)
