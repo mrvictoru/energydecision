@@ -88,7 +88,7 @@ energydecision/
     print(results_df)
     ```
 
-*   if there are mulitple environments, simulation can be run in parallel using [`run_episodes_parallel`](src/decision.py)
+*   if there are mulitple environments, simulation can be run in parallel using [`run_episodes_parallel`](src/decision.py). (only suitable for 'Rule' or 'SDP' based agent)
 
     ```python
     # Example (Conceptual)
@@ -187,7 +187,7 @@ energydecision/
     training_env_fns = [make_env(ds) for ds in training_dataset]
     training_vec_env = DummyVecEnv(training_env_fns)
 
-    num_total_steps = len(training_dataset[0])*len(training_dataset)
+    num_total_steps = len(training_dataset[0])
     print(f"Total number of steps possible in training dataset: {num_total_steps}")
 
     testing_env_fns = [make_env(ds) for ds in testing_dataset]

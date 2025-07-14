@@ -356,12 +356,15 @@ def run_single(agent_class, env, agent_kwargs, render):
 def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4):
     """
     Runs one episode per environment in parallel.
-    agent_class: The Agent class to instantiate.
+    agent_class: The Agent class to instantiate. 
     envs: List of SolarBatteryEnv instances.
-    agent_kwargs: Dict of kwargs for Agent constructor.
+    agent_kwargs: Dict of kwargs for Agent constructor. (only suitable for rule, sdp algorithms)
     Returns: List of DataFrames (one per environment).
     """
     agent_kwargs = agent_kwargs or {}
+    # check if algorith is suitable for parallel execution
+    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp']:
+        raise ValueError("Parallel execution is only supported for 'rule' and 'sdp' algorithms. ")
 
     results = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -370,3 +373,49 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
         for f in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             results.append(f.result())
     return results
+
+# This function runs a trained SB3 model on a vectorized environment and collects episode trajectories.
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None):
+    """
+    Runs a trained SB3 model on a vectorized environment and collects episode trajectories.
+    Args:
+        model: Trained SB3 model (e.g., PPO, A2C, etc.)
+        vec_env: Vectorized environment (DummyVecEnv or SubprocVecEnv)
+        deterministic: Whether to use deterministic actions
+        max_steps: Optional maximum number of steps to run (default: run until all envs are done)
+    Returns:
+        List of dicts, one per environment, each containing lists of 'obs', 'actions', 'rewards', 'infos'
+    """
+    import numpy as np
+
+    if not hasattr(model, 'predict'):
+        raise ValueError("The provided model does not have a 'predict' method. Ensure it is a valid SB3 model.")
+    if not isinstance(vec_env, (DummyVecEnv, SubprocVecEnv)):
+        raise ValueError("The provided vec_env must be a DummyVecEnv or SubprocVecEnv instance.")
+    num_envs = vec_env.num_envs
+    obs = vec_env.reset()
+    dones = np.zeros(num_envs, dtype=bool)
+    episode_data = [
+        {'obs': [], 'actions': [], 'rewards': [], 'infos': []}
+        for _ in range(num_envs)
+    ]
+    steps = 0
+
+    while not np.all(dones):
+        actions, _ = model.predict(obs, deterministic=deterministic)
+        next_obs, rewards, next_dones, infos = vec_env.step(actions)
+        not_done_indices = np.where(~dones)[0]
+        for i in not_done_indices:
+            episode_data[i]['obs'].append(obs[i])
+            episode_data[i]['actions'].append(actions[i])
+            episode_data[i]['rewards'].append(rewards[i])
+            episode_data[i]['infos'].append(infos[i])
+            if next_dones[i]:
+                dones[i] = True
+        obs = next_obs
+        steps += 1
+        if max_steps is not None and steps >= max_steps:
+            break
+
+    return episode_data
