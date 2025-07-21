@@ -387,7 +387,6 @@ def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None
     Returns:
         List of dicts, one per environment, each containing lists of 'obs', 'actions', 'rewards', 'infos'
     """
-    import numpy as np
 
     if not hasattr(model, 'predict'):
         raise ValueError("The provided model does not have a 'predict' method. Ensure it is a valid SB3 model.")
