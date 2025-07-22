@@ -418,3 +418,18 @@ def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None
             break
 
     return episode_data
+
+def flatten_episode_data(episode_data):
+    dfs = []
+    for i, traj in enumerate(episode_data):
+        length = len(traj['obs'])
+        df = pl.DataFrame({
+            'episode_id': [i] * length,
+            'step': list(range(length)),
+            'obs': [o.tolist() if isinstance(o, np.ndarray) else o for o in traj['obs']],
+            'action': [a.tolist() if isinstance(a, np.ndarray) else a for a in traj['actions']],
+            'reward': traj['rewards'],
+            'info': traj['infos'],
+        })
+        dfs.append(df)
+    return pl.concat(dfs)
