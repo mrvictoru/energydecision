@@ -111,6 +111,8 @@ def td3_model_kwargs_fn(trial,vec_env=None):
     else:
         net_arch = [400, 300]
     policy_kwargs = dict(net_arch=net_arch)
+    if vec_env is None or not hasattr(vec_env, "action_space"):
+        raise ValueError("vec_env must be provided and have an action_space attribute for TD3.")
     n_actions = vec_env.action_space.shape[-1]
     action_noise = NormalActionNoise(
         mean=np.zeros(n_actions),
@@ -139,6 +141,8 @@ def ddpg_model_kwargs_fn(trial, vec_env=None):
     else:
         net_arch = [400, 300]
     policy_kwargs = dict(net_arch=net_arch)
+    if vec_env is None or not hasattr(vec_env, "action_space"):
+        raise ValueError("vec_env must be provided and have an action_space attribute for DDPG.")
     n_actions = vec_env.action_space.shape[-1]
     action_noise = OrnsteinUhlenbeckActionNoise(
         mean=np.zeros(n_actions), 

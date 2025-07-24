@@ -376,6 +376,7 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
 
 # This function runs a trained SB3 model on a vectorized environment and collects episode trajectories.
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+import json
 def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None):
     """
     Runs a trained SB3 model on a vectorized environment and collects episode trajectories.
@@ -396,20 +397,28 @@ def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None
     obs = vec_env.reset()
     dones = np.zeros(num_envs, dtype=bool)
     episode_data = [
-        {'obs': [], 'actions': [], 'rewards': [], 'infos': []}
+        {'norm_observation':[], 'raw_observation': [], 'actions': [], 'rewards': [], 'infos': []}
         for _ in range(num_envs)
     ]
     steps = 0
 
-    while not np.all(dones):
+    while not dones.all():
+        raw_obs_list = vec_env.env_method('get_raw_obs')
         actions, _ = model.predict(obs, deterministic=deterministic)
         next_obs, rewards, next_dones, infos = vec_env.step(actions)
-        not_done_indices = np.where(~dones)[0]
+        not_done_indices = np.where(dones == False)[0]
         for i in not_done_indices:
-            episode_data[i]['obs'].append(obs[i])
-            episode_data[i]['actions'].append(actions[i])
-            episode_data[i]['rewards'].append(rewards[i])
-            episode_data[i]['infos'].append(infos[i])
+            # Convert data to Parquet-compatible types at collection time
+            episode_data[i]['norm_observation'].append(obs[i].tolist())
+            episode_data[i]['raw_observation'].append(raw_obs_list[i].tolist() if isinstance(raw_obs_list[i], np.ndarray) else raw_obs_list[i])
+            episode_data[i]['actions'].append(actions[i].tolist() if isinstance(actions[i], np.ndarray) else actions[i])
+            episode_data[i]['rewards'].append(float(rewards[i]))
+            
+            # The info dict from SB3 can contain non-serializable types.
+            # We filter for basic types and convert the rest to strings before JSON serialization.
+            serializable_info = {k: (v if isinstance(v, (str, int, float, bool)) else str(v)) for k, v in infos[i].items()}
+            episode_data[i]['infos'].append(json.dumps(serializable_info))
+
             if next_dones[i]:
                 dones[i] = True
         obs = next_obs
@@ -422,14 +431,15 @@ def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None
 def flatten_episode_data(episode_data):
     dfs = []
     for i, traj in enumerate(episode_data):
-        length = len(traj['obs'])
+        length = len(traj['norm_observation'])
         df = pl.DataFrame({
-            'episode_id': [i] * length,
+            'episode_id': [i for _ in range(length)],
             'step': list(range(length)),
-            'obs': [o.tolist() if isinstance(o, np.ndarray) else o for o in traj['obs']],
-            'action': [a.tolist() if isinstance(a, np.ndarray) else a for a in traj['actions']],
+            'norm_observation': traj['norm_observation'],
+            'raw_observation': traj['raw_observation'],
+            'action': traj['actions'],
             'reward': traj['rewards'],
             'info': traj['infos'],
-        })
+        }, strict=False)
         dfs.append(df)
     return pl.concat(dfs)
