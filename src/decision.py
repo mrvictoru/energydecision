@@ -312,6 +312,7 @@ class Agent:
         raw_obs = self.env.get_raw_obs()  # Get raw observation if available
         logs = []
         terminated, truncated = False, False
+        step = 0  # Step counter
         # Decide which obs to use based on agent type
         if self.algorithm in ['rule', 'sdp']:
             # Use raw_obs if available, else fallback to obs
@@ -325,6 +326,7 @@ class Agent:
             next_obs, reward, terminated, truncated, info = self.env.step(action)
             
             logs.append({
+                'step': step,
                 'norm_observation': obs.tolist() if isinstance(current_obs, np.ndarray) else current_obs,
                 'raw_observation': raw_obs.tolist() if isinstance(raw_obs, np.ndarray) else raw_obs,
                 'action': action,
@@ -341,6 +343,7 @@ class Agent:
                 current_obs = obs
             if render:
                 self.env.render()
+            step += 1  # Increment step counter
 
         return pl.DataFrame(logs)
 
