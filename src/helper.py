@@ -3,6 +3,7 @@ import numpy as np
 import re
 from datetime import datetime
 import matplotlib.pyplot as plt
+from typing import Optional
 from EnergySimEnv import SolarBatteryEnv
 
 
@@ -17,15 +18,15 @@ def parse_time(time_str: str) -> int:
     except Exception:
         raise ValueError(f"Time format not recognized: {time_str}")
     return dt.hour * 60 + dt.minute
-
 def transform_polars_df(
     df: pl.DataFrame,
     import_energy_price: float = 0.23, #in USD
     export_energy_price: float = 0.04, #in USD
-    price_periods: str = None,  # Expects string in format "7am – 10am | 4pm – 9pm"
+    price_periods: Optional[str] = None,  # Expects string in format "7am – 10am | 4pm – 9pm"
     default_import_energy_price: float = 0.1, #in USD
     default_export_energy_price: float = 0.02 #in USD
 ) -> pl.DataFrame:
+
     """
     Transforms an input Polars DataFrame into a format for the SolarBatteryEnv.
     Adds meta data columns: Customer, Postcode, DateRange.

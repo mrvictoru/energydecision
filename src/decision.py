@@ -348,7 +348,7 @@ class Agent:
         return pl.DataFrame(logs)
 
 import concurrent.futures
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 import warnings
 
 def run_single(agent_class, env, agent_kwargs, render):
