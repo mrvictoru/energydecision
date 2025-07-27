@@ -307,3 +307,20 @@ def plot_48h_from_logs(
 
     plt.tight_layout()
     plt.show()
+
+# Helper: flatten episode data created from run_sb3_model_on_vec_env() from decision.py into a Polars DataFrame
+def flatten_episode_data(episode_data):
+    dfs = []
+    for i, traj in enumerate(episode_data):
+        length = len(traj['norm_observation'])
+        df = pl.DataFrame({
+            'episode_id': [i for _ in range(length)],
+            'step': list(range(length)),
+            'norm_observation': traj['norm_observation'],
+            'raw_observation': traj['raw_observation'],
+            'action': traj['actions'],
+            'reward': traj['rewards'],
+            'info': traj['infos'],
+        }, strict=False)
+        dfs.append(df)
+    return pl.concat(dfs)
