@@ -122,14 +122,15 @@ def train_decision_transformer(
     device: Optional[str] = None,
     save_path: str = "../models/dt_model.pt",
 ) -> tuple:
-
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     # log the start time
     start_time = datetime.datetime.now()
     print(f"Training started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     log_losses = []
 
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    
 
     loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
