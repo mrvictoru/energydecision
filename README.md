@@ -227,7 +227,7 @@ energydecision/
     )
     loader = DataLoader(ds, batch_size=2, shuffle=False)
 
-    # 3) Instantiate your DecisionTransformer
+    # 3) Instantiate your DecisionTransformer and train it
     # Get the maximum possible timestep from the environment's data length
     max_steps_in_episode = len(env.df)
 
@@ -242,7 +242,7 @@ energydecision/
         max_timestep= max_steps_in_episode,
     )
 
-    # 3) Train the Decision Transformer
+    # Train the Decision Transformer
     trained_model, train_losses = train_decision_transformer(
         ds=ds,
         context_length=context_length,
