@@ -26,23 +26,23 @@ This project explores different algorithms for optimizing energy management in a
 
 ```
 energydecision/
-├── data/                      # Data files (CSV, Parquet, etc.)
-├── src/                       # Source code
-│   ├── EnergySimEnv.py        # Gymnasium environment for solar-battery-grid simulation
-│   ├── decision.py            # Agent class: rule-based, RL, DT, and SDP controllers
-│   ├── batterydeg.py          # Battery degradation models (static and dynamic)
-│   ├── helper.py              # Data transformation and scenario generation utilities
-│   ├── transformer.py         # Core Decision Transformer model
-│   ├── decision_dataset.py    # TrajectoryDataset class and train_decision_transformer function
-│   ├── sb3train.py            # RL training utilities (Stable-Baselines3)
-│   └── ...                    # Other modules/utilities
+├── data/                       # Data files (CSV, Parquet, etc.)
+├── src/                        # Source code
+│   ├── EnergySimEnv.py         # Gymnasium environment for solar-battery-grid simulation
+│   ├── decision.py             # Agent class: rule-based, RL, DT, and SDP controllers
+│   ├── batterydeg.py           # Battery degradation models (static and dynamic)
+│   ├── helper.py               # Data transformation and scenario generation utilities
+│   ├── decision_transformer.py # Core Decision Transformer model class
+│   ├── transformer_training.py # TrajectoryDataset class and train_decision_transformer function
+│   ├── sb3train.py             # RL training utilities (Stable-Baselines3)
+│   └── ...                     # Other modules/utilities
 ├── .gitignore
-├── docker-compose.yml         # Docker Compose configuration
-├── Dockerfile                 # Dockerfile for building the environment
-├── README.md                  # Project documentation (this file)
-├── requirements.txt           # Python package requirements
-├── testrun.ipynb              # Example Jupyter notebook for running simulations
-└── torch_req.txt              # PyTorch-specific requirements
+├── docker-compose.yml          # Docker Compose configuration
+├── Dockerfile                  # Dockerfile for building the environment
+├── README.md                   # Project documentation (this file)
+├── requirements.txt            # Python package requirements
+├── testrun.ipynb               # Example Jupyter notebook for running simulations
+└── torch_req.txt               # PyTorch-specific requirements
 ```
 
 ## Installation
