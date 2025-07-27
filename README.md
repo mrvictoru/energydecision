@@ -18,7 +18,7 @@ This project explores different algorithms for optimizing energy management in a
 *   ~~**Online learning loop:** Training loop using stablebaselines3~~
 *   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
 *   **Refactor Agent class** Refactor Agent class to be less spaghetti
-*   **Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm
+*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
 *   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
 
 
@@ -26,15 +26,15 @@ This project explores different algorithms for optimizing energy management in a
 
 ```
 energydecision/
-├── data/                      # Data files (CSV, PDF, etc.)
+├── data/                      # Data files (CSV, Parquet, etc.)
 ├── src/                       # Source code
-│   ├── EnergySimEnv.py        # Gymnasium environment for simulation
-│   ├── decision.py            # Agent class and control algorithms
-│   ├── batterydeg.py          # Battery degradation models
-│   ├── helper.py              # Utility and scenario generation functions
-│   ├── transformer.py         # Decision Transformer model
+│   ├── EnergySimEnv.py        # Gymnasium environment for solar-battery-grid simulation
+│   ├── decision.py            # Agent class: rule-based, RL, DT, and SDP controllers
+│   ├── batterydeg.py          # Battery degradation models (static and dynamic)
+│   ├── helper.py              # Data transformation and scenario generation utilities
+│   ├── transformer.py         # Core Decision Transformer model
+│   ├── decision_dataset.py    # TrajectoryDataset class and train_decision_transformer function
 │   ├── sb3train.py            # RL training utilities (Stable-Baselines3)
-│   ├── *.zip                  # Pre-trained RL model weights
 │   └── ...                    # Other modules/utilities
 ├── .gitignore
 ├── docker-compose.yml         # Docker Compose configuration
@@ -194,6 +194,69 @@ energydecision/
 
     # Create and train a PPO model
     ppo_model, _ = train_model(model_class=PPO, vec_env=training_vec_env, total_timesteps=num_total_steps, eval_env_fn=testing_env_fns[0])
+    ```
+
+*   Utilise [`train_decision_transformer`](src/transformer_training.py) to train ['DecisionTransformer'](src/decision_transformer.py) using offline interaction data collected through ['run_episodes_parallel'](src/decision.py) or ['run_sb3_model_on_vec_env'](src/decision.py) and load it onto [`TrajectoryDataset`](src/transformer_training.py)
+
+    ```python
+    from torch.utils.data import DataLoader
+    from src.decision_dataset import TrajectoryDataset, train_decision_transformer
+    import polars as pl
+
+    # 1) Prepare environment to get dims
+
+    # Load data
+    datapath = '../data/2011-2012 Solar home electricity data v2.csv'
+    # skip the first line in csv and read the next line as column
+    df = pl.read_csv(datapath, skip_rows=1)
+    # then get the data of customer 1
+    customer_df = df.filter(pl.col('Customer') == 1)
+    newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
+    env = SolarBatteryEnv(newcustomerdf)
+    state_dim = env.observation_space.shape[0]
+    act_dim   = env.action_space.shape[0]
+
+    # 2) Load dataset and sample a batch
+    context_length = 16
+    ds = TrajectoryDataset(
+        data_path='../data/rule_all_episode_logs.parquet',
+        context_length=context_length,
+        state_dim=state_dim,
+        act_dim=act_dim,
+        discount_factor=0.99,
+    )
+    loader = DataLoader(ds, batch_size=2, shuffle=False)
+
+    # 3) Instantiate your DecisionTransformer
+    # Get the maximum possible timestep from the environment's data length
+    max_steps_in_episode = len(env.df)
+
+    model = DecisionTransformer(
+        state_dim   = state_dim,
+        act_dim     = act_dim,
+        n_block     = 2,
+        h_dim       = 128,
+        context_len = context_length,
+        n_heads     = 8,
+        drop_p      = 0.1,
+        max_timestep= max_steps_in_episode,
+    )
+
+    # 3) Train the Decision Transformer
+    trained_model, train_losses = train_decision_transformer(
+        ds=ds,
+        context_length=context_length,
+        state_dim=state_dim,
+        act_dim=act_dim,
+        max_timestep=max_steps_in_episode,
+        model=model,
+        batch_size=32,
+        lr=1e-4,
+        epochs=5,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        save_path="../models/dt_model.pt"
+    )
+    ```
 
 ## Dependencies
 
