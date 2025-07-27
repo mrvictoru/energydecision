@@ -196,7 +196,7 @@ energydecision/
     ppo_model, _ = train_model(model_class=PPO, vec_env=training_vec_env, total_timesteps=num_total_steps, eval_env_fn=testing_env_fns[0])
     ```
 
-*   Utilise [`train_decision_transformer`](src/transformer_training.py) to train ['DecisionTransformer'](src/decision_transformer.py) using offline interaction data collected through ['run_episodes_parallel'](src/decision.py) or ['run_sb3_model_on_vec_env'](src/decision.py) and load it onto [`TrajectoryDataset`](src/transformer_training.py)
+*   Utilise [`train_decision_transformer`](src/transformer_training.py) to train [`DecisionTransformer`](src/decision_transformer.py) using offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py) and load it onto [`TrajectoryDataset`](src/transformer_training.py)
 
     ```python
     from torch.utils.data import DataLoader
