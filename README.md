@@ -17,9 +17,10 @@ This project explores different algorithms for optimizing energy management in a
 *   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
 *   ~~**Online learning loop:** Training loop using stablebaselines3~~
 *   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
-*   **Refactor Agent class** Refactor Agent class to be less spaghetti
 *   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
 *   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
+*   **Refactor Agent class** Refactor Agent class to be less spaghetti
+*   **Optimize training loop** TBD
 
 
 ## Project Structure
