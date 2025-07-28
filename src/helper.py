@@ -387,20 +387,19 @@ def evaluate_experiment_logs(
 
 
 # Helper: evaluate multiple experiments and return a pandas DataFrame
-import pandas as pd
 
 def evaluate_experiments(
     all_logs: dict[str, list[pl.DataFrame]],
     target_return: float = 0.0
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """
     Given a dict mapping experiment names to lists of episode logs,
-    compute evaluation metrics for each and return a DataFrame.
+    compute evaluation metrics for each and return a Polars DataFrame.
     """
     rows = []
     for name, logs in all_logs.items():
         metrics = evaluate_experiment_logs(logs, target_return=target_return)
         metrics['experiment'] = name
         rows.append(metrics)
-    df = pd.DataFrame(rows).set_index('experiment')
-    return df
+    df = pl.DataFrame(rows)
+    return df.sort('experiment')

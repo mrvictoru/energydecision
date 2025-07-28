@@ -33,7 +33,7 @@ energydecision/
 │   ├── EnergySimEnv.py         # Gymnasium environment for solar-battery-grid simulation
 │   ├── decision.py             # Agent class: rule-based, RL, DT, and SDP controllers
 │   ├── batterydeg.py           # Battery degradation models (static and dynamic)
-│   ├── helper.py               # Data transformation and scenario generation utilities
+│   ├── helper.py               # Data transformation ,preparation and evaluation utilities
 │   ├── decision_transformer.py # Core Decision Transformer model class
 │   ├── transformer_training.py # TrajectoryDataset class and train_decision_transformer function
 │   ├── sb3train.py             # RL training utilities (Stable-Baselines3)
@@ -275,6 +275,37 @@ energydecision/
         device="cuda" if torch.cuda.is_available() else "cpu",
         save_path="../models/dt_model.pt"
     )
+    ```
+
+*   Utilise [`evaluate_experiment_logs`](src/helper.py) to evaluate offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py)
+
+    ```python
+    from decision import run_episodes_parallel, Agent
+    from helper import evaluate_experiment_logs
+
+    # Example: run episodes in parallel
+    episode_logs = run_episodes_parallel(Agent, envs, agent_kwargs=rule_agent_kwargs, max_workers=8)
+
+    # Directly evaluate
+    metrics = evaluate_experiment_logs(episode_logs)
+    print(metrics)
+    ```
+    ```python
+    from decision import run_sb3_model_on_vec_env
+    from helper import flatten_episode_data, evaluate_experiment_logs
+
+    # Run SB3 model
+    episode_data = run_sb3_model_on_vec_env(model, vec_env)
+
+    # Flatten to a single DataFrame
+    all_logs_df = flatten_episode_data(episode_data)
+
+    # Split into a list of DataFrames, one per episode
+    logs_by_episode = [all_logs_df.filter(pl.col("episode_id") == eid) for eid in all_logs_df["episode_id"].unique()]
+
+    # Evaluate
+    metrics = evaluate_experiment_logs(logs_by_episode)
+    print(metrics)
     ```
 
 ## Dependencies
