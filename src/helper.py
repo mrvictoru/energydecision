@@ -324,3 +324,83 @@ def flatten_episode_data(episode_data):
         }, strict=False)
         dfs.append(df)
     return pl.concat(dfs)
+
+def evaluate_experiment_logs(
+    logs: list[pl.DataFrame],
+    target_return: float = 0.0
+) -> dict:
+    """
+    Compute key performance metrics for a single experiment's episode logs.
+    Returns a dict of:
+      - mean_reward, median_reward, std_reward
+      - pct_5_reward, pct_95_reward
+      - sharpe_ratio, sortino_ratio
+      - avg_grid_cost, avg_grid_revenue, avg_degradation_cost
+    """
+    # total rewards per episode
+    total_rewards = [df['reward'].sum() for df in logs]
+    rewards_arr = np.array(total_rewards, dtype=float)
+    mean_r = rewards_arr.mean()
+    std_r = rewards_arr.std(ddof=0)
+    # compute 5th, 50th (median), and 95th percentiles of episode rewards
+    # Use Python list to satisfy numpy percentile type annotations
+    rewards_list = rewards_arr.tolist()
+    pct5 = float(np.percentile(rewards_list, 5))
+    median_r = float(np.percentile(rewards_list, 50))
+    pct95 = float(np.percentile(rewards_list, 95))
+
+    # downside deviation for sortino
+    # downside deviation for Sortino: only rewards below target_return
+    downs = [r for r in rewards_arr if r < target_return]
+    dd = float(np.std(downs, ddof=0)) if downs else 0.0
+    sharpe = mean_r / std_r if std_r > 0 else float('nan')
+    sortino = (mean_r - target_return) / dd if dd > 0 else float('nan')
+
+    # compute cost components
+    grid_costs = []
+    grid_revenues = []
+    deg_costs = []
+    for df in logs:
+        infos = df['info'].to_list()
+        gc = sum(info.get('grid_reward', 0.0) for info in infos if info.get('grid_energy',0) > 0)
+        gr = sum(info.get('grid_reward', 0.0) for info in infos if info.get('grid_energy',0) < 0)
+        dc = sum(info.get('battery_deg_penalty', 0.0) * info.get('battery_life_cost', 1.0) for info in infos)
+        grid_costs.append(abs(gc))
+        grid_revenues.append(gr)
+        deg_costs.append(dc)
+    avg_gc = float(np.mean(grid_costs))
+    avg_gr = float(np.mean(grid_revenues))
+    avg_dc = float(np.mean(deg_costs))
+
+    return {
+        'mean_reward': mean_r,
+        'median_reward': median_r,
+        'std_reward': std_r,
+        'pct_5_reward': pct5,
+        'pct_95_reward': pct95,
+        'sharpe_ratio': sharpe,
+        'sortino_ratio': sortino,
+        'avg_grid_cost': avg_gc,
+        'avg_grid_revenue': avg_gr,
+        'avg_deg_cost': avg_dc,
+    }
+
+
+# Helper: evaluate multiple experiments and return a pandas DataFrame
+import pandas as pd
+
+def evaluate_experiments(
+    all_logs: dict[str, list[pl.DataFrame]],
+    target_return: float = 0.0
+) -> pd.DataFrame:
+    """
+    Given a dict mapping experiment names to lists of episode logs,
+    compute evaluation metrics for each and return a DataFrame.
+    """
+    rows = []
+    for name, logs in all_logs.items():
+        metrics = evaluate_experiment_logs(logs, target_return=target_return)
+        metrics['experiment'] = name
+        rows.append(metrics)
+    df = pd.DataFrame(rows).set_index('experiment')
+    return df
