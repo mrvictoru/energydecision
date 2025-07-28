@@ -1,9 +1,12 @@
 import polars as pl
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from typing import Optional
-
+import os
+import torch.nn.functional as F
+from decision_transformer import DecisionTransformer
+import datetime
 
 class TrajectoryDataset(Dataset):
     """Dataset for Decision Transformer training using normalized observations and trajectories."""
@@ -102,12 +105,6 @@ class TrajectoryDataset(Dataset):
             "mask": torch.from_numpy(mask),
         }
 
-import os
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from decision_transformer import DecisionTransformer
-import datetime
-
 # --- Training Function for Decision Transformer ---
 def train_decision_transformer(
     ds: TrajectoryDataset,
@@ -129,8 +126,6 @@ def train_decision_transformer(
     print(f"Training started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     log_losses = []
-
-    
 
     loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
@@ -174,4 +169,11 @@ def train_decision_transformer(
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to {save_path}")
     return (model, log_losses)
+
+def concat_trajectory_datasets(datasets: list[TrajectoryDataset]) -> ConcatDataset:
+    """
+    Concatenate multiple TrajectoryDataset instances into a single dataset for training.
+    Returns a torch.utils.data.ConcatDataset.
+    """
+    return ConcatDataset(datasets)
 
