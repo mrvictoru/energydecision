@@ -195,6 +195,23 @@ energydecision/
 
     # Create and train a PPO model
     ppo_model, _ = train_model(model_class=PPO, vec_env=training_vec_env, total_timesteps=num_total_steps, eval_env_fn=testing_env_fns[0])
+
+    # simulate the model interaction and record the log
+    from decision import run_sb3_model_on_vec_env
+    import multiprocessing
+
+    # (only needed if you ever switch to SubprocVecEnv on Linux/notebooks)
+    multiprocessing.set_start_method("forkserver", force=True)
+    # use SubprocVecEnv
+    from stable_baselines3.common.vec_env import SubprocVecEnv
+    test_vec_env = SubprocVecEnv(testing_env_fns)
+
+    ppo_episode_logs = run_sb3_model_on_vec_env(ppo_model, test_vec_env)
+
+    # store it as parquet
+    from helper import flatten_episode_data
+    ppo_logs = flatten_episode_data(ppo_episode_logs)
+    ppo_logs.write_parquet("../data/ppo_test_episode_logs.parquet")
     ```
 
 *   Utilise [`train_decision_transformer`](src/transformer_training.py) to train [`DecisionTransformer`](src/decision_transformer.py) using offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py) and load it onto [`TrajectoryDataset`](src/transformer_training.py)
