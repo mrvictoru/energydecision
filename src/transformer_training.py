@@ -133,7 +133,10 @@ def train_decision_transformer(
     loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
     model = model.to(device)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
     use_amp = device.startswith("cuda")
     if use_amp:
@@ -161,6 +164,9 @@ def train_decision_transformer(
                     loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / m.sum()
                     loss = loss_r + loss_s + loss_a
                 scaler.scale(loss).backward()
+                # Gradient clipping (max norm 0.1)
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                 scaler.step(optimizer)
                 scaler.update()
                 loss_to_log = loss_a.detach().cpu().item()
@@ -173,6 +179,8 @@ def train_decision_transformer(
                 loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / m.sum()
                 loss = loss_r + loss_s + loss_a
                 loss.backward()
+                # Gradient clipping (max norm 0.1)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                 optimizer.step()
                 loss_to_log = loss_a.detach().cpu().item()
                 loss_value = loss.detach().cpu().item()
@@ -182,6 +190,8 @@ def train_decision_transformer(
 
         avg_loss = total_loss / len(ds)
         print(f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f}")
+        # Step the learning rate scheduler
+        scheduler.step()
 
     # log end time
     end_time = datetime.datetime.now()
