@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from decision_transformer import DecisionTransformer
 import datetime
 
+
 class TrajectoryDataset(Dataset):
     """Dataset for Decision Transformer training using normalized observations and trajectories."""
 
@@ -106,6 +107,7 @@ class TrajectoryDataset(Dataset):
         }
 
 # --- Training Function for Decision Transformer ---
+from torch.amp import GradScaler, autocast
 def train_decision_transformer(
     ds: TrajectoryDataset,
     context_length: int,
@@ -119,6 +121,7 @@ def train_decision_transformer(
     device: Optional[str] = None,
     save_path: str = "../models/dt_model.pt",
 ) -> tuple:
+
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     # log the start time
@@ -127,10 +130,16 @@ def train_decision_transformer(
 
     log_losses = []
 
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    use_amp = device.startswith("cuda")
+    if use_amp:
+        scaler = GradScaler('cuda')
+    else:
+        scaler = None
 
     for epoch in range(1, epochs+1):
         model.train()
@@ -143,19 +152,33 @@ def train_decision_transformer(
             mask      = batch["mask"].to(device)
 
             optimizer.zero_grad()
-            ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions)
-
-            m = mask.unsqueeze(-1).float()
-            loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / m.sum()
-            loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / m.sum()
-            loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / m.sum()
-            loss = loss_r + loss_s + loss_a
-
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item() * states.size(0)
+            if use_amp and scaler is not None:
+                with autocast('cuda'):
+                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions)
+                    m = mask.unsqueeze(-1).float()
+                    loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / m.sum()
+                    loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / m.sum()
+                    loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / m.sum()
+                    loss = loss_r + loss_s + loss_a
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                loss_to_log = loss_a.detach().cpu().item()
+                loss_value = loss.detach().cpu().item()
+            else:
+                ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions)
+                m = mask.unsqueeze(-1).float()
+                loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / m.sum()
+                loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / m.sum()
+                loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / m.sum()
+                loss = loss_r + loss_s + loss_a
+                loss.backward()
+                optimizer.step()
+                loss_to_log = loss_a.detach().cpu().item()
+                loss_value = loss.detach().cpu().item()
+            total_loss += loss_value * states.size(0)
             # Log action losses
-            log_losses.append(loss_a.detach().cpu().item())
+            log_losses.append(loss_to_log)
 
         avg_loss = total_loss / len(ds)
         print(f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f}")
