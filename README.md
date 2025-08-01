@@ -11,7 +11,8 @@ This project explores different algorithms for optimizing energy management in a
     *   Decision Transformer (DT)
     *   Stochastic Dynamic Programming (SDP) with receding horizon optimization
 *   **Battery Degradation Modeling:** Includes models for battery degradation based on usage patterns ([`src/batterydeg.py`](src/batterydeg.py)), incorporating both static and dynamic (rainflow counting) approaches.
-*   **Scenario Generation:** Supports scenario-based optimization using forecast data ([`src/helper.py`](src/helper.py)).
+*   **Sampling Environment with different agent to use for Offline RL training:** The [`run_episodes_parallel`](src/decision.py) function allows running multiple environments in parallel with different agents, collecting interaction data for offline training.
+*   **Decision Transformer Training:** Implements a training loop for the Decision Transformer model using offline interaction data ([`src/transformer_training.py`](src/transformer_training.py)).
 
 ## ToDo
 *   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
@@ -20,7 +21,7 @@ This project explores different algorithms for optimizing energy management in a
 *   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
 *   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
 *   **Refactor Agent class:** Refactor Agent class to be less spaghetti
-*   **Optimize training loop:** TBD
+*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
 *   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
 
 
