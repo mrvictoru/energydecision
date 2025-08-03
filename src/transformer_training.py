@@ -9,8 +9,13 @@ from decision_transformer import DecisionTransformer
 import datetime
 
 
+
+
 class TrajectoryDataset(Dataset):
-    """Dataset for Decision Transformer training using normalized observations and trajectories."""
+    """
+    Dataset for Decision Transformer training using normalized observations and trajectories, using sliding windows.
+    Each item is a window of length `context_length` from a single episode, right-padded if at the start of an episode.
+    """
 
     def __init__(
         self,
@@ -21,6 +26,8 @@ class TrajectoryDataset(Dataset):
         discount_factor: float = 0.99,
     ):
         """
+        Loads the dataset from a parquet file, groups by episode, and builds a list of all possible sliding windows.
+        Each window is a contiguous sequence of up to `context_length` steps from a single episode.
         Args:
             data_path: Path to a parquet file with trajectory data. Expects columns [episode_id, step, norm_observation, action, reward].
             context_length: Fixed length of each sequence/window (T).
@@ -33,31 +40,42 @@ class TrajectoryDataset(Dataset):
         self.act_dim = act_dim
         self.gamma = discount_factor
 
-        # Load the entire parquet into memory via Polars
         df = pl.read_parquet(data_path)
 
-        # Group by episode and preprocess
-        self.episodes = []
-        # iterate unique episode_ids
+        # Store all episode data and build sliding window indices
+        self.episodes = []  # List of dicts, one per episode
+        self.indices = []   # List of (episode_idx, start_idx) for each window
+
         for eid in df["episode_id"].unique().to_list():
             grp = df.filter(pl.col("episode_id") == eid)
             states = np.stack(grp["norm_observation"].to_list())  # [L, state_dim]
             actions = np.stack(grp["action"].to_list())           # [L, act_dim]
             rewards = np.array(grp["reward"].to_list(), dtype=np.float32)  # [L]
             timesteps = np.array(grp["step"].to_list(), dtype=np.int64)    # [L]
-
-            # Compute returns-to-go
             rtgs = self._compute_rtgs(rewards)
 
-            self.episodes.append({
+            ep_len = states.shape[0]
+            ep_dict = {
                 "states": states,
                 "actions": actions,
                 "rtgs": rtgs,
                 "timesteps": timesteps,
-            })
+                "length": ep_len,
+            }
+            self.episodes.append(ep_dict)
+
+            # For each possible window in this episode, store (episode_idx, start_idx)
+            for start_idx in range(ep_len):
+                self.indices.append((len(self.episodes)-1, start_idx))
 
     def _compute_rtgs(self, rewards: np.ndarray) -> np.ndarray:
-        """Compute discounted cumulative rewards-to-go for a single episode."""
+        """
+        Compute discounted cumulative rewards-to-go for a single episode.
+        Args:
+            rewards: np.ndarray of shape [L], the reward at each step in the episode.
+        Returns:
+            rtgs: np.ndarray of shape [L], where rtgs[i] = sum_{j=i}^L gamma^{j-i} * rewards[j]
+        """
         rtgs = np.zeros_like(rewards, dtype=np.float32)
         running = 0.0
         for i in reversed(range(len(rewards))):
@@ -65,24 +83,39 @@ class TrajectoryDataset(Dataset):
             rtgs[i] = running
         return rtgs
 
+
     def __len__(self) -> int:
-        return len(self.episodes)
+        """
+        Returns the total number of sliding windows (across all episodes) in the dataset.
+        Each window is a possible training sample.
+        """
+        return len(self.indices)
 
     def __getitem__(self, idx: int) -> dict:
         """
-        Returns a sequence of length `context_length`, padded on the left if needed.
-        Output dict contains:
-            states:   Tensor[T, state_dim]
-            actions:  Tensor[T, act_dim]
-            rtgs:     Tensor[T, 1]
-            timesteps:Tensor[T]
-            mask:     Tensor[T] (1=valid, 0=padding)
+        Returns a padded window of length `context_length` from a single episode.
+        The window is right-aligned: if the window is shorter than `context_length`,
+        the valid data is at the end and the beginning is zero-padded.
+        Args:
+            idx: Index into the list of all possible windows (across all episodes).
+        Returns:
+            dict with keys:
+                states:   Tensor[T, state_dim]   (padded window of states)
+                actions:  Tensor[T, act_dim]     (padded window of actions)
+                rtgs:     Tensor[T, 1]           (padded window of returns-to-go)
+                timesteps:Tensor[T]              (padded window of timesteps)
+                mask:     Tensor[T]              (1 for valid, 0 for padding)
         """
-        ep = self.episodes[idx]
-        L = ep["states"].shape[0]
+        ep_idx, start_idx = self.indices[idx]
+        ep = self.episodes[ep_idx]
         T = self.context_length
+        ep_len = ep["length"]
 
-        # Initialize buffers
+        # Compute the window (may be partial at the end of the episode)
+        end_idx = min(start_idx + T, ep_len)
+        window_len = end_idx - start_idx
+
+        # Initialize buffers (zero-padded)
         states = np.zeros((T, self.state_dim), dtype=np.float32)
         actions = np.zeros((T, self.act_dim), dtype=np.float32)
         rtgs = np.zeros((T, 1), dtype=np.float32)
@@ -90,13 +123,11 @@ class TrajectoryDataset(Dataset):
         mask = np.zeros(T, dtype=np.float32)
 
         # Copy episode data to the right-aligned window
-        start = max(T - L, 0)
-        end = start + min(L, T)
-        states[start:end] = ep["states"][-T:]
-        actions[start:end] = ep["actions"][-T:]
-        rtgs[start:end, 0] = ep["rtgs"][-T:]
-        timesteps[start:end] = ep["timesteps"][-T:]
-        mask[start:end] = 1.0
+        states[-window_len:] = ep["states"][start_idx:end_idx]
+        actions[-window_len:] = ep["actions"][start_idx:end_idx]
+        rtgs[-window_len:, 0] = ep["rtgs"][start_idx:end_idx]
+        timesteps[-window_len:] = ep["timesteps"][start_idx:end_idx]
+        mask[-window_len:] = 1.0
 
         return {
             "states": torch.from_numpy(states),
