@@ -141,7 +141,11 @@ class Agent:
         return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
 
     def _solve_sdp(self, forecasts):
-        """Implements the backward induction algorithm with vectorized feasibility checks and action effects."""
+        """
+        The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
+        by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge
+        Implements the backward induction algorithm with vectorized feasibility checks and action effects.
+        """
         num_soc_levels = len(self.soc_levels_kwh)
         horizon = len(forecasts)
     

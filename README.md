@@ -56,14 +56,17 @@ energydecision/
     cd energydecision
     ```
 2.  **Using Docker:**
-*   Build and run the container:
+*   Build and run the container, which will spin up a jupyterlab server with all dependencies installed:
     ```bash
     sudo docker compose up
     ```
 
 ## Usage
 
-*   Explore the simulation and agent interactions in the [testrun.ipynb](testrun.ipynb) notebook.
+*   Explore the simulation and agent interactions in the [`testrun.ipynb`](testrun.ipynb) notebook.
+*   See Demo jupyternotebook [`DemoEnv.ipynb`](DemoEnv.ipynb) and [`Demosb3.ipynb`](Demosb3.ipynb) for example usage of the gym and stable-baselines3 library.
+
+*   **Using the Environment class and logging interaction from programmed Algorithms:**
 *   Instantiate the [`SolarBatteryEnv`](src/EnergySimEnv.py) and [`Agent`](src/decision.py) classes programmatically to run simulations with different algorithms and parameters.
 
     ```python
@@ -139,6 +142,7 @@ energydecision/
     print(sdp_episode_logs)
     ```
 
+*   **Training the policy with stable_baselines3 algorithms and logging the policy interaction:**
 *   Utilise [`train_model`](src/sb3train.py) to train policy using reinforcement learning library stable_baselines3 against the environment, then [`run_sb3_model_on_vec_env`](src/decision.py) to simulate the model interaction and record the log.
 
     ```python
@@ -216,6 +220,7 @@ energydecision/
     ppo_logs.write_parquet("../data/ppo_test_episode_logs.parquet")
     ```
 
+*   **Training the Decision Transformer with offline interaction data:**
 *   Utilise [`train_decision_transformer`](src/transformer_training.py) to train [`DecisionTransformer`](src/decision_transformer.py) using offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py) and load it onto [`TrajectoryDataset`](src/transformer_training.py)
 
     ```python
@@ -278,6 +283,7 @@ energydecision/
     )
     ```
 
+*   **Evaluating model performance from the interaction data:**
 *   Utilise [`evaluate_experiment_logs`](src/helper.py) to evaluate offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py)
 
     ```python
