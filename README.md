@@ -139,7 +139,7 @@ energydecision/
     print(sdp_episode_logs)
     ```
 
-*   Utilise [`train_model`](src/sb3train.py) to train policy using reinforcement learning library stable_baselines3 against the environment
+*   Utilise [`train_model`](src/sb3train.py) to train policy using reinforcement learning library stable_baselines3 against the environment, then [`run_sb3_model_on_vec_env`](src/decision.py) to simulate the model interaction and record the log.
 
     ```python
     import polars as pl
