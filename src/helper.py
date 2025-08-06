@@ -325,6 +325,9 @@ def flatten_episode_data(episode_data):
         dfs.append(df)
     return pl.concat(dfs)
 
+
+import json
+
 def evaluate_experiment_logs(
     logs: list[pl.DataFrame],
     target_return: float = 0.0
@@ -360,11 +363,27 @@ def evaluate_experiment_logs(
     grid_costs = []
     grid_revenues = []
     deg_costs = []
+    def safe_float(val):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return 0.0
+
     for df in logs:
         infos = df['info'].to_list()
-        gc = sum(info.get('grid_reward', 0.0) for info in infos if info.get('grid_energy',0) > 0)
-        gr = sum(info.get('grid_reward', 0.0) for info in infos if info.get('grid_energy',0) < 0)
-        dc = sum(info.get('battery_deg_penalty', 0.0) * info.get('battery_life_cost', 1.0) for info in infos)
+        # Parse info strings to dicts if needed
+        parsed_infos = []
+        for info in infos:
+            if isinstance(info, str):
+                try:
+                    parsed_infos.append(json.loads(info))
+                except Exception:
+                    parsed_infos.append({})
+            else:
+                parsed_infos.append(info)
+        gc = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) > 0)
+        gr = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) < 0)
+        dc = sum(safe_float(i.get('battery_deg_penalty', 0.0)) * safe_float(i.get('battery_life_cost', 1.0)) for i in parsed_infos)
         grid_costs.append(abs(gc))
         grid_revenues.append(gr)
         deg_costs.append(dc)
