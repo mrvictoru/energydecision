@@ -330,7 +330,7 @@ import json
 
 def evaluate_experiment_logs(
     logs: list[pl.DataFrame],
-    target_return: float = 0.0
+    target_return: float = 0.0 # for comparison, use the mean reward of a baseline agent's episode
 ) -> dict:
     """
     Compute key performance metrics for a single experiment's episode logs.
@@ -409,16 +409,112 @@ def evaluate_experiment_logs(
 
 def evaluate_experiments(
     all_logs: dict[str, list[pl.DataFrame]],
-    target_return: float = 0.0
-) -> pl.DataFrame:
+    target_return: float = 0.0,
+    make_plots: bool = True,
+    return_figs: bool = False,
+    figsize: tuple = (6,4)
+) -> pl.DataFrame | tuple[pl.DataFrame, dict]:
     """
-    Given a dict mapping experiment names to lists of episode logs,
-    compute evaluation metrics for each and return a Polars DataFrame.
+    Given a dict mapping experiment names to lists of episode logs, compute evaluation metrics.
+    Optionally create diagnostic plots:
+      1) Mean reward bar (with std error bars)
+      2) Stacked average cost components (grid vs degradation)
+      3) Risk–return scatter (std vs mean, colour by Sharpe)
+      4) Episode return distribution (box plot)
+
+    Params:
+        all_logs: mapping experiment name -> list of per-episode DataFrames
+        target_return: baseline for Sortino (passed to evaluate_experiment_logs)
+        make_plots: whether to generate and display plots
+        return_figs: if True, return a dict of matplotlib Figure objects along with the DataFrame
+        figsize: base figure size (width, height)
+
+    Returns:
+        metrics_df (pl.DataFrame) OR (metrics_df, figs_dict) if return_figs=True
     """
     rows = []
+    episode_rows = []  # for per-episode reward distribution
     for name, logs in all_logs.items():
         metrics = evaluate_experiment_logs(logs, target_return=target_return)
         metrics['experiment'] = name
         rows.append(metrics)
-    df = pl.DataFrame(rows)
-    return df.sort('experiment')
+        # build per-episode total rewards
+        for idx, ep_df in enumerate(logs):
+            episode_rows.append({
+                'experiment': name,
+                'episode': idx,
+                'total_reward': float(ep_df['reward'].sum())
+            })
+    metrics_df = pl.DataFrame(rows).sort('experiment')
+    if not make_plots and not return_figs:
+        return metrics_df
+
+    figs: dict[str, plt.Figure] = {}
+
+    try:
+        import matplotlib.pyplot as plt  # already imported above, safeguard
+        # 1) Mean reward bar with std
+        fig1, ax1 = plt.subplots(figsize=figsize)
+        x = np.arange(len(metrics_df))
+        mean_rewards = metrics_df['mean_reward'].to_list()
+        std_rewards = metrics_df['std_reward'].to_list()
+        labels = metrics_df['experiment'].to_list()
+        ax1.bar(x, mean_rewards, yerr=std_rewards, capsize=4, color='tab:blue', alpha=0.75)
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(labels, rotation=45, ha='right')
+        ax1.set_ylabel('Mean Episode Reward')
+        ax1.set_title('Mean Reward ± Std')
+        ax1.grid(axis='y', alpha=0.3)
+        figs['mean_reward'] = fig1
+
+        # 2) Stacked cost components
+        fig2, ax2 = plt.subplots(figsize=figsize)
+        grid_cost = metrics_df['avg_grid_cost'].to_list()
+        deg_cost = metrics_df['avg_deg_cost'].to_list()
+        ax2.bar(x, grid_cost, label='Grid Cost', color='tab:gray')
+        ax2.bar(x, deg_cost, bottom=grid_cost, label='Degradation Cost', color='tab:orange')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(labels, rotation=45, ha='right')
+        ax2.set_ylabel('Average Cost')
+        ax2.set_title('Average Cost Components')
+        ax2.legend()
+        ax2.grid(axis='y', alpha=0.3)
+        figs['cost_stack'] = fig2
+
+        # 3) Risk–return scatter (std vs mean, colour by Sharpe)
+        sharpe = metrics_df['sharpe_ratio'].to_list()
+        fig3, ax3 = plt.subplots(figsize=figsize)
+        sc = ax3.scatter(std_rewards, mean_rewards, c=sharpe, cmap='viridis', s=120, edgecolor='k')
+        for i, lbl in enumerate(labels):
+            ax3.text(std_rewards[i], mean_rewards[i], lbl, fontsize=8, ha='left', va='bottom')
+        ax3.set_xlabel('Std Reward (Risk)')
+        ax3.set_ylabel('Mean Reward')
+        ax3.set_title('Risk–Return (Colour=Sharpe)')
+        cbar = fig3.colorbar(sc, ax=ax3)
+        cbar.set_label('Sharpe Ratio')
+        ax3.grid(alpha=0.3)
+        figs['risk_return'] = fig3
+
+        # 4) Episode return distribution (box plot)
+        if episode_rows:
+            ep_df = pl.DataFrame(episode_rows)
+            # pivot to pandas for boxplot simplicity
+            pd_ep = ep_df.to_pandas()
+            fig4, ax4 = plt.subplots(figsize=(max(figsize[0], len(labels)*0.6), figsize[1]))
+            # group returns by experiment in order of metrics_df
+            data_in_order = [pd_ep.loc[pd_ep['experiment']==lab, 'total_reward'].values for lab in labels]
+            ax4.boxplot(data_in_order, labels=labels, showfliers=False)
+            ax4.set_ylabel('Episode Total Reward')
+            ax4.set_title('Episode Return Distribution (Box)')
+            ax4.tick_params(axis='x', rotation=45)
+            ax4.grid(axis='y', alpha=0.3)
+            figs['episode_distribution'] = fig4
+
+        if make_plots:
+            plt.show(block=False)
+    except Exception as e:
+        print(f"Plot generation failed: {e}")
+
+    if return_figs:
+        return metrics_df, figs
+    return metrics_df
