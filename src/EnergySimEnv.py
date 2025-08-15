@@ -48,13 +48,13 @@ class SolarBatteryEnv(gym.Env):
     def __init__(
         self,
         df: pl.DataFrame,
-        battery_capacity=13.5, #kWh (default Tesla Powerwall 2)
-        max_battery_flow=5.0, #kW
+        battery_capacity=7.0, #kWh (default Tesla Powerwall 1)
+        max_battery_flow=3.3, #kW
         max_grid_flow=10.0, #kW
         init_battery_level=5.0, #kWh
         max_step=1000,
         render_mode=None,
-        battery_life_cost=15300.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
+        battery_life_cost=5000.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         correction_interval = 100, # steps before dynamic correction
         init_correction_steps = [10, 20, 40 ,70, 110, 160],
         step_duration = 0.5, # duration of each step in hours (default half an hour)

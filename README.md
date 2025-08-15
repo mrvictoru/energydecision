@@ -284,35 +284,41 @@ energydecision/
     ```
 
 *   **Evaluating model performance from the interaction data:**
-*   Utilise [`evaluate_experiment_logs`](src/helper.py) to evaluate offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py)
-
+*   Utilise [`evaluate_experiment_logs`](src/helper.py) to evaluate offline interaction data
     ```python
-    from decision import run_episodes_parallel, Agent
-    from helper import evaluate_experiment_logs
-
-    # Example: run episodes in parallel
-    episode_logs = run_episodes_parallel(Agent, envs, agent_kwargs=rule_agent_kwargs, max_workers=8)
+    # read parquet as polars dataframe
+    import polars as pl
+    sb3_test_logs = pl.read_parquet("../data/sa3_test_episode_logs.parquet")
+    ppo_test_logs = pl.read_parquet("../data/ppo_test_episode_logs.parquet")
+    rule_all_logs = pl.read_parquet("../data/rule_all_episode_logs.parquet")
+    sdp_all_logs = pl.read_parquet("../data/sdp_all_episode_logs.parquet")
 
     # Directly evaluate
-    metrics = evaluate_experiment_logs(episode_logs)
-    print(metrics)
-    ```
-    ```python
-    from decision import run_sb3_model_on_vec_env
-    from helper import flatten_episode_data, evaluate_experiment_logs
-
-    # Run SB3 model
-    episode_data = run_sb3_model_on_vec_env(model, vec_env)
-
-    # Flatten to a single DataFrame
-    all_logs_df = flatten_episode_data(episode_data)
+    from helper import evaluate_experiment_logs
 
     # Split into a list of DataFrames, one per episode
-    logs_by_episode = [all_logs_df.filter(pl.col("episode_id") == eid) for eid in all_logs_df["episode_id"].unique()]
+    baseline_logs = [rule_all_logs.filter(pl.col("episode_id") == eid) for eid in rule_all_logs["episode_id"].unique()]
 
     # Evaluate
-    metrics = evaluate_experiment_logs(logs_by_episode)
+    metrics = evaluate_experiment_logs(baseline_logs)
     print(metrics)
+
+    # Evaluate multiple algorithms together
+    from helper import evaluate_experiments
+    # Split into a list of DataFrames, one per episode
+    sdp_logs = [sdp_all_logs.filter(pl.col("episode_id") == eid) for eid in sdp_all_logs["episode_id"].unique()]
+    rule_logs = [rule_all_logs.filter(pl.col("episode_id") == eid) for eid in rule_all_logs["episode_id"].unique()]
+    sb3_logs = [sb3_test_logs.filter(pl.col("episode_id") == eid) for eid in sb3_test_logs["episode_id"].unique()]
+    ppo_logs = [ppo_test_logs.filter(pl.col("episode_id") == eid) for eid in ppo_test_logs["episode_id"].unique()]
+
+    all_logs = {
+        "sdp": sdp_logs,
+        "rule": rule_logs,
+        "sb3": sb3_logs,
+        "ppo": ppo_logs,
+    }
+
+    metrics = evaluate_experiments(all_logs, target_return=0.0)
     ```
 
 ## Dependencies
