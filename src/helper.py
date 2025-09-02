@@ -381,15 +381,37 @@ def evaluate_experiment_logs(
                     parsed_infos.append({})
             else:
                 parsed_infos.append(info)
-        gc = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) > 0)
-        gr = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) < 0)
-        dc = sum(safe_float(i.get('battery_deg_penalty', 0.0)) * safe_float(i.get('battery_life_cost', 1.0)) for i in parsed_infos)
-        grid_costs.append(abs(gc))
-        grid_revenues.append(gr)
-        deg_costs.append(dc)
-    avg_gc = float(np.mean(grid_costs))
-    avg_gr = float(np.mean(grid_revenues))
-    avg_dc = float(np.mean(deg_costs))
+
+        # Prefer new fields if available: 'grid_cost' (positive=cost, negative=revenue) and 'deg_cost'
+        has_grid_cost_field = any(isinstance(i, dict) and 'grid_cost' in i for i in parsed_infos)
+        has_deg_cost_field = any(isinstance(i, dict) and 'deg_cost' in i for i in parsed_infos)
+
+        if has_grid_cost_field:
+            total_grid_cost = sum(safe_float(i.get('grid_cost', 0.0)) for i in parsed_infos if safe_float(i.get('grid_cost', 0.0)) > 0)
+            total_grid_revenue = -sum(safe_float(i.get('grid_cost', 0.0)) for i in parsed_infos if safe_float(i.get('grid_cost', 0.0)) < 0)
+        else:
+            # Fallback to older fields: compute cost from grid_reward where grid_energy>0 (importing)
+            total_grid_cost = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) > 0)
+            total_grid_cost = float(abs(total_grid_cost))
+            # revenue from exporting (grid_energy < 0)
+            total_grid_revenue = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) < 0)
+
+        if has_deg_cost_field:
+            total_deg_cost = sum(safe_float(i.get('deg_cost', 0.0)) for i in parsed_infos)
+        else:
+            # Fallback to older fields: battery_deg_penalty * battery_life_cost
+            total_deg_cost = sum(safe_float(i.get('battery_deg_penalty', 0.0)) * safe_float(i.get('battery_life_cost', 1.0)) for i in parsed_infos)
+
+        grid_costs.append(float(total_grid_cost))
+        grid_revenues.append(float(total_grid_revenue))
+        deg_costs.append(float(total_deg_cost))
+    avg_gc = float(np.mean(grid_costs)) if grid_costs else 0.0
+    avg_gr = float(np.mean(grid_revenues)) if grid_revenues else 0.0
+    avg_dc = float(np.mean(deg_costs)) if deg_costs else 0.0
+
+    # Average total operational cost per episode = grid_cost - grid_revenue + deg_cost
+    operational_costs = [float(gc) - float(gr) + float(dc) for gc, gr, dc in zip(grid_costs, grid_revenues, deg_costs)]
+    avg_operational_cost = float(np.mean(operational_costs)) if operational_costs else 0.0
 
     return {
         'mean_reward': mean_r,
@@ -402,6 +424,7 @@ def evaluate_experiment_logs(
         'avg_grid_cost': avg_gc,
         'avg_grid_revenue': avg_gr,
         'avg_deg_cost': avg_dc,
+        'avg_operational_cost': avg_operational_cost,
     }
 
 
@@ -467,16 +490,58 @@ def evaluate_experiments(
         ax1.grid(axis='y', alpha=0.3)
         figs['mean_reward'] = fig1
 
-        # 2) Stacked cost components
+        # 2) Stacked cost components with percentage annotations
         fig2, ax2 = plt.subplots(figsize=figsize)
         grid_cost = metrics_df['avg_grid_cost'].to_list()
         deg_cost = metrics_df['avg_deg_cost'].to_list()
-        ax2.bar(x, grid_cost, label='Grid Cost', color='tab:gray')
-        ax2.bar(x, deg_cost, bottom=grid_cost, label='Degradation Cost', color='tab:orange')
+
+        # Draw stacked bars
+        bars_grid = ax2.bar(x, grid_cost, label='Grid Cost', color='tab:gray')
+        bars_deg = ax2.bar(x, deg_cost, bottom=grid_cost, label='Degradation Cost', color='tab:orange')
+
+        # Compute totals and annotate each segment with percent contribution
+        totals = [g + d for g, d in zip(grid_cost, deg_cost)]
+        # Find a reference height for placing small-label annotations
+        max_total = max(totals) if totals else 1.0
+
+        for i in range(len(x)):
+            total = totals[i] if totals[i] != 0 else 0.0
+
+            # Grid segment
+            g = grid_cost[i]
+            if total > 0:
+                pct_g = 100.0 * (g / total)
+            else:
+                pct_g = 0.0
+            # Position: middle of the grid segment
+            y_g = g / 2.0
+            # Choose text color for contrast
+            color_g = 'white' if (g / max_total) > 0.12 else 'black'
+            if g / max_total >= 0.03:
+                ax2.text(x[i], y_g, f"{pct_g:.1f}%", ha='center', va='center', color=color_g, fontsize=8)
+            else:
+                # place small labels above the bar
+                ax2.text(x[i], total + 0.01 * max_total, f"G:{pct_g:.1f}%", ha='center', va='bottom', color='black', fontsize=7)
+
+            # Degradation segment
+            d = deg_cost[i]
+            if total > 0:
+                pct_d = 100.0 * (d / total)
+            else:
+                pct_d = 0.0
+            # Position: middle of the degradation segment
+            y_d = g + d / 2.0
+            color_d = 'white' if (d / max_total) > 0.12 else 'black'
+            if d / max_total >= 0.03:
+                ax2.text(x[i], y_d, f"{pct_d:.1f}%", ha='center', va='center', color=color_d, fontsize=8)
+            else:
+                # place small labels above the bar (if grid already used the space, offset slightly)
+                ax2.text(x[i], total + 0.015 * max_total, f"D:{pct_d:.1f}%", ha='center', va='bottom', color='black', fontsize=7)
+
         ax2.set_xticks(x)
         ax2.set_xticklabels(labels, rotation=45, ha='right')
         ax2.set_ylabel('Average Cost')
-        ax2.set_title('Average Cost Components')
+        ax2.set_title('Average Cost Components (percent annotated)')
         ax2.legend()
         ax2.grid(axis='y', alpha=0.3)
         figs['cost_stack'] = fig2

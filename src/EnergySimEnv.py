@@ -9,7 +9,7 @@ import polars as pl
 from batterydeg import static_degradation, dynamic_degradation
 
 # global variables
-VIOLATION_PENALTY = -1000
+VIOLATION_PENALTY = -8964
 MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR = 0.01  # 1% of battery_life_cost per step
 MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM = 0.001  # 0.1% of battery_life_cost per step
 
@@ -318,12 +318,14 @@ class SolarBatteryEnv(gym.Env):
                 "battery_level": new_battery_level,
                 "grid_energy": grid_energy,
                 "energy_price": energy_price,
+                "grid_cost": 0.0,  # No cost due to violation
                 "grid_reward": 0.0,  # No reward due to violation
                 "battery_deg_penalty": 0.0,  # No degradation cost due to violation
                 "dynamic_deg": -1.0,  # Placeholder for dynamic degradation
                 "static_deg": -1.0,  # Placeholder for static degradation
                 "num_cycles": 0,  # Placeholder for number of cycles
                 "correction_factor": self.correction_factor,
+                "deg_cost": 0.0,  # No degradation cost due to violation
                 "energy_conservation_violation": True
             }
 
@@ -377,12 +379,14 @@ class SolarBatteryEnv(gym.Env):
             "battery_level": new_battery_level,
             "grid_energy": grid_energy,
             "energy_price": energy_price,
+            "grid_cost": grid_energy * energy_price,
             "grid_reward": grid_reward,
             "battery_deg_penalty": battery_deg_penalty,
             "dynamic_deg": dynamic_deg,
             "static_deg": static_deg,
             "num_cycles": num_cycles,
             "correction_factor": self.correction_factor,
+            "deg_cost": current_step_deg_cost,
             "energy_conservation_violation": False
         }
 

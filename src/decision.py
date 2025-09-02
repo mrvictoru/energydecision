@@ -360,12 +360,13 @@ def run_single(agent_class, env, agent_kwargs, render):
     return agent.run_episode(render=render)
 
 # this can be used to run multiple episodes in parallel
-def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4):
+def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4, use_notebook_tqdm=True):
     """
     Runs one episode per environment in parallel.
     agent_class: The Agent class to instantiate. 
     envs: List of SolarBatteryEnv instances.
     agent_kwargs: Dict of kwargs for Agent constructor. (only suitable for rule, sdp algorithms)
+    use_notebook_tqdm: If True, use tqdm.notebook.tqdm; else use tqdm.tqdm (for scripts)
     Returns: List of DataFrames (one per environment).
     """
     agent_kwargs = agent_kwargs or {}
@@ -373,11 +374,17 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp']:
         raise ValueError("Parallel execution is only supported for 'rule' and 'sdp' algorithms. ")
 
+    # Select tqdm version
+    if use_notebook_tqdm:
+        from tqdm.notebook import tqdm as tqdm_bar
+    else:
+        from tqdm import tqdm as tqdm_bar
+
     results = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         # Use as_completed to update progress as each finishes
         futures = [executor.submit(run_single, agent_class, env, agent_kwargs, render) for env in envs]
-        for f in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
+        for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             results.append(f.result())
     return results
 
