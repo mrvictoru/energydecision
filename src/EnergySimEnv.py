@@ -57,8 +57,7 @@ class SolarBatteryEnv(gym.Env):
         battery_life_cost=5000.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         correction_interval = 100, # steps before dynamic correction
         init_correction_steps = [10, 20, 40 ,70, 110, 160],
-        step_duration = 0.5, # duration of each step in hours (default half an hour)
-        normalize_obs: bool = True
+        step_duration = 0.5 # duration of each step in hours (default half an hour)
     ):
         super(SolarBatteryEnv, self).__init__()
         self.df = df
@@ -257,7 +256,7 @@ class SolarBatteryEnv(gym.Env):
         grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy) > self.max_grid_energy else 0
         # Grid reward: negative cost for importing energy (or reward for exporting)
         grid_reward = -(grid_energy * energy_price) + grid_violation_penalty
-        return grid_reward, grid_violation_penalty
+        return grid_reward
 
     def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
         # battery flow rate is negative for discharge and positive for charge
@@ -301,8 +300,7 @@ class SolarBatteryEnv(gym.Env):
         supply = solar + battery_discharge
         grid_energy_needed = demand - supply  # If positive, importing; if negative, exporting
 
-        # Clip the grid flow if needed and flag a violation penalty if limits are exceeded
-        grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy_needed) > self.max_grid_energy else 0
+        # Clip the grid flow if needed
         grid_energy = np.clip(grid_energy_needed, -self.max_grid_energy, self.max_grid_energy)
 
         # Check if this clipping breaks energy conservation
@@ -332,7 +330,7 @@ class SolarBatteryEnv(gym.Env):
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
 
         # ----- Compute Rewards -----
-        grid_reward, grid_violation_penalty = self._calculate_grid_reward(grid_energy, energy_price)
+        grid_reward = self._calculate_grid_reward(grid_energy, energy_price)
         # SoC_avg = 100 · ((q_t) − 0.5 · (b_t) / B)
         # where
         # q_t is the battery energy (in kWh) before the operation,

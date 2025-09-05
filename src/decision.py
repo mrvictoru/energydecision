@@ -1,9 +1,57 @@
 import numpy as np
 import torch
 import polars as pl
+import warnings
 from EnergySimEnv import SolarBatteryEnv
 
 from batterydeg import static_degradation
+
+
+# Helper functions for SDP implementation
+def interpolate_ctg(soc_levels_kwh, ctg_array, soc_value):
+    """
+    Linearly interpolate cost-to-go values for a continuous SoC between discrete levels.
+    Clamps at the ends if soc_value is outside the range.
+    
+    Args:
+        soc_levels_kwh: Array of discrete SoC levels in kWh
+        ctg_array: Array of cost-to-go values corresponding to soc_levels_kwh
+        soc_value: Continuous SoC value to interpolate at
+    
+    Returns:
+        Interpolated cost-to-go value
+    """
+    # Clamp soc_value to the bounds of soc_levels_kwh
+    soc_value = np.clip(soc_value, soc_levels_kwh[0], soc_levels_kwh[-1])
+    
+    # Use numpy's interp function for linear interpolation
+    return np.interp(soc_value, soc_levels_kwh, ctg_array)
+
+
+def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
+    """
+    Compute grid cost with explicit import/export semantics and grid limit checking.
+    
+    Args:
+        grid_energy: Grid energy (positive = import, negative = export)
+        import_price: Price per kWh for importing energy
+        export_price: Price per kWh for exporting energy (revenue)
+        max_grid_energy: Maximum allowed grid energy (absolute value)
+    
+    Returns:
+        Grid cost (positive = cost, negative = revenue, np.inf if limit exceeded)
+    """
+    # Check grid limits first
+    if abs(grid_energy) > max_grid_energy + 1e-6:  # Add small tolerance
+        return np.inf
+    
+    if grid_energy > 0:  # Importing energy
+        return grid_energy * import_price
+    else:  # Exporting energy (grid_energy is negative)
+        # Export generates revenue, so cost is negative (revenue reduces total cost)
+        export_revenue = abs(grid_energy) * export_price
+        return -export_revenue
+
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
@@ -180,9 +228,19 @@ class Agent:
                     self.battery_capacity - soc_kwh
                 )
                 
-                # Compute next SoC values and map to nearest discrete SoC indices
+                # Compute next SoC values (continuous) and interpolate future costs
                 next_soc_kwhs = soc_kwh + actual_battery_flow_energies
-                next_soc_indices = np.abs(self.soc_levels_kwh[None, :] - next_soc_kwhs[:, None]).argmin(axis=1)
+                
+                # Use linear interpolation for cost-to-go lookup instead of nearest-index mapping
+                # This reduces discretization error by avoiding snapping to grid points
+                future_costs = np.array([
+                    interpolate_ctg(self.soc_levels_kwh, cost_to_go[t + 1, :], next_soc_kwh)
+                    for next_soc_kwh in next_soc_kwhs
+                ])
+                
+                # Assert shape alignment for safety
+                assert len(future_costs) == len(feasible_action_indices), \
+                    f"Shape mismatch: future_costs {len(future_costs)} vs feasible_actions {len(feasible_action_indices)}"
             
                 # Compute battery flow rates for feasible actions
                 battery_flow_rates = self.action_levels_norm[feasible_action_indices] * self.max_battery_flow
@@ -197,8 +255,7 @@ class Agent:
                     )
                     for i in range(len(feasible_action_indices))
                 ])
-                # Get future cost-to-go for each possible next SoC
-                future_costs = cost_to_go[t + 1, next_soc_indices]
+                
                 total_costs = stage_costs + future_costs
             
                 # Select the action with the minimum total cost (stage + future)
@@ -239,18 +296,11 @@ class Agent:
         battery_discharge_energy = max(0, -battery_flow_energy)
         grid_energy = load + battery_charge_energy - solar - battery_discharge_energy
 
-        grid_cost = 0
-        # Check grid limits (using energy directly)
-        if abs(grid_energy) > self.max_grid_energy + 1e-6: # Add tolerance
-            grid_cost = np.inf # Penalize grid violation heavily
-        else:
-            if grid_energy > 0: # Importing
-                grid_cost = grid_energy * import_price
-            else: # Exporting (grid_energy is negative)
-                grid_cost = grid_energy * export_price # Export price might be lower
-
+        # Use helper function for clear import/export semantics and grid limit checking
+        grid_cost = compute_grid_cost(grid_energy, import_price, export_price, self.max_grid_energy)
+        
         if grid_cost == np.inf:
-            return np.inf # Return early if grid violated
+            return np.inf  # Return early if grid violated
 
         # --- Degradation Cost ---
         if self.degradation_model == 'linear':
@@ -289,13 +339,13 @@ class Agent:
         # this is to check
         if self.rule_presistence and battery_level < 0.9:  # battery is not full
             #continue charging.
-            result = min((0.5 + noise, 0.5))
+            result = min(0.5 + noise, 0.5)
         elif self.rule_presistence and battery_level > 0.9:  # battery is not empty
             self.rule_presistence = False
-            result = max((-0.1 + noise, -0.1))
+            result = max(-0.1 + noise, -0.1)
         elif battery_level < 0.1:  # battery is empty
             self.rule_presistence = True
-            result = min((0.5 + noise, 0.5))
+            result = min(0.5 + noise, 0.5)
         
         elif diff > 0 and battery_level < 0.9:  # surplus energy
             # Compute the recommended charging power as a fraction of the maximum battery flow;
@@ -353,7 +403,6 @@ class Agent:
 
 import concurrent.futures
 from tqdm.notebook import tqdm
-import warnings
 
 def run_single(agent_class, env, agent_kwargs, render):
     agent = agent_class(env, **agent_kwargs)
