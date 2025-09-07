@@ -8,6 +8,7 @@ of historical data, supporting uncertainty modeling for energy decision making.
 import polars as pl
 import numpy as np
 from typing import List, Optional, Union
+from typing import Dict, Tuple
 
 
 class QuantileScenarioGenerator:
@@ -89,6 +90,12 @@ class QuantileScenarioGenerator:
         # Validate columns exist and are numeric
         self._validate_columns(df, columns)
         
+        if not columns:
+            raise ValueError("No numeric columns available for scenario generation.")
+
+        if group_by is not None and group_by not in df.columns:
+            raise ValueError(f"group_by column '{group_by}' not found in DataFrame")
+        
         result_df = df.clone()
         
         if group_by is not None:
@@ -116,14 +123,14 @@ class QuantileScenarioGenerator:
         scenario_columns = []
         for col in df.columns:
             if df[col].dtype in numeric_types:
-                # Skip columns that look like primary identifiers or timestamps
+                # Skip obvious time/date columns but keep numeric ids and other numeric features
                 col_lower = col.lower()
-                if not any(keyword == col_lower or col_lower.endswith('_' + keyword) or col_lower.startswith(keyword + '_') 
-                          for keyword in ['timestamp', 'time', 'date']):
-                    # Don't skip location_id or similar meaningful numeric identifiers
-                    if not (col_lower in ['id'] or col_lower.endswith('_id') and len(col_lower) <= 3):
-                        scenario_columns.append(col)
-        
+                if not any(
+                    keyword == col_lower or col_lower.endswith('_' + keyword) or col_lower.startswith(keyword + '_')
+                    for keyword in ['timestamp', 'time', 'date']
+                ):
+                    scenario_columns.append(col)
+
         return scenario_columns
     
     def _validate_columns(self, df: pl.DataFrame, columns: List[str]) -> None:
@@ -159,30 +166,25 @@ class QuantileScenarioGenerator:
         Returns:
             pl.DataFrame: DataFrame with scenario columns added.
         """
-        # Calculate quantiles for each column
+        # Calculate quantiles for each column and collect into a single row
         quantile_exprs = []
-        
+
         for col in columns:
             for i, quantile in enumerate(self.quantiles, 1):
                 scenario_col_name = f"{self.scenario_prefix}_{i}_{col}"
-                quantile_exprs.append(
-                    pl.col(col).quantile(quantile).alias(scenario_col_name)
-                )
-        
-        # Calculate all quantiles
+                quantile_exprs.append(pl.col(col).quantile(quantile).alias(scenario_col_name))
+
         quantiles_df = df.select(quantile_exprs).head(1)
-        
-        # Add scenario columns to original dataframe
-        result_df = df.clone()
-        
+
+        # Build literal expressions for all scenario columns at once for efficiency
+        lit_exprs = []
         for col in columns:
-            for i, quantile in enumerate(self.quantiles, 1):
+            for i, _ in enumerate(self.quantiles, 1):
                 scenario_col_name = f"{self.scenario_prefix}_{i}_{col}"
                 scenario_value = quantiles_df[scenario_col_name].item()
-                result_df = result_df.with_columns(
-                    pl.lit(scenario_value).alias(scenario_col_name)
-                )
-        
+                lit_exprs.append(pl.lit(scenario_value).alias(scenario_col_name))
+
+        result_df = df.clone().with_columns(lit_exprs)
         return result_df
     
     def _generate_scenarios_grouped(
@@ -204,20 +206,18 @@ class QuantileScenarioGenerator:
         """
         # Calculate quantiles by group
         quantile_exprs = []
-        
+
         for col in columns:
             for i, quantile in enumerate(self.quantiles, 1):
                 scenario_col_name = f"{self.scenario_prefix}_{i}_{col}"
-                quantile_exprs.append(
-                    pl.col(col).quantile(quantile).alias(scenario_col_name)
-                )
-        
-        # Calculate quantiles by group
-        group_quantiles = df.group_by(group_by).agg(quantile_exprs)
-        
+                quantile_exprs.append(pl.col(col).quantile(quantile).alias(scenario_col_name))
+
+        # Use modern Polars API for grouping and aggregation
+        group_quantiles = df.groupby(group_by).agg(quantile_exprs)
+
         # Join back to original dataframe
         result_df = df.join(group_quantiles, on=group_by, how="left")
-        
+
         return result_df
     
     def get_scenario_columns(self, base_columns: List[str]) -> List[str]:
@@ -262,3 +262,176 @@ class QuantileScenarioGenerator:
                     })
         
         return pl.DataFrame(summary_data)
+
+    # New methods to satisfy the blueprint described in the project:
+    # For each time step t produce arrays of values and probabilities for each variable
+    # (Solar, Load, ImportPrice, ExportPrice). Probabilities are equal by default
+    # (uniform over quantile bins) but callers may supply explicit quantiles per variable.
+    def generate_time_step_scenarios(
+        self,
+        df: pl.DataFrame,
+        time_index_col: Optional[str] = None,
+        variables: Optional[Dict[str, str]] = None,
+        per_variable_quantiles: Optional[Dict[str, List[float]]] = None,
+        group_by: Optional[str] = None,
+    ) -> Dict[int, Dict[str, Tuple[np.ndarray, np.ndarray]]]:
+        """
+        Generate per-time-step marginal scenario arrays and probabilities for the
+        four variables required by the blueprint.
+
+        Args:
+            df: Input Polars DataFrame containing historical data.
+            time_index_col: Optional column name to use as the time index. If None,
+                row order (0..N-1) will be used as time steps.
+            variables: Optional mapping of blueprint variable names to DataFrame
+                columns. Expected keys: 'solar', 'load', 'import_price', 'export_price'.
+                Defaults to common names if not provided.
+            per_variable_quantiles: Optional dict mapping variable name to list of
+                quantiles to use for that variable. If not provided the generator's
+                configured quantiles are used for all variables.
+            group_by: Optional column name to group by when computing quantiles.
+
+        Returns:
+            A dict keyed by time-step index (int). Each value is a dict mapping
+            variable short names ('solar','load','import_price','export_price') to
+            a tuple (values: np.ndarray, probs: np.ndarray).
+
+        Notes:
+            - If `group_by` is provided, quantiles are computed per-group and then
+              attached to every row in that group (so values can change by group).
+            - Probabilities are uniform across the quantile bins by default.
+        """
+        # Default variable column mapping
+        default_vars = {
+            'solar': 'SolarGen',
+            'load': 'HouseLoad',
+            'import_price': 'ImportEnergyPrice',
+            'export_price': 'ExportEnergyPrice'
+        }
+        variables = variables or default_vars
+
+        # Validate variable columns exist
+        for vname, col in variables.items():
+            if col not in df.columns:
+                raise ValueError(f"Column for variable '{vname}' not found in DataFrame: {col}")
+
+        # Determine per-variable quantiles
+        var_quantiles: Dict[str, List[float]] = {}
+        for vname in variables.keys():
+            if per_variable_quantiles and vname in per_variable_quantiles:
+                qs = per_variable_quantiles[vname]
+            else:
+                qs = self.quantiles
+            if not qs:
+                raise ValueError(f"No quantiles provided for variable {vname}")
+            var_quantiles[vname] = sorted(qs)
+
+        # Helper to build uniform probs for a list of values
+        def _uniform_probs(n: int) -> np.ndarray:
+            if n <= 0:
+                return np.array([])
+            return np.repeat(1.0 / n, n)
+
+        # If grouping is requested compute quantiles per group else global
+        if group_by is not None:
+            if group_by not in df.columns:
+                raise ValueError(f"group_by column '{group_by}' not found in DataFrame")
+
+            # Build aggregation expressions to compute quantiles per variable
+            agg_exprs = []
+            for vname, col in variables.items():
+                qs = var_quantiles[vname]
+                for i, q in enumerate(qs, 1):
+                    agg_exprs.append(pl.col(col).quantile(q).alias(f"{vname}_q{i}"))
+
+            group_q = df.groupby(group_by).agg(agg_exprs)
+            # Convert group quantiles to a mapping: group_value -> {vname: np.array(values)}
+            group_rows = group_q.to_dicts()
+            group_mapping = {}
+            for r in group_rows:
+                key = r[group_by]
+                vals = {}
+                for vname in variables.keys():
+                    qs = var_quantiles[vname]
+                    values = np.array([r[f"{vname}_q{i}"] for i in range(1, len(qs) + 1)], dtype=float)
+                    vals[vname] = values
+                group_mapping[key] = vals
+
+            # Now attach for each row in df the group's scenario arrays
+            result: Dict[int, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
+            rows = df.to_dicts()
+            for idx, row in enumerate(rows):
+                group_key = row[group_by]
+                if group_key not in group_mapping:
+                    raise RuntimeError(f"Missing group quantiles for group {group_key}")
+                per_vars = {}
+                for vname in variables.keys():
+                    values = group_mapping[group_key][vname]
+                    probs = _uniform_probs(len(values))
+                    per_vars[vname] = (values, probs)
+                result[idx] = per_vars
+            return result
+
+        # No grouping: compute global quantiles for each variable once
+        result: Dict[int, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
+        # Precompute global quantile values per variable
+        global_vals: Dict[str, np.ndarray] = {}
+        for vname, col in variables.items():
+            qs = var_quantiles[vname]
+            values = np.array([df.select(pl.col(col).quantile(q)).to_series().item() for q in qs], dtype=float)
+            global_vals[vname] = values
+
+        # Build per-row mapping using time index or row order
+        if time_index_col is not None and time_index_col not in df.columns:
+            raise ValueError(f"time_index_col '{time_index_col}' not found in DataFrame")
+
+        rows = df.to_dicts()
+        for idx, _ in enumerate(rows):
+            per_vars = {}
+            for vname in variables.keys():
+                values = global_vals[vname]
+                probs = _uniform_probs(len(values))
+                per_vars[vname] = (values, probs)
+            result[idx] = per_vars
+
+        return result
+
+    def expected_cost_cartesian(
+        self,
+        values_solar: np.ndarray,
+        probs_solar: np.ndarray,
+        values_load: np.ndarray,
+        probs_load: np.ndarray,
+        values_imp: np.ndarray,
+        probs_imp: np.ndarray,
+        values_exp: np.ndarray,
+        probs_exp: np.ndarray,
+        stage_cost_fn,
+    ) -> float:
+        """
+        Compute expected stage cost by enumerating the Cartesian product of four
+        independent marginal scenarios. The provided stage_cost_fn should accept
+        arguments (solar, load, import_price, export_price) and return the cost
+        (float) for that realization.
+
+        This implements the blueprint's expectation: E[cost] = sum_{i,j,k,l}
+        probs_solar[i]*probs_load[j]*probs_imp[k]*probs_exp[l] * stage_cost(...)
+        """
+        # Quick shape checks
+        if len(values_solar) != len(probs_solar) or len(values_load) != len(probs_load) or \
+           len(values_imp) != len(probs_imp) or len(values_exp) != len(probs_exp):
+            raise ValueError("Values and probs arrays must have matching lengths for each variable")
+
+        expected = 0.0
+        # Enumerate cartesian product; keep it simple and readable
+        for i, (vs, ps) in enumerate(zip(values_solar, probs_solar)):
+            for j, (vl, pl) in enumerate(zip(values_load, probs_load)):
+                for k, (vi, pi) in enumerate(zip(values_imp, probs_imp)):
+                    for l, (ve, pe) in enumerate(zip(values_exp, probs_exp)):
+                        p = ps * pl * pi * pe
+                        if p == 0.0:
+                            continue
+                        c = stage_cost_fn(vs, vl, vi, ve)
+                        expected += p * c
+
+        return float(expected)
