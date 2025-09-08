@@ -15,7 +15,7 @@ from datetime import date, timedelta
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from scenario_generation.quantile_scenarios import QuantileScenarioGenerator
+from quantile_scenarios import QuantileScenarioGenerator
 
 
 class TestQuantileScenarioGenerator:
