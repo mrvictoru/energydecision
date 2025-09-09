@@ -5,6 +5,7 @@ import warnings
 from EnergySimEnv import SolarBatteryEnv
 
 from batterydeg import static_degradation
+from quantile_scenarios import QuantileScenarioGenerator
 
 
 # Helper functions for SDP implementation
@@ -98,6 +99,12 @@ class Agent:
             # Discretize state (SoC in kWh) and action (normalized flow) spaces
             self.soc_levels_kwh = np.linspace(0, self.battery_capacity, self.soc_resolution)
             self.action_levels_norm = np.linspace(-1.0, 1.0, self.action_resolution)
+
+            # Quantile scenario generator (used to compute expected grid cost)
+            # Keep a small default scenario count to limit compute; caller can replace if needed.
+            self.scenario_generator = QuantileScenarioGenerator(n_scenarios=5)
+            # simple cache for per-row scenarios to avoid recomputing inside tight loops
+            self._scenario_cache = None
 
             # Cache for the policy table (optional, might recompute every step in receding horizon)
             # self.sdp_policy_cache = None
@@ -286,50 +293,76 @@ class Agent:
 
     def _calculate_sdp_stage_cost(self, t, soc_kwh, battery_flow_rate, battery_flow_energy, forecast_step):
         """Calculates the cost for a single step in the SDP."""
-        solar = forecast_step['SolarGen']
-        load = forecast_step['HouseLoad']
-        import_price = forecast_step['ImportEnergyPrice']
-        export_price = forecast_step['ExportEnergyPrice']
+        # We'll compute expected grid cost over scenarios for this timestep using the scenario generator.
+        # Degradation cost remains deterministic and is added afterwards.
 
-        # --- Grid Cost ---
-        battery_charge_energy = max(0, battery_flow_energy)
-        battery_discharge_energy = max(0, -battery_flow_energy)
-        grid_energy = load + battery_charge_energy - solar - battery_discharge_energy
+        # Prepare / compute per-time-step scenarios (cache on first call for this horizon)
+        if self._scenario_cache is None:
+            # Build scenarios for the whole env dataframe once; keys are row indices
+            try:
+                self._scenario_cache = self.scenario_generator.generate_time_step_scenarios(self.env.df)
+            except Exception:
+                # If scenario generation fails for any reason, fallback to deterministic forecast values
+                self._scenario_cache = None
 
-        # Use helper function for clear import/export semantics and grid limit checking
-        grid_cost = compute_grid_cost(grid_energy, import_price, export_price, self.max_grid_energy)
-        
-        if grid_cost == np.inf:
-            return np.inf  # Return early if grid violated
+        # Default fallback: use deterministic forecast values from forecast_step
+        deterministic_solar = forecast_step.get('SolarGen')
+        deterministic_load = forecast_step.get('HouseLoad')
+        deterministic_imp = forecast_step.get('ImportEnergyPrice')
+        deterministic_exp = forecast_step.get('ExportEnergyPrice')
 
-        # --- Degradation Cost ---
+        # Build the stage cost function which depends on the four random variables
+        def _stage_cost_fn(solar_v, load_v, imp_v, exp_v):
+            # Compute grid energy given this realization and the candidate battery flow
+            battery_charge_energy = max(0, battery_flow_energy)
+            battery_discharge_energy = max(0, -battery_flow_energy)
+            grid_energy = load_v + battery_charge_energy - solar_v - battery_discharge_energy
+
+            grid_cost = compute_grid_cost(grid_energy, imp_v, exp_v, self.max_grid_energy)
+            if grid_cost == np.inf:
+                return np.inf
+            return grid_cost
+
+        expected_grid_cost = None
+        if self._scenario_cache is not None and t in self._scenario_cache:
+            per_vars = self._scenario_cache[t]
+            vals_solar, ps_solar = per_vars['solar']
+            vals_load, ps_load = per_vars['load']
+            vals_imp, ps_imp = per_vars['import_price']
+            vals_exp, ps_exp = per_vars['export_price']
+
+            # Compute expected grid cost by enumerating cartesian product of marginals
+            expected_grid_cost = self.scenario_generator.expected_cost_cartesian(
+                vals_solar, ps_solar,
+                vals_load, ps_load,
+                vals_imp, ps_imp,
+                vals_exp, ps_exp,
+                _stage_cost_fn
+            )
+        else:
+            # Fallback deterministic evaluation
+            deterministic_grid_energy = deterministic_load + max(0, battery_flow_energy) - deterministic_solar - max(0, -battery_flow_energy)
+            deterministic_grid_cost = compute_grid_cost(deterministic_grid_energy, deterministic_imp, deterministic_exp, self.max_grid_energy)
+            if deterministic_grid_cost == np.inf:
+                return np.inf
+            expected_grid_cost = deterministic_grid_cost
+
+        # --- Degradation Cost (unchanged) ---
         if self.degradation_model == 'linear':
-            # Linear throughput-based degradation (from the paper)
             degradation_cost = self.linear_deg_cost_per_kwh * abs(battery_flow_energy)
         else:
-            # Use the *intended* flow rate for degradation calculation
             Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
             Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
-
-            # DoD based on the *actual* energy moved
             DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
-
-            # Average SoC for the step
-            # If discharging (flow_energy < 0), avg is current - half_discharged
-            # If charging (flow_energy > 0), avg is current + half_charged
             SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
-            SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100) # Ensure valid range
-
-            # Handle zero DoD case (no degradation)
+            SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
             if DoD_percent < 1e-6:
                 degradation_fraction = 0.0
             else:
-                # Calculate degradation fraction using the static degradation model and apply correction factor
-                degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent)*self.static_deg_correction_factor
-
+                degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent) * self.static_deg_correction_factor
             degradation_cost = degradation_fraction * self.battery_life_cost
 
-        return grid_cost + degradation_cost
+        return expected_grid_cost + degradation_cost
 
     def rule_based_action(self, obs):
         diff = obs[1] - obs[2] # difference between solar generation (obs[1]) and house load (obs[2])
