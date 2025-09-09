@@ -213,7 +213,7 @@ class QuantileScenarioGenerator:
                 quantile_exprs.append(pl.col(col).quantile(quantile).alias(scenario_col_name))
 
         # Use modern Polars API for grouping and aggregation
-        group_quantiles = df.groupby(group_by).agg(quantile_exprs)
+        group_quantiles = df.group_by(group_by).agg(quantile_exprs)
 
         # Join back to original dataframe
         result_df = df.join(group_quantiles, on=group_by, how="left")
@@ -344,7 +344,7 @@ class QuantileScenarioGenerator:
                 for i, q in enumerate(qs, 1):
                     agg_exprs.append(pl.col(col).quantile(q).alias(f"{vname}_q{i}"))
 
-            group_q = df.groupby(group_by).agg(agg_exprs)
+            group_q = df.group_by(group_by).agg(agg_exprs)
             # Convert group quantiles to a mapping: group_value -> {vname: np.array(values)}
             group_rows = group_q.to_dicts()
             group_mapping = {}
@@ -435,3 +435,69 @@ class QuantileScenarioGenerator:
                         expected += p * c
 
         return float(expected)
+
+    def expected_cost_monte_carlo(
+        self,
+        values_solar: np.ndarray,
+        probs_solar: np.ndarray,
+        values_load: np.ndarray,
+        probs_load: np.ndarray,
+        values_imp: np.ndarray,
+        probs_imp: np.ndarray,
+        values_exp: np.ndarray,
+        probs_exp: np.ndarray,
+        stage_cost_fn,
+        n_samples: int = 100,
+        rng_seed: Optional[int] = None,
+    ) -> float:
+        """
+        Approximate expected stage cost by Monte Carlo sampling of joint scenarios.
+
+        Args:
+            values_*/probs_*: Marginal discrete values and probabilities for each variable.
+            stage_cost_fn: Callable(solar, load, import_price, export_price) -> float
+            n_samples: Number of Monte Carlo joint samples (default 100).
+            rng_seed: Optional integer seed for reproducibility.
+
+        Returns:
+            Approximate expected cost (float). If any sampled realization yields
+            `np.inf` cost the method will return `np.inf` immediately because that
+            indicates a positive-probability infeasible outcome.
+
+        Notes:
+            - This method samples independent marginals to form joint samples.
+            - Accuracy improves with larger `n_samples`.
+        """
+        # basic validation
+        if n_samples <= 0:
+            raise ValueError("n_samples must be a positive integer")
+
+        # ensure shapes match
+        if len(values_solar) != len(probs_solar) or len(values_load) != len(probs_load) or \
+           len(values_imp) != len(probs_imp) or len(values_exp) != len(probs_exp):
+            raise ValueError("Values and probs arrays must have matching lengths for each variable")
+
+        rng = np.random.default_rng(rng_seed)
+
+        # Precompute cumulative distributions or just use choice with p=probs
+        total = 0.0
+        for _ in range(n_samples):
+            i = rng.choice(len(values_solar), p=probs_solar)
+            j = rng.choice(len(values_load), p=probs_load)
+            k = rng.choice(len(values_imp), p=probs_imp)
+            l = rng.choice(len(values_exp), p=probs_exp)
+
+            vs = float(values_solar[i])
+            vl = float(values_load[j])
+            vi = float(values_imp[k])
+            ve = float(values_exp[l])
+
+            c = stage_cost_fn(vs, vl, vi, ve)
+            if c == np.inf:
+                # If any sampled realization is infeasible with infinite cost,
+                # the true expectation (if that realization has >0 probability)
+                # is infinite; return immediately.
+                return np.inf
+            total += float(c)
+
+        return float(total / float(n_samples))
