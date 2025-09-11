@@ -346,22 +346,34 @@ class QuantileScenarioGenerator:
 
             group_q = df.group_by(group_by).agg(agg_exprs)
             # Convert group quantiles to a mapping: group_value -> {vname: np.array(values)}
-            group_rows = group_q.to_dicts()
+            # Build list of quantile column names in the same order they were aggregated
+            quantile_col_names = []
+            for vname in variables.keys():
+                qs = var_quantiles[vname]
+                for i in range(1, len(qs) + 1):
+                    quantile_col_names.append(f"{vname}_q{i}")
+
+            # Select group key plus quantile columns and convert to numpy array once
+            sel_cols = [group_by] + quantile_col_names
+            group_arr = group_q.select(sel_cols).to_numpy()
+
             group_mapping = {}
-            for r in group_rows:
-                key = r[group_by]
+            for row in group_arr:
+                key = row[0]
                 vals = {}
+                start = 1
                 for vname in variables.keys():
                     qs = var_quantiles[vname]
-                    values = np.array([r[f"{vname}_q{i}"] for i in range(1, len(qs) + 1)], dtype=float)
+                    n = len(qs)
+                    values = np.array(row[start:start + n], dtype=float)
                     vals[vname] = values
+                    start += n
                 group_mapping[key] = vals
 
-            # Now attach for each row in df the group's scenario arrays
+            # Now attach for each row in df the group's scenario arrays (avoid to_dicts())
             result: Dict[int, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
-            rows = df.to_dicts()
-            for idx, row in enumerate(rows):
-                group_key = row[group_by]
+            group_keys = df.select(group_by).to_series().to_numpy()
+            for idx, group_key in enumerate(group_keys):
                 if group_key not in group_mapping:
                     raise RuntimeError(f"Missing group quantiles for group {group_key}")
                 per_vars = {}
@@ -385,8 +397,8 @@ class QuantileScenarioGenerator:
         if time_index_col is not None and time_index_col not in df.columns:
             raise ValueError(f"time_index_col '{time_index_col}' not found in DataFrame")
 
-        rows = df.to_dicts()
-        for idx, _ in enumerate(rows):
+        nrows = df.height
+        for idx in range(nrows):
             per_vars = {}
             for vname in variables.keys():
                 values = global_vals[vname]

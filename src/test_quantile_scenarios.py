@@ -37,8 +37,7 @@ class TestQuantileScenarioGenerator:
             'HouseLoad': np.random.normal(5, 1.5, n_rows),  # House load (kW)
             'ImportEnergyPrice': np.random.uniform(0.1, 0.3, n_rows),  # Price ($/kWh)
             'ExportEnergyPrice': np.random.uniform(0.05, 0.15, n_rows),  # Price ($/kWh)
-            'Customer': ['A'] * 50 + ['B'] * 50,  # Two customers
-            'location_id': [1] * 25 + [2] * 25 + [1] * 25 + [2] * 25  # Two locations per customer
+            'Customer': ['A'] * 50 + ['B'] * 50  # Two customers
         })
         
         # Small dataset for edge case testing
@@ -124,7 +123,7 @@ class TestQuantileScenarioGenerator:
         generator = QuantileScenarioGenerator()
         detected_columns = generator._auto_detect_scenario_columns(self.sample_df)
         
-        expected_columns = ['SolarGen', 'HouseLoad', 'ImportEnergyPrice', 'ExportEnergyPrice', 'location_id']
+        expected_columns = ['SolarGen', 'HouseLoad', 'ImportEnergyPrice', 'ExportEnergyPrice']
         assert set(detected_columns) == set(expected_columns)
     
     def test_validate_columns_valid(self):
@@ -183,7 +182,7 @@ class TestQuantileScenarioGenerator:
         result_df = generator.generate_scenarios(self.sample_df)
         
         # Should have scenario columns for all numeric columns
-        expected_base_cols = ['SolarGen', 'HouseLoad', 'ImportEnergyPrice', 'ExportEnergyPrice', 'location_id']
+        expected_base_cols = ['SolarGen', 'HouseLoad', 'ImportEnergyPrice', 'ExportEnergyPrice']
         for base_col in expected_base_cols:
             assert f'scenario_1_{base_col}' in result_df.columns
             assert f'scenario_2_{base_col}' in result_df.columns

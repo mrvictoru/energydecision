@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import polars as pl
 import warnings
+from typing import Optional
 from EnergySimEnv import SolarBatteryEnv
 
 from batterydeg import static_degradation
@@ -57,7 +58,8 @@ def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
                 horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor = 0.01,# Added SDP params
-                degradation_model = 'linear', linear_deg_cost_p_kwh=None):
+                degradation_model = 'linear', linear_deg_cost_p_kwh=None,
+                use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
@@ -105,6 +107,10 @@ class Agent:
             self.scenario_generator = QuantileScenarioGenerator(n_scenarios=5)
             # simple cache for per-row scenarios to avoid recomputing inside tight loops
             self._scenario_cache = None
+            # Monte Carlo configuration for expected cost approximation
+            self.use_monte_carlo = use_monte_carlo
+            self.mc_samples = int(mc_samples) if mc_samples is not None else 100
+            self.mc_seed = mc_seed
 
             # Cache for the policy table (optional, might recompute every step in receding horizon)
             # self.sdp_policy_cache = None
@@ -217,6 +223,32 @@ class Agent:
         # Backward induction: iterate over each time step in reverse (from horizon-1 to 0)
         for t in range(horizon - 1, -1, -1):
             forecast_step = forecasts[t]
+            # If Monte Carlo is enabled and scenarios are available, pre-sample
+            # joint realizations for this time step and reuse across actions
+            monte_samples = None
+            if getattr(self, 'use_monte_carlo', False) and self._scenario_cache is not None and t in self._scenario_cache:
+                per_vars_t = self._scenario_cache[t]
+                vals_solar_t, ps_solar_t = per_vars_t['solar']
+                vals_load_t, ps_load_t = per_vars_t['load']
+                vals_imp_t, ps_imp_t = per_vars_t['import_price']
+                vals_exp_t, ps_exp_t = per_vars_t['export_price']
+
+                rng_seed_t = None if getattr(self, 'mc_seed', None) is None else (getattr(self, 'mc_seed') + t)
+                rng = np.random.default_rng(rng_seed_t)
+                n_samples = getattr(self, 'mc_samples', 100)
+
+                # Sample marginal indices independently to form joint samples
+                idx_s = rng.choice(len(vals_solar_t), size=n_samples, p=ps_solar_t)
+                idx_l = rng.choice(len(vals_load_t), size=n_samples, p=ps_load_t)
+                idx_i = rng.choice(len(vals_imp_t), size=n_samples, p=ps_imp_t)
+                idx_e = rng.choice(len(vals_exp_t), size=n_samples, p=ps_exp_t)
+
+                sampled_solar = vals_solar_t[idx_s]
+                sampled_load = vals_load_t[idx_l]
+                sampled_imp = vals_imp_t[idx_i]
+                sampled_exp = vals_exp_t[idx_e]
+
+                monte_samples = (sampled_solar, sampled_load, sampled_imp, sampled_exp)
             # For each discretized state-of-charge (SoC) level
             for soc_idx, soc_kwh in enumerate(self.soc_levels_kwh):
             
@@ -253,15 +285,51 @@ class Agent:
                 battery_flow_rates = self.action_levels_norm[feasible_action_indices] * self.max_battery_flow
             
                 # Calculate stage costs for all feasible actions at this step
-                stage_costs = np.array([
-                    self._calculate_sdp_stage_cost(
-                        t, soc_kwh,
-                        battery_flow_rates[i],
-                        actual_battery_flow_energies[i],
-                        forecast_step
-                    )
-                    for i in range(len(feasible_action_indices))
-                ])
+                # Per-time-step memo cache for stage-cost evaluations keyed by rounded energy
+                stage_cost_cache = {}
+
+                if monte_samples is not None:
+                    sampled_solar, sampled_load, sampled_imp, sampled_exp = monte_samples
+
+                    # Vectorized evaluation across samples for each action
+                    def eval_action_cost(batt_flow_energy, batt_flow_rate):
+                        # Per-sample battery contributions
+                        battery_charge_energy = max(0, batt_flow_energy)
+                        battery_discharge_energy = max(0, -batt_flow_energy)
+                        # grid_energy array for samples
+                        grid_energy = sampled_load + battery_charge_energy - sampled_solar - battery_discharge_energy
+                        # Check grid limits
+                        if np.any(np.abs(grid_energy) > (self.max_grid_energy + 1e-6)):
+                            return np.inf
+                        # Elementwise cost: import positive, export negative
+                        is_import = grid_energy > 0
+                        costs = np.where(is_import, grid_energy * sampled_imp, -np.abs(grid_energy) * sampled_exp)
+                        # If any cost is infinite (shouldn't be after limit check) treat as infeasible
+                        if np.any(np.isinf(costs)):
+                            return np.inf
+                        return float(np.mean(costs))
+
+                    stage_costs = np.array([
+                        stage_cost_cache.setdefault(
+                            round(float(actual_battery_flow_energies[i]), 8),
+                            eval_action_cost(actual_battery_flow_energies[i], battery_flow_rates[i])
+                        )
+                        for i in range(len(feasible_action_indices))
+                    ])
+                else:
+                    # Use cache to avoid repeated calls for identical clipped energies
+                    stage_costs = np.array([
+                        stage_cost_cache.setdefault(
+                            round(float(actual_battery_flow_energies[i]), 8),
+                            self._calculate_sdp_stage_cost(
+                                t, soc_kwh,
+                                battery_flow_rates[i],
+                                actual_battery_flow_energies[i],
+                                forecast_step
+                            )
+                        )
+                        for i in range(len(feasible_action_indices))
+                    ])
                 
                 total_costs = stage_costs + future_costs
             
@@ -331,14 +399,31 @@ class Agent:
             vals_imp, ps_imp = per_vars['import_price']
             vals_exp, ps_exp = per_vars['export_price']
 
-            # Compute expected grid cost by enumerating cartesian product of marginals
-            expected_grid_cost = self.scenario_generator.expected_cost_cartesian(
-                vals_solar, ps_solar,
-                vals_load, ps_load,
-                vals_imp, ps_imp,
-                vals_exp, ps_exp,
-                _stage_cost_fn
-            )
+            # Prefer Monte Carlo approximation when requested to reduce computation
+            # Decide whether to use Monte Carlo automatically when the
+            # Cartesian product of scenario counts would be large.
+            n_comb = len(vals_solar) * len(vals_load) * len(vals_imp) * len(vals_exp)
+            use_mc = getattr(self, 'use_monte_carlo', False) or (n_comb > 200)
+
+            if use_mc:
+                expected_grid_cost = self.scenario_generator.expected_cost_monte_carlo(
+                    vals_solar, ps_solar,
+                    vals_load, ps_load,
+                    vals_imp, ps_imp,
+                    vals_exp, ps_exp,
+                    _stage_cost_fn,
+                    n_samples=getattr(self, 'mc_samples', 100),
+                    rng_seed=getattr(self, 'mc_seed', None),
+                )
+            else:
+                # Compute expected grid cost by enumerating cartesian product of marginals
+                expected_grid_cost = self.scenario_generator.expected_cost_cartesian(
+                    vals_solar, ps_solar,
+                    vals_load, ps_load,
+                    vals_imp, ps_imp,
+                    vals_exp, ps_exp,
+                    _stage_cost_fn
+                )
         else:
             # Fallback deterministic evaluation
             deterministic_grid_energy = deterministic_load + max(0, battery_flow_energy) - deterministic_solar - max(0, -battery_flow_energy)
