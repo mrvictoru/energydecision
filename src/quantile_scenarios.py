@@ -370,22 +370,26 @@ class QuantileScenarioGenerator:
                     start += n
                 group_mapping[key] = vals
 
-            # Now attach for each row in df the group's scenario arrays (avoid to_dicts())
-            result: Dict[int, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
+            # Build per-variable numpy arrays shaped (n_rows, n_quantiles_for_var)
+            nrows = df.height
+            result_mapping: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
             group_keys = df.select(group_by).to_series().to_numpy()
-            for idx, group_key in enumerate(group_keys):
-                if group_key not in group_mapping:
-                    raise RuntimeError(f"Missing group quantiles for group {group_key}")
-                per_vars = {}
-                for vname in variables.keys():
-                    values = group_mapping[group_key][vname]
-                    probs = _uniform_probs(len(values))
-                    per_vars[vname] = (values, probs)
-                result[idx] = per_vars
-            return result
+            for vname in variables.keys():
+                qs = var_quantiles[vname]
+                n_q = len(qs)
+                vals_arr = np.zeros((nrows, n_q), dtype=float)
+                for idx, group_key in enumerate(group_keys):
+                    if group_key not in group_mapping:
+                        raise RuntimeError(f"Missing group quantiles for group {group_key}")
+                    vals_arr[idx, :] = group_mapping[group_key][vname]
+                probs_vec = _uniform_probs(n_q)
+                probs_arr = np.tile(probs_vec.reshape(1, n_q), (nrows, 1))
+                result_mapping[vname] = (vals_arr, probs_arr)
+            return result_mapping
 
         # No grouping: compute global quantiles for each variable once
-        result: Dict[int, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
+        # For no-group case, build per-variable arrays where each row repeats the global quantiles
+        result_mapping: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
         # Precompute global quantile values per variable
         global_vals: Dict[str, np.ndarray] = {}
         for vname, col in variables.items():
@@ -398,15 +402,15 @@ class QuantileScenarioGenerator:
             raise ValueError(f"time_index_col '{time_index_col}' not found in DataFrame")
 
         nrows = df.height
-        for idx in range(nrows):
-            per_vars = {}
-            for vname in variables.keys():
-                values = global_vals[vname]
-                probs = _uniform_probs(len(values))
-                per_vars[vname] = (values, probs)
-            result[idx] = per_vars
+        for vname in variables.keys():
+            values = global_vals[vname]
+            n_q = len(values)
+            vals_arr = np.tile(values.reshape(1, n_q), (nrows, 1))
+            probs_arr = np.tile(_uniform_probs(n_q).reshape(1, n_q), (nrows, 1))
+            result_mapping[vname] = (vals_arr, probs_arr)
 
-        return result
+        return result_mapping
+
 
     def expected_cost_cartesian(
         self,

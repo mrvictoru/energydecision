@@ -8,6 +8,8 @@ from EnergySimEnv import SolarBatteryEnv
 from batterydeg import static_degradation
 from quantile_scenarios import QuantileScenarioGenerator
 
+import concurrent.futures
+from tqdm.notebook import tqdm
 
 # Helper functions for SDP implementation
 def interpolate_ctg(soc_levels_kwh, ctg_array, soc_value):
@@ -154,8 +156,8 @@ class Agent:
                 print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
                 return self.rule_based_action(obs) # Fallback action
 
-            # 2. Solve SDP for the horizon
-            policy_table = self._solve_sdp(forecasts)
+            # 2. Solve SDP for the horizon (provide absolute start index for scenario indexing)
+            policy_table = self._solve_sdp(forecasts, start_index=current_step_env)
 
             # 3. Determine Current State Index
             soc_idx = self._soc_to_idx(current_soc_kwh)
@@ -168,7 +170,7 @@ class Agent:
             else:
                 action_value = self.action_levels_norm[optimal_action_idx]
             # add small noise to the action
-            noise = np.random.normal(-0.01, 0.01)
+            noise = np.random.normal(-0.001, 0.001)
             action_value = min(max(action_value + noise, -1.0), 1.0)
             return [np.float32(action_value)]
         else:
@@ -201,7 +203,7 @@ class Agent:
         """Maps a continuous SoC value to the index of the nearest discrete level."""
         return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
 
-    def _solve_sdp(self, forecasts):
+    def _solve_sdp(self, forecasts, start_index: int = 0):
         """
         The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
         by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge
@@ -226,29 +228,48 @@ class Agent:
             # If Monte Carlo is enabled and scenarios are available, pre-sample
             # joint realizations for this time step and reuse across actions
             monte_samples = None
-            if getattr(self, 'use_monte_carlo', False) and self._scenario_cache is not None and t in self._scenario_cache:
-                per_vars_t = self._scenario_cache[t]
-                vals_solar_t, ps_solar_t = per_vars_t['solar']
-                vals_load_t, ps_load_t = per_vars_t['load']
-                vals_imp_t, ps_imp_t = per_vars_t['import_price']
-                vals_exp_t, ps_exp_t = per_vars_t['export_price']
+            # Prepare absolute row index for this horizon step
+            row_idx = start_index + t
+            if getattr(self, 'use_monte_carlo', False) and self._scenario_cache is not None:
+                # self._scenario_cache is expected to be a mapping vname -> (vals_arr, probs_arr)
+                try:
+                    vals_solar_arr, ps_solar_arr = self._scenario_cache['solar']
+                    vals_load_arr, ps_load_arr = self._scenario_cache['load']
+                    vals_imp_arr, ps_imp_arr = self._scenario_cache['import_price']
+                    vals_exp_arr, ps_exp_arr = self._scenario_cache['export_price']
+                except Exception:
+                    vals_solar_arr = ps_solar_arr = vals_load_arr = ps_load_arr = None
 
-                rng_seed_t = None if getattr(self, 'mc_seed', None) is None else (getattr(self, 'mc_seed') + t)
-                rng = np.random.default_rng(rng_seed_t)
-                n_samples = getattr(self, 'mc_samples', 100)
+                if vals_solar_arr is not None:
+                    # Ensure row_idx within bounds
+                    if row_idx < 0 or row_idx >= vals_solar_arr.shape[0]:
+                        monte_samples = None
+                    else:
+                        vals_solar_t = vals_solar_arr[row_idx, :]
+                        ps_solar_t = ps_solar_arr[row_idx, :]
+                        vals_load_t = vals_load_arr[row_idx, :]
+                        ps_load_t = ps_load_arr[row_idx, :]
+                        vals_imp_t = vals_imp_arr[row_idx, :]
+                        ps_imp_t = ps_imp_arr[row_idx, :]
+                        vals_exp_t = vals_exp_arr[row_idx, :]
+                        ps_exp_t = ps_exp_arr[row_idx, :]
 
-                # Sample marginal indices independently to form joint samples
-                idx_s = rng.choice(len(vals_solar_t), size=n_samples, p=ps_solar_t)
-                idx_l = rng.choice(len(vals_load_t), size=n_samples, p=ps_load_t)
-                idx_i = rng.choice(len(vals_imp_t), size=n_samples, p=ps_imp_t)
-                idx_e = rng.choice(len(vals_exp_t), size=n_samples, p=ps_exp_t)
+                        rng_seed_t = None if getattr(self, 'mc_seed', None) is None else (getattr(self, 'mc_seed') + t)
+                        rng = np.random.default_rng(rng_seed_t)
+                        n_samples = getattr(self, 'mc_samples', 100)
 
-                sampled_solar = vals_solar_t[idx_s]
-                sampled_load = vals_load_t[idx_l]
-                sampled_imp = vals_imp_t[idx_i]
-                sampled_exp = vals_exp_t[idx_e]
+                        # Sample marginal indices independently to form joint samples
+                        idx_s = rng.choice(len(vals_solar_t), size=n_samples, p=ps_solar_t)
+                        idx_l = rng.choice(len(vals_load_t), size=n_samples, p=ps_load_t)
+                        idx_i = rng.choice(len(vals_imp_t), size=n_samples, p=ps_imp_t)
+                        idx_e = rng.choice(len(vals_exp_t), size=n_samples, p=ps_exp_t)
 
-                monte_samples = (sampled_solar, sampled_load, sampled_imp, sampled_exp)
+                        sampled_solar = vals_solar_t[idx_s]
+                        sampled_load = vals_load_t[idx_l]
+                        sampled_imp = vals_imp_t[idx_i]
+                        sampled_exp = vals_exp_t[idx_e]
+
+                        monte_samples = (sampled_solar, sampled_load, sampled_imp, sampled_exp)
             # For each discretized state-of-charge (SoC) level
             for soc_idx, soc_kwh in enumerate(self.soc_levels_kwh):
             
@@ -379,6 +400,36 @@ class Agent:
         deterministic_imp = forecast_step.get('ImportEnergyPrice')
         deterministic_exp = forecast_step.get('ExportEnergyPrice')
 
+        # If scenario arrays are available, index them by absolute row index
+        vals_solar = ps_solar = vals_load = ps_load = vals_imp = ps_imp = vals_exp = ps_exp = None
+        if self._scenario_cache is not None:
+            try:
+                vals_solar_arr, ps_solar_arr = self._scenario_cache['solar']
+                vals_load_arr, ps_load_arr = self._scenario_cache['load']
+                vals_imp_arr, ps_imp_arr = self._scenario_cache['import_price']
+                vals_exp_arr, ps_exp_arr = self._scenario_cache['export_price']
+            except Exception:
+                vals_solar_arr = None
+
+            if vals_solar_arr is not None:
+                # row index passed via t param; attempt to use it if within range
+                row_idx = None
+                # try to infer row index: forecasts list length equals horizon; use env.current_step offset
+                try:
+                    row_idx = self.env.current_step + t
+                except Exception:
+                    row_idx = None
+
+                if row_idx is not None and 0 <= row_idx < vals_solar_arr.shape[0]:
+                    vals_solar = vals_solar_arr[row_idx, :]
+                    ps_solar = ps_solar_arr[row_idx, :]
+                    vals_load = vals_load_arr[row_idx, :]
+                    ps_load = ps_load_arr[row_idx, :]
+                    vals_imp = vals_imp_arr[row_idx, :]
+                    ps_imp = ps_imp_arr[row_idx, :]
+                    vals_exp = vals_exp_arr[row_idx, :]
+                    ps_exp = ps_exp_arr[row_idx, :]
+
         # Build the stage cost function which depends on the four random variables
         def _stage_cost_fn(solar_v, load_v, imp_v, exp_v):
             # Compute grid energy given this realization and the candidate battery flow
@@ -479,9 +530,11 @@ class Agent:
     
         return [np.float32(result)]  # Return as a list to match expected action format
     
-    def run_episode(self, render=False):
+    def run_episode(self, render=False, display_progress=False):
         obs, info = self.env.reset()
         raw_obs = self.env.get_raw_obs()  # Get raw observation if available
+        max_possible_steps = len(self.env.df)
+
         logs = []
         terminated, truncated = False, False
         step = 0  # Step counter
@@ -493,38 +546,52 @@ class Agent:
             # Use norm_obs if available, else fallback to obs
             current_obs = obs
 
-        while not (terminated or truncated):
-            action = self.choose_action(current_obs)
-            next_obs, reward, terminated, truncated, info = self.env.step(action)
-            
-            logs.append({
-                'step': step,
-                'norm_observation': obs.tolist() if isinstance(current_obs, np.ndarray) else current_obs,
-                'raw_observation': raw_obs.tolist() if isinstance(raw_obs, np.ndarray) else raw_obs,
-                'action': action,
-                'reward': reward,
-                'info': info
-            })
+        pbar = None
+        if display_progress:
+            try:
+                from tqdm.notebook import tqdm as tqdm_bar
+            except Exception:
+                from tqdm import tqdm as tqdm_bar
+            # Use DataFrame length as an upper bound for progress
+            pbar = tqdm_bar(total=max_possible_steps, desc="Episode", leave=False)
 
-            # Select the correct next_obs for the next step
-            raw_obs = self.env.get_raw_obs()  # Get raw observation if available
-            obs = next_obs
-            if self.algorithm in ['rule', 'sdp']:
-                current_obs = raw_obs
-            else:
-                current_obs = obs
-            if render:
-                self.env.render()
-            step += 1  # Increment step counter
+        try:
+            while not (terminated or truncated):
+                action = self.choose_action(current_obs)
+                next_obs, reward, terminated, truncated, info = self.env.step(action)
+
+                logs.append({
+                    'step': step,
+                    'norm_observation': obs.tolist() if isinstance(current_obs, np.ndarray) else current_obs,
+                    'raw_observation': raw_obs.tolist() if isinstance(raw_obs, np.ndarray) else raw_obs,
+                    'action': action,
+                    'reward': reward,
+                    'info': info
+                })
+
+                # Select the correct next_obs for the next step
+                raw_obs = self.env.get_raw_obs()  # Get raw observation if available
+                obs = next_obs
+                if self.algorithm in ['rule', 'sdp']:
+                    current_obs = raw_obs
+                else:
+                    current_obs = obs
+                if render:
+                    self.env.render()
+                step += 1  # Increment step counter
+                if pbar is not None:
+                    pbar.update(1)
+
+        finally:
+            if pbar is not None:
+                pbar.close()
 
         return pl.DataFrame(logs)
 
-import concurrent.futures
-from tqdm.notebook import tqdm
 
-def run_single(agent_class, env, agent_kwargs, render):
+def run_single(agent_class, env, agent_kwargs, render, display_progress=False):
     agent = agent_class(env, **agent_kwargs)
-    return agent.run_episode(render=render)
+    return agent.run_episode(render=render, display_progress=display_progress)
 
 # this can be used to run multiple episodes in parallel
 def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4, use_notebook_tqdm=True):
