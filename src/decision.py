@@ -205,46 +205,48 @@ class Agent:
 
     def _solve_sdp(self, forecasts, start_index: int = 0):
         """
-        The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
-        by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge
-        Implements the backward induction algorithm with vectorized feasibility checks and action effects.
+        Vectorized SDP backward induction: compute feasible next SoC and stage costs in
+        array form across all SoC levels and actions. Evaluate expensive stage costs
+        only once per unique clipped battery energy per timestep.
         """
+        import numpy as _np
+
         num_soc_levels = len(self.soc_levels_kwh)
         horizon = len(forecasts)
-    
+
         # Initialize cost-to-go (J) and policy tables
-        cost_to_go = np.full((horizon + 1, num_soc_levels), np.inf)
-        policy_table = np.full((horizon, num_soc_levels), -1, dtype=int)  # Store action indices
-    
-        # Terminal cost is zero
+        cost_to_go = _np.full((horizon + 1, num_soc_levels), _np.inf)
+        policy_table = _np.full((horizon, num_soc_levels), -1, dtype=int)
         cost_to_go[horizon, :] = 0.0
-    
-        # Precompute battery flow energies for all actions
+
+        # Precompute battery flow energies for all actions (kWh)
         battery_flow_energies = self.action_levels_norm * self.max_battery_flow * self.step_duration
-    
-        # Backward induction: iterate over each time step in reverse (from horizon-1 to 0)
+        num_actions = len(self.action_levels_norm)
+        socs = self.soc_levels_kwh  # shape (num_soc,)
+
+        # Ensure scenario cache prepared once if possible
+        if self._scenario_cache is None:
+            try:
+                self._scenario_cache = self.scenario_generator.generate_time_step_scenarios(self.env.df)
+            except Exception:
+                self._scenario_cache = None
+
+        # Backward induction (vectorized per timestep)
         for t in range(horizon - 1, -1, -1):
             forecast_step = forecasts[t]
-            # If Monte Carlo is enabled and scenarios are available, pre-sample
-            # joint realizations for this time step and reuse across actions
-            monte_samples = None
-            # Prepare absolute row index for this horizon step
             row_idx = start_index + t
+
+            # Prepare Monte Carlo pre-sampled arrays for this t (if possible)
+            monte_samples = None
             if getattr(self, 'use_monte_carlo', False) and self._scenario_cache is not None:
-                # self._scenario_cache is expected to be a mapping vname -> (vals_arr, probs_arr)
                 try:
                     vals_solar_arr, ps_solar_arr = self._scenario_cache['solar']
                     vals_load_arr, ps_load_arr = self._scenario_cache['load']
                     vals_imp_arr, ps_imp_arr = self._scenario_cache['import_price']
                     vals_exp_arr, ps_exp_arr = self._scenario_cache['export_price']
-                except Exception:
-                    vals_solar_arr = ps_solar_arr = vals_load_arr = ps_load_arr = None
 
-                if vals_solar_arr is not None:
-                    # Ensure row_idx within bounds
-                    if row_idx < 0 or row_idx >= vals_solar_arr.shape[0]:
-                        monte_samples = None
-                    else:
+                    if (row_idx >= 0 and row_idx < vals_solar_arr.shape[0]):
+                        # Extract per-timestep scenario marginals
                         vals_solar_t = vals_solar_arr[row_idx, :]
                         ps_solar_t = ps_solar_arr[row_idx, :]
                         vals_load_t = vals_load_arr[row_idx, :]
@@ -254,15 +256,16 @@ class Agent:
                         vals_exp_t = vals_exp_arr[row_idx, :]
                         ps_exp_t = ps_exp_arr[row_idx, :]
 
-                        rng_seed_t = None if getattr(self, 'mc_seed', None) is None else (getattr(self, 'mc_seed') + t)
-                        rng = np.random.default_rng(rng_seed_t)
-                        n_samples = getattr(self, 'mc_samples', 100)
+                        # Sample joint marginal indices once per timestep
+                        mc_seed = getattr(self, 'mc_seed', None)
+                        mc_samples = getattr(self, 'mc_samples', 100)
+                        rng_seed_t = None if mc_seed is None else (mc_seed + t)
+                        rng = _np.random.default_rng(rng_seed_t)
 
-                        # Sample marginal indices independently to form joint samples
-                        idx_s = rng.choice(len(vals_solar_t), size=n_samples, p=ps_solar_t)
-                        idx_l = rng.choice(len(vals_load_t), size=n_samples, p=ps_load_t)
-                        idx_i = rng.choice(len(vals_imp_t), size=n_samples, p=ps_imp_t)
-                        idx_e = rng.choice(len(vals_exp_t), size=n_samples, p=ps_exp_t)
+                        idx_s = rng.choice(len(vals_solar_t), size=mc_samples, p=ps_solar_t)
+                        idx_l = rng.choice(len(vals_load_t), size=mc_samples, p=ps_load_t)
+                        idx_i = rng.choice(len(vals_imp_t), size=mc_samples, p=ps_imp_t)
+                        idx_e = rng.choice(len(vals_exp_t), size=mc_samples, p=ps_exp_t)
 
                         sampled_solar = vals_solar_t[idx_s]
                         sampled_load = vals_load_t[idx_l]
@@ -270,157 +273,170 @@ class Agent:
                         sampled_exp = vals_exp_t[idx_e]
 
                         monte_samples = (sampled_solar, sampled_load, sampled_imp, sampled_exp)
-            # For each discretized state-of-charge (SoC) level
-            for soc_idx, soc_kwh in enumerate(self.soc_levels_kwh):
-            
-                # Feasibility Check: Compute all possible next SoC values for all actions
-                potential_next_socs = soc_kwh + battery_flow_energies
-                feasible_mask = (potential_next_socs >= -1e-6) & (potential_next_socs <= self.battery_capacity + 1e-6)
-                feasible_action_indices = np.where(feasible_mask)[0]
-            
-                if feasible_action_indices.size == 0:
-                    continue  # No feasible actions from this SoC
-            
-                # Clip battery flow energies to ensure SoC stays within bounds
-                actual_battery_flow_energies = np.clip(
-                    battery_flow_energies[feasible_action_indices],
-                    -soc_kwh,
-                    self.battery_capacity - soc_kwh
-                )
-                
-                # Compute next SoC values (continuous) and interpolate future costs
-                next_soc_kwhs = soc_kwh + actual_battery_flow_energies
-                
-                # Use linear interpolation for cost-to-go lookup instead of nearest-index mapping
-                # This reduces discretization error by avoiding snapping to grid points
-                future_costs = np.array([
-                    interpolate_ctg(self.soc_levels_kwh, cost_to_go[t + 1, :], next_soc_kwh)
-                    for next_soc_kwh in next_soc_kwhs
-                ])
-                
-                # Assert shape alignment for safety
-                assert len(future_costs) == len(feasible_action_indices), \
-                    f"Shape mismatch: future_costs {len(future_costs)} vs feasible_actions {len(feasible_action_indices)}"
-            
-                # Compute battery flow rates for feasible actions
-                battery_flow_rates = self.action_levels_norm[feasible_action_indices] * self.max_battery_flow
-            
-                # Calculate stage costs for all feasible actions at this step
-                # Per-time-step memo cache for stage-cost evaluations keyed by rounded energy
-                stage_cost_cache = {}
+                except Exception:
+                    monte_samples = None
+
+            # Vectorized feasibility: shape (num_soc, num_actions)
+            socs_reshaped = socs[:, _np.newaxis]  # (num_soc, 1)
+            battery_energies_reshaped = battery_flow_energies[_np.newaxis, :]  # (1, num_actions)
+            potential_next_socs = socs_reshaped + battery_energies_reshaped  # (num_soc, num_actions)
+
+            # Feasibility mask: within [0, battery_capacity] with tolerance
+            feasible_mask = ((potential_next_socs >= -1e-6) & 
+                           (potential_next_socs <= self.battery_capacity + 1e-6))
+
+            # Clipped battery flow energies for each (soc, action) pair
+            clipped_battery_energies = _np.clip(
+                battery_energies_reshaped,
+                -socs_reshaped,  # minimum: discharge down to 0
+                self.battery_capacity - socs_reshaped  # maximum: charge up to capacity
+            )
+
+            # Compute next SoCs and future costs via vectorized interpolation
+            next_socs = socs_reshaped + clipped_battery_energies  # (num_soc, num_actions)
+            future_costs = _np.array([
+                [interpolate_ctg(self.soc_levels_kwh, cost_to_go[t + 1, :], next_socs[soc_idx, action_idx])
+                 for action_idx in range(num_actions)]
+                for soc_idx in range(num_soc_levels)
+            ])  # (num_soc, num_actions)
+
+            # Build unique energy list from all feasible clipped energies using rounding key
+            unique_energies = []
+            energy_to_cost = {}
+            for soc_idx in range(num_soc_levels):
+                for action_idx in range(num_actions):
+                    if feasible_mask[soc_idx, action_idx]:
+                        energy = clipped_battery_energies[soc_idx, action_idx]
+                        rounded_key = _np.round(float(energy), 10)  # Use np.round(..., 10) as rounding key
+                        if rounded_key not in energy_to_cost:
+                            unique_energies.append(energy)
+                            energy_to_cost[rounded_key] = None  # Placeholder, will be filled
+
+            # Evaluate stage costs for unique energies only
+            for energy in unique_energies:
+                rounded_key = _np.round(float(energy), 10)
+                battery_rate = energy / self.step_duration  # Convert back to rate
 
                 if monte_samples is not None:
+                    # Vectorized Monte Carlo evaluation
                     sampled_solar, sampled_load, sampled_imp, sampled_exp = monte_samples
+                    
+                    # Vectorized grid energy calculation across all samples
+                    battery_charge_energy = _np.maximum(0, energy)
+                    battery_discharge_energy = _np.maximum(0, -energy)
+                    grid_energy = sampled_load + battery_charge_energy - sampled_solar - battery_discharge_energy
 
-                    # Vectorized evaluation across samples for each action
-                    def eval_action_cost(batt_flow_energy, batt_flow_rate):
-                        # Per-sample battery contributions
-                        battery_charge_energy = max(0, batt_flow_energy)
-                        battery_discharge_energy = max(0, -batt_flow_energy)
-                        # grid_energy array for samples
-                        grid_energy = sampled_load + battery_charge_energy - sampled_solar - battery_discharge_energy
-                        # Check grid limits
-                        if np.any(np.abs(grid_energy) > (self.max_grid_energy + 1e-6)):
-                            return np.inf
-                        # Elementwise cost: import positive, export negative
+                    # Check grid limits
+                    if _np.any(_np.abs(grid_energy) > (self.max_grid_energy + 1e-6)):
+                        stage_cost = _np.inf
+                    else:
+                        # Vectorized cost calculation
                         is_import = grid_energy > 0
-                        costs = np.where(is_import, grid_energy * sampled_imp, -np.abs(grid_energy) * sampled_exp)
-                        # If any cost is infinite (shouldn't be after limit check) treat as infeasible
-                        if np.any(np.isinf(costs)):
-                            return np.inf
-                        return float(np.mean(costs))
-
-                    stage_costs = np.array([
-                        stage_cost_cache.setdefault(
-                            round(float(actual_battery_flow_energies[i]), 8),
-                            eval_action_cost(actual_battery_flow_energies[i], battery_flow_rates[i])
-                        )
-                        for i in range(len(feasible_action_indices))
-                    ])
+                        costs = _np.where(is_import, 
+                                        grid_energy * sampled_imp, 
+                                        -_np.abs(grid_energy) * sampled_exp)
+                        if _np.any(_np.isinf(costs)):
+                            stage_cost = _np.inf
+                        else:
+                            stage_cost = float(_np.mean(costs))
+                    
+                    # Add degradation cost
+                    if self.degradation_model == 'linear':
+                        degradation_cost = self.linear_deg_cost_per_kwh * abs(energy)
+                    else:
+                        # Use a representative SoC for degradation calculation
+                        rep_soc = self.battery_capacity / 2.0
+                        Id_crate = abs(max(0, -battery_rate) / self.battery_capacity)
+                        Ich_crate = abs(max(0, battery_rate) / self.battery_capacity)
+                        DoD_percent = abs(energy / self.battery_capacity) * 100.0
+                        SoC_avg_percent = (rep_soc + 0.5 * energy) / self.battery_capacity * 100.0
+                        SoC_avg_percent = _np.clip(SoC_avg_percent, 0, 100)
+                        if DoD_percent < 1e-6:
+                            degradation_fraction = 0.0
+                        else:
+                            degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent) * self.static_deg_correction_factor
+                        degradation_cost = degradation_fraction * self.battery_life_cost
+                    
+                    energy_to_cost[rounded_key] = stage_cost + degradation_cost
                 else:
-                    # Use cache to avoid repeated calls for identical clipped energies
-                    stage_costs = np.array([
-                        stage_cost_cache.setdefault(
-                            round(float(actual_battery_flow_energies[i]), 8),
-                            self._calculate_sdp_stage_cost(
-                                t, soc_kwh,
-                                battery_flow_rates[i],
-                                actual_battery_flow_energies[i],
-                                forecast_step
-                            )
-                        )
-                        for i in range(len(feasible_action_indices))
-                    ])
-                
-                total_costs = stage_costs + future_costs
-            
-                # Select the action with the minimum total cost (stage + future)
-                valid_mask = (stage_costs != np.inf) & (future_costs != np.inf)
-                if np.any(valid_mask):
-                    min_idx = np.argmin(total_costs[valid_mask])
-                    min_total_cost = total_costs[valid_mask][min_idx]
-                    best_action_idx = feasible_action_indices[valid_mask][min_idx]
-                    cost_to_go[t, soc_idx] = min_total_cost
+                    # Use existing _calculate_sdp_stage_cost for deterministic fallback
+                    rep_soc = self.battery_capacity / 2.0  # Representative SoC for cost calculation
+                    energy_to_cost[rounded_key] = self._calculate_sdp_stage_cost(
+                        row_idx, rep_soc, battery_rate, energy, forecast_step
+                    )
+
+            # Build stage cost matrix by looking up cached values
+            stage_costs = _np.full((num_soc_levels, num_actions), _np.inf)
+            for soc_idx in range(num_soc_levels):
+                for action_idx in range(num_actions):
+                    if feasible_mask[soc_idx, action_idx]:
+                        energy = clipped_battery_energies[soc_idx, action_idx]
+                        rounded_key = _np.round(float(energy), 10)
+                        stage_costs[soc_idx, action_idx] = energy_to_cost[rounded_key]
+
+            # Vectorized total cost and optimal action selection
+            total_costs = stage_costs + future_costs
+            valid_mask = feasible_mask & (_np.isfinite(stage_costs)) & (_np.isfinite(future_costs))
+
+            for soc_idx in range(num_soc_levels):
+                if _np.any(valid_mask[soc_idx, :]):
+                    valid_actions = valid_mask[soc_idx, :]
+                    best_action_idx = _np.argmin(total_costs[soc_idx, valid_actions])
+                    # Convert back to original action index
+                    best_action_idx = _np.where(valid_actions)[0][best_action_idx]
+                    
+                    cost_to_go[t, soc_idx] = total_costs[soc_idx, best_action_idx]
                     policy_table[t, soc_idx] = best_action_idx
-            
-                    # Debug logging for the current actual SoC at t=0 (optional)
-                    current_actual_soc_idx = self._soc_to_idx(self.env.battery_level)
-                    if t == 0 and soc_idx == current_actual_soc_idx:
-                        self.sdp_debug_log.append({
-                            't': t,
-                            'soc_idx': soc_idx,
-                            'action_idx': best_action_idx,
-                            'action_norm': self.action_levels_norm[best_action_idx],
-                            'stage_cost': stage_costs[valid_mask][min_idx],
-                            'future_cost': future_costs[valid_mask][min_idx],
-                            'total_cost': min_total_cost
-                        })
-        
-        # Return the computed policy table (action indices for each time/SoC)
+
+                    # Debug logging for current actual SoC at t=0
+                    if t == 0:
+                        current_actual_soc_idx = self._soc_to_idx(self.env.battery_level)
+                        if soc_idx == current_actual_soc_idx:
+                            self.sdp_debug_log.append({
+                                't': t,
+                                'soc_idx': soc_idx,
+                                'action_idx': best_action_idx,
+                                'action_norm': self.action_levels_norm[best_action_idx],
+                                'stage_cost': stage_costs[soc_idx, best_action_idx],
+                                'future_cost': future_costs[soc_idx, best_action_idx],
+                                'total_cost': total_costs[soc_idx, best_action_idx]
+                            })
+
         return policy_table
 
 
-    def _calculate_sdp_stage_cost(self, t, soc_kwh, battery_flow_rate, battery_flow_energy, forecast_step):
-        """Calculates the cost for a single step in the SDP."""
-        # We'll compute expected grid cost over scenarios for this timestep using the scenario generator.
-        # Degradation cost remains deterministic and is added afterwards.
+    def _calculate_sdp_stage_cost(self, row_idx, soc_kwh, battery_flow_rate, battery_flow_energy, forecast_step):
+        """
+        Vectorized stage cost calculation: compute expected grid cost using scenario arrays
+        indexed by absolute row index, with degradation cost added deterministically.
+        """
+        import numpy as _np
 
-        # Prepare / compute per-time-step scenarios (cache on first call for this horizon)
+        # Ensure scenario cache prepared once if possible
         if self._scenario_cache is None:
-            # Build scenarios for the whole env dataframe once; keys are row indices
             try:
                 self._scenario_cache = self.scenario_generator.generate_time_step_scenarios(self.env.df)
             except Exception:
-                # If scenario generation fails for any reason, fallback to deterministic forecast values
                 self._scenario_cache = None
 
-        # Default fallback: use deterministic forecast values from forecast_step
+        # Default fallback: use deterministic forecast values
         deterministic_solar = forecast_step.get('SolarGen')
         deterministic_load = forecast_step.get('HouseLoad')
         deterministic_imp = forecast_step.get('ImportEnergyPrice')
         deterministic_exp = forecast_step.get('ExportEnergyPrice')
 
-        # If scenario arrays are available, index them by absolute row index
-        vals_solar = ps_solar = vals_load = ps_load = vals_imp = ps_imp = vals_exp = ps_exp = None
+        expected_grid_cost = None
+        
+        # Try to use scenario arrays indexed by absolute row index
         if self._scenario_cache is not None:
             try:
                 vals_solar_arr, ps_solar_arr = self._scenario_cache['solar']
                 vals_load_arr, ps_load_arr = self._scenario_cache['load']
                 vals_imp_arr, ps_imp_arr = self._scenario_cache['import_price']
                 vals_exp_arr, ps_exp_arr = self._scenario_cache['export_price']
-            except Exception:
-                vals_solar_arr = None
 
-            if vals_solar_arr is not None:
-                # row index passed via t param; attempt to use it if within range
-                row_idx = None
-                # try to infer row index: forecasts list length equals horizon; use env.current_step offset
-                try:
-                    row_idx = self.env.current_step + t
-                except Exception:
-                    row_idx = None
-
-                if row_idx is not None and 0 <= row_idx < vals_solar_arr.shape[0]:
+                if (row_idx >= 0 and row_idx < vals_solar_arr.shape[0]):
+                    # Extract scenario marginals for this row
                     vals_solar = vals_solar_arr[row_idx, :]
                     ps_solar = ps_solar_arr[row_idx, :]
                     vals_load = vals_load_arr[row_idx, :]
@@ -430,60 +446,52 @@ class Agent:
                     vals_exp = vals_exp_arr[row_idx, :]
                     ps_exp = ps_exp_arr[row_idx, :]
 
-        # Build the stage cost function which depends on the four random variables
-        def _stage_cost_fn(solar_v, load_v, imp_v, exp_v):
-            # Compute grid energy given this realization and the candidate battery flow
+                    # Vectorized stage cost function across scenarios
+                    def _stage_cost_fn(solar_v, load_v, imp_v, exp_v):
+                        battery_charge_energy = max(0, battery_flow_energy)
+                        battery_discharge_energy = max(0, -battery_flow_energy)
+                        grid_energy = load_v + battery_charge_energy - solar_v - battery_discharge_energy
+                        return compute_grid_cost(grid_energy, imp_v, exp_v, self.max_grid_energy)
+
+                    # Decide between Monte Carlo and exhaustive evaluation
+                    n_comb = len(vals_solar) * len(vals_load) * len(vals_imp) * len(vals_exp)
+                    use_mc = getattr(self, 'use_monte_carlo', False) or (n_comb > 200)
+
+                    if use_mc:
+                        expected_grid_cost = self.scenario_generator.expected_cost_monte_carlo(
+                            vals_solar, ps_solar,
+                            vals_load, ps_load,
+                            vals_imp, ps_imp,
+                            vals_exp, ps_exp,
+                            _stage_cost_fn,
+                            n_samples=getattr(self, 'mc_samples', 100),
+                            rng_seed=getattr(self, 'mc_seed', None),
+                        )
+                    else:
+                        expected_grid_cost = self.scenario_generator.expected_cost_cartesian(
+                            vals_solar, ps_solar,
+                            vals_load, ps_load,
+                            vals_imp, ps_imp,
+                            vals_exp, ps_exp,
+                            _stage_cost_fn
+                        )
+            except Exception:
+                expected_grid_cost = None
+
+        # Fallback to deterministic evaluation if scenarios unavailable
+        if expected_grid_cost is None:
             battery_charge_energy = max(0, battery_flow_energy)
             battery_discharge_energy = max(0, -battery_flow_energy)
-            grid_energy = load_v + battery_charge_energy - solar_v - battery_discharge_energy
-
-            grid_cost = compute_grid_cost(grid_energy, imp_v, exp_v, self.max_grid_energy)
-            if grid_cost == np.inf:
-                return np.inf
-            return grid_cost
-
-        expected_grid_cost = None
-        if self._scenario_cache is not None and t in self._scenario_cache:
-            per_vars = self._scenario_cache[t]
-            vals_solar, ps_solar = per_vars['solar']
-            vals_load, ps_load = per_vars['load']
-            vals_imp, ps_imp = per_vars['import_price']
-            vals_exp, ps_exp = per_vars['export_price']
-
-            # Prefer Monte Carlo approximation when requested to reduce computation
-            # Decide whether to use Monte Carlo automatically when the
-            # Cartesian product of scenario counts would be large.
-            n_comb = len(vals_solar) * len(vals_load) * len(vals_imp) * len(vals_exp)
-            use_mc = getattr(self, 'use_monte_carlo', False) or (n_comb > 200)
-
-            if use_mc:
-                expected_grid_cost = self.scenario_generator.expected_cost_monte_carlo(
-                    vals_solar, ps_solar,
-                    vals_load, ps_load,
-                    vals_imp, ps_imp,
-                    vals_exp, ps_exp,
-                    _stage_cost_fn,
-                    n_samples=getattr(self, 'mc_samples', 100),
-                    rng_seed=getattr(self, 'mc_seed', None),
-                )
-            else:
-                # Compute expected grid cost by enumerating cartesian product of marginals
-                expected_grid_cost = self.scenario_generator.expected_cost_cartesian(
-                    vals_solar, ps_solar,
-                    vals_load, ps_load,
-                    vals_imp, ps_imp,
-                    vals_exp, ps_exp,
-                    _stage_cost_fn
-                )
-        else:
-            # Fallback deterministic evaluation
-            deterministic_grid_energy = deterministic_load + max(0, battery_flow_energy) - deterministic_solar - max(0, -battery_flow_energy)
-            deterministic_grid_cost = compute_grid_cost(deterministic_grid_energy, deterministic_imp, deterministic_exp, self.max_grid_energy)
-            if deterministic_grid_cost == np.inf:
-                return np.inf
+            deterministic_grid_energy = (deterministic_load + battery_charge_energy - 
+                                       deterministic_solar - battery_discharge_energy)
+            deterministic_grid_cost = compute_grid_cost(
+                deterministic_grid_energy, deterministic_imp, deterministic_exp, self.max_grid_energy
+            )
+            if deterministic_grid_cost == _np.inf:
+                return _np.inf
             expected_grid_cost = deterministic_grid_cost
 
-        # --- Degradation Cost (unchanged) ---
+        # Add degradation cost deterministically
         if self.degradation_model == 'linear':
             degradation_cost = self.linear_deg_cost_per_kwh * abs(battery_flow_energy)
         else:
@@ -491,7 +499,7 @@ class Agent:
             Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
             DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
             SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
-            SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
+            SoC_avg_percent = _np.clip(SoC_avg_percent, 0, 100)
             if DoD_percent < 1e-6:
                 degradation_fraction = 0.0
             else:
