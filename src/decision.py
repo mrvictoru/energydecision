@@ -209,14 +209,13 @@ class Agent:
         array form across all SoC levels and actions. Evaluate expensive stage costs
         only once per unique clipped battery energy per timestep.
         """
-        import numpy as _np
 
         num_soc_levels = len(self.soc_levels_kwh)
         horizon = len(forecasts)
 
         # Initialize cost-to-go (J) and policy tables
-        cost_to_go = _np.full((horizon + 1, num_soc_levels), _np.inf)
-        policy_table = _np.full((horizon, num_soc_levels), -1, dtype=int)
+        cost_to_go = np.full((horizon + 1, num_soc_levels), np.inf)
+        policy_table = np.full((horizon, num_soc_levels), -1, dtype=int)
         cost_to_go[horizon, :] = 0.0
 
         # Precompute battery flow energies for all actions (kWh)
@@ -260,7 +259,7 @@ class Agent:
                         mc_seed = getattr(self, 'mc_seed', None)
                         mc_samples = getattr(self, 'mc_samples', 100)
                         rng_seed_t = None if mc_seed is None else (mc_seed + t)
-                        rng = _np.random.default_rng(rng_seed_t)
+                        rng = np.random.default_rng(rng_seed_t)
 
                         idx_s = rng.choice(len(vals_solar_t), size=mc_samples, p=ps_solar_t)
                         idx_l = rng.choice(len(vals_load_t), size=mc_samples, p=ps_load_t)
@@ -277,8 +276,8 @@ class Agent:
                     monte_samples = None
 
             # Vectorized feasibility: shape (num_soc, num_actions)
-            socs_reshaped = socs[:, _np.newaxis]  # (num_soc, 1)
-            battery_energies_reshaped = battery_flow_energies[_np.newaxis, :]  # (1, num_actions)
+            socs_reshaped = socs[:, np.newaxis]  # (num_soc, 1)
+            battery_energies_reshaped = battery_flow_energies[np.newaxis, :]  # (1, num_actions)
             potential_next_socs = socs_reshaped + battery_energies_reshaped  # (num_soc, num_actions)
 
             # Feasibility mask: within [0, battery_capacity] with tolerance
@@ -286,7 +285,7 @@ class Agent:
                            (potential_next_socs <= self.battery_capacity + 1e-6))
 
             # Clipped battery flow energies for each (soc, action) pair
-            clipped_battery_energies = _np.clip(
+            clipped_battery_energies = np.clip(
                 battery_energies_reshaped,
                 -socs_reshaped,  # minimum: discharge down to 0
                 self.battery_capacity - socs_reshaped  # maximum: charge up to capacity
@@ -294,7 +293,7 @@ class Agent:
 
             # Compute next SoCs and future costs via vectorized interpolation
             next_socs = socs_reshaped + clipped_battery_energies  # (num_soc, num_actions)
-            future_costs = _np.array([
+            future_costs = np.array([
                 [interpolate_ctg(self.soc_levels_kwh, cost_to_go[t + 1, :], next_socs[soc_idx, action_idx])
                  for action_idx in range(num_actions)]
                 for soc_idx in range(num_soc_levels)
@@ -307,14 +306,14 @@ class Agent:
                 for action_idx in range(num_actions):
                     if feasible_mask[soc_idx, action_idx]:
                         energy = clipped_battery_energies[soc_idx, action_idx]
-                        rounded_key = _np.round(float(energy), 10)  # Use np.round(..., 10) as rounding key
+                        rounded_key = np.round(float(energy), 10)  # Use np.round(..., 10) as rounding key
                         if rounded_key not in energy_to_cost:
                             unique_energies.append(energy)
                             energy_to_cost[rounded_key] = None  # Placeholder, will be filled
 
             # Evaluate stage costs for unique energies only
             for energy in unique_energies:
-                rounded_key = _np.round(float(energy), 10)
+                rounded_key = np.round(float(energy), 10)
                 battery_rate = energy / self.step_duration  # Convert back to rate
 
                 if monte_samples is not None:
@@ -322,23 +321,23 @@ class Agent:
                     sampled_solar, sampled_load, sampled_imp, sampled_exp = monte_samples
                     
                     # Vectorized grid energy calculation across all samples
-                    battery_charge_energy = _np.maximum(0, energy)
-                    battery_discharge_energy = _np.maximum(0, -energy)
+                    battery_charge_energy = np.maximum(0, energy)
+                    battery_discharge_energy = np.maximum(0, -energy)
                     grid_energy = sampled_load + battery_charge_energy - sampled_solar - battery_discharge_energy
 
                     # Check grid limits
-                    if _np.any(_np.abs(grid_energy) > (self.max_grid_energy + 1e-6)):
-                        stage_cost = _np.inf
+                    if np.any(np.abs(grid_energy) > (self.max_grid_energy + 1e-6)):
+                        stage_cost = np.inf
                     else:
                         # Vectorized cost calculation
                         is_import = grid_energy > 0
-                        costs = _np.where(is_import, 
+                        costs = np.where(is_import, 
                                         grid_energy * sampled_imp, 
-                                        -_np.abs(grid_energy) * sampled_exp)
-                        if _np.any(_np.isinf(costs)):
-                            stage_cost = _np.inf
+                                        -np.abs(grid_energy) * sampled_exp)
+                        if np.any(np.isinf(costs)):
+                            stage_cost = np.inf
                         else:
-                            stage_cost = float(_np.mean(costs))
+                            stage_cost = float(np.mean(costs))
                     
                     # Add degradation cost
                     if self.degradation_model == 'linear':
@@ -350,7 +349,7 @@ class Agent:
                         Ich_crate = abs(max(0, battery_rate) / self.battery_capacity)
                         DoD_percent = abs(energy / self.battery_capacity) * 100.0
                         SoC_avg_percent = (rep_soc + 0.5 * energy) / self.battery_capacity * 100.0
-                        SoC_avg_percent = _np.clip(SoC_avg_percent, 0, 100)
+                        SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
                         if DoD_percent < 1e-6:
                             degradation_fraction = 0.0
                         else:
@@ -366,24 +365,24 @@ class Agent:
                     )
 
             # Build stage cost matrix by looking up cached values
-            stage_costs = _np.full((num_soc_levels, num_actions), _np.inf)
+            stage_costs = np.full((num_soc_levels, num_actions), np.inf)
             for soc_idx in range(num_soc_levels):
                 for action_idx in range(num_actions):
                     if feasible_mask[soc_idx, action_idx]:
                         energy = clipped_battery_energies[soc_idx, action_idx]
-                        rounded_key = _np.round(float(energy), 10)
+                        rounded_key = np.round(float(energy), 10)
                         stage_costs[soc_idx, action_idx] = energy_to_cost[rounded_key]
 
             # Vectorized total cost and optimal action selection
             total_costs = stage_costs + future_costs
-            valid_mask = feasible_mask & (_np.isfinite(stage_costs)) & (_np.isfinite(future_costs))
+            valid_mask = feasible_mask & (np.isfinite(stage_costs)) & (np.isfinite(future_costs))
 
             for soc_idx in range(num_soc_levels):
-                if _np.any(valid_mask[soc_idx, :]):
+                if np.any(valid_mask[soc_idx, :]):
                     valid_actions = valid_mask[soc_idx, :]
-                    best_action_idx = _np.argmin(total_costs[soc_idx, valid_actions])
+                    best_action_idx = np.argmin(total_costs[soc_idx, valid_actions])
                     # Convert back to original action index
-                    best_action_idx = _np.where(valid_actions)[0][best_action_idx]
+                    best_action_idx = np.where(valid_actions)[0][best_action_idx]
                     
                     cost_to_go[t, soc_idx] = total_costs[soc_idx, best_action_idx]
                     policy_table[t, soc_idx] = best_action_idx
@@ -410,7 +409,6 @@ class Agent:
         Vectorized stage cost calculation: compute expected grid cost using scenario arrays
         indexed by absolute row index, with degradation cost added deterministically.
         """
-        import numpy as _np
 
         # Ensure scenario cache prepared once if possible
         if self._scenario_cache is None:
@@ -487,8 +485,8 @@ class Agent:
             deterministic_grid_cost = compute_grid_cost(
                 deterministic_grid_energy, deterministic_imp, deterministic_exp, self.max_grid_energy
             )
-            if deterministic_grid_cost == _np.inf:
-                return _np.inf
+            if deterministic_grid_cost == np.inf:
+                return np.inf
             expected_grid_cost = deterministic_grid_cost
 
         # Add degradation cost deterministically
@@ -499,7 +497,7 @@ class Agent:
             Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
             DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
             SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
-            SoC_avg_percent = _np.clip(SoC_avg_percent, 0, 100)
+            SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
             if DoD_percent < 1e-6:
                 degradation_fraction = 0.0
             else:
