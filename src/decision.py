@@ -535,15 +535,17 @@ class Agent:
             # Use norm_obs if available, else fallback to obs
             current_obs = obs
 
-        pbar = None
+        #pbar = None
         if display_progress:
+            print("Starting Simulation...")
+            """
             try:
                 from tqdm.notebook import tqdm as tqdm_bar
             except Exception:
                 from tqdm import tqdm as tqdm_bar
             # Use DataFrame length as an upper bound for progress
             pbar = tqdm_bar(total=max_possible_steps, desc="Episode", leave=False)
-
+            """
         try:
             while not (terminated or truncated):
                 action = self.choose_action(current_obs)
@@ -568,12 +570,14 @@ class Agent:
                 if render:
                     self.env.render()
                 step += 1  # Increment step counter
-                if pbar is not None:
-                    pbar.update(1)
+                if display_progress is not False:
+                    #pbar.update(1)
+                    print(f"Step {step}/{max_possible_steps}", end='\r')
 
         finally:
-            if pbar is not None:
-                pbar.close()
+            #if pbar is not None:
+                #pbar.close()
+            print("Sim Complete")
 
         return pl.DataFrame(logs)
 
@@ -582,11 +586,11 @@ def run_single(agent_class, env, agent_kwargs, render, display_progress=False):
     agent = agent_class(env, **agent_kwargs)
     return agent.run_episode(render=render, display_progress=display_progress)
 
-def run_single_with_logging(agent_class, env, agent_kwargs, render, idx):
+def run_single_with_logging(agent_class, env, agent_kwargs, render, idx, display_progress=False):
     import time
     print(f"[START] Episode {idx}")
     start = time.time()
-    result = run_single(agent_class, env, agent_kwargs, render)
+    result = run_single(agent_class, env, agent_kwargs, render, display_progress=display_progress)
     elapsed = time.time() - start
     print(f"[DONE]  Episode {idx} (Elapsed: {elapsed:.2f} sec)")
     return result
@@ -612,8 +616,9 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
 
     results = []
     print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
+    print("Using ThreadPoolExecutor for parallel execution.")
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx) for idx, env in enumerate(envs)]
+        futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx, True) for idx, env in enumerate(envs)]
         for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             results.append(f.result())
     print(f"[INFO] All episodes complete.")
