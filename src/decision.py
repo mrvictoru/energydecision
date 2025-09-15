@@ -582,6 +582,15 @@ def run_single(agent_class, env, agent_kwargs, render, display_progress=False):
     agent = agent_class(env, **agent_kwargs)
     return agent.run_episode(render=render, display_progress=display_progress)
 
+def run_single_with_logging(agent_class, env, agent_kwargs, render, idx):
+    import time
+    print(f"[START] Episode {idx}")
+    start = time.time()
+    result = run_single(agent_class, env, agent_kwargs, render)
+    elapsed = time.time() - start
+    print(f"[DONE]  Episode {idx} (Elapsed: {elapsed:.2f} sec)")
+    return result
+
 # this can be used to run multiple episodes in parallel
 def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4, use_notebook_tqdm=True):
     """
@@ -593,22 +602,21 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     Returns: List of DataFrames (one per environment).
     """
     agent_kwargs = agent_kwargs or {}
-    # check if algorith is suitable for parallel execution
     if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp']:
         raise ValueError("Parallel execution is only supported for 'rule' and 'sdp' algorithms. ")
 
-    # Select tqdm version
     if use_notebook_tqdm:
         from tqdm.notebook import tqdm as tqdm_bar
     else:
         from tqdm import tqdm as tqdm_bar
 
     results = []
+    print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        # Use as_completed to update progress as each finishes
-        futures = [executor.submit(run_single, agent_class, env, agent_kwargs, render) for env in envs]
+        futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx) for idx, env in enumerate(envs)]
         for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             results.append(f.result())
+    print(f"[INFO] All episodes complete.")
     return results
 
 # This function runs a trained SB3 model on a vectorized environment and collects episode trajectories.
