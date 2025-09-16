@@ -617,7 +617,7 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     results = []
     print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx, True) for idx, env in enumerate(envs)]
         for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             results.append(f.result())

@@ -43,7 +43,7 @@ def main(datapath='../data/2010-2011 Solar home electricity data.csv', output_pa
         'linear_deg_cost_p_kwh': 0.2 # only needed if using linear
     }
     print(f"Running SDP agent with kwargs: {sdp_agent_kwargs}")
-    sdp_episode_logs = run_episodes_parallel(Agent, envs, agent_kwargs=sdp_agent_kwargs, max_workers=8, use_notebook_tqdm=False)
+    sdp_episode_logs = run_episodes_parallel(Agent, envs, agent_kwargs=sdp_agent_kwargs, max_workers=2, use_notebook_tqdm=False)
     print(f"Completed running {len(sdp_episode_logs)} episodes.")
     # combine all the dataframes in sdp_episode_logs into one dataframe and add a column episode_id to identify each episode
     print(f"Combining all episode logs into one dataframe and saving to {output_path}")
