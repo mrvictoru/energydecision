@@ -6,6 +6,8 @@ from decision import run_episodes_parallel, Agent
 from EnergySimEnv import SolarBatteryEnv
 import argparse
 
+import multiprocessing
+multiprocessing.set_start_method('spawn', force=True)
 
 def main(datapath='../data/2010-2011 Solar home electricity data.csv', output_path='../data/sdp_all_episode_01_logs.parquet'):
 
