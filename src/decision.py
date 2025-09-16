@@ -596,7 +596,7 @@ def run_single_with_logging(agent_class, env, agent_kwargs, render, idx, display
     return result
 
 # this can be used to run multiple episodes in parallel
-def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4, use_notebook_tqdm=True):
+def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4, use_notebook_tqdm=False):
     """
     Runs one episode per environment in parallel.
     agent_class: The Agent class to instantiate. 
@@ -616,7 +616,7 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
 
     results = []
     print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
-    print("Using ThreadPoolExecutor for parallel execution.")
+
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx, True) for idx, env in enumerate(envs)]
         for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
