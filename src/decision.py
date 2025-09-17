@@ -78,20 +78,26 @@ class Agent:
         self.rule_presistence = False  # Preset for rule-based action persistence
 
         if self.algorithm == 'sdp' or self.algorithm == 'mrdp':  # Stochastic Dynamic Programming
-            # The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
-            # by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge 
-
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
-            if subhorizon_specs is not None:
-                if not isinstance(subhorizon_specs, list):
+            self.subhorizon_specs = subhorizon_specs
+            # Normalize shorthand keys (soc_res/action_res) to soc_resolution/action_resolution
+            if self.subhorizon_specs is not None:
+                if not isinstance(self.subhorizon_specs, list):
                     raise ValueError("subhorizon_specs must be a list of dicts.")
-                for idx, spec in enumerate(subhorizon_specs):
+                normalized = []
+                for idx, spec in enumerate(self.subhorizon_specs):
                     if not isinstance(spec, dict):
                         raise ValueError(f"subhorizon_specs[{idx}] must be a dict.")
-                    missing = required_subhorizon_keys - set(spec.keys())
+                    spec_copy = dict(spec)
+                    if 'soc_res' in spec_copy and 'soc_resolution' not in spec_copy:
+                        spec_copy['soc_resolution'] = spec_copy.pop('soc_res')
+                    if 'action_res' in spec_copy and 'action_resolution' not in spec_copy:
+                        spec_copy['action_resolution'] = spec_copy.pop('action_res')
+                    missing = required_subhorizon_keys - set(spec_copy.keys())
                     if missing:
                         raise ValueError(f"subhorizon_specs[{idx}] is missing required keys: {missing}")
-            self.subhorizon_specs = subhorizon_specs
+                    normalized.append(spec_copy)
+                self.subhorizon_specs = normalized
 
             self.horizon = horizon
             self.soc_resolution = soc_resolution
@@ -166,27 +172,41 @@ class Agent:
 
             # --- Receding Horizon SDP ---
             # 1. Get Forecasts
-            forecasts = self._get_forecasts(current_step_env, self.horizon)
+            if self.algorithm == 'mrdp' and self.subhorizon_specs is not None:
+                total_horizon = sum(int(spec.get('length', 0)) for spec in self.subhorizon_specs)
+                horizon_for_forecasts = max(1, total_horizon)
+            else:
+                horizon_for_forecasts = self.horizon
+            forecasts = self._get_forecasts(current_step_env, horizon_for_forecasts)
             if not forecasts: # Handle case where horizon goes beyond data
                 print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
                 return self.rule_based_action(obs) # Fallback action
             if self.algorithm == 'sdp':
-                # 2. Solve SDP for the horizon (provide absolute start index for scenario indexing)
                 policy_table = self._solve_sdp(forecasts, start_index=current_step_env)
             elif self.algorithm == 'mrdp':
                 policy_table = self._solve_mrdp(forecasts, start_index=current_step_env)
 
             # 3. Determine Current State Index
-            soc_idx = self._soc_to_idx(current_soc_kwh)
+            if self.algorithm == 'mrdp' and self.subhorizon_specs is not None and len(self.subhorizon_specs) > 0:
+                first_spec = self.subhorizon_specs[0]
+                soc_res_first = int(first_spec.get('soc_resolution', self.soc_resolution))
+                soc_levels_first = np.linspace(0, self.battery_capacity, soc_res_first)
+                soc_idx = int(np.argmin(np.abs(soc_levels_first - current_soc_kwh)))
+            else:
+                soc_idx = self._soc_to_idx(current_soc_kwh)
 
             # 4. Get Optimal Action for the *first* step
             optimal_action_idx = policy_table[0, soc_idx]
-            if optimal_action_idx == -1: # Handle cases where no valid action was found (e.g., all lead to penalties)
+            if optimal_action_idx == -1:
                 print(f"Warning: No optimal action found for SoC {current_soc_kwh:.2f} at step {current_step_env}. Using zero action.")
                 action_value = 0.0008964
             else:
-                action_value = self.action_levels_norm[optimal_action_idx]
-            # add small noise to the action
+                if self.algorithm == 'mrdp' and self.subhorizon_specs is not None and len(self.subhorizon_specs) > 0:
+                    action_res_first = int(first_spec.get('action_resolution', self.action_resolution))
+                    action_levels_first = np.linspace(-1.0, 1.0, action_res_first)
+                    action_value = action_levels_first[int(optimal_action_idx)]
+                else:
+                    action_value = self.action_levels_norm[int(optimal_action_idx)]
             noise = np.random.normal(-0.001, 0.001)
             action_value = min(max(action_value + noise, -1.0), 1.0)
             return [np.float32(action_value)]
@@ -509,27 +529,24 @@ class Agent:
         MRDP-enabled SDP backward induction: Uses sdp_multires.solve_mrdp for multi-resolution DP.
         """
         # 1. Use subhorizon_specs from Agent argument, or default if not provided
+        # Default step_duration values use the same time unit as env.step_duration
         subhorizon_specs = self.subhorizon_specs if self.subhorizon_specs is not None else [
-            {'start': 0, 'length': 12, 'soc_resolution': 20, 'action_resolution': 41, 'step_duration': 1800},
-            {'start': 12, 'length': 36, 'soc_resolution': 8,  'action_resolution': 17, 'step_duration': 3600},
+            {'start': 0, 'length': 12, 'soc_resolution': 20, 'action_resolution': 41, 'step_duration': self.step_duration},
+            {'start': 12, 'length': 36, 'soc_resolution': 8,  'action_resolution': 17, 'step_duration': max(self.step_duration, 2 * self.step_duration)},
         ]
-        
-        # 2. Define stage-cost function wrapper using existing Agent logic (vectorized stage cost)
+
         def stage_cost_function(t_global_idx, unique_energy_values):
             costs = np.empty(len(unique_energy_values), dtype=float)
             for i, energy in enumerate(unique_energy_values):
-                # You can use Agent._calculate_sdp_stage_cost or direct logic here
-                soc_kwh = self.battery_capacity / 2.0  # or pass true SoC if needed
+                soc_kwh = self.battery_capacity / 2.0
                 battery_rate = energy / self.step_duration
-                # Use deterministic forecasts or scenario cache as in Agent
                 forecast_idx = t_global_idx
                 forecast_step = forecasts[forecast_idx] if forecast_idx < len(forecasts) else forecasts[-1]
                 costs[i] = self._calculate_sdp_stage_cost(
                     forecast_idx, soc_kwh, battery_rate, energy, forecast_step
                 )
             return costs
-        
-        # 3. Call MRDP orchestrator
+
         policy_table, cost_to_go = solve_mrdp(
             env=self.env,
             forecasts=forecasts,
