@@ -60,12 +60,13 @@ def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor = 0.01,# Added SDP params
-                degradation_model = 'linear', linear_deg_cost_p_kwh=None,
-                use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None):
+                 horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor=0.01, # Added SDP params
+                 degradation_model='linear', linear_deg_cost_p_kwh=None,
+                 use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
+                 subhorizon_specs=None):
         """
         env: an instance of SolarBatteryEnv.
-        algorithm: choose between 'rule', 'rl', 'dt', or 'sdp'.
+        algorithm: choose between 'rule', 'rl', 'dt', 'mrdp' or 'sdp'.
         model: For RL/DT algorithm, a trained model.
         horizon: Time horizon for SDP optimization (default: 48 steps = 24 hours).
         soc_resolution: Resolution of state-of-charge discretization (default: 20 levels).
@@ -76,9 +77,22 @@ class Agent:
         self.model = model
         self.rule_presistence = False  # Preset for rule-based action persistence
 
-        if self.algorithm == 'sdp': # Stochastic Dynamic Programming
-        # The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
-        # by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge 
+        if self.algorithm == 'sdp' or self.algorithm == 'mrdp':  # Stochastic Dynamic Programming
+            # The following algorithm is derived from the paper "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation (2018)"
+            # by K Abdulla, J De Hoog, V Muenzel, F Suits, K Steer, A Wirth, S Halgamuge 
+
+            required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
+            if subhorizon_specs is not None:
+                if not isinstance(subhorizon_specs, list):
+                    raise ValueError("subhorizon_specs must be a list of dicts.")
+                for idx, spec in enumerate(subhorizon_specs):
+                    if not isinstance(spec, dict):
+                        raise ValueError(f"subhorizon_specs[{idx}] must be a dict.")
+                    missing = required_subhorizon_keys - set(spec.keys())
+                    if missing:
+                        raise ValueError(f"subhorizon_specs[{idx}] is missing required keys: {missing}")
+            self.subhorizon_specs = subhorizon_specs
+
             self.horizon = horizon
             self.soc_resolution = soc_resolution
             self.action_resolution = action_resolution
@@ -146,7 +160,7 @@ class Agent:
             _, _, act_preds = self.model(state, rtg, timestep, actions)
             action = act_preds[0, 0].detach().cpu().numpy().tolist()
             return action
-        elif self.algorithm == 'sdp':
+        elif self.algorithm == 'sdp' or self.algorithm == 'mrdp':
             current_soc_kwh = obs[-2] # Assuming BatteryLevel is the second to last element
             current_step_env = self.env.current_step # Get current step from env
 
@@ -156,9 +170,11 @@ class Agent:
             if not forecasts: # Handle case where horizon goes beyond data
                 print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
                 return self.rule_based_action(obs) # Fallback action
-
-            # 2. Solve SDP for the horizon (provide absolute start index for scenario indexing)
-            policy_table = self._solve_sdp(forecasts, start_index=current_step_env)
+            if self.algorithm == 'sdp':
+                # 2. Solve SDP for the horizon (provide absolute start index for scenario indexing)
+                policy_table = self._solve_sdp(forecasts, start_index=current_step_env)
+            elif self.algorithm == 'mrdp':
+                policy_table = self._solve_mrdp(forecasts, start_index=current_step_env)
 
             # 3. Determine Current State Index
             soc_idx = self._soc_to_idx(current_soc_kwh)
@@ -174,19 +190,6 @@ class Agent:
             noise = np.random.normal(-0.001, 0.001)
             action_value = min(max(action_value + noise, -1.0), 1.0)
             return [np.float32(action_value)]
-        elif self.algorithm == 'mrdp':
-            current_soc_kwh = obs[-2]
-            current_step_env = self.env.current_step
-            forecasts = self._get_forecasts(current_step_env, self.horizon)
-            if not forecasts:
-                print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
-                return self.rule_based_action(obs)
-            # Use the new MRDP solver
-            policy_table = self._solve_mrdp(forecasts, start_index=current_step_env)
-            soc_idx = self._soc_to_idx(current_soc_kwh)
-            optimal_action_idx = policy_table[0, soc_idx]
-        else:
-            raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
         
      # --- SDP Helper Methods ---
 
@@ -505,8 +508,8 @@ class Agent:
         """
         MRDP-enabled SDP backward induction: Uses sdp_multires.solve_mrdp for multi-resolution DP.
         """
-        # 1. Define sub-horizon specs — can be parameterized or hardcoded for testing
-        subhorizon_specs = [
+        # 1. Use subhorizon_specs from Agent argument, or default if not provided
+        subhorizon_specs = self.subhorizon_specs if self.subhorizon_specs is not None else [
             {'start': 0, 'length': 12, 'soc_resolution': 20, 'action_resolution': 41, 'step_duration': 1800},
             {'start': 12, 'length': 36, 'soc_resolution': 8,  'action_resolution': 17, 'step_duration': 3600},
         ]
