@@ -7,6 +7,7 @@ from EnergySimEnv import SolarBatteryEnv
 
 from batterydeg import static_degradation
 from quantile_scenarios import QuantileScenarioGenerator
+from sdp_multires import DynamicProgram, solve_mrdp
 
 import concurrent.futures
 from tqdm.notebook import tqdm
@@ -173,6 +174,17 @@ class Agent:
             noise = np.random.normal(-0.001, 0.001)
             action_value = min(max(action_value + noise, -1.0), 1.0)
             return [np.float32(action_value)]
+        elif self.algorithm == 'mrdp':
+            current_soc_kwh = obs[-2]
+            current_step_env = self.env.current_step
+            forecasts = self._get_forecasts(current_step_env, self.horizon)
+            if not forecasts:
+                print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
+                return self.rule_based_action(obs)
+            # Use the new MRDP solver
+            policy_table = self._solve_mrdp(forecasts, start_index=current_step_env)
+            soc_idx = self._soc_to_idx(current_soc_kwh)
+            optimal_action_idx = policy_table[0, soc_idx]
         else:
             raise NotImplementedError(f"Algorithm '{self.algorithm}' is not supported.")
         
@@ -488,6 +500,41 @@ class Agent:
             degradation_cost = degradation_fraction * self.battery_life_cost
 
         return expected_grid_cost + degradation_cost
+    
+    def _solve_mrdp(self, forecasts, start_index: int = 0):
+        """
+        MRDP-enabled SDP backward induction: Uses sdp_multires.solve_mrdp for multi-resolution DP.
+        """
+        # 1. Define sub-horizon specs — can be parameterized or hardcoded for testing
+        subhorizon_specs = [
+            {'start': 0, 'length': 12, 'soc_resolution': 20, 'action_resolution': 41, 'step_duration': 1800},
+            {'start': 12, 'length': 36, 'soc_resolution': 8,  'action_resolution': 17, 'step_duration': 3600},
+        ]
+        
+        # 2. Define stage-cost function wrapper using existing Agent logic (vectorized stage cost)
+        def stage_cost_function(t_global_idx, unique_energy_values):
+            costs = np.empty(len(unique_energy_values), dtype=float)
+            for i, energy in enumerate(unique_energy_values):
+                # You can use Agent._calculate_sdp_stage_cost or direct logic here
+                soc_kwh = self.battery_capacity / 2.0  # or pass true SoC if needed
+                battery_rate = energy / self.step_duration
+                # Use deterministic forecasts or scenario cache as in Agent
+                forecast_idx = t_global_idx
+                forecast_step = forecasts[forecast_idx] if forecast_idx < len(forecasts) else forecasts[-1]
+                costs[i] = self._calculate_sdp_stage_cost(
+                    forecast_idx, soc_kwh, battery_rate, energy, forecast_step
+                )
+            return costs
+        
+        # 3. Call MRDP orchestrator
+        policy_table, cost_to_go = solve_mrdp(
+            env=self.env,
+            forecasts=forecasts,
+            subhorizon_specs=subhorizon_specs,
+            global_start_index=start_index,
+            stage_cost_function=stage_cost_function
+        )
+        return policy_table
 
     def rule_based_action(self, obs):
         diff = obs[1] - obs[2] # difference between solar generation (obs[1]) and house load (obs[2])
