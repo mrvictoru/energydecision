@@ -289,11 +289,7 @@ class SolarBatteryEnv(gym.Env):
         row = self._get_row(self.current_step)
         solar = row['SolarGen']
         load = row['HouseLoad']
-        # Determine energy price based on grid flow (import vs export).
-        # grid_energy: positive => import (pay ImportEnergyPrice),
-        #              negative => export (receive ExportEnergyPrice).
-        energy_price = row['ImportEnergyPrice'] if grid_energy >= 0 else row['ExportEnergyPrice']
-
+        
         # ----- Determine battery charge and discharge -----
         battery_charge = max(0, battery_flow_energy)
         battery_discharge = max(0, -battery_flow_energy)
@@ -305,6 +301,11 @@ class SolarBatteryEnv(gym.Env):
 
         # Clip the grid flow if needed
         grid_energy = np.clip(grid_energy_needed, -self.max_grid_energy, self.max_grid_energy)
+
+        # Determine energy price based on grid flow (import vs export).
+        # grid_energy: positive => import (pay ImportEnergyPrice),
+        #              negative => export (receive ExportEnergyPrice).
+        energy_price = row['ImportEnergyPrice'] if grid_energy >= 0 else row['ExportEnergyPrice']
 
         # Check if this clipping breaks energy conservation
         actual_supply = supply + grid_energy
@@ -321,9 +322,10 @@ class SolarBatteryEnv(gym.Env):
                 "energy_price": energy_price,
                 "grid_cost": 0.0,  # No cost due to violation
                 "grid_reward": 0.0,  # No reward due to violation
-                "battery_deg_penalty": 0.0,  # No degradation cost due to violation
+                "battery_deg_penalty_fraction_corrected": 0.0,
+                "battery_deg_penalty_fraction_raw": 0.0,
                 "dynamic_deg": -1.0,  # Placeholder for dynamic degradation
-                "static_deg": -1.0,  # Placeholder for static degradation
+                "static_deg_sum_raw": -1.0,  # Placeholder for static degradation
                 "num_cycles": 0,  # Placeholder for number of cycles
                 "correction_factor": self.correction_factor,
                 "deg_cost": 0.0,  # No degradation cost due to violation
