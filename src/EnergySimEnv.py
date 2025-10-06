@@ -334,8 +334,7 @@ class SolarBatteryEnv(gym.Env):
 
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
 
-        # ----- Compute Rewards -----
-        grid_reward = self._calculate_grid_reward(grid_energy, energy_price)
+
         # Compute avg SoC robustly:
         # q_t = battery energy before the operation (kWh)
         # b_t = energy discharged (kWh, positive for discharge, negative for charge)
@@ -387,11 +386,8 @@ class SolarBatteryEnv(gym.Env):
         # Compute per-step degradation cost in USD
         current_step_deg_cost = corrected_static_frac * self.battery_life_cost
 
-        # ----- Grid reward (electricity cost) -----
-        grid_reward = -(grid_energy * energy_price)
-        # Add violation penalty if grid_energy is beyond allowed limit
-        if abs(grid_energy) > self.max_grid_energy:
-            grid_reward += VIOLATION_PENALTY
+        # ----- Compute Rewards (electricity cost and grid violation)-----
+        grid_reward = self._calculate_grid_reward(grid_energy, energy_price)
 
         # Final reward: trade-off energy cost vs degradation cost
         reward = grid_reward - current_step_deg_cost
