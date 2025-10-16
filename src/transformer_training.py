@@ -279,6 +279,8 @@ def train_decision_transformer(
             leave=False,
             unit="batch",
         )
+        batch_action_loss_sum = 0.0
+        batch_count = 0
         for batch_idx, batch in enumerate(progress_bar):
             if skip_until_batch and batch_idx < skip_until_batch:
                 continue
@@ -358,8 +360,8 @@ def train_decision_transformer(
                 continue
 
             total_loss += loss_value * states.size(0)
-            # Log action losses
-            log_losses.append(loss_to_log)
+            batch_action_loss_sum += loss_to_log
+            batch_count += 1
             progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "skipped": skipped_batches})
 
             if checkpoints_per_epoch > 0 and segment_boundaries:
@@ -372,7 +374,9 @@ def train_decision_transformer(
                     segment_idx += 1
 
         avg_loss = total_loss / max(1, len(ds) - skipped_batches)
-        print(f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f} — Skipped batches: {skipped_batches}")
+        avg_action_loss = batch_action_loss_sum / max(1, batch_count)
+        log_losses.append(avg_action_loss)
+        print(f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f} — Action Loss: {avg_action_loss:.6f} — Skipped batches: {skipped_batches}")
         # Step the learning rate scheduler
         scheduler.step()
 
