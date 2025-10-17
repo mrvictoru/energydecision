@@ -673,7 +673,7 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     Returns: List of DataFrames (one per environment).
     """
     agent_kwargs = agent_kwargs or {}
-    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp']:
+    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp','dt']:
         raise ValueError("Parallel execution is only supported for 'rule', 'sdp', and 'mrdp' algorithms. ")
 
     if use_notebook_tqdm:
