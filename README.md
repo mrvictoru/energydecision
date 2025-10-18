@@ -30,22 +30,45 @@ This project explores different algorithms for optimizing energy management in a
 ```
 energydecision/
 ├── data/                       # Data files (CSV, Parquet, etc.)
+│   ├── *.csv                   # Solar home electricity data, household data, customer splits
+│   ├── *.parquet               # Episode logs for different algorithms
+│   ├── *.pdf                   # Reference papers
+│   └── ...
+├── models/                     # Saved models and checkpoints
+│   ├── *.zip                   # RL agent models
+│   ├── *.pt                    # Decision Transformer checkpoints
+│   ├── *.json                  # Model configs
+│   └── ...
 ├── src/                        # Source code
 │   ├── EnergySimEnv.py         # Gymnasium environment for solar-battery-grid simulation
 │   ├── decision.py             # Agent class: rule-based, RL, DT, and SDP controllers
 │   ├── batterydeg.py           # Battery degradation models (static and dynamic)
-│   ├── helper.py               # Data transformation ,preparation and evaluation utilities
+│   ├── helper.py               # Data transformation, preparation, and evaluation utilities
 │   ├── decision_transformer.py # Core Decision Transformer model class
 │   ├── transformer_training.py # TrajectoryDataset class and train_decision_transformer function
 │   ├── sb3train.py             # RL training utilities (Stable-Baselines3)
+│   ├── quantile_scenarios.py   # Quantile scenario generation
+│   ├── run_sdp_parallel.py     # Parallel SDP simulation
+│   ├── sdp_multires.py         # Multi-resolution SDP
+│   ├── mrdp_integration_example.py # MRDP integration example
+│   ├── test_mrdp_validation.py # MRDP validation tests
+│   ├── test_quantile_scenarios.py # Quantile scenario tests
+│   ├── test_reward_logic.py    # Reward logic tests
+│   ├── test_sdp_perf.py        # SDP performance tests
+│   ├── test_sdp_timing.py      # SDP timing tests
 │   └── ...                     # Other modules/utilities
 ├── .gitignore
 ├── docker-compose.yml          # Docker Compose configuration
 ├── Dockerfile                  # Dockerfile for building the environment
+├── MRDP_README.md              # MRDP integration documentation
 ├── README.md                   # Project documentation (this file)
+├── README.scenario-support.md  # Scenario support documentation
 ├── requirements.txt            # Python package requirements
+├── torch_req.txt               # PyTorch-specific requirements
 ├── testrun.ipynb               # Example Jupyter notebook for running simulations
-└── torch_req.txt               # PyTorch-specific requirements
+├── DemoEnv.ipynb               # Demo notebook for environment usage
+├── Demosb3.ipynb               # Demo notebook for Stable-Baselines3 usage
+└── ...
 ```
 
 ## Installation
@@ -242,7 +265,7 @@ energydecision/
     act_dim   = env.action_space.shape[0]
 
     # 2) Load dataset and sample a batch
-    context_length = 16
+    context_length = 36
     ds = TrajectoryDataset(
         data_path='../data/rule_all_episode_logs.parquet',
         context_length=context_length,
@@ -268,7 +291,7 @@ energydecision/
     )
 
     # Train the Decision Transformer
-    trained_model, train_losses = train_decision_transformer(
+    trained_model, train_losses, val_losses = train_decision_transformer(
         ds=ds,
         context_length=context_length,
         state_dim=state_dim,
@@ -277,7 +300,7 @@ energydecision/
         model=model,
         batch_size=32,
         lr=1e-4,
-        epochs=5,
+        epochs=2,
         device="cuda" if torch.cuda.is_available() else "cpu",
         save_path="../models/dt_model.pt"
     )

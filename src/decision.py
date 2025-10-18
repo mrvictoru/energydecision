@@ -63,7 +63,7 @@ class Agent:
                  horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor=0.01, # Added SDP params
                  degradation_model='linear', linear_deg_cost_p_kwh=None,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
-                 subhorizon_specs=None):
+                 subhorizon_specs=None, rtg_value: float = 0.0):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp' or 'sdp'.
@@ -141,6 +141,8 @@ class Agent:
 
             # debugging log when using SDP, it tracks the steps solving SDP
             self.sdp_debug_log = []
+        elif self.algorithm == 'dt':
+            self.rtg_value = rtg_value  # Return-to-go value for DT input
 
     def choose_action(self, obs):
         if self.algorithm == 'rule':
@@ -160,7 +162,7 @@ class Agent:
                 raise ValueError("Decision Transformer selected but no model provided.")
             device = next(self.model.parameters()).device
             state = torch.tensor(obs, dtype=torch.float32, device=device).reshape(1, 1, -1)
-            rtg = torch.tensor([[0.0]], dtype=torch.float32, device=device).reshape(1, 1, 1)
+            rtg = torch.tensor([[self.rtg_value]], dtype=torch.float32, device=device).reshape(1, 1, 1)
             timestep = torch.tensor([[0]], dtype=torch.long, device=device)
             actions = torch.zeros((1, 1, self.model.act_dim), dtype=torch.float32, device=device)
             _, _, act_preds = self.model(state, rtg, timestep, actions)
