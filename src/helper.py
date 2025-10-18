@@ -5,6 +5,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from typing import Optional
 from EnergySimEnv import SolarBatteryEnv
+from pathlib import Path
 
 
 # Helper: parse a time string like "7am" or "7:30am" into minutes since midnight.
@@ -434,8 +435,10 @@ def evaluate_experiments(
     all_logs: dict[str, list[pl.DataFrame]],
     target_return: float = 0.0,
     make_plots: bool = True,
-    return_figs: bool = False,
-    figsize: tuple = (6,4)
+    figsize: tuple = (6,4),
+    save_dir: Optional[str] = None,
+    save_format: str = "svg",
+    dpi: int = 200,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict]:
     """
     Given a dict mapping experiment names to lists of episode logs, compute evaluation metrics.
@@ -449,8 +452,10 @@ def evaluate_experiments(
         all_logs: mapping experiment name -> list of per-episode DataFrames
         target_return: baseline for Sortino (passed to evaluate_experiment_logs)
         make_plots: whether to generate and display plots
-        return_figs: if True, return a dict of matplotlib Figure objects along with the DataFrame
         figsize: base figure size (width, height)
+        save_dir: if provided, save generated figures into this directory (created if needed)
+        save_format: image format for saved figures (e.g., 'png', 'pdf', 'svg')
+        dpi: dots-per-inch for saved raster images
 
     Returns:
         metrics_df (pl.DataFrame) OR (metrics_df, figs_dict) if return_figs=True
@@ -469,7 +474,8 @@ def evaluate_experiments(
                 'total_reward': float(ep_df['reward'].sum())
             })
     metrics_df = pl.DataFrame(rows).sort('experiment')
-    if not make_plots and not return_figs:
+    # If neither showing nor saving nor returning figs, skip figure generation entirely
+    if not make_plots and not return_figs and save_dir is None:
         return metrics_df
 
     figs: dict[str, plt.Figure] = {}
@@ -575,11 +581,20 @@ def evaluate_experiments(
             ax4.grid(axis='y', alpha=0.3)
             figs['episode_distribution'] = fig4
 
+        # Save figures if requested
+        if save_dir is not None and figs:
+            try:
+                out_dir = Path(save_dir)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                for name, fig in figs.items():
+                    filename = out_dir / f"{name}.{save_format}"
+                    fig.savefig(filename, dpi=dpi, bbox_inches='tight')
+            except Exception as se:
+                print(f"Saving figures failed: {se}")
+
         if make_plots:
             plt.show(block=False)
     except Exception as e:
         print(f"Plot generation failed: {e}")
 
-    if return_figs:
-        return metrics_df, figs
     return metrics_df
