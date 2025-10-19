@@ -311,7 +311,7 @@ def train_decision_transformer(
                     # device_type for autocast: 'cuda' or 'cpu'
                     device_type = 'cuda' if device.startswith('cuda') else 'cpu'
                     with autocast(device_type=device_type):
-                        ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions)
+                        ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
                         if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
                             skipped_batches += 1
                             progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
@@ -334,7 +334,7 @@ def train_decision_transformer(
                     loss_to_log = loss_a.detach().cpu().item()
                     loss_value = loss.detach().cpu().item()
                 else:
-                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions)
+                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
                     if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
                         skipped_batches += 1
                         progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
@@ -398,7 +398,7 @@ def train_decision_transformer(
                     if valid_count.item() == 0:
                         val_skipped += 1
                         continue
-                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions)
+                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
                     loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
                     loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
                     loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
