@@ -128,6 +128,9 @@ class DecisionTransformer(nn.Module):
         self.pred_rtg = nn.Linear(h_dim, 1)
         self.pred_state = nn.Linear(h_dim, state_dim)
         self.pred_act = nn.Sequential(*([nn.Linear(h_dim, act_dim)] + ([nn.Tanh()] if use_action_tah else [])))
+        
+        # Default return_scale for inference (can be set during training)
+        self.return_scale = 1.0
     
     def forward(self, state, rtg, timestep, actions, attention_mask=None):
         B, T, _ = state.shape
@@ -170,3 +173,42 @@ class DecisionTransformer(nn.Module):
         act_preds = self.pred_act(h[:,1])       # predict action given r, s
 
         return return_preds, state_preds, act_preds
+    
+    def get_action(self, states, actions, rtg, timesteps, attention_mask=None):
+        """
+        Convenience method to get the last action prediction from the model.
+        Provides API parity with the official Decision Transformer implementation.
+        
+        Args:
+            states: Tensor of shape [B, T, state_dim] or [T, state_dim]
+            actions: Tensor of shape [B, T, act_dim] or [T, act_dim]
+            rtg: Tensor of shape [B, T, 1] or [T, 1] or [B, T] or [T]
+            timesteps: Tensor of shape [B, T] or [T]
+            attention_mask: Optional tensor of shape [B, T] or [T] with 1 for valid, 0 for padding
+            
+        Returns:
+            Tensor of shape [act_dim] representing the action prediction at the last position
+        """
+        # Ensure all inputs have batch dimension
+        if states.dim() == 2:  # [T, state_dim]
+            states = states.unsqueeze(0)  # [1, T, state_dim]
+        if actions.dim() == 2:  # [T, act_dim]
+            actions = actions.unsqueeze(0)  # [1, T, act_dim]
+        if rtg.dim() == 1:  # [T]
+            rtg = rtg.unsqueeze(0).unsqueeze(-1)  # [1, T, 1]
+        elif rtg.dim() == 2:  # Could be [B, T] or [T, 1]
+            if rtg.shape[1] == 1 or rtg.shape[0] == 1:  # [T, 1] case
+                if rtg.shape[0] != 1:
+                    rtg = rtg.unsqueeze(0)  # [1, T, 1]
+            else:  # [B, T] case
+                rtg = rtg.unsqueeze(-1)  # [B, T, 1]
+        if timesteps.dim() == 1:  # [T]
+            timesteps = timesteps.unsqueeze(0)  # [1, T]
+        if attention_mask is not None and attention_mask.dim() == 1:  # [T]
+            attention_mask = attention_mask.unsqueeze(0)  # [1, T]
+        
+        # Call forward pass
+        _, _, act_preds = self.forward(states, rtg, timesteps, actions, attention_mask=attention_mask)
+        
+        # Return the last action prediction, removing batch dimension
+        return act_preds[0, -1]

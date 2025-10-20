@@ -191,6 +191,11 @@ class Agent:
                 timesteps = np.array(self.dt_timesteps_buffer[-context_len:])
                 mask = np.ones(context_len)
             
+            # Apply return_scale to RTGs (matching training behavior)
+            return_scale = getattr(self.model, 'return_scale', 1.0)
+            if return_scale != 1.0:
+                rtgs = rtgs / return_scale
+            
             # Convert to tensors
             states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, state_dim]
             actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, act_dim]
@@ -198,9 +203,9 @@ class Agent:
             timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)  # [1, T]
             attention_mask = torch.tensor(mask, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T]
             
-            # Get action prediction
-            _, _, act_preds = self.model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
-            action = act_preds[0, -1].detach().cpu().numpy().tolist()  # Use the last position
+            # Get action prediction using get_action() helper
+            action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+            action = action.detach().cpu().numpy().tolist()  # Convert to list
             return action
         elif self.algorithm == 'sdp' or self.algorithm == 'mrdp':
             current_soc_kwh = obs[-2] # Assuming BatteryLevel is the second to last element

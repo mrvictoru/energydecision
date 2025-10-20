@@ -161,6 +161,11 @@ def train_decision_transformer(
     checkpoint_interval: int = 1,
     checkpoints_per_epoch: int = 0,
     val_ds: Optional[TrajectoryDataset] = None,
+    action_loss_weight: float = 1.0,
+    state_loss_weight: float = 0.1,
+    return_loss_weight: float = 0.1,
+    weight_decay: float = 1e-4,
+    return_scale: float = 1.0,
 ) -> tuple:
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -177,8 +182,11 @@ def train_decision_transformer(
     loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=pin_memory)
 
     model = model.to(device)
+    
+    # Save return_scale to model for inference consistency
+    model.return_scale = return_scale
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
@@ -290,6 +298,10 @@ def train_decision_transformer(
             rtgs      = batch["rtgs"].to(device).float()
             timesteps = batch["timesteps"].to(device)
             mask      = batch["mask"].to(device)
+            
+            # Apply return_scale to RTGs if specified
+            if return_scale != 1.0:
+                rtgs = rtgs / return_scale
 
             # quick sanity checks on inputs
             if not (_is_finite(states) and _is_finite(actions) and _is_finite(rtgs)):
@@ -319,7 +331,7 @@ def train_decision_transformer(
                         loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
                         loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
                         loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
-                        loss = loss_r + loss_s + loss_a
+                        loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
 
                     if not torch.isfinite(loss):
                         skipped_batches += 1
@@ -342,7 +354,7 @@ def train_decision_transformer(
                     loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
                     loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
                     loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
-                    loss = loss_r + loss_s + loss_a
+                    loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
 
                     if not torch.isfinite(loss):
                         skipped_batches += 1
@@ -393,6 +405,11 @@ def train_decision_transformer(
                     rtgs      = batch["rtgs"].to(device).float()
                     timesteps = batch["timesteps"].to(device)
                     mask      = batch["mask"].to(device)
+                    
+                    # Apply return_scale to RTGs if specified
+                    if return_scale != 1.0:
+                        rtgs = rtgs / return_scale
+                    
                     m = mask.unsqueeze(-1).float()
                     valid_count = m.sum()
                     if valid_count.item() == 0:
@@ -402,7 +419,7 @@ def train_decision_transformer(
                     loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
                     loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
                     loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
-                    loss = loss_r + loss_s + loss_a
+                    loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
                     val_total_loss += loss.item() * states.size(0)
             avg_val_loss = val_total_loss / max(1, len(val_ds) - val_skipped)
             val_losses.append(avg_val_loss)
