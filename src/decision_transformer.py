@@ -36,8 +36,9 @@ class MaskedAttention(nn.Module):
         # so that it will not be included in the model parameters and be updated during backpropagation
         self.register_buffer('mask', mask)
 
-    def forward(self, x):
+    def forward(self, x, key_padding_mask=None):
         # x: [B, T, H]
+        # key_padding_mask: [B, T] with 1 for valid tokens, 0 for padding (optional)
         B, T, C = x.shape # batch size, sequence length, hidden dimension * number of heads
         N, D = self.n_heads, C // self.n_heads # number of heads, dimension of each head
 
@@ -48,8 +49,21 @@ class MaskedAttention(nn.Module):
 
         # compute the attention
         weights = Q @ K.transpose(2,3) / math.sqrt(D) # QK^T / sqrt(D)
+        
+        # Apply causal mask (lower triangular)
         weights = weights.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf')) # mask the future tokens 
+        
+        # Apply key padding mask if provided
+        if key_padding_mask is not None:
+            # key_padding_mask: [B, T] with 1 for valid, 0 for padding
+            # Reshape to [B, 1, 1, T] for broadcasting over heads and queries
+            key_mask = key_padding_mask.unsqueeze(1).unsqueeze(2)  # [B, 1, 1, T]
+            # Mask out padded keys by setting their attention weights to -inf
+            weights = weights.masked_fill(key_mask == 0, float('-inf'))
+        
         normalized_weights = F.softmax(weights, dim=-1) # softmax along the last dimension
+        # Replace NaN with 0 (happens when all keys are masked for a query position)
+        normalized_weights = torch.nan_to_num(normalized_weights, nan=0.0)
         A = self.att_drop(normalized_weights @ V) # attention with dropout
 
         # compute the output
@@ -73,10 +87,11 @@ class AttentionBlock(nn.Module):
             nn.Dropout(drop_p)
         )
 
-    def forward(self, x):
+    def forward(self, x, key_padding_mask=None):
         # x: [B, T, H]
+        # key_padding_mask: [B, T] with 1 for valid tokens, 0 for padding (optional)
         # Attention -> LayerNorm -> Residual -> FFN -> LayerNorm -> Residual
-        out = self.norm1(x + self.attention(x))
+        out = self.norm1(x + self.attention(x, key_padding_mask))
         out = self.norm2(out + self.ffn(out))
 
         return out
@@ -92,7 +107,7 @@ class DecisionTransformer(nn.Module):
         # transformer blocks
         input_seq_len = 3 * context_len
         blocks = [AttentionBlock(h_dim, input_seq_len, n_heads, drop_p) for _ in range(n_block)]
-        self.transformer = nn.Sequential(*blocks)
+        self.transformer = nn.ModuleList(blocks)
 
         # projection heads (project to embedding)
         self.embed_ln = nn.LayerNorm(h_dim)
@@ -113,7 +128,7 @@ class DecisionTransformer(nn.Module):
         self.pred_state = nn.Linear(h_dim, state_dim)
         self.pred_act = nn.Sequential(*([nn.Linear(h_dim, act_dim)] + ([nn.Tanh()] if use_action_tah else [])))
     
-    def forward(self, state, rtg, timestep, actions):
+    def forward(self, state, rtg, timestep, actions, attention_mask=None):
         B, T, _ = state.shape
 
         # timestep embedding
@@ -131,8 +146,19 @@ class DecisionTransformer(nn.Module):
         h = torch.stack([rtg_emb, state_emb, act_emb], dim=1).permute(0,2,1,3).reshape(B, 3*T, self.h_dim)
         h = self.embed_ln(h)
 
+        # Build stacked attention mask for the tripled sequence (R, s, a)
+        if attention_mask is not None:
+            # attention_mask: [B, T] with 1 for valid tokens, 0 for padding
+            # Stack it three times for (rtg, state, action) tokens
+            stacked_mask = torch.stack([attention_mask, attention_mask, attention_mask], dim=1)  # [B, 3, T]
+            stacked_mask = stacked_mask.permute(0, 2, 1).reshape(B, 3*T)  # [B, 3*T]
+        else:
+            # Default to all ones (all tokens are valid)
+            stacked_mask = torch.ones(B, 3*T, dtype=h.dtype, device=h.device)
+
         # transformer blocks
-        h = self.transformer(h)
+        for block in self.transformer:
+            h = block(h, key_padding_mask=stacked_mask)
 
         # get h reshaped such that its size is (B, 3, T, h_dim) and
         # h[:, 0, t] is conditioned on r_0, s_0, a_0, ..., r_t

@@ -165,7 +165,9 @@ class Agent:
             rtg = torch.tensor([[self.rtg_value]], dtype=torch.float32, device=device).reshape(1, 1, 1)
             timestep = torch.tensor([[0]], dtype=torch.long, device=device)
             actions = torch.zeros((1, 1, self.model.act_dim), dtype=torch.float32, device=device)
-            _, _, act_preds = self.model(state, rtg, timestep, actions)
+            # Create default attention mask of ones (all tokens are valid)
+            attention_mask = torch.ones((1, 1), dtype=torch.float32, device=device)
+            _, _, act_preds = self.model(state, rtg, timestep, actions, attention_mask=attention_mask)
             action = act_preds[0, 0].detach().cpu().numpy().tolist()
             return action
         elif self.algorithm == 'sdp' or self.algorithm == 'mrdp':
