@@ -103,6 +103,7 @@ class DecisionTransformer(nn.Module):
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.h_dim = h_dim
+        self.context_len = context_len
 
         # transformer blocks
         input_seq_len = 3 * context_len
@@ -138,9 +139,6 @@ class DecisionTransformer(nn.Module):
         state_emb = self.embed_state(state) + time_emb
         rtg_emb = self.embed_rtg(rtg) + time_emb
         act_emb = self.embed_act(actions) + time_emb
-        if act_emb.shape != time_emb.shape:
-            act_emb = torch.squeeze(act_emb) # fix the unmatch dimension
-        act_emb = act_emb + time_emb
 
         # stack the embeddings and reshape sequence as (r1, s1, a1, r2, s2, a2, ...)
         h = torch.stack([rtg_emb, state_emb, act_emb], dim=1).permute(0,2,1,3).reshape(B, 3*T, self.h_dim)

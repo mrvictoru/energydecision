@@ -63,7 +63,7 @@ class Agent:
                  horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor=0.01, # Added SDP params
                  degradation_model='linear', linear_deg_cost_p_kwh=None,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
-                 subhorizon_specs=None, rtg_value: float = 0.0):
+                 subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp' or 'sdp'.
@@ -71,6 +71,7 @@ class Agent:
         horizon: Time horizon for SDP optimization (default: 48 steps = 24 hours).
         soc_resolution: Resolution of state-of-charge discretization (default: 20 levels).
         action_resolution: Resolution of action discretization (default: 11 levels, e.g., -1.0, -0.8, ..., 0.8, 1.0).
+        dt_gamma: Discount factor for RTG updates in DT inference (default: 0.99, matching training).
         """
         self.env = env
         self.algorithm = algorithm.lower()
@@ -142,7 +143,13 @@ class Agent:
             # debugging log when using SDP, it tracks the steps solving SDP
             self.sdp_debug_log = []
         elif self.algorithm == 'dt':
-            self.rtg_value = rtg_value  # Return-to-go value for DT input
+            self.rtg_value = rtg_value  # Initial Return-to-go value for DT input
+            self.dt_gamma = dt_gamma    # Discount factor for RTG updates
+            # Initialize rolling context buffers (will be populated after reset)
+            self.dt_states_buffer = []
+            self.dt_actions_buffer = []
+            self.dt_rtgs_buffer = []
+            self.dt_timesteps_buffer = []
 
     def choose_action(self, obs):
         if self.algorithm == 'rule':
@@ -161,14 +168,39 @@ class Agent:
             if self.model is None:
                 raise ValueError("Decision Transformer selected but no model provided.")
             device = next(self.model.parameters()).device
-            state = torch.tensor(obs, dtype=torch.float32, device=device).reshape(1, 1, -1)
-            rtg = torch.tensor([[self.rtg_value]], dtype=torch.float32, device=device).reshape(1, 1, 1)
-            timestep = torch.tensor([[0]], dtype=torch.long, device=device)
-            actions = torch.zeros((1, 1, self.model.act_dim), dtype=torch.float32, device=device)
-            # Create default attention mask of ones (all tokens are valid)
-            attention_mask = torch.ones((1, 1), dtype=torch.float32, device=device)
-            _, _, act_preds = self.model(state, rtg, timestep, actions, attention_mask=attention_mask)
-            action = act_preds[0, 0].detach().cpu().numpy().tolist()
+            
+            # Build inputs from rolling buffers
+            context_len = self.model.context_len
+            buffer_len = len(self.dt_states_buffer)
+            
+            # Prepare tensors with left-padding if buffer is shorter than context_len
+            if buffer_len < context_len:
+                # Left-pad with zeros
+                pad_len = context_len - buffer_len
+                states = np.vstack([np.zeros((pad_len, len(obs))), np.array(self.dt_states_buffer)])
+                actions = np.vstack([np.zeros((pad_len, self.model.act_dim)), np.array(self.dt_actions_buffer)])
+                rtgs = np.concatenate([np.zeros(pad_len), np.array(self.dt_rtgs_buffer)])
+                timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), np.array(self.dt_timesteps_buffer)])
+                # Attention mask: 0 for padding, 1 for valid
+                mask = np.concatenate([np.zeros(pad_len), np.ones(buffer_len)])
+            else:
+                # Use the last context_len items
+                states = np.array(self.dt_states_buffer[-context_len:])
+                actions = np.array(self.dt_actions_buffer[-context_len:])
+                rtgs = np.array(self.dt_rtgs_buffer[-context_len:])
+                timesteps = np.array(self.dt_timesteps_buffer[-context_len:])
+                mask = np.ones(context_len)
+            
+            # Convert to tensors
+            states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, state_dim]
+            actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, act_dim]
+            rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)  # [1, T, 1]
+            timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)  # [1, T]
+            attention_mask = torch.tensor(mask, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T]
+            
+            # Get action prediction
+            _, _, act_preds = self.model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+            action = act_preds[0, -1].detach().cpu().numpy().tolist()  # Use the last position
             return action
         elif self.algorithm == 'sdp' or self.algorithm == 'mrdp':
             current_soc_kwh = obs[-2] # Assuming BatteryLevel is the second to last element
@@ -595,6 +627,13 @@ class Agent:
         raw_obs = self.env.get_raw_obs()  # Get raw observation if available
         max_possible_steps = len(self.env.df)
 
+        # Initialize DT rolling buffers upon reset
+        if self.algorithm == 'dt':
+            self.dt_states_buffer = [obs.copy()]
+            self.dt_actions_buffer = [np.zeros(self.model.act_dim)]  # Placeholder action for first step
+            self.dt_rtgs_buffer = [self.rtg_value]
+            self.dt_timesteps_buffer = [self.env.current_step]
+
         logs = []
         terminated, truncated = False, False
         step = 0  # Step counter
@@ -630,6 +669,37 @@ class Agent:
                     'reward': reward,
                     'info': info
                 })
+
+                # Update DT rolling buffers after step
+                if self.algorithm == 'dt':
+                    context_len = self.model.context_len
+                    # Update the last action slot with the actual action taken
+                    if isinstance(action, list):
+                        action_array = np.array(action, dtype=np.float32)
+                    else:
+                        action_array = np.array([action], dtype=np.float32) if np.isscalar(action) else action
+                    self.dt_actions_buffer[-1] = action_array
+                    
+                    # Update RTG using discounted recurrence: R_{t+1} = (R_t - r_t) / gamma
+                    if self.dt_gamma == 1.0:
+                        # Undiscounted: R_{t+1} = R_t - r_t
+                        next_rtg = self.dt_rtgs_buffer[-1] - reward
+                    else:
+                        # Discounted: R_{t+1} = (R_t - r_t) / gamma
+                        next_rtg = (self.dt_rtgs_buffer[-1] - reward) / self.dt_gamma
+                    
+                    # Append next state, action placeholder, RTG, and timestep
+                    self.dt_states_buffer.append(next_obs.copy())
+                    self.dt_actions_buffer.append(np.zeros(self.model.act_dim))  # Placeholder for next action
+                    self.dt_rtgs_buffer.append(next_rtg)
+                    self.dt_timesteps_buffer.append(self.env.current_step)
+                    
+                    # Clamp buffers to context_len
+                    if len(self.dt_states_buffer) > context_len:
+                        self.dt_states_buffer = self.dt_states_buffer[-context_len:]
+                        self.dt_actions_buffer = self.dt_actions_buffer[-context_len:]
+                        self.dt_rtgs_buffer = self.dt_rtgs_buffer[-context_len:]
+                        self.dt_timesteps_buffer = self.dt_timesteps_buffer[-context_len:]
 
                 # Select the correct next_obs for the next step
                 raw_obs = self.env.get_raw_obs()  # Get raw observation if available
