@@ -89,259 +89,218 @@ energydecision/
 *   Explore the simulation and agent interactions in the [`testrun.ipynb`](testrun.ipynb) notebook.
 *   See Demo jupyternotebook [`DemoEnv.ipynb`](DemoEnv.ipynb) and [`Demosb3.ipynb`](Demosb3.ipynb) for example usage of the gym and stable-baselines3 library.
 
-*   **Using the Environment class and logging interaction from programmed Algorithms:**
-*   Instantiate the [`SolarBatteryEnv`](src/EnergySimEnv.py) and [`Agent`](src/decision.py) classes programmatically to run simulations with different algorithms and parameters.
+*   **Using the environment class from code:** Instantiate [`SolarBatteryEnv`](src/EnergySimEnv.py) and [`Agent`](src/decision.py) directly to run a single episode and capture step-level logs.
 
     ```python
-    # Example (Conceptual)
     import polars as pl
+    from src.helper import transform_polars_df
     from src.EnergySimEnv import SolarBatteryEnv
     from src.decision import Agent
-    from src.helper import transform_polars_df # Or your custom provider
 
-    # Load data
-    df = pl.read_csv("data/your_data.csv") # Replace with your data file
-    dataset = transform_polars_df(df, import_energy_price=0.15, export_energy_price=0.1, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.1, default_export_energy_price=0.08) # transform the data into dataset which can be used to build the simulation environment
-
-    # Initialize environment
-    env = SolarBatteryEnv(dataset, max_step=len(dataset)-1)
-
-    # Initialize agent (e.g., SDP)
-    agent = Agent(
-        env,
-        algorithm='rule'
+    # Load a customer trace and convert it to the environment format
+    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    customer_id = df["Customer"][0]
+    customer_df = df.filter(pl.col("Customer") == customer_id)
+    dataset = transform_polars_df(
+        customer_df,
+        import_energy_price=0.23,
+        export_energy_price=0.015,
+        price_periods="7am-10am | 4pm-9pm",
+        default_import_energy_price=0.15,
+        default_export_energy_price=0.01,
     )
 
-    # Run a simulation episode
-    results_df = agent.run_episode()
-    print(results_df)
+    env = SolarBatteryEnv(dataset, max_step=len(dataset) - 1)
+    agent = Agent(env, algorithm="rule")
+
+    episode_log = agent.run_episode()
+    print(episode_log.head())
     ```
 
-*   if there are mulitple environments, simulation can be run in parallel using [`run_episodes_parallel`](src/decision.py). (only suitable for 'Rule' or 'SDP' based agent)
+*   **Running multiple environments in parallel:** [`run_episodes_parallel`](src/decision.py) can execute one episode per environment for rule/SDP/MRDP/DT agents.
 
     ```python
-    # Example (Conceptual)
+    import numpy as np
     import polars as pl
-    from src.EnergySimEnv import SolarBatteryEnv
+    from src.helper import make_env, transform_polars_df
     from src.decision import Agent, run_episodes_parallel
-    from src.helper import transform_polars_df, make_env
 
-    # Load data
-    datapath = '../data/2011-2012 Solar home electricity data v2.csv'
-    # skip the first line in csv and read the next line as column
-    # then read the rest of the file and store as dataframe
-    df = pl.read_csv(datapath, skip_rows=1)
-    # get all the unique customers as their own dataframes
-    customers = df['Customer'].unique()
-    # pick 10% of the random customers as testing data
-    testing_customers = np.random.choice(customers, int(0.1*len(customers)), replace=False)
-    # transform the data into dataset which can be used build simulation environments
-    testing_dataset = []
-    for customer in testing_customers:
-        customer_df = df.filter(pl.col('Customer') == customer)
-        try:
-            newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
-        except Exception as e:
-            print(f"Error with customer as testing dataset: {customer}")
-            print(e)
-            break
-        testing_dataset.append(newcustomerdf)
+    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    customers = df["Customer"].unique()
+    rng = np.random.default_rng(seed=42)
+    sample_ids = rng.choice(customers, size=4, replace=False)
 
-    testing_env_fns = [make_env(ds) for ds in testing_dataset]
-    # Initialize environments and SDP agent parameters
-    sdp_agent_kwargs = {
-        'algorithm': 'sdp',
-        'soc_resolution': 20,
-        'action_resolution': 41,  # best to be 2*soc_resolution + 1
-        'degradation_model': 'linear', # the other option being static degradation 'static'
-        'linear_deg_cost_p_kwh': 0.2 # only needed if using linear
+    datasets = []
+    for cid in sample_ids:
+        customer_df = df.filter(pl.col("Customer") == cid)
+        datasets.append(
+            transform_polars_df(
+                customer_df,
+                import_energy_price=0.23,
+                export_energy_price=0.015,
+                price_periods="7am-10am | 4pm-9pm",
+                default_import_energy_price=0.15,
+                default_export_energy_price=0.01,
+            )
+        )
+
+    envs = [creator() for creator in (make_env(ds) for ds in datasets)]
+    agent_kwargs = {
+        "algorithm": "sdp",
+        "soc_resolution": 21,
+        "action_resolution": 41,
+        "degradation_model": "linear",
+        "linear_deg_cost_p_kwh": 0.2,
     }
-    num_step = None # pick the number of step for the simulation
-    test_envs = [env_fn(num_step) for env_fn in testing_env_fns]
 
-    # Run all episodes in parallel
-    sdp_episode_logs = run_episodes_parallel(Agent, test_envs, agent_kwargs=sdp_agent_kwargs, max_workers=8)
-
-    print(sdp_episode_logs)
+    episode_logs = run_episodes_parallel(
+        Agent,
+        envs,
+        agent_kwargs=agent_kwargs,
+        max_workers=4,
+    )
+    print(len(episode_logs))  # number of completed episodes
     ```
 
-*   **Training the policy with stable_baselines3 algorithms and logging the policy interaction:**
-*   Utilise [`train_model`](src/sb3train.py) to train policy using reinforcement learning library stable_baselines3 against the environment, then [`run_sb3_model_on_vec_env`](src/decision.py) to simulate the model interaction and record the log.
+*   **Training Stable-Baselines3 policies and logging rollouts:** [`train_model`](src/sb3train.py) wraps Optuna tuning (optional) and SB3 training; [`run_sb3_model_on_vec_env`](src/decision.py) records trajectories for evaluation.
 
     ```python
+    import numpy as np
     import polars as pl
-    from stable_baselines3 import PPO, A2C, DDPG, SAC, TD3
-    from stable_baselines3.common.vec_env import DummyVecEnv
-    from src.helper import transform_polars_df, make_env
-    from sb3train import train_model
-    from EnergySimEnv import SolarBatteryEnv
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+    from src.helper import make_env, transform_polars_df, flatten_episode_data
+    from src.sb3train import train_model
+    from src.decision import run_sb3_model_on_vec_env
 
-    # Load data
-    datapath = '../data/2011-2012 Solar home electricity data v2.csv'
-    # skip the first line in csv and read the next line as column
-    # then read the rest of the file and store as dataframe
-    df = pl.read_csv(datapath, skip_rows=1)
-    # get all the unique customers as their own dataframes
-    customers = df['Customer'].unique()
-    # get all the unique customers as their own dataframes
-    customers = df['Customer'].unique()
-    # pick 80% of the random customers as training data
-    training_customers = np.random.choice(customers, int(0.8*len(customers)), replace=False)
-    # the rest of the customers are testing data
-    testing_customers = np.setdiff1d(customers, training_customers)
+    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    customers = df["Customer"].unique()
+    rng = np.random.default_rng(seed=0)
+    train_ids = rng.choice(customers, size=int(0.8 * len(customers)), replace=False)
+    test_ids = np.setdiff1d(customers, train_ids)
 
-    # loop through each customer and use transform_polars_df to get the dataframe and store it in a list call dataset
-    training_dataset = []
-    for customer in training_customers:
-        customer_df = df.filter(pl.col('Customer') == customer)
-        try:
-            newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
-        except Exception as e:
-            print(f"Error with customer as training dataset: {customer}")
-            print(e)
-            break
-        training_dataset.append(newcustomerdf)
+    def build_datasets(ids):
+        out = []
+        for cid in ids:
+            customer_df = df.filter(pl.col("Customer") == cid)
+            out.append(
+                transform_polars_df(
+                    customer_df,
+                    import_energy_price=0.23,
+                    export_energy_price=0.015,
+                    price_periods="7am-10am | 4pm-9pm",
+                    default_import_energy_price=0.15,
+                    default_export_energy_price=0.01,
+                )
+            )
+        return out
 
-    testing_dataset = []
-    for customer in testing_customers:
-        customer_df = df.filter(pl.col('Customer') == customer)
-        try:
-            newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
-        except Exception as e:
-            print(f"Error with customer as testing dataset: {customer}")
-            print(e)
-            break
-        testing_dataset.append(newcustomerdf)
-    
-    # Create a list of environment creation functions to build a vectorized environment.
-    training_env_fns = [make_env(ds) for ds in training_dataset]
+    training_datasets = build_datasets(train_ids)
+    testing_datasets = build_datasets(test_ids)
+
+    training_env_fns = [make_env(ds) for ds in training_datasets]
     training_vec_env = DummyVecEnv(training_env_fns)
+    testing_env_fns = [make_env(ds) for ds in testing_datasets]
 
-    num_total_steps = len(training_dataset[0])
-    print(f"Total number of steps possible in training dataset: {num_total_steps}")
+    ppo_model, eval_summary = train_model(
+        model_class=PPO,
+        vec_env=training_vec_env,
+        eval_env_fn=testing_env_fns[0],
+        total_timesteps=400_000,
+        default_model=True,
+    )
 
-    testing_env_fns = [make_env(ds) for ds in testing_dataset]
-
-    # Create and train a PPO model
-    ppo_model, _ = train_model(model_class=PPO, vec_env=training_vec_env, total_timesteps=num_total_steps, eval_env_fn=testing_env_fns[0])
-
-    # simulate the model interaction and record the log
-    from decision import run_sb3_model_on_vec_env
-    import multiprocessing
-
-    # (only needed if you ever switch to SubprocVecEnv on Linux/notebooks)
-    multiprocessing.set_start_method("forkserver", force=True)
-    # use SubprocVecEnv
-    from stable_baselines3.common.vec_env import SubprocVecEnv
     test_vec_env = SubprocVecEnv(testing_env_fns)
+    ppo_episode_data = run_sb3_model_on_vec_env(ppo_model, test_vec_env, deterministic=True)
 
-    ppo_episode_logs = run_sb3_model_on_vec_env(ppo_model, test_vec_env)
-
-    # store it as parquet
-    from helper import flatten_episode_data
-    ppo_logs = flatten_episode_data(ppo_episode_logs)
-    ppo_logs.write_parquet("../data/ppo_test_episode_logs.parquet")
+    trajectories = flatten_episode_data(ppo_episode_data)
+    trajectories.write_parquet("data/ppo_test_episode_logs.parquet")
     ```
 
-*   **Training the Decision Transformer with offline interaction data:**
-*   Utilise [`train_decision_transformer`](src/transformer_training.py) to train [`DecisionTransformer`](src/decision_transformer.py) using offline interaction data collected through [`run_episodes_parallel`](src/decision.py) or [`run_sb3_model_on_vec_env`](src/decision.py) and load it onto [`TrajectoryDataset`](src/transformer_training.py)
+*   **Training the Decision Transformer with offline interaction data:** [`train_decision_transformer`](src/transformer_training.py) consumes a [`TrajectoryDataset`](src/transformer_training.py) built from logged trajectories.
 
     ```python
-    from torch.utils.data import DataLoader
-    from src.decision_dataset import TrajectoryDataset, train_decision_transformer
+    import torch
     import polars as pl
+    from src.helper import transform_polars_df
+    from src.EnergySimEnv import SolarBatteryEnv
+    from src.transformer_training import TrajectoryDataset, train_decision_transformer
+    from src.decision_transformer import DecisionTransformer
 
-    # 1) Prepare environment to get dims
+    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    customer_df = df.filter(pl.col("Customer") == df["Customer"][0])
+    dataset = transform_polars_df(
+        customer_df,
+        import_energy_price=0.23,
+        export_energy_price=0.015,
+        price_periods="7am-10am | 4pm-9pm",
+        default_import_energy_price=0.15,
+        default_export_energy_price=0.01,
+    )
 
-    # Load data
-    datapath = '../data/2011-2012 Solar home electricity data v2.csv'
-    # skip the first line in csv and read the next line as column
-    df = pl.read_csv(datapath, skip_rows=1)
-    # then get the data of customer 1
-    customer_df = df.filter(pl.col('Customer') == 1)
-    newcustomerdf = transform_polars_df(customer_df, import_energy_price=0.23, export_energy_price=0.015, price_periods="7am – 10am | 4pm – 9pm", default_import_energy_price=0.15, default_export_energy_price=0.01)
-    env = SolarBatteryEnv(newcustomerdf)
+    env = SolarBatteryEnv(dataset)
     state_dim = env.observation_space.shape[0]
-    act_dim   = env.action_space.shape[0]
+    action_dim = env.action_space.shape[0]
 
-    # 2) Load dataset and sample a batch
-    context_length = 36
-    ds = TrajectoryDataset(
-        data_path='../data/rule_all_episode_logs.parquet',
-        context_length=context_length,
+    train_ds = TrajectoryDataset(
+        data_path="data/rule_train_episode_01_logs.parquet",
+        context_length=36,
         state_dim=state_dim,
-        act_dim=act_dim,
+        act_dim=action_dim,
         discount_factor=0.99,
     )
-    loader = DataLoader(ds, batch_size=2, shuffle=False)
-
-    # 3) Instantiate your DecisionTransformer and train it
-    # Get the maximum possible timestep from the environment's data length
-    max_steps_in_episode = len(env.df)
 
     model = DecisionTransformer(
-        state_dim   = state_dim,
-        act_dim     = act_dim,
-        n_block     = 2,
-        h_dim       = 128,
-        context_len = context_length,
-        n_heads     = 8,
-        drop_p      = 0.1,
-        max_timestep= max_steps_in_episode,
+        state_dim=state_dim,
+        act_dim=action_dim,
+        n_block=2,
+        h_dim=128,
+        context_len=36,
+        n_heads=8,
+        drop_p=0.1,
+        max_timestep=len(env.df),
     )
 
-    # Train the Decision Transformer
     trained_model, train_losses, val_losses = train_decision_transformer(
-        ds=ds,
-        context_length=context_length,
-        state_dim=state_dim,
-        act_dim=act_dim,
-        max_timestep=max_steps_in_episode,
+        ds=train_ds,
         model=model,
         batch_size=32,
         lr=1e-4,
-        epochs=2,
+        epochs=5,
         device="cuda" if torch.cuda.is_available() else "cpu",
-        save_path="../models/dt_model.pt"
+        save_path="models/dt_model.pt",
+        checkpoint_path="models/dt_checkpoint.pt",
     )
     ```
 
-*   **Evaluating model performance from the interaction data:**
-*   Utilise [`evaluate_experiment_logs`](src/helper.py) to evaluate offline interaction data
+*   **Evaluating model performance from interaction data:** Use [`evaluate_experiment_logs`](src/helper.py) for single experiments or [`evaluate_experiments`](src/helper.py) for comparisons. Figures can be saved by passing `save_dir`.
+
     ```python
-    # read parquet as polars dataframe
     import polars as pl
-    sb3_test_logs = pl.read_parquet("../data/sa3_test_episode_logs.parquet")
-    ppo_test_logs = pl.read_parquet("../data/ppo_test_episode_logs.parquet")
-    rule_all_logs = pl.read_parquet("../data/rule_all_episode_logs.parquet")
-    sdp_all_logs = pl.read_parquet("../data/sdp_all_episode_logs.parquet")
+    from src.helper import evaluate_experiment_logs, evaluate_experiments
 
-    # Directly evaluate
-    from helper import evaluate_experiment_logs
+    ppo_logs = [
+        pl.read_parquet("data/ppo_test_episode_01_logs.parquet"),
+        pl.read_parquet("data/ppo_test_episode_02_logs.parquet"),
+    ]
+    rule_logs = [
+        pl.read_parquet("data/rule_test_episode_01_logs.parquet"),
+        pl.read_parquet("data/rule_test_episode_02_logs.parquet"),
+    ]
 
-    # Split into a list of DataFrames, one per episode
-    baseline_logs = [rule_all_logs.filter(pl.col("episode_id") == eid) for eid in rule_all_logs["episode_id"].unique()]
+    baseline_metrics = evaluate_experiment_logs(rule_logs, target_return=0.0)
+    print(baseline_metrics)
 
-    # Evaluate
-    metrics = evaluate_experiment_logs(baseline_logs)
-    print(metrics)
-
-    # Evaluate multiple algorithms together
-    from helper import evaluate_experiments
-    # Split into a list of DataFrames, one per episode
-    sdp_logs = [sdp_all_logs.filter(pl.col("episode_id") == eid) for eid in sdp_all_logs["episode_id"].unique()]
-    rule_logs = [rule_all_logs.filter(pl.col("episode_id") == eid) for eid in rule_all_logs["episode_id"].unique()]
-    sb3_logs = [sb3_test_logs.filter(pl.col("episode_id") == eid) for eid in sb3_test_logs["episode_id"].unique()]
-    ppo_logs = [ppo_test_logs.filter(pl.col("episode_id") == eid) for eid in ppo_test_logs["episode_id"].unique()]
-
-    all_logs = {
-        "sdp": sdp_logs,
-        "rule": rule_logs,
-        "sb3": sb3_logs,
-        "ppo": ppo_logs,
-    }
-
-    metrics = evaluate_experiments(all_logs, target_return=0.0)
+    comparison = evaluate_experiments(
+        {
+            "rule": rule_logs,
+            "ppo": ppo_logs,
+        },
+        target_return=0.0,
+        save_dir="eval_output/figures",
+        save_format="png",
+    )
+    print(comparison)
     ```
 
 ## Dependencies
