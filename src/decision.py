@@ -192,7 +192,15 @@ class Agent:
                 mask = np.ones(context_len)
             
             # Apply return_scale to RTGs (matching training behavior)
-            return_scale = getattr(self.model, 'return_scale', 1.0)
+            return_scale_attr = getattr(self.model, 'return_scale', 1.0)
+            if isinstance(return_scale_attr, torch.Tensor):
+                return_scale = float(return_scale_attr.detach().cpu().item())
+            else:
+                return_scale = float(return_scale_attr)
+
+            # Guard against invalid scaling factors that would introduce NaNs
+            if not np.isfinite(return_scale) or abs(return_scale) < 1e-12:
+                raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
             if return_scale != 1.0:
                 rtgs = rtgs / return_scale
             
