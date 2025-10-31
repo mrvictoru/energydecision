@@ -139,6 +139,11 @@ class TrajectoryDataset(Dataset):
             "mask": torch.from_numpy(mask),
         }
 
+
+class NonFiniteParameterError(RuntimeError):
+    """Raised when model parameters contain NaN/Inf after an optimizer step."""
+    pass
+
 # --- Training Function for Decision Transformer ---
 try:
     from torch import amp as _torch_amp  # type: ignore[attr-defined]
@@ -261,176 +266,222 @@ def train_decision_transformer(
     elif resume and checkpoint_path:
         print(f"Resume requested but checkpoint not found at {checkpoint_path}; starting fresh.")
 
-    for epoch in range(start_epoch, epochs+1):
-        model.train()
-        total_loss = 0.0
-        skipped_batches = 0
-        total_batches = len(loader)
-        segment_boundaries: list[int] = []
-        if checkpoints_per_epoch > 0 and total_batches > 0:
-            segment_size = max(1, math.ceil(total_batches / checkpoints_per_epoch))
-            segment_boundaries = [min(total_batches, segment_size * (i + 1)) for i in range(checkpoints_per_epoch)]
-        segment_idx = 0
-        skip_until_batch = 0
-        if (
-            resume
-            and epoch == start_epoch
-            and checkpoints_per_epoch > 0
-            and resume_from_segment > 0
-            and len(segment_boundaries) >= resume_from_segment
-        ):
-            segment_idx = resume_from_segment
-            skip_until_batch = segment_boundaries[resume_from_segment - 1]
-        progress_bar = tqdm(
-            loader,
-            desc=f"Epoch {epoch}/{epochs}",
-            leave=False,
-            unit="batch",
-        )
-        batch_action_loss_sum = 0.0
-        batch_count = 0
-        for batch_idx, batch in enumerate(progress_bar):
-            if skip_until_batch and batch_idx < skip_until_batch:
-                continue
-            # move tensors and ensure float dtype
-            states    = batch["states"].to(device).float()
-            actions   = batch["actions"].to(device).float()
-            rtgs      = batch["rtgs"].to(device).float()
-            timesteps = batch["timesteps"].to(device)
-            mask      = batch["mask"].to(device)
-            
-            # Apply return_scale to RTGs if specified
-            if return_scale != 1.0:
-                rtgs = rtgs / return_scale
+    def _assert_model_finite() -> None:
+        # Fail fast if a training step introduces NaNs/Infs into the weights
+        for name, param in model.named_parameters():
+            if not torch.isfinite(param).all():
+                raise NonFiniteParameterError(f"Non-finite parameter detected in '{name}' after optimizer step")
 
-            # quick sanity checks on inputs
-            if not (_is_finite(states) and _is_finite(actions) and _is_finite(rtgs)):
-                skipped_batches += 1
-                progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in inputs")
-                continue
+    recovery_attempts = 0
+    max_recovery_attempts = 3
+    training_finished = False
 
-            optimizer.zero_grad()
-            m = mask.unsqueeze(-1).float()
-            valid_count = m.sum()
-            if valid_count.item() == 0:
-                skipped_batches += 1
-                progress_bar.write(f"Skipping batch {batch_idx}: zero valid mask entries")
-                continue
-
-            # compute predictions and losses inside AMP/autocast if available
-            try:
-                if use_amp and scaler is not None:
-                    # device_type for autocast: 'cuda' or 'cpu'
-                    device_type = 'cuda' if device.startswith('cuda') else 'cpu'
-                    with autocast(device_type=device_type):
-                        ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
-                        if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
-                            skipped_batches += 1
-                            progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
-                            continue
-                        loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
-                        loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                        loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
-                        loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-
-                    if not torch.isfinite(loss):
-                        skipped_batches += 1
-                        progress_bar.write(f"Skipping batch {batch_idx}: non-finite loss")
-                        continue
-
-                    scaler.scale(loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-                    scaler.step(optimizer)
-                    scaler.update()
-                    loss_to_log = loss_a.detach().cpu().item()
-                    loss_value = loss.detach().cpu().item()
-                else:
-                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
-                    if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
-                        skipped_batches += 1
-                        progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
-                        continue
-                    loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
-                    loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                    loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
-                    loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-
-                    if not torch.isfinite(loss):
-                        skipped_batches += 1
-                        progress_bar.write(f"Skipping batch {batch_idx}: non-finite loss")
-                        continue
-
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-                    optimizer.step()
-                    loss_to_log = loss_a.detach().cpu().item()
-                    loss_value = loss.detach().cpu().item()
-            except Exception as e:
-                skipped_batches += 1
-                progress_bar.write(f"Skipping batch {batch_idx}: exception during forward/backward: {e}")
-                continue
-
-            total_loss += loss_value * states.size(0)
-            batch_action_loss_sum += loss_to_log
-            batch_count += 1
-            progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "skipped": skipped_batches})
-
-            if checkpoints_per_epoch > 0 and segment_boundaries:
-                while (
-                    segment_idx < checkpoints_per_epoch
-                    and batch_idx + 1 >= segment_boundaries[segment_idx]
+    while not training_finished:
+        try:
+            for epoch in range(start_epoch, epochs + 1):
+                model.train()
+                total_loss = 0.0
+                skipped_batches = 0
+                total_batches = len(loader)
+                segment_boundaries: list[int] = []
+                if checkpoints_per_epoch > 0 and total_batches > 0:
+                    segment_size = max(1, math.ceil(total_batches / checkpoints_per_epoch))
+                    segment_boundaries = [min(total_batches, segment_size * (i + 1)) for i in range(checkpoints_per_epoch)]
+                segment_idx = 0
+                skip_until_batch = 0
+                if (
+                    resume
+                    and epoch == start_epoch
+                    and checkpoints_per_epoch > 0
+                    and resume_from_segment > 0
+                    and len(segment_boundaries) >= resume_from_segment
                 ):
-                    if checkpoint_path:
-                        _save_checkpoint(epoch, segment_idx)
-                    segment_idx += 1
-
-        avg_loss = total_loss / max(1, len(ds) - skipped_batches)
-        avg_action_loss = batch_action_loss_sum / max(1, batch_count)
-        log_losses.append(avg_action_loss)
-        print(f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f} — Action Loss: {avg_action_loss:.6f} — Skipped batches: {skipped_batches}")
-        # Step the learning rate scheduler
-        scheduler.step()
-
-        # Validation loss check
-        if val_ds is not None:
-            model.eval()
-            val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=pin_memory)
-            val_total_loss = 0.0
-            val_skipped = 0
-            with torch.no_grad():
-                for batch in val_loader:
-                    states    = batch["states"].to(device).float()
-                    actions   = batch["actions"].to(device).float()
-                    rtgs      = batch["rtgs"].to(device).float()
+                    segment_idx = resume_from_segment
+                    skip_until_batch = segment_boundaries[resume_from_segment - 1]
+                progress_bar = tqdm(
+                    loader,
+                    desc=f"Epoch {epoch}/{epochs}",
+                    leave=False,
+                    unit="batch",
+                )
+                batch_action_loss_sum = 0.0
+                batch_count = 0
+                for batch_idx, batch in enumerate(progress_bar):
+                    if skip_until_batch and batch_idx < skip_until_batch:
+                        continue
+                    states = batch["states"].to(device).float()
+                    actions = batch["actions"].to(device).float()
+                    rtgs = batch["rtgs"].to(device).float()
                     timesteps = batch["timesteps"].to(device)
-                    mask      = batch["mask"].to(device)
-                    
-                    # Apply return_scale to RTGs if specified
+                    mask = batch["mask"].to(device)
+
                     if return_scale != 1.0:
                         rtgs = rtgs / return_scale
-                    
+
+                    if not (_is_finite(states) and _is_finite(actions) and _is_finite(rtgs)):
+                        skipped_batches += 1
+                        progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in inputs")
+                        continue
+
+                    optimizer.zero_grad()
                     m = mask.unsqueeze(-1).float()
                     valid_count = m.sum()
                     if valid_count.item() == 0:
-                        val_skipped += 1
+                        skipped_batches += 1
+                        progress_bar.write(f"Skipping batch {batch_idx}: zero valid mask entries")
                         continue
-                    ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
-                    loss_r = F.mse_loss(ret_pred   * m, rtgs   * m, reduction="sum") / valid_count
-                    loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                    loss_a = F.mse_loss(act_pred   * m, actions* m, reduction="sum") / valid_count
-                    loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-                    val_total_loss += loss.item() * states.size(0)
-            avg_val_loss = val_total_loss / max(1, len(val_ds) - val_skipped)
-            val_losses.append(avg_val_loss)
-            print(f"Epoch {epoch}/{epochs} — Validation Loss: {avg_val_loss:.6f}")
 
-        if resume and epoch == start_epoch:
-            resume_from_segment = 0
-            resume = False
+                    try:
+                        if use_amp and scaler is not None:
+                            device_type = "cuda" if device.startswith("cuda") else "cpu"
+                            with autocast(device_type=device_type):
+                                ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
+                                if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
+                                    skipped_batches += 1
+                                    progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
+                                    continue
+                                loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
+                                loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
+                                loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+                                loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
 
-        if checkpoint_path and (epoch % checkpoint_interval == 0):
-            _save_checkpoint(epoch)
+                            if not torch.isfinite(loss):
+                                skipped_batches += 1
+                                progress_bar.write(f"Skipping batch {batch_idx}: non-finite loss")
+                                continue
+
+                            scaler.scale(loss).backward()
+                            scaler.unscale_(optimizer)
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+                            scaler.step(optimizer)
+                            scaler.update()
+                            _assert_model_finite()
+                            loss_to_log = loss_a.detach().cpu().item()
+                            loss_value = loss.detach().cpu().item()
+                        else:
+                            ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
+                            if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
+                                skipped_batches += 1
+                                progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
+                                continue
+                            loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
+                            loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
+                            loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+                            loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
+
+                            if not torch.isfinite(loss):
+                                skipped_batches += 1
+                                progress_bar.write(f"Skipping batch {batch_idx}: non-finite loss")
+                                continue
+
+                            loss.backward()
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+                            optimizer.step()
+                            _assert_model_finite()
+                            loss_to_log = loss_a.detach().cpu().item()
+                            loss_value = loss.detach().cpu().item()
+                    except NonFiniteParameterError:
+                        raise
+                    except Exception as e:
+                        skipped_batches += 1
+                        progress_bar.write(f"Skipping batch {batch_idx}: exception during forward/backward: {e}")
+                        continue
+
+                    total_loss += loss_value * states.size(0)
+                    batch_action_loss_sum += loss_to_log
+                    batch_count += 1
+                    progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "skipped": skipped_batches})
+
+                    if checkpoints_per_epoch > 0 and segment_boundaries:
+                        while segment_idx < checkpoints_per_epoch and batch_idx + 1 >= segment_boundaries[segment_idx]:
+                            if checkpoint_path:
+                                _save_checkpoint(epoch, segment_idx)
+                            segment_idx += 1
+
+                avg_loss = total_loss / max(1, len(ds) - skipped_batches)
+                avg_action_loss = batch_action_loss_sum / max(1, batch_count)
+                log_losses.append(avg_action_loss)
+                print(
+                    f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f} — Action Loss: {avg_action_loss:.6f} — Skipped batches: {skipped_batches}"
+                )
+                scheduler.step()
+
+                if val_ds is not None:
+                    model.eval()
+                    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=pin_memory)
+                    val_total_loss = 0.0
+                    val_skipped = 0
+                    with torch.no_grad():
+                        for batch in val_loader:
+                            states = batch["states"].to(device).float()
+                            actions = batch["actions"].to(device).float()
+                            rtgs = batch["rtgs"].to(device).float()
+                            timesteps = batch["timesteps"].to(device)
+                            mask = batch["mask"].to(device)
+
+                            if return_scale != 1.0:
+                                rtgs = rtgs / return_scale
+
+                            m = mask.unsqueeze(-1).float()
+                            valid_count = m.sum()
+                            if valid_count.item() == 0:
+                                val_skipped += 1
+                                continue
+                            ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
+                            loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
+                            loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
+                            loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+                            loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
+                            val_total_loss += loss.item() * states.size(0)
+                    avg_val_loss = val_total_loss / max(1, len(val_ds) - val_skipped)
+                    val_losses.append(avg_val_loss)
+                    print(f"Epoch {epoch}/{epochs} — Validation Loss: {avg_val_loss:.6f}")
+
+                if resume and epoch == start_epoch:
+                    resume_from_segment = 0
+                    resume = False
+
+                if checkpoint_path and (epoch % checkpoint_interval == 0):
+                    _save_checkpoint(epoch)
+
+            training_finished = True
+        except NonFiniteParameterError as err:
+            if not checkpoint_path or not os.path.exists(checkpoint_path):
+                raise
+            recovery_attempts += 1
+            print(f"Non-finite weights detected. Attempting recovery from {checkpoint_path} (attempt {recovery_attempts}).")
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint["model_state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
+            last_epoch_saved = checkpoint.get("epoch", 0)
+            last_segment_saved = checkpoint.get("segment", -1)
+            if use_amp and scaler is not None and "scaler_state_dict" in checkpoint:
+                scaler.load_state_dict(checkpoint["scaler_state_dict"])
+
+            if checkpoints_per_epoch > 0 and last_segment_saved >= 0:
+                if last_segment_saved + 1 >= checkpoints_per_epoch:
+                    start_epoch = last_epoch_saved + 1
+                    resume_from_segment = 0
+                else:
+                    start_epoch = max(1, last_epoch_saved)
+                    resume_from_segment = last_segment_saved + 1
+            else:
+                start_epoch = last_epoch_saved + 1
+                resume_from_segment = 0
+
+            if start_epoch > epochs:
+                print("Checkpoint epoch exceeds requested epochs; training will perform zero additional epochs.")
+                training_finished = True
+            else:
+                print(f"Restarting from checkpoint — epoch {start_epoch} of {epochs}")
+                resume = True
+
+            if recovery_attempts >= max_recovery_attempts:
+                raise RuntimeError("Exceeded maximum recovery attempts due to recurring non-finite parameters.") from err
+
+            continue
 
     # log end time
     end_time = datetime.datetime.now()
