@@ -55,21 +55,21 @@ class MaskedAttention(nn.Module):
         
         # Apply key padding mask if provided
         if key_padding_mask is not None:
-            # key_padding_mask: [B, T] with 1 for valid, 0 for padding
-            # Reshape to [B, 1, 1, T] for broadcasting over heads and queries
+            # Convert to boolean mask: True = keep, False = mask out
+            key_padding_mask = key_padding_mask.to(dtype=torch.bool, device=weights.device)
             key_mask = key_padding_mask.unsqueeze(1).unsqueeze(2)  # [B, 1, 1, T]
-            # Mask out padded keys by setting their attention weights to -inf
-            weights = weights.masked_fill(key_mask == 0, float('-inf'))
+            weights = weights.masked_fill(~key_mask, float('-inf'))
         
         normalized_weights = F.softmax(weights, dim=-1) # softmax along the last dimension
-        # Replace NaN with 0 (happens when all keys are masked for a query position)
-        normalized_weights = torch.nan_to_num(normalized_weights, nan=0.0)
+        # Replace NaN/Inf with 0 (happens when all keys are masked for a query position)
+        normalized_weights = torch.nan_to_num(normalized_weights, nan=0.0, posinf=0.0, neginf=0.0)
         A = self.att_drop(normalized_weights @ V) # attention with dropout
 
         # compute the output
         # gather heads and project to correct dimension
         attention = A.transpose(1, 2).contiguous().view(B, T, N*D)
         out = self.proj_drop(self.proj_net(attention))
+        out = torch.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
 
         return out
 
@@ -128,9 +128,21 @@ class DecisionTransformer(nn.Module):
         self.pred_rtg = nn.Linear(h_dim, 1)
         self.pred_state = nn.Linear(h_dim, state_dim)
         self.pred_act = nn.Sequential(*([nn.Linear(h_dim, act_dim)] + ([nn.Tanh()] if use_action_tah else [])))
+        
+        # Default return_scale for inference (can be set during training)
+        self.return_scale = 1.0
     
     def forward(self, state, rtg, timestep, actions, attention_mask=None):
         B, T, _ = state.shape
+
+        # Sanitize inputs to avoid propagating NaNs/Infs
+        state = torch.nan_to_num(state, nan=0.0, posinf=0.0, neginf=0.0)
+        rtg = torch.nan_to_num(rtg, nan=0.0, posinf=0.0, neginf=0.0)
+        actions = torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Clamp timestep indices to embedding range
+        max_timestep = self.embed_timestep.num_embeddings
+        timestep = timestep.clamp(min=0, max=max_timestep - 1)
 
         # timestep embedding
         time_emb = self.embed_timestep(timestep)
@@ -146,13 +158,15 @@ class DecisionTransformer(nn.Module):
 
         # Build stacked attention mask for the tripled sequence (R, s, a)
         if attention_mask is not None:
-            # attention_mask: [B, T] with 1 for valid tokens, 0 for padding
+            attention_mask = attention_mask.to(device=h.device)
+            # Convert to boolean mask (True = valid token)
+            attention_mask = attention_mask > 0
             # Stack it three times for (rtg, state, action) tokens
             stacked_mask = torch.stack([attention_mask, attention_mask, attention_mask], dim=1)  # [B, 3, T]
             stacked_mask = stacked_mask.permute(0, 2, 1).reshape(B, 3*T)  # [B, 3*T]
         else:
             # Default to all ones (all tokens are valid)
-            stacked_mask = torch.ones(B, 3*T, dtype=h.dtype, device=h.device)
+            stacked_mask = torch.ones(B, 3*T, dtype=torch.bool, device=h.device)
 
         # transformer blocks
         for block in self.transformer:
@@ -169,4 +183,59 @@ class DecisionTransformer(nn.Module):
         state_preds = self.pred_state(h[:,2])   # predict next state given r, s, a
         act_preds = self.pred_act(h[:,1])       # predict action given r, s
 
+        return_preds = torch.nan_to_num(return_preds, nan=0.0, posinf=0.0, neginf=0.0)
+        state_preds = torch.nan_to_num(state_preds, nan=0.0, posinf=0.0, neginf=0.0)
+        act_preds = torch.nan_to_num(act_preds, nan=0.0, posinf=0.0, neginf=0.0)
+
         return return_preds, state_preds, act_preds
+    
+    def get_action(self, states, actions, rtg, timesteps, attention_mask=None):
+        """
+        Convenience method to get the last action prediction from the model.
+        Provides API parity with the official Decision Transformer implementation.
+        
+        Args:
+            states: Tensor of shape [B, T, state_dim] or [T, state_dim]
+            actions: Tensor of shape [B, T, act_dim] or [T, act_dim]
+            rtg: Tensor of shape [B, T, 1] or [T, 1] or [B, T] or [T]
+            timesteps: Tensor of shape [B, T] or [T]
+            attention_mask: Optional tensor of shape [B, T] or [T] with 1 for valid, 0 for padding
+            
+        Returns:
+            Tensor of shape [act_dim] representing the action prediction at the last position
+        """
+        # Ensure all inputs have batch dimension
+        if states.dim() == 2:  # [T, state_dim]
+            states = states.unsqueeze(0)  # [1, T, state_dim]
+        if actions.dim() == 2:  # [T, act_dim]
+            actions = actions.unsqueeze(0)  # [1, T, act_dim]
+        if rtg.dim() == 1:  # [T]
+            rtg = rtg.unsqueeze(0).unsqueeze(-1)  # [1, T, 1]
+        elif rtg.dim() == 2:  # Could be [B, T] or [T, 1]
+            if rtg.shape[1] == 1 or rtg.shape[0] == 1:  # [T, 1] case
+                if rtg.shape[0] != 1:
+                    rtg = rtg.unsqueeze(0)  # [1, T, 1]
+            else:  # [B, T] case
+                rtg = rtg.unsqueeze(-1)  # [B, T, 1]
+        if timesteps.dim() == 1:  # [T]
+            timesteps = timesteps.unsqueeze(0)  # [1, T]
+        if attention_mask is not None and attention_mask.dim() == 1:  # [T]
+            attention_mask = attention_mask.unsqueeze(0)  # [1, T]
+
+        # Clamp timesteps to the embedding range before forward pass
+        max_timestep = self.embed_timestep.num_embeddings
+        timesteps = timesteps.clamp(min=0, max=max_timestep - 1)
+
+        # Sanitize tensors before forward pass
+        states = torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
+        actions = torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
+        rtg = torch.nan_to_num(rtg, nan=0.0, posinf=0.0, neginf=0.0)
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(dtype=torch.bool, device=states.device)
+        
+        # Call forward pass
+        _, _, act_preds = self.forward(states, rtg, timesteps, actions, attention_mask=attention_mask)
+        act_preds = torch.nan_to_num(act_preds, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Return the last action prediction, removing batch dimension
+        return act_preds[0, -1]
