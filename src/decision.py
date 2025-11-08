@@ -167,29 +167,68 @@ class Agent:
         elif self.algorithm == 'dt':
             if self.model is None:
                 raise ValueError("Decision Transformer selected but no model provided.")
+            self.model.eval()
             device = next(self.model.parameters()).device
             
             # Build inputs from rolling buffers
             context_len = self.model.context_len
+            state_dim = self.model.state_dim
+            act_dim = self.model.act_dim
             buffer_len = len(self.dt_states_buffer)
+
+            buffer_states = (
+                np.array(self.dt_states_buffer, dtype=np.float32)
+                if buffer_len > 0 else np.zeros((0, state_dim), dtype=np.float32)
+            )
+            if buffer_states.ndim == 1 and buffer_len > 0:
+                buffer_states = buffer_states.reshape(buffer_len, state_dim)
+
+            buffer_actions = (
+                np.array(self.dt_actions_buffer, dtype=np.float32)
+                if buffer_len > 0 else np.zeros((0, act_dim), dtype=np.float32)
+            )
+            if buffer_actions.ndim == 1 and buffer_len > 0:
+                buffer_actions = buffer_actions.reshape(buffer_len, act_dim)
+
+            buffer_rtgs = (
+                np.array(self.dt_rtgs_buffer, dtype=np.float32)
+                if buffer_len > 0 else np.zeros(0, dtype=np.float32)
+            )
+
+            buffer_timesteps = (
+                np.array(self.dt_timesteps_buffer, dtype=np.int64)
+                if buffer_len > 0 else np.zeros(0, dtype=np.int64)
+            )
             
             # Prepare tensors with left-padding if buffer is shorter than context_len
             if buffer_len < context_len:
                 # Left-pad with zeros
                 pad_len = context_len - buffer_len
-                states = np.vstack([np.zeros((pad_len, len(obs))), np.array(self.dt_states_buffer)])
-                actions = np.vstack([np.zeros((pad_len, self.model.act_dim)), np.array(self.dt_actions_buffer)])
-                rtgs = np.concatenate([np.zeros(pad_len), np.array(self.dt_rtgs_buffer)])
-                timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), np.array(self.dt_timesteps_buffer)])
+                states = np.vstack([
+                    np.zeros((pad_len, state_dim), dtype=np.float32),
+                    buffer_states
+                ])
+                actions = np.vstack([
+                    np.zeros((pad_len, act_dim), dtype=np.float32),
+                    buffer_actions
+                ])
+                rtgs = np.concatenate([
+                    np.zeros(pad_len, dtype=np.float32),
+                    buffer_rtgs
+                ])
+                timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), buffer_timesteps])
                 # Attention mask: 0 for padding, 1 for valid
-                mask = np.concatenate([np.zeros(pad_len), np.ones(buffer_len)])
+                mask = np.concatenate([
+                    np.zeros(pad_len, dtype=np.bool_),
+                    np.ones(buffer_len, dtype=np.bool_)
+                ])
             else:
                 # Use the last context_len items
-                states = np.array(self.dt_states_buffer[-context_len:])
-                actions = np.array(self.dt_actions_buffer[-context_len:])
-                rtgs = np.array(self.dt_rtgs_buffer[-context_len:])
-                timesteps = np.array(self.dt_timesteps_buffer[-context_len:])
-                mask = np.ones(context_len)
+                states = buffer_states[-context_len:]
+                actions = buffer_actions[-context_len:]
+                rtgs = buffer_rtgs[-context_len:]
+                timesteps = buffer_timesteps[-context_len:]
+                mask = np.ones(context_len, dtype=np.bool_)
             
             # Apply return_scale to RTGs (matching training behavior)
             return_scale_attr = getattr(self.model, 'return_scale', 1.0)
@@ -203,17 +242,34 @@ class Agent:
                 raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
             if return_scale != 1.0:
                 rtgs = rtgs / return_scale
+
+            # Sanitize numeric inputs
+            states = np.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
+            actions = np.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
+            rtgs = np.nan_to_num(rtgs, nan=0.0, posinf=0.0, neginf=0.0)
+
+            # Clip RTGs to stay within a safe numerical range (tuned to dataset scale if needed)
+            rtg_clip = 1e3
+            rtgs = np.clip(rtgs, -rtg_clip, rtg_clip)
+
+            # Clamp timesteps to embedding range
+            max_time = getattr(self.model.embed_timestep, 'num_embeddings', None)
+            if max_time is not None and max_time > 0:
+                timesteps = np.clip(timesteps, 0, max_time - 1)
             
             # Convert to tensors
             states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, state_dim]
             actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, act_dim]
             rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)  # [1, T, 1]
             timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)  # [1, T]
-            attention_mask = torch.tensor(mask, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T]
+            attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)  # [1, T]
             
             # Get action prediction using get_action() helper
-            action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
-            action = action.detach().cpu().numpy().tolist()  # Convert to list
+            with torch.no_grad():
+                action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+            action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
+            action = action.detach().cpu().numpy()
+            action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0).tolist()
             return action
         elif self.algorithm == 'sdp' or self.algorithm == 'mrdp':
             current_soc_kwh = obs[-2] # Assuming BatteryLevel is the second to last element
