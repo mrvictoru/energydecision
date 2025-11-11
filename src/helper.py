@@ -598,3 +598,110 @@ def evaluate_experiments(
         print(f"Plot generation failed: {e}")
 
     return metrics_df
+
+def compare_actions_across_algorithms(
+    logs_dict: dict[str, list[pl.DataFrame]],
+    time_periods: Optional[list[tuple[int, int]]] = None,  # [(start_step, end_step), ...]
+    save_dir: Optional[str] = None
+) -> dict:
+    """
+    Compare actions taken by different algorithms during the same simulation period.
+    
+    Args:
+        logs_dict: {algorithm_name: [episode_logs]}
+        time_periods: specific time windows to analyze (or analyze full episodes)
+        
+    Returns:
+        dict with action statistics and plots
+    """
+    results = {}
+    
+    for algo_name, logs in logs_dict.items():
+        all_actions = []
+        for ep_df in logs:
+            actions = [a[0] if isinstance(a, (list, np.ndarray)) else a 
+                      for a in ep_df['action'].to_list()]
+            all_actions.extend(actions)
+        
+        results[algo_name] = {
+            'mean_action': np.mean(all_actions),
+            'std_action': np.std(all_actions),
+            'action_range': (np.min(all_actions), np.max(all_actions)),
+            'action_histogram': np.histogram(all_actions, bins=50)
+        }
+    
+    # Create comparison plots
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    
+    # Action distribution histograms
+    # Action timeseries for same episode
+    # Action difference heatmap
+    # State-action relationship scatter
+    
+    return results
+
+def analyze_temporal_actions(
+    logs_dict: dict[str, pl.DataFrame],  # single episode from each algo
+    step_range: Optional[tuple[int, int]] = None,
+    annotate_states: bool = True
+) -> plt.Figure:
+    """
+    Compare actions step-by-step for the same time period across algorithms.
+    Useful for understanding decision divergence points.
+    """
+    fig, axes = plt.subplots(4, 1, figsize=(14, 10))
+    
+    # Plot 1: Action timeseries overlay
+    # Plot 2: Action difference (algo1 - algo2)
+    # Plot 3: Battery SOC comparison
+    # Plot 4: Grid interaction comparison
+    
+    return fig
+
+def evaluate_by_conditions(
+    logs: list[pl.DataFrame],
+    conditions: dict[str, callable]  # e.g., {"high_solar": lambda obs: obs[5] > threshold}
+) -> dict:
+    """
+    Evaluate algorithm performance under different conditions.
+    
+    conditions example:
+        {
+            "high_solar": lambda obs: obs[5] > 2.0,
+            "peak_price": lambda obs: obs[7] > 0.2,
+            "low_battery": lambda obs: obs[-2] < 0.3
+        }
+    """
+    results = {}
+    for condition_name, condition_fn in conditions.items():
+        filtered_rewards = []
+        for ep_df in logs:
+            mask = [condition_fn(obs) for obs in ep_df['raw_observation']]
+            filtered_rewards.extend(ep_df['reward'][mask].to_list())
+        
+        results[condition_name] = {
+            'mean_reward': np.mean(filtered_rewards) if filtered_rewards else 0.0,
+            'count': len(filtered_rewards)
+        }
+    return results
+
+def compute_decision_divergence(
+    logs1: pl.DataFrame,
+    logs2: pl.DataFrame,
+    action_tolerance: float = 0.01
+) -> dict:
+    """
+    Measure how often two algorithms take different actions in same states.
+    """
+    actions1 = np.array([a[0] if isinstance(a, list) else a for a in logs1['action']])
+    actions2 = np.array([a[0] if isinstance(a, list) else a for a in logs2['action']])
+    
+    # Action difference metrics
+    action_diff = np.abs(actions1 - actions2)
+    
+    return {
+        'mean_absolute_diff': np.mean(action_diff),
+        'max_diff': np.max(action_diff),
+        'divergence_rate': np.mean(action_diff > action_tolerance),
+        'correlation': np.corrcoef(actions1, actions2)[0, 1]
+    }
