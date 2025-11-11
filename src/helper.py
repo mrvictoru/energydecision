@@ -19,6 +19,7 @@ def parse_time(time_str: str) -> int:
     except Exception:
         raise ValueError(f"Time format not recognized: {time_str}")
     return dt.hour * 60 + dt.minute
+
 def transform_polars_df(
     df: pl.DataFrame,
     import_energy_price: float = 0.23, #in USD
@@ -328,7 +329,7 @@ def flatten_episode_data(episode_data):
 
 
 import json
-
+# Helper: evaluate a single experiment's episode logs
 def evaluate_experiment_logs(
     logs: list[pl.DataFrame],
     target_return: float = 0.0 # for comparison, use the mean reward of a baseline agent's episode
@@ -599,6 +600,7 @@ def evaluate_experiments(
 
     return metrics_df
 
+# Helper: compare actions taken by different algorithms
 def compare_actions_across_algorithms(
     logs_dict: dict[str, list[pl.DataFrame]],
     time_periods: Optional[list[tuple[int, int]]] = None,  # [(start_step, end_step), ...]
