@@ -690,7 +690,7 @@ class ActionComparisonConfig:
     compute_pairwise: bool = True
     subsample_scatter: int = 2000
     save_dir: Optional[str] = None
-    save_format: str = "png"
+    save_format: str = "svg"
     dpi: int = 160
     return_figs: bool = True
 
@@ -730,6 +730,7 @@ class ActionComparisonResult:
 class TemporalAnalysisResult:
     figure: plt.Figure
     stats: dict[str, Any]
+    extra_figures: dict[str, plt.Figure] = field(default_factory=dict)
 
 
 class AlgorithmActionComparator:
@@ -1420,6 +1421,23 @@ class AlgorithmActionComparator:
             # steps become a simple range for concatenated windows
             total_len = max((arr.size for arr in actions.values()), default=0)
             steps = np.arange(0, total_len)
+            # compute breakpoints for each configured window (use per-window max length across algos)
+            window_breaks: list[int] = []
+            if window_ranges:
+                win_lens: list[int] = []
+                for (s, e) in window_ranges:
+                    max_len = 0
+                    for df in logs_dict.values():
+                        s_loc = max(0, int(s))
+                        e_loc = min(int(e), df.height)
+                        if e_loc > s_loc:
+                            max_len = max(max_len, e_loc - s_loc)
+                    win_lens.append(max_len)
+                # cumulative breakpoints (exclude final total)
+                cum = 0
+                for wl in win_lens:
+                    cum += wl
+                    window_breaks.append(int(cum))
         else:
             if cfg.step_range is None:
                 min_len = min(lengths.values())
@@ -1464,6 +1482,19 @@ class AlgorithmActionComparator:
                 else:
                     grids[name] = None
 
+        def _contiguous_segments(mask: np.ndarray) -> list[tuple[int, int]]:
+            segments: list[tuple[int, int]] = []
+            start_idx: Optional[int] = None
+            for idx, flag in enumerate(mask):
+                if flag and start_idx is None:
+                    start_idx = idx
+                elif not flag and start_idx is not None:
+                    segments.append((start_idx, idx))
+                    start_idx = None
+            if start_idx is not None:
+                segments.append((start_idx, mask.size))
+            return segments
+
         n_rows = 2
         if cfg.annotate_states:
             n_rows += 1
@@ -1484,13 +1515,39 @@ class AlgorithmActionComparator:
         ax_act.grid(alpha=0.3)
         ax_act.legend(loc="best", ncol=min(len(algo_names), 3))
 
+        # Draw separators for concatenated windows, if any
+        if cfg.time_periods and "window_breaks" in locals() and window_breaks:
+            # we don't want the final total boundary (steps length) to be drawn
+            for pos in window_breaks[:-1]:
+                for ax in axes:
+                    ax.axvline(pos, color="gray", linestyle="--", alpha=0.45)
+            # annotate top axis with window numbering (centered)
+            try:
+                acc = 0
+                for i, b in enumerate(window_breaks):
+                    # center of window i is acc + (b-acc)/2
+                    if i == 0:
+                        start = 0
+                    else:
+                        start = window_breaks[i - 1]
+                    length = b - start
+                    if length <= 0:
+                        continue
+                    mid = start + length // 2
+                    ax_act.text(mid, ax_act.get_ylim()[1] * 1.01, f"W{i}", ha="center", va="bottom", fontsize=8, color="gray")
+                    acc = b
+            except Exception:
+                pass
+
         ax_diff = axes[axis_idx]
         axis_idx += 1
         ref_actions = actions[reference]
+        diff_cache: dict[str, np.ndarray] = {}
         for name in algo_names:
             if name == reference:
                 continue
             diff = actions[name] - ref_actions
+            diff_cache[name] = diff
             ax_diff.plot(steps, diff, label=f"{name} - {reference}", linewidth=1.4)
         ax_diff.axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
         ax_diff.axhline(cfg.action_tolerance, color="r", linestyle="--", linewidth=0.8, alpha=0.6)
@@ -1498,7 +1555,8 @@ class AlgorithmActionComparator:
         ax_diff.set_title(f"Action differences vs reference '{reference}'")
         ax_diff.set_ylabel("Δ Action")
         ax_diff.grid(alpha=0.3)
-        ax_diff.legend(loc="best", ncol=min(len(algo_names) - 1, 3))
+        if diff_cache:
+            ax_diff.legend(loc="best", ncol=min(len(diff_cache), 3))
 
         if cfg.annotate_states:
             ax_soc = axes[axis_idx]
@@ -1568,21 +1626,92 @@ class AlgorithmActionComparator:
                     corr_val = float(np.corrcoef(arr, ref_arr)[0, 1])
                 except Exception:
                     corr_val = float("nan")
+            diff_mask = np.abs(diff) > cfg.action_tolerance
+            segments = _contiguous_segments(diff_mask)
+            segment_summaries: list[dict[str, int]] = []
+            for start_idx, end_idx in segments:
+                if end_idx <= start_idx:
+                    continue
+                start_step = int(steps[start_idx])
+                end_step = int(steps[end_idx - 1])
+                segment_summaries.append(
+                    {
+                        "start_step": start_step,
+                        "end_step": end_step,
+                        "length_steps": int(end_idx - start_idx),
+                    }
+                )
             stats["vs_reference"][name] = {
                 "mean_abs_diff": mae,
                 "rmse": rmse,
                 "divergence_rate": divergence,
                 "correlation": corr_val,
+                "mean_signed_diff": float(np.nanmean(diff)),
+                "max_abs_diff": float(np.nanmax(np.abs(diff))),
+                "divergent_segments": segment_summaries,
             }
+
+        extra_figures: dict[str, plt.Figure] = {}
+        if diff_cache:
+            n_panels = len(diff_cache)
+            fig_diff_detail, diff_axes = plt.subplots(
+                n_panels,
+                1,
+                figsize=(14, max(3.0, 2.0 * n_panels)),
+                sharex=True,
+            )
+            if n_panels == 1:
+                diff_axes = [diff_axes]
+            for ax_idx, (name, diff) in enumerate(diff_cache.items()):
+                ax_local = diff_axes[ax_idx]
+                # draw same window separators on difference panels
+                if cfg.time_periods and "window_breaks" in locals() and window_breaks:
+                    for pos in window_breaks[:-1]:
+                        ax_local.axvline(pos, color="gray", linestyle="--", alpha=0.4)
+                mask = np.abs(diff) > cfg.action_tolerance
+                ax_local.plot(steps, diff, label=f"{name} - {reference}", linewidth=1.5, color=f"C{(ax_idx + 1) % 10}")
+                ax_local.fill_between(steps, 0, diff, where=diff >= 0, alpha=0.08, color="tab:blue")
+                ax_local.fill_between(steps, 0, diff, where=diff < 0, alpha=0.08, color="tab:orange")
+                for start_idx, end_idx in _contiguous_segments(mask):
+                    if end_idx <= start_idx:
+                        continue
+                    ax_local.axvspan(
+                        steps[start_idx],
+                        steps[end_idx - 1],
+                        color="tab:red",
+                        alpha=0.08,
+                    )
+                ax_local.axhline(0.0, color="k", linewidth=1.0, alpha=0.4)
+                ax_local.axhline(cfg.action_tolerance, color="r", linestyle="--", linewidth=0.8, alpha=0.5)
+                ax_local.axhline(-cfg.action_tolerance, color="r", linestyle="--", linewidth=0.8, alpha=0.5)
+                ax_local.set_ylabel("Δ Action")
+                ax_local.set_title(f"{name} vs {reference}")
+                summary = stats["vs_reference"].get(name, {})
+                if summary:
+                    text = (
+                        f"mean Δ={summary.get('mean_signed_diff', float('nan')):.3f}"
+                        f"\n|Δ|>tol: {summary.get('divergence_rate', 0.0)*100:.1f}%"
+                    )
+                    ax_local.text(0.01, 0.95, text, transform=ax_local.transAxes, va="top", fontsize=9,
+                                  bbox={"facecolor": "white", "alpha": 0.7, "edgecolor": "none"})
+                ax_local.grid(alpha=0.3)
+            diff_axes[-1].set_xlabel("Step" if not (cfg.step_duration and cfg.step_duration > 0) else "Time-aligned step")
+            plt.tight_layout()
+            extra_figures["difference_panels"] = fig_diff_detail
 
         if cfg.save_path is not None:
             try:
                 Path(cfg.save_path).parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(cfg.save_path, dpi=200, bbox_inches="tight")
+                if extra_figures:
+                    base_path = Path(cfg.save_path)
+                    for key, fig_extra in extra_figures.items():
+                        extra_path = base_path.with_name(f"{base_path.stem}_{key}{base_path.suffix}")
+                        fig_extra.savefig(extra_path, dpi=200, bbox_inches="tight")
             except Exception as exc:
                 print(f"Failed to save analyze_temporal_actions figure: {exc}")
 
-        return TemporalAnalysisResult(figure=fig, stats=stats)
+        return TemporalAnalysisResult(figure=fig, stats=stats, extra_figures=extra_figures)
 
 
 def compare_actions_across_algorithms(
@@ -1671,7 +1800,8 @@ def analyze_temporal_actions(
     reference: Optional[str] = None,
     action_tolerance: float = 0.01,
     save_path: Optional[str] = None,
-) -> tuple[plt.Figure, dict]:
+    return_extra_figures: bool = True,
+) -> tuple[plt.Figure, dict] | tuple[plt.Figure, dict, dict[str, plt.Figure]]:
     """Backwards-compatible wrapper around AlgorithmActionComparator.analyze_temporal.
 
     Parameters
@@ -1699,7 +1829,10 @@ def analyze_temporal_actions(
     Returns
     -------
     tuple[plt.Figure, dict]
-        Matplotlib figure and computed statistics dictionary.
+        Matplotlib figure and computed statistics dictionary. If ``return_extra_figures`` is
+        True the function returns a 3-tuple ``(figure, stats, extra_figures)`` where
+        ``extra_figures`` is a mapping of small diagnostic figures (e.g. per-algorithm
+        difference panels) produced by the temporal analysis.
     """
 
     comparator = AlgorithmActionComparator()
@@ -1714,6 +1847,8 @@ def analyze_temporal_actions(
     )
 
     result = comparator.analyze_temporal(logs_dict=logs_dict, config=cfg)
+    if return_extra_figures:
+        return result.figure, result.stats, result.extra_figures
     return result.figure, result.stats
 
 
