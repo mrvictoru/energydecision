@@ -40,7 +40,8 @@ The easiest way to run the project is via Docker, which sets up a JupyterLab env
 
 docker compose up --build*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
 
-```*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
+```
+*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
 
 Access JupyterLab at `http://localhost:8888`.*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
 
@@ -193,8 +194,9 @@ energydecision/    ```bash
 ├── requirements.txt            # Dependencies    from src.decision import Agent
 
 └── README.md                   # This file
-
-```    # Load a customer trace and convert it to the environment format
+```
+```python    
+# Load a customer trace and convert it to the environment format
 
     df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
     customer_id = df["Customer"][0]
@@ -213,7 +215,7 @@ energydecision/    ```bash
 
     episode_log = agent.run_episode()
     print(episode_log.head())
-    ```
+```
 
 *   **Running multiple environments in parallel:** [`run_episodes_parallel`](src/decision.py) can execute one episode per environment for rule/SDP/MRDP/DT agents.
 
@@ -258,7 +260,7 @@ energydecision/    ```bash
         max_workers=4,
     )
     print(len(episode_logs))  # number of completed episodes
-    ```
+```
 
 *   **Training Stable-Baselines3 policies and logging rollouts:** [`train_model`](src/sb3train.py) wraps Optuna tuning (optional) and SB3 training; [`run_sb3_model_on_vec_env`](src/decision.py) records trajectories for evaluation.
 
@@ -313,7 +315,7 @@ energydecision/    ```bash
 
     trajectories = flatten_episode_data(ppo_episode_data)
     trajectories.write_parquet("data/ppo_test_episode_logs.parquet")
-    ```
+```
 
 *   **Training the Decision Transformer with offline interaction data:** [`train_decision_transformer`](src/transformer_training.py) consumes a [`TrajectoryDataset`](src/transformer_training.py) built from logged trajectories.
 
