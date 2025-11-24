@@ -280,11 +280,11 @@ print(episode_log.head())
         max_workers=4,
     )
     print(len(episode_logs))  # number of completed episodes
-```
+    ```
 
 *   **Training Stable-Baselines3 policies and logging rollouts:** [`train_model`](src/sb3train.py) wraps Optuna tuning (optional) and SB3 training; [`run_sb3_model_on_vec_env`](src/decision.py) records trajectories for evaluation.
 
-    ```python
+```python
     import numpy as np
     import polars as pl
     from stable_baselines3 import PPO
