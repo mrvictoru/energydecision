@@ -40,6 +40,7 @@ def transform_polars_df(
     """
     Transforms an input Polars DataFrame into a format for the SolarBatteryEnv.
     Adds meta data columns: Customer, Postcode, DateRange.
+    This function can handle the same data cited from https://github.com/pierre-haessig/ausgrid-solar-data?tab=readme-ov-file
     """
     # use regex to check if price_periods is in the correct format
     if price_periods is not None:

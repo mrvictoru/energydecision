@@ -1,103 +1,203 @@
-# Energy Decision
+# Energy Decision: Solar-Battery Control Benchmark# Energy Decision
 
-This project explores different algorithms for optimizing energy management in a solar-battery-grid system using a gymnasium environment to simulate system interaction and reward calculation. The goal is to minimize energy costs while considering battery degradation.
 
-## Features
 
-*   **Simulation Environment:** A custom Gym environment ([`src/EnergySimEnv.py`](src/EnergySimEnv.py)) simulating a household with solar panels, a battery, and grid connection. The return observation is normalized against the dataset so it is sutiable with reinforcement learning method. Seperate method can be used to return raw value for observation.
-*   **Control Algorithms:** Implements and compares several control strategies within the [`Agent`](src/decision.py) class in [`src/decision.py`](src/decision.py):
-    *   Rule-Based Controller
-    *   Reinforcement Learning (RL) agents (using pre-trained models like A2C, DDPG, PPO)
-    *   Decision Transformer (DT)
-    *   Stochastic Dynamic Programming (SDP) with receding horizon optimization
-*   **Battery Degradation Modeling:** Includes models for battery degradation based on usage patterns ([`src/batterydeg.py`](src/batterydeg.py)), incorporating both static and dynamic (rainflow counting) approaches.
-*   **Sampling Environment with different agent to use for Offline RL training:** The [`run_episodes_parallel`](src/decision.py) function allows running multiple environments in parallel with different agents, collecting interaction data for offline training.
+This project provides a comprehensive framework for benchmarking control algorithms in residential solar-battery systems. It integrates a high-fidelity Gymnasium environment, diverse baselines (Rule-based, SDP, MRDP), Online Reinforcement Learning (SB3), and Offline Reinforcement Learning (Decision Transformer).This project explores different algorithms for optimizing energy management in a solar-battery-grid system using a gymnasium environment to simulate system interaction and reward calculation. The goal is to minimize energy costs while considering battery degradation.
+
+
+
+## Features## Features
+
+
+
+*   **Gymnasium Environment:** [`src/EnergySimEnv.py`](src/EnergySimEnv.py) simulates a household with solar PV, battery storage, and grid connection. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.*   **Simulation Environment:** A custom Gym environment ([`src/EnergySimEnv.py`](src/EnergySimEnv.py)) simulating a household with solar panels, a battery, and grid connection. The return observation is normalized against the dataset so it is sutiable with reinforcement learning method. Seperate method can be used to return raw value for observation.
+
+*   **Algorithmic Baselines:***   **Control Algorithms:** Implements and compares several control strategies within the [`Agent`](src/decision.py) class in [`src/decision.py`](src/decision.py):
+
+    *   **Rule-Based:** Heuristic controller with safety constraints.    *   Rule-Based Controller
+
+    *   **Optimization:** Stochastic Dynamic Programming (SDP) and Multi-Resolution Dynamic Programming (MRDP) for theoretical optimality.    *   Reinforcement Learning (RL) agents (using pre-trained models like A2C, DDPG, PPO)
+
+    *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 via Stable-Baselines3.    *   Decision Transformer (DT)
+
+    *   **Offline RL:** Decision Transformer (DT) trained on mixed behavioral logs.    *   Stochastic Dynamic Programming (SDP) with receding horizon optimization
+
+*   **Battery Degradation:** Detailed semi-empirical models (Rainflow counting, throughput, C-rate) in [`src/batterydeg.py`](src/batterydeg.py).*   **Battery Degradation Modeling:** Includes models for battery degradation based on usage patterns ([`src/batterydeg.py`](src/batterydeg.py)), incorporating both static and dynamic (rainflow counting) approaches.
+
+*   **Evaluation Suite:** Unified metrics for cost, revenue, degradation, and risk (Sharpe/Sortino ratios).*   **Sampling Environment with different agent to use for Offline RL training:** The [`run_episodes_parallel`](src/decision.py) function allows running multiple environments in parallel with different agents, collecting interaction data for offline training.
+
 *   **Decision Transformer Training:** Implements a training loop for the Decision Transformer model using offline interaction data ([`src/transformer_training.py`](src/transformer_training.py)).
-
-## ToDo
-*   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
-*   ~~**Online learning loop:** Training loop using stablebaselines3~~
-*   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
-*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
-*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
-*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
-*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
-*   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
-
-
-## Project Structure
-
-```
-energydecision/
-├── data/                       # Data files (CSV, Parquet, etc.)
-│   ├── *.csv                   # Solar home electricity data, household data, customer splits
-│   ├── *.parquet               # Episode logs for different algorithms
-│   ├── *.pdf                   # Reference papers
-│   └── ...
-├── models/                     # Saved models and checkpoints
-│   ├── *.zip                   # RL agent models
-│   ├── *.pt                    # Decision Transformer checkpoints
-│   ├── *.json                  # Model configs
-│   └── ...
-├── src/                        # Source code
-│   ├── EnergySimEnv.py         # Gymnasium environment for solar-battery-grid simulation
-│   ├── decision.py             # Agent class: rule-based, RL, DT, and SDP controllers
-│   ├── batterydeg.py           # Battery degradation models (static and dynamic)
-│   ├── helper.py               # Data transformation, preparation, and evaluation utilities
-│   ├── decision_transformer.py # Core Decision Transformer model class
-│   ├── transformer_training.py # TrajectoryDataset class and train_decision_transformer function
-│   ├── sb3train.py             # RL training utilities (Stable-Baselines3)
-│   ├── quantile_scenarios.py   # Quantile scenario generation
-│   ├── run_sdp_parallel.py     # Parallel SDP simulation
-│   ├── sdp_multires.py         # Multi-resolution SDP
-│   ├── mrdp_integration_example.py # MRDP integration example
-│   ├── test_mrdp_validation.py # MRDP validation tests
-│   ├── test_quantile_scenarios.py # Quantile scenario tests
-│   ├── test_reward_logic.py    # Reward logic tests
-│   ├── test_sdp_perf.py        # SDP performance tests
-│   ├── test_sdp_timing.py      # SDP timing tests
-│   └── ...                     # Other modules/utilities
-├── .gitignore
-├── docker-compose.yml          # Docker Compose configuration
-├── Dockerfile                  # Dockerfile for building the environment
-├── MRDP_README.md              # MRDP integration documentation
-├── README.md                   # Project documentation (this file)
-├── README.scenario-support.md  # Scenario support documentation
-├── requirements.txt            # Python package requirements
-├── torch_req.txt               # PyTorch-specific requirements
-├── testrun.ipynb               # Example Jupyter notebook for running simulations
-├── DemoEnv.ipynb               # Demo notebook for environment usage
-├── Demosb3.ipynb               # Demo notebook for Stable-Baselines3 usage
-└── ...
-```
 
 ## Installation
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
+## ToDo
+
+### Option 1: Docker (Recommended)*   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
+
+The easiest way to run the project is via Docker, which sets up a JupyterLab environment with all dependencies.*   ~~**Online learning loop:** Training loop using stablebaselines3~~
+
+*   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
+
+```bash*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
+
+docker compose up --build*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
+
+```*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
+
+Access JupyterLab at `http://localhost:8888`.*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
+
+*   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
+
+### Option 2: Local Installation
+
+Requires Python 3.10+.
+
+## Project Structure
+
+```bash
+
+pip install -r requirements.txt```
+
+pip install -r torch_req.txtenergydecision/
+
+```├── data/                       # Data files (CSV, Parquet, etc.)
+
+│   ├── *.csv                   # Solar home electricity data, household data, customer splits
+
+## Data Setup│   ├── *.parquet               # Episode logs for different algorithms
+
+│   ├── *.pdf                   # Reference papers
+
+1.  Download the **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013).│   └── ...
+
+2.  Place the CSV files in the `data/` directory:├── models/                     # Saved models and checkpoints
+
+    *   `data/2010-2011 Solar home electricity data.csv`│   ├── *.zip                   # RL agent models
+
+    *   `data/2011-2012 Solar home electricity data v2.csv`│   ├── *.pt                    # Decision Transformer checkpoints
+
+    *   `data/2012-2013 Solar home electricity data v2.csv`│   ├── *.json                  # Model configs
+
+│   └── ...
+
+## Usage Workflow├── src/                        # Source code
+
+│   ├── EnergySimEnv.py         # Gymnasium environment for solar-battery-grid simulation
+
+The project workflow is divided into three main stages: Simulation/Baselines, Training, and Evaluation.│   ├── decision.py             # Agent class: rule-based, RL, DT, and SDP controllers
+
+│   ├── batterydeg.py           # Battery degradation models (static and dynamic)
+
+### 1. Simulation & Baselines (`test_simrun.ipynb`)│   ├── helper.py               # Data transformation, preparation, and evaluation utilities
+
+Use this notebook to:│   ├── decision_transformer.py # Core Decision Transformer model class
+
+*   Load and preprocess customer data.│   ├── transformer_training.py # TrajectoryDataset class and train_decision_transformer function
+
+*   Run **Rule-based**, **SDP**, and **MRDP** agents.│   ├── sb3train.py             # RL training utilities (Stable-Baselines3)
+
+*   Generate interaction logs (`.parquet` files) for offline training.│   ├── quantile_scenarios.py   # Quantile scenario generation
+
+*   Test trained Decision Transformer models.│   ├── run_sdp_parallel.py     # Parallel SDP simulation
+
+│   ├── sdp_multires.py         # Multi-resolution SDP
+
+### 2. Online RL Training (`test_sb3train.ipynb`)│   ├── mrdp_integration_example.py # MRDP integration example
+
+Use this notebook to:│   ├── test_mrdp_validation.py # MRDP validation tests
+
+*   Train Online RL agents (PPO, SAC, A2C, DDPG, TD3) using Stable-Baselines3.│   ├── test_quantile_scenarios.py # Quantile scenario tests
+
+*   Save trained models to `models/`.│   ├── test_reward_logic.py    # Reward logic tests
+
+*   Generate interaction logs from these agents to diversify the offline training dataset.│   ├── test_sdp_perf.py        # SDP performance tests
+
+│   ├── test_sdp_timing.py      # SDP timing tests
+
+### 3. Offline RL: Decision Transformer│   └── ...                     # Other modules/utilities
+
+**Training:**├── .gitignore
+
+Train the Decision Transformer using the logs generated in steps 1 & 2.├── docker-compose.yml          # Docker Compose configuration
+
+```bash├── Dockerfile                  # Dockerfile for building the environment
+
+python src/train_decision_transformer.py \├── MRDP_README.md              # MRDP integration documentation
+
+    --data-dir data \├── README.md                   # Project documentation (this file)
+
+    --patterns rule_train sdp_train ppo_train \├── README.scenario-support.md  # Scenario support documentation
+
+    --epochs 10 \├── requirements.txt            # Python package requirements
+
+    --batch-size 64 \├── torch_req.txt               # PyTorch-specific requirements
+
+    --context-length 48├── testrun.ipynb               # Example Jupyter notebook for running simulations
+
+```├── DemoEnv.ipynb               # Demo notebook for environment usage
+
+**Inference:**├── Demosb3.ipynb               # Demo notebook for Stable-Baselines3 usage
+
+Load the trained model in `test_simrun.ipynb` to evaluate its performance.└── ...
+
+```
+
+### 4. Evaluation (`test_eval.ipynb`)
+
+Use this notebook to:## Installation
+
+*   Load logs from all algorithms.
+
+*   Compute aggregate metrics (Profit, ROI, Degradation).1.  **Clone the repository:**
+
+*   Generate comparative plots (Risk-Return, Cost Breakdown).    ```bash
+
+*   Perform temporal analysis of agent behavior.    git clone <repository-url>
+
     cd energydecision
-    ```
+
+## Project Structure    ```
+
 2.  **Using Docker:**
-*   Build and run the container, which will spin up a jupyterlab server with all dependencies installed:
-    ```bash
-    sudo docker compose up
-    ```
 
-## Usage
+```*   Build and run the container, which will spin up a jupyterlab server with all dependencies installed:
 
-*   Explore the simulation and agent interactions in the [`testrun.ipynb`](testrun.ipynb) notebook.
-*   See Demo jupyternotebook [`DemoEnv.ipynb`](DemoEnv.ipynb) and [`Demosb3.ipynb`](Demosb3.ipynb) for example usage of the gym and stable-baselines3 library.
+energydecision/    ```bash
 
-*   **Using the environment class from code:** Instantiate [`SolarBatteryEnv`](src/EnergySimEnv.py) and [`Agent`](src/decision.py) directly to run a single episode and capture step-level logs.
+├── data/                       # Datasets and generated parquet logs    sudo docker compose up
 
-    ```python
-    import polars as pl
-    from src.helper import transform_polars_df
-    from src.EnergySimEnv import SolarBatteryEnv
-    from src.decision import Agent
+├── eval_output/                # Evaluation results and figures    ```
 
-    # Load a customer trace and convert it to the environment format
+├── models/                     # Trained models (RL .zip, DT .pt)
+
+├── src/## Usage
+
+│   ├── EnergySimEnv.py         # Gym Environment
+
+│   ├── decision.py             # Agent wrappers (Rule, SDP, MRDP)*   Explore the simulation and agent interactions in the [`testrun.ipynb`](testrun.ipynb) notebook.
+
+│   ├── batterydeg.py           # Degradation models*   See Demo jupyternotebook [`DemoEnv.ipynb`](DemoEnv.ipynb) and [`Demosb3.ipynb`](Demosb3.ipynb) for example usage of the gym and stable-baselines3 library.
+
+│   ├── decision_transformer.py # DT Architecture
+
+│   ├── transformer_training.py # DT Training loop*   **Using the environment class from code:** Instantiate [`SolarBatteryEnv`](src/EnergySimEnv.py) and [`Agent`](src/decision.py) directly to run a single episode and capture step-level logs.
+
+│   ├── sdp_multires.py         # MRDP Implementation
+
+│   └── ...    ```python
+
+├── test_simrun.ipynb           # Main simulation notebook    import polars as pl
+
+├── test_sb3train.ipynb         # Online RL training notebook    from src.helper import transform_polars_df
+
+├── test_eval.ipynb             # Evaluation notebook    from src.EnergySimEnv import SolarBatteryEnv
+
+├── requirements.txt            # Dependencies    from src.decision import Agent
+
+└── README.md                   # This file
+
+```    # Load a customer trace and convert it to the environment format
+
     df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
     customer_id = df["Customer"][0]
     customer_df = df.filter(pl.col("Customer") == customer_id)

@@ -19,9 +19,14 @@ This work establishes a consolidated, reproducible benchmark to address these li
 
 The goal of this platform is to serve as the foundational infrastructure for a PhD thesis investigating **robust, generalization-capable control policies for decentralized energy systems**.
 
-## 2. Related Work (brief)
+## 2. Related Work
 
-Energy storage dispatch has been explored with rule/control heuristics, stochastic dynamic programming, model predictive control, and reinforcement learning. Recent work applies offline RL and sequence models (Decision Transformers) to control from logged data. Our contribution is to bridge these lines in a single, open benchmark with reproducible pipelines and risk/degradation-aware evaluation.
+This research is directly founded upon the work of Abdulla et al. [1], which established a rigorous framework for the optimal operation of energy storage systems using Stochastic Dynamic Programming (SDP). Their work demonstrated that accounting for battery degradation and forecast uncertainty is essential for realistic economic assessment.
+
+We adopt the SDP formulation and the multi-factor degradation model from [1] and [2] as the core of our model-based planning baselines. We extend this foundation by:
+1.  **Modernizing the Interface:** Wrapping the simulation in a standard Gymnasium API to bridge the gap between the optimization and Deep RL communities.
+2.  **Expanding the Algorithmic Suite:** Introducing Online Deep RL (PPO, SAC) and Offline RL (Decision Transformers) to compare learning-based approaches against the theoretical optimality of SDP.
+3.  **Open Reproducibility:** Providing a fully open-source, containerized benchmark, addressing the lack of public code in prior studies.
 
 ## 3. System Model and Environment
 
@@ -29,7 +34,7 @@ Environment: `src/EnergySimEnv.py` defines `SolarBatteryEnv` with:
 - Action: normalized battery power in [-1, 1]; mapped to kW and bounded by `max_battery_flow`, SoC, and grid limits.
 - Observation: cyclical time features (sin/cos of hour/day) plus normalized data frame features and [battery_level, degr_cost].
 - Dynamics: `step_duration` inferred from timestamps; grid energy per step capped by `max_grid_flow × step_duration`.
-- Reward/cost: grid import cost/export revenue and degradation cost (see `src/batterydeg.py`). Violation penalties prevent infeasible behavior.
+- Reward/cost: grid import cost/export revenue and degradation cost. The degradation model is implemented based on Muenzel et al. [2] (as used in [1]), calculating cost based on depth-of-discharge, C-rate, and throughput.
 - Forecast features: one-step-ahead `FutureSolar`/`FutureLoad` enable planning-based agents.
 
 Dataset contract (from `src/helper.py::transform_polars_df`):
@@ -40,15 +45,24 @@ Dataset contract (from `src/helper.py::transform_polars_df`):
 Baselines and planners are implemented in `src/decision.py` (Agent abstraction):
 - Rule-based: a heuristic with persistence and noise damping for stability.
 - RL (SB3): PPO/A2C/DDPG/SAC/TD3 via `src/sb3train.py::train_model`; rollouts collected by `run_sb3_model_on_vec_env` and flattened with `flatten_episode_data`.
-- SDP: `algorithm='sdp'` with horizon, `soc_resolution`, `action_resolution`. Vectorized backward induction with optional Monte Carlo over quantile scenarios (`src/quantile_scenarios.py`).
-- MRDP: `algorithm='mrdp'` with `subhorizon_specs=[{start,length,soc_resolution,action_resolution,step_duration}, …]` for coarse-to-fine planning.
-- Decision Transformer (DT): Offline sequence model (`src/decision_transformer.py`) trained on `TrajectoryDataset` from logged trajectories (`src/transformer_training.py`). Inference uses `model.get_action` with rolling context.
+- SDP: We implement the Stochastic Dynamic Programming approach proposed by Abdulla et al. [1]. The state space (SoC) is discretized, and we use backward induction to compute the optimal policy value function. We further enhance this with Multi-Resolution DP (MRDP) to improve computational efficiency.
+- MRDP: `algorithm='mrdp'` with `subhorizon_specs` for coarse-to-fine planning, addressing the "curse of dimensionality" inherent in standard SDP.
+- Decision Transformer (DT): Offline sequence model proposed by Chen et al. [4] (`src/decision_transformer.py`) trained on `TrajectoryDataset` from logged trajectories (`src/transformer_training.py`). Inference uses `model.get_action` with rolling context.
 
 Risk-aware extensions (proposed): add CVaR-style evaluation and multi-objective scalarization for cost vs degradation; robustify SDP/MRDP using uncertainty bands.
 
 ## 5. Data and Preprocessing
 
-Source data: public Solar home electricity datasets in `data/`, plus precomputed episode logs for various algorithms (Parquet). Preprocessing via `transform_polars_df` converts per-customer CSVs into the environment schema, with configurable tariffs (`price_periods`) and default vs peak prices (`ImportEnergyPrice`, `ExportEnergyPrice`). `make_env(dataset)` returns callables for vectorized execution.
+### 5.1 Source Data
+For the proof of concept, we utilize the **Ausgrid Solar Home Electricity Data** [5]. This public dataset contains half-hourly electricity data for 300 anonymized homes with rooftop solar systems in the Ausgrid network area. The dataset spans from 1 July 2010 to 30 June 2013 and includes gross metered solar generation and household consumption.
+
+The customers in these datasets have been de-identified and typically represent households in separate houses with available roof space, rather than apartments. The data was sourced from customers on domestic tariffs with gross metered solar systems installed for the full period. Quality checks were performed to exclude customers with extreme consumption or generation patterns. Specifically, we utilize the following archives:
+- `2010-2011 Solar home electricity data.csv`
+- `2011-2012 Solar home electricity data v2.csv`
+- `2012-2013 Solar home electricity data v2.csv`
+
+### 5.2 Preprocessing
+Preprocessing via `transform_polars_df` converts per-customer CSVs into the environment schema, with configurable tariffs (`price_periods`) and default vs peak prices (`ImportEnergyPrice`, `ExportEnergyPrice`). `make_env(dataset)` returns callables for vectorized execution.
 
 ## 6. Experimental Setup
 
@@ -117,13 +131,13 @@ This framework provides the necessary tooling to pursue several high-impact rese
 
 We introduce a unified, open framework for learning and planning in solar–battery–grid control with degradation- and risk-aware evaluation. It supports rule-based control, RL, SDP/MRDP, and Decision Transformers, with standardized preprocessing and metrics. This report documents the system and experimental protocol; results will follow in an updated version and accompanying repository tags.
 
-## References (selected)
+## References
 
-[1] Sutton & Barto. Reinforcement Learning: An Introduction.
-[2] Silver et al. Deterministic Policy Gradient Algorithms.
-[3] Kostrikov et al. Offline Reinforcement Learning.
-[4] Chen et al. Decision Transformer.
-[5] Tariff and energy storage operation references (utility docs and related literature).
+[1] K. Abdulla, J. De Hoog, et al., "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation," *IEEE Transactions on Smart Grid*, 2016.
+[2] V. Muenzel, J. De Hoog, et al., "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management," *IEEE Transactions on Industrial Electronics*, 2015.
+[3] Sutton & Barto. Reinforcement Learning: An Introduction.
+[4] Chen et al. Decision Transformer: Reinforcement Learning via Sequence Modeling.
+[5] Ausgrid. Solar home electricity data. https://github.com/pierre-haessig/ausgrid-solar-data?tab=readme-ov-file. Accessed April 2017.
 
 ---
 
