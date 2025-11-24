@@ -718,6 +718,10 @@ class TemporalAnalysisConfig:
     reference: Optional[str] = None
     action_tolerance: float = 0.01
     save_path: Optional[str] = None
+    # File format to use when saving figures (e.g. 'svg', 'png', 'pdf')
+    save_format: str = "svg"
+    # DPI used for raster (e.g. png/jpg) images. Ignored for vector formats like svg.
+    dpi: int = 200
 
 
 @dataclass
@@ -835,12 +839,111 @@ class AlgorithmActionComparator:
 
     # ------------------------------------------------------------------
     # Action-level comparison (Section A)
+    # Main outputs (how to read them)
+    # --------------------------------
+    # 1. Metrics dictionary (returned value / ``ActionComparisonResult.metrics``)
+    #
+    #         * ``metrics['per_algorithm'][algo]``
+    #                 - Scalar stats such as ``mean_action``, ``std_action``, ``min/max``,
+    #                     ``median_action`` and percentiles. These tell you whether an
+    #                     algorithm is on average more charging (positive actions) or
+    #                     discharging (negative actions), and how variable it is.
+    #                 - ``fraction_positive``: fraction of steps with action>0. Values
+    #                     close to 1 mean the policy spends most of the time charging,
+    #                     close to 0 mean mostly discharging.
+    #                 - ``hist_values`` + ``hist_bin_edges``: global histogram of actions
+    #                     (probabilities when ``normalize_hist=True``). Comparing these
+    #                     across algorithms shows whether one policy is more aggressive or
+    #                     conservative.
+    #                 - ``corr_action_soc``, ``corr_action_solar``, ``corr_action_load``:
+    #                     linear correlations between raw actions and SOC / solar / load,
+    #                     indicating how strongly each state dimension drives behaviour.
+    #
+    #         * ``metrics['pairwise'][(algo_i, algo_j)]`` (when
+    #             ``compute_pairwise=True``)
+    #                 - ``mae`` / ``rmse``: average absolute/squared difference between
+    #                     sampled actions from the two distributions. Higher values mean
+    #                     the algorithms tend to pick more different actions overall.
+    #                 - ``corr``: correlation between sampled actions. Values near 1
+    #                     mean they usually move in the same direction (both charge or
+    #                     both discharge), values near 0 mean weak relation, and negative
+    #                     values suggest opposite tendencies.
+    #                 - ``js_divergence``, ``kl_i_j``, ``kl_j_i``, ``wasserstein``:
+    #                     distribution-level distances; larger numbers mean more distinct
+    #                     action distributions.
+    #
+    #         * ``metrics['step_profile']``
+    #                 - Contains per-step medians and IQRs (25th–75th percentiles) of
+    #                     actions, either over the full episode or per configured
+    #                     ``time_periods``. This is useful for seeing consistent patterns,
+    #                     e.g. "all algorithms discharge in the evening window".
+    #
+    # 2. Figures dictionary (``ActionComparisonResult.figures`` when
+    #         ``config.return_figs=True``)
+    #
+    #         Typical keys and how to interpret them:
+    #
+    #             - ``'action_hist'``: overlaid action histograms / densities for all
+    #                 algorithms. Look for shifts in mass (one algorithm charges more,
+    #                 another uses extremes) and differences in spread (deterministic vs
+    #                 exploratory behaviour).
+    #
+    #             - ``'action_cdf'``: CDF of actions per algorithm. At any given
+    #                 action value, the CDF height shows the fraction of steps with
+    #                 action ≤ that value. Crossing CDFs highlight where one policy uses
+    #                 larger or smaller actions.
+    #
+    #             - ``'step_profile'`` and ``'step_profile_window_*'``: per-step
+    #                 median action with shaded IQR across episodes. These emphasise
+    #                 typical temporal patterns rather than single trajectories. When
+    #                 ``time_periods`` is set, each window profile is plotted
+    #                 separately and the global profile concatenates windows in order.
+    #
+    #             - ``'median_diff_vs_reference'``: per-step difference in median
+    #                 action relative to the reference algorithm (algo − reference).
+    #                 Regions consistently above 0 indicate the algorithm charges more
+    #                 (or discharges less) than the reference; regions below 0 indicate
+    #                 more discharging behaviour.
+    #
+    #             - ``'action_vs_soc'``: scatter of action vs battery SOC (optionally
+    #                 subsampled). This reveals state-dependent policy structure: for
+    #                 example, whether an algorithm starts discharging at lower SOC
+    #                 thresholds than another.
+    #
+    #             - ``'pairwise_js_heatmap'`` (if pairwise metrics are computed):
+    #                 heatmap of JS divergence between algorithms. Darker cells mark
+    #                 pairs whose action distributions differ more. The numeric
+    #                 annotations in each cell give the exact JS value.
     # ------------------------------------------------------------------
     def compare(
         self,
         logs_dict: Optional[dict[str, list[pl.DataFrame]]] = None,
         config: Optional[ActionComparisonConfig] = None,
     ) -> ActionComparisonResult | dict:
+        """Aggregate and visualize action-level behaviour across algorithms.
+
+        High-level intent
+        ------------------
+        This method answers:
+            * "How do different algorithms *typically* act?" (charge/discharge bias,
+                    use of extremes, variability).
+            * "How similar or different are their action distributions?" (pairwise
+                    divergences and correlations).
+            * "How does behaviour depend on state (SOC / solar / load) and on
+                    episode step or selected time windows?".
+
+        Usage tips
+        ----------
+        * Use ``max_episodes`` to trade speed vs stability: small values show
+            behaviour on a few episodes; larger values give smoother, more
+            representative statistics.
+        * Use ``time_periods`` to focus on specific regimes (e.g. morning vs
+            evening). Per-window histograms and step profiles then make it
+            easier to see *when* algorithms differ.
+                        * Choose a sensible ``reference`` so that
+                            ``'median_diff_vs_reference'`` is easy to interpret (e.g. a baseline
+                            rule or production policy).
+        """
         cfg = config or ActionComparisonConfig()
         data = self._validate_action_logs(logs_dict or self.action_logs)
         algo_names = list(data.keys())
@@ -1348,12 +1451,204 @@ class AlgorithmActionComparator:
 
     # ------------------------------------------------------------------
     # Temporal analysis (Section B)
+    #
+    # Main outputs (how to read them)
+    # --------------------------------
+    # 1. Primary figure (returned via ``TemporalAnalysisResult.figure``)
+    #
+    #         * Top panel: raw actions over time for each algorithm.
+    #                 - X-axis is either step index or concatenated windows
+    #                     from ``time_periods``.
+    #                 - Comparing curves shows *when* algorithms choose
+    #                     different charge/discharge levels.
+    #
+    #         * Second panel: per-step action differences vs the reference.
+    #                 - Each curve is ``algo - reference`` at every step.
+    #                 - The horizontal lines at ``±action_tolerance`` mark
+    #                     the threshold above which we consider behaviour
+    #                     meaningfully different.
+    #                 - Sustained bands above 0 mean the algorithm tends to
+    #                     charge more (or discharge less) than the reference;
+    #                     sustained bands below 0 mean more discharging.
+    #
+    #         * Optional SOC panel (when ``annotate_states=True`` and
+    #             ``raw_observation`` is available):
+    #                 - Shows battery state of charge over time for each
+    #                     algorithm, aligned with the action and difference
+    #                     plots. Use this to relate action shifts to SOC
+    #                     regimes (e.g. “this policy discharges earlier when
+    #                     SOC is high”).
+    #
+    #         * Optional grid-energy panel (when ``annotate_states=True``
+    #             and ``info['grid_energy']`` is present):
+    #                 - Shows net grid import/export per step. This helps
+    #                     connect action differences to system-level impact
+    #                     (e.g. higher imports during peak windows).
+    #
+    #         * When ``time_periods`` is provided:
+    #                 - The requested windows are concatenated along the
+    #                     X-axis, and vertical dashed lines are drawn between
+    #                     them.
+    #                 - Labels ``W0``, ``W1``, … above the top axis indicate
+    #                     each window in order, making it clear which
+    #                     temporal region you are looking at.
+    #
+    # 2. Extra figures (``TemporalAnalysisResult.extra_figures``)
+    #
+    #         * ``'difference_panels'``: focused per-algorithm difference
+    #             view vs the reference.
+    #                 - One subplot per non-reference algorithm.
+    #                 - Each plot shows ``algo - reference`` over time,
+    #                     with light shading for positive vs negative
+    #                     regions and red spans wherever
+    #                     ``|algo - reference| > action_tolerance``.
+    #                 - A small textbox summarises
+    #                     ``mean_signed_diff`` and ``divergence_rate`` for
+    #                     that algorithm.
+    #                 - When ``time_periods`` is used, the same vertical
+    #                     dashed separators are drawn so windows line up
+    #                     with the main figure.
+    #
+    # 3. Statistics dictionary (``TemporalAnalysisResult.stats``)
+    #
+    #         * ``stats['per_algorithm'][algo]``
+    #                 - Basic scalar summary over the analysed range:
+    #                     ``mean_action``, ``std_action``, ``min_action``,
+    #                     ``max_action``. Use this to see which policies
+    #                     are overall more charging/ discharging or have
+    #                     more volatile actions.
+    #
+    #         * ``stats['vs_reference'][algo]`` for each non-reference
+    #             algorithm:
+    #                 - ``mean_abs_diff`` / ``rmse``: average magnitude of
+    #                     deviation from the reference.
+    #                 - ``divergence_rate``: fraction of steps where
+    #                     ``|algo - reference| > action_tolerance``.
+    #                     Higher values mean the algorithm frequently makes
+    #                     materially different decisions.
+    #                 - ``correlation``: linear correlation between the
+    #                     algorithm’s and reference’s actions; values near 1
+    #                     indicate they move together, near 0 weak relation,
+    #                     negative values suggest opposite tendencies.
+    #                 - ``mean_signed_diff``: average (signed) difference;
+    #                     positive means the algorithm tends to choose
+    #                     larger actions, negative means smaller.
+    #                 - ``max_abs_diff``: largest observed absolute
+    #                     deviation.
+    #                 - ``divergent_segments``: list of contiguous segments
+    #                     where ``|algo - reference| > action_tolerance``,
+    #                     each with ``start_step``, ``end_step`` and
+    #                     ``length_steps``. These highlight sustained
+    #                     departures from the reference rather than
+    #                     isolated outliers.
+    #
+    # 4. Configuration knobs (via ``TemporalAnalysisConfig``)
+    #
+    #         * ``time_periods`` vs ``step_range``:
+    #                 - Use ``time_periods`` (list of (start, end) windows)
+    #                     to focus on specific temporal regimes and see
+    #                     them stitched together with separators.
+    #                 - Use ``step_range`` to analyse one contiguous block
+    #                     of steps shared across algorithms.
+    #
+    #         * ``reference``:
+    #                 - Choose a baseline algorithm (e.g. rule-based or
+    #                     production policy) so that all differences are
+    #                     expressed relative to a familiar behaviour.
+    #
+    #         * ``action_tolerance``:
+    #                 - Sets what counts as a “meaningful” action
+    #                     difference. Lower values detect subtle shifts;
+    #                     higher values focus only on large deviations.
+    #
+    #         * ``annotate_states`` and ``step_duration``:
+    #                 - Enable ``annotate_states`` to overlay SOC and grid
+    #                     energy and connect policy decisions to system
+    #                     state.
+    #                 - Set ``step_duration`` (hours) to relabel the X-axis
+    #                     in real time rather than raw step indices.
     # ------------------------------------------------------------------
     def analyze_temporal(
         self,
         logs_dict: dict[str, pl.DataFrame],
         config: Optional[TemporalAnalysisConfig] = None,
     ) -> TemporalAnalysisResult:
+        """Analyse and visualise per-step action behaviour over time.
+
+                High-level intent
+                -----------------
+                This method focuses on *temporal* structure rather than overall
+                distributions. It answers questions like:
+
+                        * "At what times do algorithms make different decisions?"
+                        * "How large and persistent are those differences vs a chosen
+                            reference policy?"
+                        * "How do these action differences line up with SOC and grid
+                            behaviour?"
+
+                Main outputs
+                ------------
+                * ``TemporalAnalysisResult.figure``
+                        Multi-panel overview figure with:
+
+                        - Actions per algorithm over time (top panel).
+                        - Per-step action differences (algo − reference) with
+                            tolerance lines at ``±action_tolerance`` (second panel).
+                        - Optional SOC and grid-energy panels when
+                            ``annotate_states=True`` and the underlying columns are
+                            available.
+
+                        When ``time_periods`` is provided, only those windows are
+                        extracted (per algorithm), concatenated along the X-axis,
+                        and separated by vertical dashed lines labelled ``W0``,
+                        ``W1``, …. This makes it easy to compare behaviour across
+                        specific regimes (e.g. morning vs evening).
+
+                * ``TemporalAnalysisResult.extra_figures``
+                        Currently contains an optional ``'difference_panels'``
+                        figure: one subplot per non-reference algorithm showing
+                        detailed ``algo − reference`` curves, shaded regions for
+                        positive/negative differences, and red spans where
+                        ``|algo - reference| > action_tolerance``, plus a small
+                        textbox with summary stats.
+
+                * ``TemporalAnalysisResult.stats``
+                        Dictionary with two main sections:
+
+                        - ``stats['per_algorithm'][algo]``: scalar summaries of
+                            actions over the analysed range (mean, std, min, max).
+
+                        - ``stats['vs_reference'][algo]`` (for each non-reference
+                            algorithm): metrics quantifying how different the policy is
+                            from the reference, including ``mean_abs_diff``, ``rmse``,
+                            ``divergence_rate`` (fraction of steps where
+                            ``|algo - reference| > action_tolerance``), ``correlation``
+                            between action series, ``mean_signed_diff``,
+                            ``max_abs_diff``, and a list of ``divergent_segments`` with
+                            start/end steps and lengths.
+
+                Key configuration knobs (via ``TemporalAnalysisConfig``)
+                -------------------------------------------------------
+                * ``time_periods`` vs ``step_range``
+                        Use ``time_periods`` to stitch together several disjoint
+                        windows (with visible separators), or ``step_range`` to
+                        analyse one contiguous block of steps shared across all
+                        algorithms.
+
+                * ``reference``
+                        Name of the baseline algorithm against which differences are
+                        computed. If None, the first key in ``logs_dict`` is used.
+
+                * ``action_tolerance``
+                        Threshold for treating an action difference as
+                        behaviourally significant; controls both the red highlight
+                        spans and the ``divergence_rate`` metric.
+
+                * ``annotate_states`` and ``step_duration``
+                        Enable ``annotate_states`` to include SOC / grid panels, and
+                        set ``step_duration`` (hours) to relabel the X-axis in real
+                        time instead of raw step indices.
+        """
         if not logs_dict or not isinstance(logs_dict, dict):
             raise ValueError("logs_dict must be a non-empty dict[str, pl.DataFrame].")
         for name, df in logs_dict.items():
@@ -1701,13 +1996,20 @@ class AlgorithmActionComparator:
 
         if cfg.save_path is not None:
             try:
-                Path(cfg.save_path).parent.mkdir(parents=True, exist_ok=True)
-                fig.savefig(cfg.save_path, dpi=200, bbox_inches="tight")
+                base_path = Path(cfg.save_path)
+                # Ensure parent dir exists
+                base_path.parent.mkdir(parents=True, exist_ok=True)
+                # Normalize filename extension to cfg.save_format
+                desired_ext = f".{cfg.save_format.lstrip('.') if cfg.save_format else 'svg'}"
+                if base_path.suffix.lower() != desired_ext.lower():
+                    base_path = base_path.with_suffix(desired_ext)
+                # Save main figure
+                fig.savefig(base_path, format=cfg.save_format, dpi=cfg.dpi, bbox_inches="tight")
+                # Save any extra figures using same base name and format
                 if extra_figures:
-                    base_path = Path(cfg.save_path)
                     for key, fig_extra in extra_figures.items():
                         extra_path = base_path.with_name(f"{base_path.stem}_{key}{base_path.suffix}")
-                        fig_extra.savefig(extra_path, dpi=200, bbox_inches="tight")
+                        fig_extra.savefig(extra_path, format=cfg.save_format, dpi=cfg.dpi, bbox_inches="tight")
             except Exception as exc:
                 print(f"Failed to save analyze_temporal_actions figure: {exc}")
 
@@ -1800,6 +2102,8 @@ def analyze_temporal_actions(
     reference: Optional[str] = None,
     action_tolerance: float = 0.01,
     save_path: Optional[str] = None,
+    save_format: str = "svg",
+    dpi: int = 200,
     return_extra_figures: bool = True,
 ) -> tuple[plt.Figure, dict] | tuple[plt.Figure, dict, dict[str, plt.Figure]]:
     """Backwards-compatible wrapper around AlgorithmActionComparator.analyze_temporal.
@@ -1825,6 +2129,13 @@ def analyze_temporal_actions(
         Threshold used to compute divergence_rate vs reference.
     save_path: Optional[str]
         Path to save the produced figure (if provided).
+    save_format: str
+        Image format to use when saving figures (e.g. 'svg', 'png', 'pdf'). The file
+        extension of the provided `save_path` will be normalized to this value if it
+        differs. Defaults to 'svg'.
+    dpi: int
+        Dots-per-inch to use when saving raster image formats (png, jpg). Ignored
+        for vector formats like `svg`.
 
     Returns
     -------
@@ -1844,6 +2155,8 @@ def analyze_temporal_actions(
         reference=reference,
         action_tolerance=action_tolerance,
         save_path=save_path,
+        save_format=save_format,
+        dpi=dpi,
     )
 
     result = comparator.analyze_temporal(logs_dict=logs_dict, config=cfg)
