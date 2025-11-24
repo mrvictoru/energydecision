@@ -4,7 +4,15 @@
 
 This project provides a comprehensive framework for benchmarking control algorithms in residential solar-battery systems. It integrates a high-fidelity Gymnasium environment, diverse baselines (Rule-based, SDP, MRDP), Online Reinforcement Learning (SB3), and Offline Reinforcement Learning (Decision Transformer).This project explores different algorithms for optimizing energy management in a solar-battery-grid system using a gymnasium environment to simulate system interaction and reward calculation. The goal is to minimize energy costs while considering battery degradation.
 
-
+## ToDo
+*   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
+*   ~~**Online learning loop:** Training loop using stablebaselines3~~
+*   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
+*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
+*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
+*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
+*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
+*   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
 
 ## Features## Features
 
@@ -30,22 +38,18 @@ This project provides a comprehensive framework for benchmarking control algorit
 
 ## Installation
 
-### Option 1: Docker (Recommended)*   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
+### Option 1: Docker (Recommended)*
 
-The easiest way to run the project is via Docker, which sets up a JupyterLab environment with all dependencies.*   ~~**Online learning loop:** Training loop using stablebaselines3~~
-
-*   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
+The easiest way to run the project is via Docker, which sets up a JupyterLab environment with all dependencies.*
 
 ```bash*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
 
 docker compose up --build*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
 
 ```
-*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
 
-Access JupyterLab at `http://localhost:8888`.*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
+Access JupyterLab at `http://localhost:8888`.*
 
-*   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
 
 ### Option 2: Local Installation
 
