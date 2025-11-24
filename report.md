@@ -1,19 +1,23 @@
-## Title
-
-Learning and Planning for Residential Solar–Battery–Grid Control: An Open, Reproducible Benchmark with RL, SDP/MRDP, and Decision Transformers
+# Benchmarking and Advancing Control Strategies for Residential Energy Storage: A Unified Framework for Reinforcement Learning and Optimization
 
 ## Abstract
 
-We present an open codebase for evaluating control algorithms that operate a residential solar–battery–grid system under uncertain load, generation, and time-varying tariffs. The framework provides a Gymnasium environment with degradation-aware rewards, a suite of baseline agents (rule-based, Stable Baselines3 RL), planning methods (stochastic dynamic programming, multi-resolution dynamic programming), and an offline learning pipeline using a Decision Transformer. We standardize preprocessing and metrics (cost, revenue, degradation, operational cost, and risk metrics such as Sharpe/Sortino). This report documents the system design, methods, experimental setup, and evaluation protocol. Initial comparative results across algorithms will be reported in an updated version; we outline figure and table placeholders and ensure reproducibility via Docker and deterministic settings.
+The effective integration of residential solar and battery storage is critical for the transition to a decentralized, renewable energy grid. However, the development of optimal control strategies is hindered by the lack of standardized benchmarks that account for stochastic load/generation, complex tariffs, and battery degradation. This report presents a comprehensive, open-source research framework designed to bridge this gap. We introduce a Gymnasium-compatible environment, a suite of diverse baselines—ranging from heuristic rules and stochastic dynamic programming (SDP) to online Reinforcement Learning (PPO/SAC) and offline Decision Transformers—and a unified evaluation protocol focusing on cost, risk, and degradation. This platform serves as a foundation for doctoral research into robust, data-driven energy management, enabling rigorous comparison of model-based and model-free approaches under realistic uncertainty.
 
 ## 1. Introduction
 
-Residential batteries with rooftop solar can reduce electricity cost and provide grid services. Operating such assets is challenging due to stochastic demand and generation, time-of-use tariffs, physical constraints, and battery degradation. Research often evaluates methods in disparate setups, hindering comparability. This work consolidates a reproducible benchmark: a standardized simulation environment, algorithm baselines spanning control, planning, and learning, and a unified evaluation suite. The goal is to accelerate research on robust, cost- and degradation-aware controllers.
+The proliferation of distributed energy resources (DERs), specifically residential solar PV and battery storage, presents both a challenge and an opportunity for modern power grids. While these assets can significantly reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by high stochasticity in demand and generation, complex time-of-use (ToU) tariffs, non-linear battery degradation dynamics, and strict physical constraints.
 
-Contributions:
-- A Gymnasium-compatible environment with explicit grid and battery constraints, and degradation-aware reward shaping.
-- Baseline agents and planners: a robust rule policy, SB3-based RL, SDP, MRDP, and a Decision Transformer pipeline for offline RL.
-- Unified preprocessing, metrics, and plotting (including risk–return visualization), with support for saving figures programmatically.
+### 1.1 The Research Gap
+Despite the abundance of literature on energy management systems (EMS), the field suffers from a lack of reproducibility and standardization. Studies often employ custom, simplified environments that neglect critical factors like battery health or realistic tariff structures. Furthermore, there is a disconnect between the optimization community (focusing on MPC/SDP) and the learning community (focusing on RL/Transformers), with few benchmarks allowing for a fair, rigorous comparison of these distinct paradigms.
+
+### 1.2 Contributions and Research Goals
+This work establishes a consolidated, reproducible benchmark to address these limitations. We provide:
+1.  **A High-Fidelity Simulation Environment:** A Gymnasium-compatible environment incorporating explicit constraints and degradation-aware reward shaping.
+2.  **Diverse Algorithmic Baselines:** A unified interface for comparing Rule-based heuristics, Stochastic Dynamic Programming (SDP), Online RL (PPO, SAC, etc.), and Offline RL (Decision Transformers).
+3.  **Comprehensive Evaluation Suite:** Standardized metrics for economic performance, battery health, and financial risk (Sharpe/Sortino ratios).
+
+The goal of this platform is to serve as the foundational infrastructure for a PhD thesis investigating **robust, generalization-capable control policies for decentralized energy systems**.
 
 ## 2. Related Work (brief)
 
@@ -72,19 +76,36 @@ Visualization:
 Statistical testing:
 - Bootstrap confidence intervals for mean differences; paired t-test or Wilcoxon on per-customer aggregates when appropriate.
 
-## 8. Results (TBD)
+## 8. Preliminary Results and Evaluation Plan
 
-We are currently running the first evaluation across rule, SDP/MRDP, PPO, and DT. This section will report:
-- Table 1: Mean ± std episode reward and operational cost by algorithm.
-- Table 2: Cost decomposition (grid cost, export revenue, degradation cost).
-- Figure 1: Risk–return scatter (colour=Sharpe).
-- Figure 2: Episode return distribution (box plot) and stacked cost bars.
+We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents. This section will be populated with:
+
+- **Table 1: Comparative Performance:** Mean ± std episode reward and operational cost by algorithm, highlighting the trade-off between optimality (SDP) and computational tractability (RL).
+- **Table 2: Cost Decomposition:** A detailed breakdown of grid cost, export revenue, and degradation cost to understand *how* agents achieve their results (e.g., does RL sacrifice battery health for short-term gain?).
+- **Figure 1: Risk–Return Analysis:** Scatter plots (Return vs. Sharpe Ratio) to visualize the stability of learned policies.
+- **Figure 2: Distributional Robustness:** Box plots of episode returns across diverse customer profiles to assess generalization.
 
 We will include per-customer breakdowns in the appendix and release all plots in `eval_output/figures/`.
 
-## 9. Discussion and Limitations
+## 9. Proposed Research Roadmap
 
-The environment abstracts network and device details (efficiencies and dynamics are simplified), and degradation models are approximate (static or linear). However, explicit constraints and degradation-aware rewards improve realism over purely economic formulations. We plan to add richer degradation models and scenario generation. Sim-to-real transfer remains future work.
+This framework provides the necessary tooling to pursue several high-impact research directions suitable for a doctoral thesis:
+
+### Phase 1: Benchmarking and Algorithmic Analysis (Current Status)
+- Establish the performance hierarchy between model-based (SDP) and model-free (RL) approaches.
+- Quantify the "Price of Anarchy" in decentralized control vs. optimal centralized planning.
+
+### Phase 2: Robustness and Generalization (Year 1-2)
+- **Distributional Shift:** Investigate how Offline RL (Decision Transformers) generalizes to unseen weather patterns or customer load profiles compared to Online RL.
+- **Risk-Sensitive Control:** Integrate CVaR constraints into the RL objective to develop agents that avoid catastrophic costs during extreme weather events.
+
+### Phase 3: Advanced Architectures and Multi-Agent Systems (Year 2-3)
+- **Transformer Architectures:** Explore modifications to the Decision Transformer architecture (e.g., long-context attention) to better capture seasonal periodicities in energy data.
+- **Multi-Agent Coordination:** Extend the environment to a microgrid setting where multiple homes trade energy, studying the emergence of cooperative behaviors.
+
+### Phase 4: Sim-to-Real Transfer (Year 3-4)
+- Develop "safe RL" wrappers to ensure constraints are met during deployment.
+- Validate policies on hardware-in-the-loop setups or pilot deployments.
 
 ## 10. Reproducibility and Artifacts
 
