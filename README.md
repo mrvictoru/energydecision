@@ -30,8 +30,6 @@ This project provides a comprehensive framework for benchmarking control algorit
 
 ## Installation
 
-## ToDo
-
 ### Option 1: Docker (Recommended)*   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
 
 The easiest way to run the project is via Docker, which sets up a JupyterLab environment with all dependencies.*   ~~**Online learning loop:** Training loop using stablebaselines3~~
