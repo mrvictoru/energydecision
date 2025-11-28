@@ -362,6 +362,11 @@ def evaluate_experiment_logs(
     pct5 = float(np.percentile(rewards_list, 5))
     median_r = float(np.percentile(rewards_list, 50))
     pct95 = float(np.percentile(rewards_list, 95))
+    max_r = float(np.max(rewards_arr)) if len(rewards_arr) > 0 else 0.0
+
+    # Recommended RTG: conservative recommendation is 95th percentile, aggressive is max
+    # We'll provide the max as the primary recommendation for offline RL stitching
+    recommended_rtg = max_r
 
     # downside deviation for sortino
     # downside deviation for Sortino: only rewards below target_return
@@ -430,6 +435,8 @@ def evaluate_experiment_logs(
         'std_reward': std_r,
         'pct_5_reward': pct5,
         'pct_95_reward': pct95,
+        'max_reward': max_r,
+        'recommended_rtg': recommended_rtg,
         'sharpe_ratio': sharpe,
         'sortino_ratio': sortino,
         'avg_grid_cost': avg_gc,

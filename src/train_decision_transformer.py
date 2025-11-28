@@ -135,7 +135,7 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict) -> dict:
         "act_dim": 1,
         "n_block": 2,
         "h_dim": 128,
-        "context_len": 36,
+        "context_len": 60,
         "n_heads": 8,
         "drop_p": 0.1,
         "max_timestep": 17567,
