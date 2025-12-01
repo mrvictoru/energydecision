@@ -13,8 +13,7 @@ This project provides a comprehensive framework for benchmarking control algorit
 *   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
 *   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
 
-## Features## Features
-
+## Features
 
 
 *   **Gymnasium Environment:** [`src/EnergySimEnv.py`](src/EnergySimEnv.py) simulates a household with solar PV, battery storage, and grid connection. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.*   **Simulation Environment:** A custom Gym environment ([`src/EnergySimEnv.py`](src/EnergySimEnv.py)) simulating a household with solar panels, a battery, and grid connection. The return observation is normalized against the dataset so it is sutiable with reinforcement learning method. Seperate method can be used to return raw value for observation.
