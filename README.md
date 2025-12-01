@@ -53,8 +53,6 @@ Access JupyterLab at `http://localhost:8888`.*
 
 Requires Python 3.10+.
 
-## Project Structure
-
 ## Installation
 
 ### 1. Clone the repository
