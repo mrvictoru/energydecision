@@ -1,5 +1,4 @@
-# Energy Decision: Solar-Battery Control Benchmark# Energy Decision
-
+# Energy Decision: Solar-Battery Control Benchmark
 
 
 This project provides a comprehensive framework for benchmarking control algorithms in residential solar-battery systems. It integrates a high-fidelity Gymnasium environment, diverse baselines (Rule-based, SDP, MRDP), Online Reinforcement Learning (SB3), and Offline Reinforcement Learning (Decision Transformer).This project explores different algorithms for optimizing energy management in a solar-battery-grid system using a gymnasium environment to simulate system interaction and reward calculation. The goal is to minimize energy costs while considering battery degradation.
