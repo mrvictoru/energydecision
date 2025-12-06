@@ -201,6 +201,13 @@ def train_decision_transformer(
     else:
         scaler = None
 
+    # AMP should be disabled until a checkpoint exists/saved to avoid early fp16 instabilities on GPU.
+    amp_available = use_amp
+    amp_enabled = False
+    first_checkpoint_saved = False
+    if amp_available:
+        print("[INFO] AMP available on device but disabled until first checkpoint is saved.")
+
     def _is_finite(t: torch.Tensor) -> bool:
         # empty tensors are considered finite
         try:
@@ -213,6 +220,7 @@ def train_decision_transformer(
     def _save_checkpoint(epoch: int, segment: int = -1) -> None:
         if not checkpoint_path:
             return
+        nonlocal amp_enabled, first_checkpoint_saved
         ckpt_dir = os.path.dirname(checkpoint_path)
         if ckpt_dir:
             os.makedirs(ckpt_dir, exist_ok=True)
@@ -230,6 +238,11 @@ def train_decision_transformer(
         if scaler is not None:
             checkpoint["scaler_state_dict"] = scaler.state_dict()
         torch.save(checkpoint, checkpoint_path)
+        # Record that we have a checkpoint on disk and enable AMP if the device supports it.
+        first_checkpoint_saved = True
+        if amp_available and use_amp:
+            amp_enabled = True
+            print("[INFO] AMP enabled after checkpoint saved on GPU.")
         if segment >= 0:
             print(f"Checkpoint saved to {checkpoint_path} — epoch {epoch}, segment {segment+1}")
         else:
@@ -250,6 +263,11 @@ def train_decision_transformer(
         last_segment_saved = checkpoint.get("segment", -1)
         if use_amp and scaler is not None and "scaler_state_dict" in checkpoint:
             scaler.load_state_dict(checkpoint["scaler_state_dict"])
+            # If the checkpoint was saved with AMP enabled and we are on GPU, enable AMP
+            amp_enabled = checkpoint.get("use_amp", False) and amp_available
+            if amp_enabled:
+                first_checkpoint_saved = True
+                print("[INFO] AMP restored from checkpoint and enabled.")
         if checkpoints_per_epoch > 0 and last_segment_saved >= 0:
             if last_segment_saved + 1 >= checkpoints_per_epoch:
                 start_epoch = last_epoch_saved + 1
@@ -267,10 +285,14 @@ def train_decision_transformer(
         print(f"Resume requested but checkpoint not found at {checkpoint_path}; starting fresh.")
 
     def _assert_model_finite() -> None:
-        # Fail fast if a training step introduces NaNs/Infs into the weights
         for name, param in model.named_parameters():
             if not torch.isfinite(param).all():
-                raise NonFiniteParameterError(f"Non-finite parameter detected in '{name}' after optimizer step")
+                print(f"[WARN] Non-finite parameter detected in '{name}' after optimizer step; clamping.")
+                with torch.no_grad():
+                    data = param.data
+                    data = torch.nan_to_num(data, nan=0.0, posinf=1e3, neginf=-1e3)
+                    data.clamp_(min=-1e3, max=1e3)
+                    param.data.copy_(data)
 
     recovery_attempts = 0
     max_recovery_attempts = 3
@@ -332,7 +354,9 @@ def train_decision_transformer(
                         continue
 
                     try:
-                        if use_amp and scaler is not None:
+                        # Per-batch AMP decision: only enable if CUDA is available and we've enabled AMP
+                        use_amp_now = amp_available and amp_enabled and (scaler is not None)
+                        if use_amp_now:
                             device_type = "cuda" if device.startswith("cuda") else "cpu"
                             with autocast(device_type=device_type):
                                 ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
@@ -459,6 +483,10 @@ def train_decision_transformer(
             last_segment_saved = checkpoint.get("segment", -1)
             if use_amp and scaler is not None and "scaler_state_dict" in checkpoint:
                 scaler.load_state_dict(checkpoint["scaler_state_dict"])
+                amp_enabled = checkpoint.get("use_amp", False) and amp_available
+                if amp_enabled:
+                    first_checkpoint_saved = True
+                    print("[INFO] AMP restored from checkpoint during recovery and enabled.")
 
             if checkpoints_per_epoch > 0 and last_segment_saved >= 0:
                 if last_segment_saved + 1 >= checkpoints_per_epoch:

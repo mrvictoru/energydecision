@@ -162,14 +162,80 @@ The project workflow is divided into four main stages: Simulation/Baselines, Tra
 **Training:**  
 Train the Decision Transformer using the logs generated in steps 1 & 2.
 
+#### 3.1 Train from scratch
+
+This starts a new model with a context length of 60 and saves checkpoints in `models/`:
+
 ```bash
-python src/train_decision_transformer.py \
-    --data-dir data \
-    --patterns rule_train sdp_train ppo_train \
-    --epochs 10 \
-    --batch-size 64 \
-    --context-length 48
+python3 src/train_decision_transformer.py \
+    --data-dir ./data \
+    --patterns train test_episodes_01 \
+    --epochs 2 \
+    --batch-size 6 \
+    --context-length 60 \
+    --checkpoint-path models/dt_model_checkpoint.pt \
+    --save-path models/dt_model.pt
 ```
+
+#### 3.2 Resume from an existing checkpoint
+
+If you already have a compatible checkpoint (same model config, especially `context_len`), you can resume:
+
+```bash
+python3 src/train_decision_transformer.py \
+    --data-dir ./data \
+    --patterns train test_episodes_01 \
+    --epochs 10 \
+    --batch-size 6 \
+    --context-length 60 \
+    --checkpoint-path models/dt_model_checkpoint.pt \
+    --save-path models/dt_model.pt \
+    --resume
+```
+
+Notes:
+
+- `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
+- `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
+
+#### 3.3 Start fresh if the checkpoint is incompatible
+
+If your previous run used a different `context_length` (or other model config) and you just want to restart training:
+
+```bash
+rm -f models/dt_model_checkpoint.pt
+
+python3 src/train_decision_transformer.py \
+    --data-dir ./data \
+    --patterns train test_episodes_01 \
+    --epochs 2 \
+    --batch-size 6 \
+    --context-length 60 \
+    --checkpoint-path models/dt_model_checkpoint.pt \
+    --save-path models/dt_model.pt
+```
+
+This removes the stale checkpoint so automatic recovery and `--resume` logic do not try to load an incompatible state.
+
+#### 3.4 Stabilizing training when encountering non‑finite weights
+
+If you see `NonFiniteParameterError` in the logs:
+
+- Reduce the learning rate, e.g.:
+
+```bash
+python3 src/train_decision_transformer.py \
+    --data-dir ./data \
+    --patterns train test_episodes_01 \
+    --epochs 2 \
+    --batch-size 6 \
+    --context-length 60 \
+    --lr 1e-5 \
+    --checkpoint-path models/dt_model_checkpoint.pt \
+    --save-path models/dt_model.pt
+```
+
+- Ensure your `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
 
 **Inference:**  
 Load the trained model in `test_simrun.ipynb` to evaluate its performance.
