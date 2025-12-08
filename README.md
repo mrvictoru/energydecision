@@ -167,14 +167,16 @@ Train the Decision Transformer using the logs generated in steps 1 & 2.
 This starts a new model with a context length of 60 and saves checkpoints in `models/`:
 
 ```bash
-python3 src/train_decision_transformer.py \
+python3 train_decision_transformer.py \
     --data-dir ./data \
     --patterns train test_episodes_01 \
     --epochs 2 \
-    --batch-size 6 \
+    --batch-size 4 \
     --context-length 60 \
-    --checkpoint-path models/dt_model_checkpoint.pt \
-    --save-path models/dt_model.pt
+    --lr 1e-5 \
+    --weight-decay 1e-4 \
+    --checkpoint-path ./models/dt_model_checkpoint.pt \
+    --save-path ./models/dt_model.pt
 ```
 
 #### 3.2 Resume from an existing checkpoint
@@ -188,7 +190,7 @@ python3 src/train_decision_transformer.py \
     --epochs 10 \
     --batch-size 6 \
     --context-length 60 \
-    --checkpoint-path models/dt_model_checkpoint.pt \
+    --checkpoint-path ./models/dt_model_checkpoint.pt \
     --save-path models/dt_model.pt \
     --resume
 ```
@@ -211,8 +213,8 @@ python3 src/train_decision_transformer.py \
     --epochs 2 \
     --batch-size 6 \
     --context-length 60 \
-    --checkpoint-path models/dt_model_checkpoint.pt \
-    --save-path models/dt_model.pt
+    --checkpoint-path ./models/dt_model_checkpoint.pt \
+    --save-path ./models/dt_model.pt
 ```
 
 This removes the stale checkpoint so automatic recovery and `--resume` logic do not try to load an incompatible state.
@@ -231,7 +233,7 @@ python3 src/train_decision_transformer.py \
     --batch-size 6 \
     --context-length 60 \
     --lr 1e-5 \
-    --checkpoint-path models/dt_model_checkpoint.pt \
+    --checkpoint-path ./models/dt_model_checkpoint.pt \
     --save-path models/dt_model.pt
 ```
 

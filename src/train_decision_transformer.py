@@ -86,6 +86,12 @@ def parse_args() -> argparse.Namespace:
         help="Device string understood by torch (e.g. cuda, cuda:0, cpu).",
     )
     parser.add_argument(
+        "--amp-mode",
+        choices=["auto", "on", "off"],
+        default="off",
+        help="Automatic mixed precision mode: auto (GPU only), on (force on CUDA), off (disable).",
+    )
+    parser.add_argument(
         "--save-path",
         type=Path,
         default=None,
@@ -255,6 +261,7 @@ def main() -> None:
         return_loss_weight=args.return_loss_weight,
         weight_decay=args.weight_decay,
         return_scale=args.return_scale,
+        amp_mode=args.amp_mode,
     )
 
     print(f"Training finished; final training loss {train_losses[-1]:.6f}")

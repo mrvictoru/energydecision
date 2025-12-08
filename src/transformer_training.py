@@ -171,6 +171,7 @@ def train_decision_transformer(
     return_loss_weight: float = 0.1,
     weight_decay: float = 1e-4,
     return_scale: float = 1.0,
+    amp_mode: str = "auto",
 ) -> tuple:
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -195,18 +196,24 @@ def train_decision_transformer(
     # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
-    use_amp = device.startswith("cuda")
+    amp_applicable = device.startswith("cuda")
+    if amp_mode == "off":
+        amp_allowed = False
+    elif amp_mode == "on":
+        amp_allowed = amp_applicable
+    else:
+        amp_allowed = amp_applicable
+
+    use_amp = amp_allowed
     if use_amp:
         scaler = GradScaler('cuda')
     else:
         scaler = None
 
-    # AMP should be disabled until a checkpoint exists/saved to avoid early fp16 instabilities on GPU.
-    amp_available = use_amp
     amp_enabled = False
     first_checkpoint_saved = False
-    if amp_available:
-        print("[INFO] AMP available on device but disabled until first checkpoint is saved.")
+    if amp_allowed:
+        print("[INFO] AMP is enabled once the first checkpoint exists. Set --amp-mode=off to disable.")
 
     def _is_finite(t: torch.Tensor) -> bool:
         # empty tensors are considered finite
@@ -234,13 +241,14 @@ def train_decision_transformer(
             "batch_size": batch_size,
             "lr": lr,
             "use_amp": use_amp,
+            "amp_enabled": amp_enabled,
         }
         if scaler is not None:
             checkpoint["scaler_state_dict"] = scaler.state_dict()
         torch.save(checkpoint, checkpoint_path)
         # Record that we have a checkpoint on disk and enable AMP if the device supports it.
         first_checkpoint_saved = True
-        if amp_available and use_amp:
+        if amp_allowed and use_amp:
             amp_enabled = True
             print("[INFO] AMP enabled after checkpoint saved on GPU.")
         if segment >= 0:
@@ -261,11 +269,10 @@ def train_decision_transformer(
         log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
         last_epoch_saved = checkpoint.get("epoch", 0)
         last_segment_saved = checkpoint.get("segment", -1)
-        if use_amp and scaler is not None and "scaler_state_dict" in checkpoint:
+        if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:
             scaler.load_state_dict(checkpoint["scaler_state_dict"])
-            # If the checkpoint was saved with AMP enabled and we are on GPU, enable AMP
-            amp_enabled = checkpoint.get("use_amp", False) and amp_available
-            if amp_enabled:
+            if checkpoint.get("amp_enabled", False):
+                amp_enabled = True
                 first_checkpoint_saved = True
                 print("[INFO] AMP restored from checkpoint and enabled.")
         if checkpoints_per_epoch > 0 and last_segment_saved >= 0:
@@ -355,7 +362,7 @@ def train_decision_transformer(
 
                     try:
                         # Per-batch AMP decision: only enable if CUDA is available and we've enabled AMP
-                        use_amp_now = amp_available and amp_enabled and (scaler is not None)
+                        use_amp_now = amp_allowed and amp_enabled and (scaler is not None)
                         if use_amp_now:
                             device_type = "cuda" if device.startswith("cuda") else "cpu"
                             with autocast(device_type=device_type):
@@ -376,7 +383,7 @@ def train_decision_transformer(
 
                             scaler.scale(loss).backward()
                             scaler.unscale_(optimizer)
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.05)
                             scaler.step(optimizer)
                             scaler.update()
                             _assert_model_finite()
@@ -399,7 +406,7 @@ def train_decision_transformer(
                                 continue
 
                             loss.backward()
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.05)
                             optimizer.step()
                             _assert_model_finite()
                             loss_to_log = loss_a.detach().cpu().item()
@@ -481,10 +488,10 @@ def train_decision_transformer(
             log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
             last_epoch_saved = checkpoint.get("epoch", 0)
             last_segment_saved = checkpoint.get("segment", -1)
-            if use_amp and scaler is not None and "scaler_state_dict" in checkpoint:
+            if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:
                 scaler.load_state_dict(checkpoint["scaler_state_dict"])
-                amp_enabled = checkpoint.get("use_amp", False) and amp_available
-                if amp_enabled:
+                if checkpoint.get("amp_enabled", False):
+                    amp_enabled = True
                     first_checkpoint_saved = True
                     print("[INFO] AMP restored from checkpoint during recovery and enabled.")
 
