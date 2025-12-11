@@ -3,7 +3,8 @@ import numpy as np
 import re
 from datetime import datetime
 import matplotlib.pyplot as plt
-from typing import Optional, Any, List, Tuple, Union
+from typing import Optional, Any, List, Tuple, Union, Dict
+from collections import Counter
 from dataclasses import dataclass, field
 from EnergySimEnv import SolarBatteryEnv
 from pathlib import Path
@@ -335,6 +336,151 @@ def flatten_episode_data(episode_data):
         }, strict=False)
         dfs.append(df)
     return pl.concat(dfs)
+
+# Helper: find problematic episodes in logs
+def find_problematic_episodes(
+    all_logs: dict[str, list[pl.DataFrame]],
+    *,
+    reward_thresh: float = 1e5,
+    rtg_thresh: float | None = None,
+    state_thresh: float = 1e3,
+    action_thresh: float = 1e3,
+    max_timestep: int | None = None,
+    rtg_percentile_for_scale: int = 90,
+    target_90th_after_scaling: float = 10.0,
+) -> tuple[List[Dict[str, Any]], float]:
+    """
+    Scan all_logs (algo -> list of episode DataFrames) and return:
+      - reports: list of problem dicts (algorithm, episode_index, rows, issues)
+      - suggested_return_scale: automatic suggestion based on rtg distribution
+
+    The suggested_return_scale is computed so that the chosen percentile (default 90th)
+    of absolute rtg values divided by the suggested scale is approximately
+    `target_90th_after_scaling` (default 10.0). This brings most RTG into a small range.
+    """
+    reports: List[Dict[str, Any]] = []
+    all_rtgs: List[float] = []
+
+    for algo, episodes in all_logs.items():
+        for ep_idx, df in enumerate(episodes):
+            issues: List[str] = []
+            if df.is_empty():
+                issues.append("empty_episode")
+            else:
+                # Collect rtg values for scale suggestion
+                if "rtg" in df.columns:
+                    try:
+                        arr = df["rtg"].to_numpy()
+                        if arr.size and arr.dtype.kind in "fc":
+                            finite = arr[np.isfinite(arr)]
+                            if finite.size:
+                                all_rtgs.append(float(np.nanmedian(np.abs(finite))))  # median per episode
+                    except Exception:
+                        pass
+
+                # NaN/Inf checks
+                for col in df.columns:
+                    try:
+                        arr = df[col].to_numpy()
+                    except Exception:
+                        arr = None
+                    if arr is not None and arr.dtype.kind in "fc":
+                        n_nan = int(np.isnan(arr).sum())
+                        n_posinf = int(np.isposinf(arr).sum())
+                        n_neginf = int(np.isneginf(arr).sum())
+                        if n_nan or n_posinf or n_neginf:
+                            issues.append(f"{col}: NaN={n_nan},+Inf={n_posinf},-Inf={n_neginf}")
+
+                # magnitude checks
+                if "reward" in df.columns:
+                    try:
+                        arr = df["reward"].to_numpy()
+                        if arr.size and arr.dtype.kind in "fc":
+                            if np.nanmax(np.abs(arr)) > reward_thresh:
+                                issues.append(f"reward_mag>{reward_thresh}")
+                    except Exception:
+                        pass
+
+                if "rtg" in df.columns and rtg_thresh is not None:
+                    try:
+                        arr = df["rtg"].to_numpy()
+                        if arr.size and arr.dtype.kind in "fc":
+                            if np.nanmax(np.abs(arr)) > rtg_thresh:
+                                issues.append(f"rtg_mag>{rtg_thresh}")
+                    except Exception:
+                        pass
+
+                state_cols = [c for c in df.columns if c.startswith("state")]
+                if state_cols:
+                    try:
+                        mats = [df[c].to_numpy() for c in state_cols if df[c].to_numpy().dtype.kind in "fc"]
+                        if mats:
+                            mat = np.vstack(mats)
+                            if mat.size and np.nanmax(np.abs(mat)) > state_thresh:
+                                issues.append(f"state_mag>{state_thresh}")
+                    except Exception:
+                        pass
+
+                act_cols = [c for c in df.columns if c.startswith("action")]
+                if act_cols:
+                    try:
+                        mats = [df[c].to_numpy() for c in act_cols if df[c].to_numpy().dtype.kind in "fc"]
+                        if mats:
+                            mat = np.vstack(mats)
+                            if mat.size and np.nanmax(np.abs(mat)) > action_thresh:
+                                issues.append(f"action_mag>{action_thresh}")
+                    except Exception:
+                        pass
+
+                # timestep checks
+                if max_timestep is not None:
+                    for tcol in ["timestep", "time", "step"]:
+                        if tcol in df.columns:
+                            try:
+                                m = int(df[tcol].max())
+                                if m > max_timestep:
+                                    issues.append(f"{tcol}_>{max_timestep}")
+                            except Exception:
+                                pass
+
+            if issues:
+                reports.append({
+                    "algorithm": algo,
+                    "episode_index": int(ep_idx),
+                    "rows": int(df.height) if not df.is_empty() else 0,
+                    "issues": issues,
+                })
+
+    # compute suggested return_scale from collected episode medians of |rtg|
+    suggested_return_scale = 1.0
+    if all_rtgs:
+        try:
+            arr = np.array(all_rtgs, dtype=float)
+            p = float(np.nanpercentile(arr, rtg_percentile_for_scale))
+            # choose scale so that p / scale ~= target_90th_after_scaling
+            if p > 0:
+                suggested_return_scale = max(1.0, p / float(target_90th_after_scaling))
+            else:
+                suggested_return_scale = 1.0
+        except Exception:
+            suggested_return_scale = 1.0
+
+    # concise summary
+    if not reports:
+        print("No problematic episodes found.")
+    else:
+        cnt = Counter((r["algorithm"] for r in reports))
+        print("Problematic episodes by algorithm:")
+        for algo, c in cnt.items():
+            print(f"  {algo}: {c} episodes")
+        import pandas as pd
+        print("First 20 problem rows:")
+        print(pd.DataFrame(reports).head(20).to_string(index=False))
+
+    print(f"\nSuggested return_scale (to bring ~{rtg_percentile_for_scale}th pct episode-median |rtg| to ~{target_90th_after_scaling}): {suggested_return_scale:.4g}")
+
+    return reports, suggested_return_scale
+
 
 
 import json

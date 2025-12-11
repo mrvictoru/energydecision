@@ -168,15 +168,16 @@ This starts a new model with a context length of 60 and saves checkpoints in `mo
 
 ```bash
 python3 train_decision_transformer.py \
-    --data-dir ./data \
+    --data-dir ../data \
     --patterns train test_episodes_01 \
     --epochs 2 \
-    --batch-size 4 \
+    --batch-size 8 \
+    --checkpoints_per_epoch 10 \
     --context-length 60 \
-    --lr 1e-5 \
+    --lr 5e-6 \
     --weight-decay 1e-4 \
-    --checkpoint-path ./models/dt_model_checkpoint.pt \
-    --save-path ./models/dt_model.pt
+    --checkpoint-path ../models/dt_model_checkpoint.pt \
+    --save-path ../models/dt_model.pt
 ```
 
 #### 3.2 Resume from an existing checkpoint
@@ -184,14 +185,15 @@ python3 train_decision_transformer.py \
 If you already have a compatible checkpoint (same model config, especially `context_len`), you can resume:
 
 ```bash
-python3 src/train_decision_transformer.py \
-    --data-dir ./data \
+python3 train_decision_transformer.py \
+    --data-dir ../data \
     --patterns train test_episodes_01 \
-    --epochs 10 \
-    --batch-size 6 \
+    --epochs 2 \
+    --batch-size 8 \
+    --checkpoints_per_epoch 10 \
     --context-length 60 \
-    --checkpoint-path ./models/dt_model_checkpoint.pt \
-    --save-path models/dt_model.pt \
+    --checkpoint-path ../models/dt_model_checkpoint.pt \
+    --save-path ../models/dt_model.pt \
     --resume
 ```
 
@@ -232,7 +234,7 @@ python3 src/train_decision_transformer.py \
     --epochs 2 \
     --batch-size 6 \
     --context-length 60 \
-    --lr 1e-5 \
+    --lr 1e-6 \
     --checkpoint-path ./models/dt_model_checkpoint.pt \
     --save-path models/dt_model.pt
 ```

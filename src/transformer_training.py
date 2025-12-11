@@ -174,47 +174,21 @@ def train_decision_transformer(
     amp_mode: str = "auto",
 ) -> tuple:
 
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    # log the start time
-    start_time = datetime.datetime.now()
-    print(f"Training started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    log_losses = []
-    val_losses = []
-
-    # create DataLoader after device is chosen so pin_memory can be set appropriately
-    pin_memory = True if device.startswith("cuda") else False
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=pin_memory)
-
-    model = model.to(device)
+    # AMP setup method
+    def _resolve_amp_settings(device_str: str, mode: str) -> tuple[bool, Optional[GradScaler]]:
+        applicable = device_str.startswith("cuda")
+        if mode == "off":
+            allowed = False
+        elif mode == "on":
+            allowed = applicable
+        else:
+            allowed = applicable
+        scaler_instance = GradScaler('cuda') if allowed else None
+        return allowed, scaler_instance
     
-    # Save return_scale to model for inference consistency
-    model.return_scale = return_scale
+    GRAD_CLIP_NORM = 0.05
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
-
-    amp_applicable = device.startswith("cuda")
-    if amp_mode == "off":
-        amp_allowed = False
-    elif amp_mode == "on":
-        amp_allowed = amp_applicable
-    else:
-        amp_allowed = amp_applicable
-
-    use_amp = amp_allowed
-    if use_amp:
-        scaler = GradScaler('cuda')
-    else:
-        scaler = None
-
-    amp_enabled = False
-    first_checkpoint_saved = False
-    if amp_allowed:
-        print("[INFO] AMP is enabled once the first checkpoint exists. Set --amp-mode=off to disable.")
-
+    # Helper to check for finite tensors
     def _is_finite(t: torch.Tensor) -> bool:
         # empty tensors are considered finite
         try:
@@ -222,8 +196,109 @@ def train_decision_transformer(
         except Exception:
             return False
 
-    start_epoch = 1
+    # Helper to decide if AMP should be used for this step
+    def _should_use_amp_now() -> bool:
+        return amp_allowed and amp_enabled and (scaler is not None)
 
+    # Forward pass and loss computation
+    def _forward_and_compute_loss(
+        states: torch.Tensor,
+        actions: torch.Tensor,
+        rtgs: torch.Tensor,
+        timesteps: torch.Tensor,
+        mask: torch.Tensor,
+        use_amp_now: bool,
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor] | None, str | None]:
+        
+        # Apply mask
+        m = mask.unsqueeze(-1).float()
+        valid_count = m.sum()
+        # Ensure there is at least one valid entry
+        if valid_count.item() == 0:
+            return None, "zero valid mask entries"
+
+        # Inner computation function
+        def _compute():
+            ret_pred, state_pred, act_pred = model(
+                states, rtgs, timesteps, actions, attention_mask=mask
+            )
+            if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
+                return None, "NaN/Inf in model outputs"
+            loss_r = (
+                F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
+            )
+            loss_s = (
+                F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
+            )
+            loss_a = (
+                F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+            )
+            loss = (
+                action_loss_weight * loss_a
+                + state_loss_weight * loss_s
+                + return_loss_weight * loss_r
+            )
+            if not torch.isfinite(loss):
+                return None, "non-finite loss"
+            return (loss, loss_a), None
+
+        # Run with or without autocast
+        if use_amp_now:
+            device_type = "cuda" if device.startswith("cuda") else "cpu"
+            with autocast(device_type=device_type):
+                return _compute()
+        return _compute()
+
+    # Optimizer step function
+    def _step_optimizer(loss: torch.Tensor, use_amp_now: bool) -> None:
+        if use_amp_now:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
+            optimizer.step()
+
+    def _run_validation(epoch: int, segment: int) -> None:
+        if val_loader is None or val_ds is None:
+            return
+        model.eval()
+        val_total_loss = 0.0
+        val_skipped = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                states = batch["states"].to(device).float()
+                actions = batch["actions"].to(device).float()
+                rtgs = batch["rtgs"].to(device).float()
+                timesteps = batch["timesteps"].to(device)
+                mask = batch["mask"].to(device)
+
+                if return_scale != 1.0:
+                    rtgs = rtgs / return_scale
+
+                m = mask.unsqueeze(-1).float()
+                valid_count = m.sum()
+                if valid_count.item() == 0:
+                    val_skipped += 1
+                    continue
+                ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
+                loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
+                loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
+                loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+                loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
+                val_total_loss += loss.item() * states.size(0)
+        avg_val_loss = val_total_loss / max(1, len(val_ds) - val_skipped)
+        val_losses.append(avg_val_loss)
+        descriptor = f"epoch {epoch}"
+        if segment >= 0:
+            descriptor += f", segment {segment+1}"
+        print(f"Validation Loss ({descriptor}): {avg_val_loss:.6f}")
+        model.train()
+
+    # Checkpoint saving function
     def _save_checkpoint(epoch: int, segment: int = -1) -> None:
         if not checkpoint_path:
             return
@@ -255,11 +330,57 @@ def train_decision_transformer(
             print(f"Checkpoint saved to {checkpoint_path} — epoch {epoch}, segment {segment+1}")
         else:
             print(f"Checkpoint saved to {checkpoint_path} at epoch {epoch}")
+        _run_validation(epoch, segment)
 
+    # Checker to ensure model parameters are finite after optimizer step
+    def _assert_model_finite() -> None:
+        for name, param in model.named_parameters():
+            if not torch.isfinite(param).all():
+                raise NonFiniteParameterError(f"Non-finite parameter detected in '{name}' after optimizer step")
+
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    # log the start time
+    start_time = datetime.datetime.now()
+    print(f"Training started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    log_losses = []
+    val_losses = []
+
+    # create DataLoader after device is chosen so pin_memory can be set appropriately
+    pin_memory = True if device.startswith("cuda") else False
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=pin_memory)
+    val_loader = (
+        DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=pin_memory)
+        if val_ds is not None
+        else None
+    )
+
+    model = model.to(device)
+    
+    # Save return_scale to model for inference consistency
+    model.return_scale = return_scale
+    # Set up optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+
+    # AMP setup
+    amp_allowed, scaler = _resolve_amp_settings(device, amp_mode)
+    use_amp = amp_allowed
+
+    amp_enabled = False
+    first_checkpoint_saved = False
+    if amp_allowed:
+        print("[INFO] AMP is enabled once the first checkpoint exists. Set --amp-mode=off to disable.")
+
+    # Initialize training state    
+    start_epoch = 1
     last_epoch_saved = 0
     last_segment_saved = -1
     resume_from_segment = 0
 
+    # Load from checkpoint if resuming
     if resume and checkpoint_path and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -291,35 +412,30 @@ def train_decision_transformer(
     elif resume and checkpoint_path:
         print(f"Resume requested but checkpoint not found at {checkpoint_path}; starting fresh.")
 
-    def _assert_model_finite() -> None:
-        for name, param in model.named_parameters():
-            if not torch.isfinite(param).all():
-                print(f"[WARN] Non-finite parameter detected in '{name}' after optimizer step; clamping.")
-                with torch.no_grad():
-                    data = param.data
-                    data = torch.nan_to_num(data, nan=0.0, posinf=1e3, neginf=-1e3)
-                    data.clamp_(min=-1e3, max=1e3)
-                    param.data.copy_(data)
 
+    # Training loop with recovery from non-finite parameters
     recovery_attempts = 0
     max_recovery_attempts = 3
     training_finished = False
 
+    # Main training loop
     while not training_finished:
         try:
             for epoch in range(start_epoch, epochs + 1):
+                # Set model to training mode
                 model.train()
                 total_loss = 0.0
                 skipped_batches = 0
                 total_batches = len(loader)
                 segment_boundaries: list[int] = []
+                # Determine segment boundaries for checkpoints within epoch
                 if checkpoints_per_epoch > 0 and total_batches > 0:
                     segment_size = max(1, math.ceil(total_batches / checkpoints_per_epoch))
                     segment_boundaries = [min(total_batches, segment_size * (i + 1)) for i in range(checkpoints_per_epoch)]
                 segment_idx = 0
                 skip_until_batch = 0
-                if (
-                    resume
+                # If resuming from a segment within the epoch, skip earlier batches
+                if (resume
                     and epoch == start_epoch
                     and checkpoints_per_epoch > 0
                     and resume_from_segment > 0
@@ -335,6 +451,7 @@ def train_decision_transformer(
                 )
                 batch_action_loss_sum = 0.0
                 batch_count = 0
+                # Iterate over batches
                 for batch_idx, batch in enumerate(progress_bar):
                     if skip_until_batch and batch_idx < skip_until_batch:
                         continue
@@ -346,127 +463,57 @@ def train_decision_transformer(
 
                     if return_scale != 1.0:
                         rtgs = rtgs / return_scale
-
+                    # Check for finite inputs
                     if not (_is_finite(states) and _is_finite(actions) and _is_finite(rtgs)):
                         skipped_batches += 1
                         progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in inputs")
                         continue
-
+                    # reset gradients
                     optimizer.zero_grad()
-                    m = mask.unsqueeze(-1).float()
-                    valid_count = m.sum()
-                    if valid_count.item() == 0:
+                    use_amp_now = _should_use_amp_now()
+                    # Forward pass and loss computation
+                    batch_result, skip_reason = _forward_and_compute_loss(
+                        states, actions, rtgs, timesteps, mask, use_amp_now
+                    )
+                    # Handle skipped batch
+                    if batch_result is None:
                         skipped_batches += 1
-                        progress_bar.write(f"Skipping batch {batch_idx}: zero valid mask entries")
+                        progress_bar.write(f"Skipping batch {batch_idx}: {skip_reason}")
                         continue
-
+                    loss, loss_action = batch_result
+                    # Optimizer step (Backward pass) with error handling
                     try:
-                        # Per-batch AMP decision: only enable if CUDA is available and we've enabled AMP
-                        use_amp_now = amp_allowed and amp_enabled and (scaler is not None)
-                        if use_amp_now:
-                            device_type = "cuda" if device.startswith("cuda") else "cpu"
-                            with autocast(device_type=device_type):
-                                ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
-                                if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
-                                    skipped_batches += 1
-                                    progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
-                                    continue
-                                loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
-                                loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                                loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
-                                loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-
-                            if not torch.isfinite(loss):
-                                skipped_batches += 1
-                                progress_bar.write(f"Skipping batch {batch_idx}: non-finite loss")
-                                continue
-
-                            scaler.scale(loss).backward()
-                            scaler.unscale_(optimizer)
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.05)
-                            scaler.step(optimizer)
-                            scaler.update()
-                            _assert_model_finite()
-                            loss_to_log = loss_a.detach().cpu().item()
-                            loss_value = loss.detach().cpu().item()
-                        else:
-                            ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
-                            if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
-                                skipped_batches += 1
-                                progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in model outputs")
-                                continue
-                            loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
-                            loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                            loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
-                            loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-
-                            if not torch.isfinite(loss):
-                                skipped_batches += 1
-                                progress_bar.write(f"Skipping batch {batch_idx}: non-finite loss")
-                                continue
-
-                            loss.backward()
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.05)
-                            optimizer.step()
-                            _assert_model_finite()
-                            loss_to_log = loss_a.detach().cpu().item()
-                            loss_value = loss.detach().cpu().item()
+                        _step_optimizer(loss, use_amp_now)
+                        _assert_model_finite()
                     except NonFiniteParameterError:
                         raise
                     except Exception as e:
                         skipped_batches += 1
                         progress_bar.write(f"Skipping batch {batch_idx}: exception during forward/backward: {e}")
                         continue
+                    # Logging
+                    loss_to_log = loss_action.detach().cpu().item()
+                    loss_value = loss.detach().cpu().item()
 
                     total_loss += loss_value * states.size(0)
                     batch_action_loss_sum += loss_to_log
                     batch_count += 1
                     progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "skipped": skipped_batches})
-
+                    # Checkpointing within epoch
                     if checkpoints_per_epoch > 0 and segment_boundaries:
                         while segment_idx < checkpoints_per_epoch and batch_idx + 1 >= segment_boundaries[segment_idx]:
                             if checkpoint_path:
                                 _save_checkpoint(epoch, segment_idx)
                             segment_idx += 1
-
+                # End of epoch logging
                 avg_loss = total_loss / max(1, len(ds) - skipped_batches)
                 avg_action_loss = batch_action_loss_sum / max(1, batch_count)
                 log_losses.append(avg_action_loss)
                 print(
                     f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f} — Action Loss: {avg_action_loss:.6f} — Skipped batches: {skipped_batches}"
                 )
+                # Step the learning rate scheduler
                 scheduler.step()
-
-                if val_ds is not None:
-                    model.eval()
-                    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=pin_memory)
-                    val_total_loss = 0.0
-                    val_skipped = 0
-                    with torch.no_grad():
-                        for batch in val_loader:
-                            states = batch["states"].to(device).float()
-                            actions = batch["actions"].to(device).float()
-                            rtgs = batch["rtgs"].to(device).float()
-                            timesteps = batch["timesteps"].to(device)
-                            mask = batch["mask"].to(device)
-
-                            if return_scale != 1.0:
-                                rtgs = rtgs / return_scale
-
-                            m = mask.unsqueeze(-1).float()
-                            valid_count = m.sum()
-                            if valid_count.item() == 0:
-                                val_skipped += 1
-                                continue
-                            ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
-                            loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
-                            loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                            loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
-                            loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-                            val_total_loss += loss.item() * states.size(0)
-                    avg_val_loss = val_total_loss / max(1, len(val_ds) - val_skipped)
-                    val_losses.append(avg_val_loss)
-                    print(f"Epoch {epoch}/{epochs} — Validation Loss: {avg_val_loss:.6f}")
 
                 if resume and epoch == start_epoch:
                     resume_from_segment = 0
@@ -476,6 +523,8 @@ def train_decision_transformer(
                     _save_checkpoint(epoch)
 
             training_finished = True
+
+        # Handle non-finite parameter recovery (restart from last checkpoint)
         except NonFiniteParameterError as err:
             if not checkpoint_path or not os.path.exists(checkpoint_path):
                 raise
