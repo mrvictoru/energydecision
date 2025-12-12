@@ -57,6 +57,7 @@ class SolarBatteryEnv(gym.Env):
         battery_life_cost=5000.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         correction_interval = 100, # steps before dynamic correction
         init_correction_steps = [10, 20, 40 ,70, 110, 160],
+        dynamic_interval_min_ratio = 0.25,  # minimum ratio of correction interval when nearing end
         step_duration = 0.5 # duration of each step in hours (default half an hour)
     ):
         super(SolarBatteryEnv, self).__init__()
@@ -71,6 +72,7 @@ class SolarBatteryEnv(gym.Env):
         self.render_mode = render_mode
         self.battery_life_cost = battery_life_cost
         self.correction_interval = correction_interval
+        self.dynamic_interval_min_ratio = dynamic_interval_min_ratio
         # Automatically determine step_duration from the DataFrame's 'Time' column
         # Assumes 'Time' is in a format compatible with numpy.datetime64 or pandas.Timestamp
         timestamps = self.df['Time'].to_numpy()
@@ -93,6 +95,7 @@ class SolarBatteryEnv(gym.Env):
         self.soc_history = []
         self.static_deg_history = []
         self.correction_factor = 1.0
+        self.last_dynamic_correction_step = 0
         
         # Action space (1D): battery_flow(normalized to [-1,1])
         self.action_space = spaces.Box(
@@ -231,6 +234,7 @@ class SolarBatteryEnv(gym.Env):
         self.soc_history = []
         self.static_deg_history = []
         self.correction_factor = 1.0
+        self.last_dynamic_correction_step = 0
         
         components = self._get_observation_components(current_step_actual_deg_cost=0.0)
         ctf, rdfv, ndfv, ref, nef = components
@@ -350,6 +354,7 @@ class SolarBatteryEnv(gym.Env):
         # ----- Battery degradation (static and corrected) -----
         # _calculate_battery_degradation returns (corrected_static_fraction, raw_static_fraction)
         corrected_static_frac, raw_static_frac = self._calculate_battery_degradation(DoD, battery_flow_rate, avg_soc)
+        corrected_static_frac = max(0.0, corrected_static_frac)
 
         # Record SoC for dynamic degradation correction (percent)
         self.soc_history.append((self.battery_level / self.battery_capacity) * 100.0)
@@ -358,33 +363,36 @@ class SolarBatteryEnv(gym.Env):
         self.static_deg_history.append(raw_static_frac)
 
         # Compute dynamic correction at configured intervals
-        num_cycles = 0 # Placeholder for number of cycles
-        dynamic_deg = -1.0 # Placeholder for dynamic degradation percentage
+        num_cycles = 0
+        dynamic_deg = -1.0
+        dynamic_interval_used = self.correction_interval
 
-        # ----- Dynamic Degradation Correction -----
-        # Check if the current step is one of the initial frequent steps OR
-        # if it's past the initial phase and meets the regular interval condition.
+        # Adaptive interval: shrink as simulation nears max_step
+        progress = min(1.0, self.current_step / max(1, self.max_step))
+        interval_ratio = max(self.dynamic_interval_min_ratio, 1.0 - progress)
+        dynamic_interval = max(1, int(self.correction_interval * interval_ratio))
+        dynamic_interval_used = dynamic_interval
+
         dynamic_correct = False
         if self.current_step in self.init_correction_steps:
             dynamic_correct = True
-        elif self.current_step > (self.init_correction_steps[-1] if self.init_correction_steps else 0) and \
-            self.current_step % self.correction_interval == 0:
+        elif self.current_step - self.last_dynamic_correction_step >= dynamic_interval:
             dynamic_correct = True
 
-        if dynamic_correct:
+        if dynamic_correct and len(self.static_deg_history) > 0:
             dynamic_deg, num_cycles = dynamic_degradation(self.soc_history, self.step_duration)
             static_deg_sum = np.sum(self.static_deg_history, dtype=np.float64)
-            # Avoid division by zero or near-zero
-            if abs(static_deg_sum) > 1e-9: 
-                self.correction_factor = dynamic_deg / static_deg_sum
-            else:
-                # Handle case where static sum is zero (e.g., set factor to 1 or log a warning)
-                self.correction_factor = 1.0
-            # after updating correction_factor, recompute the corrected fraction for reporting and cost
-            corrected_static_frac = raw_static_frac * self.correction_factor
+            if not np.isfinite(static_deg_sum) or static_deg_sum <= 1e-12:
+                static_deg_sum = 1e-12
+            ratio = dynamic_deg / static_deg_sum if np.isfinite(dynamic_deg) else 1.0
+            self.correction_factor = float(np.clip(ratio, 0.01, 10.0))
+            self.last_dynamic_correction_step = self.current_step
+            corrected_static_frac = max(0.0, raw_static_frac * self.correction_factor)
+        else:
+            dynamic_interval_used = dynamic_interval
 
         # Compute per-step degradation cost in USD
-        current_step_deg_cost = corrected_static_frac * self.battery_life_cost
+        current_step_deg_cost = max(0.0, corrected_static_frac) * self.battery_life_cost
 
         # ----- Compute Rewards (electricity cost and grid violation)-----
         grid_reward = self._calculate_grid_reward(grid_energy, energy_price)
@@ -406,6 +414,7 @@ class SolarBatteryEnv(gym.Env):
             "static_deg_sum_raw": float(np.sum(self.static_deg_history, dtype=np.float64)),
             "num_cycles": num_cycles,
             "correction_factor": self.correction_factor,
+            "dynamic_interval": dynamic_interval_used,
             "deg_cost": current_step_deg_cost,
             "energy_conservation_violation": False
         }

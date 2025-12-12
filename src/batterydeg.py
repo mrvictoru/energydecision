@@ -19,19 +19,24 @@ def nCL_Ich(Ich):
     m, n, o, p = 5963.0, -0.6531, 321.4, 0.03168
     return (m * math.exp(n * Ich) + o * math.exp(p * Ich)) / (m * math.exp(n * Ich_nom) + o * math.exp(p * Ich_nom))
 
+def _ensure_positive(value: float, eps: float = 1e-9) -> float:
+    if not np.isfinite(value) or value <= eps:
+        return eps
+    return value
+
+
 def nCL_SoC_DoD(SoC, DoD):
     q, s, t, u, v = 1471.0, 214.3, 0.6111, 0.3369, -2.295
     CL4 = lambda DoD, SoC: q + (20.0 * (s + 100.0 * u) - 200.0 * t) * DoD + s * SoC + t * DoD**2 + u * DoD * SoC + v * SoC**2
-    return CL4(DoD, SoC) / CL4(DoD_nom, SoC_nom)
+    num = _ensure_positive(CL4(DoD, SoC))
+    den = _ensure_positive(CL4(DoD_nom, SoC_nom))
+    return num / den
 
 # Static multi-factor degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
 def static_degradation(Id, Ich, SoC, DoD):
     nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC, DoD))
-    denom = CL_nom * nCL
-    if abs(denom) < 1e-12:
-        return 0
-    with np.errstate(divide='ignore', invalid='ignore'):
-        return 0.5 / denom
+    denom = _ensure_positive(CL_nom * nCL)
+    return 0.5 / denom
 
 """
 # Example usage
@@ -109,9 +114,7 @@ def degradation_per_cycle(Id, Ich, SoC_avg, DoD):
     effective discharge and charge C-rates (Id and Ich) for that cycle.
     """
     nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC_avg, DoD))
-    denom = nCL * CL_nom
-    if abs(denom) < 1e-12:
-        return 0
+    denom = _ensure_positive(nCL * CL_nom)
     return 1 / denom
 
 # Dynamic degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
@@ -123,7 +126,7 @@ def dynamic_degradation(soc_profile, step_duration=0.5):
     average SoC, DoD, and effective discharge and charging C-rates.
     """
     cycles = rainflow_counting(soc_profile, step_duration)
-    total_degradation = 0
+    total_degradation = 0.0
     for SoC_avg, DoD, Id_cycle, Ich_cycle in cycles:
         degradation = degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
         total_degradation += degradation

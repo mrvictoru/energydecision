@@ -1,104 +1,164 @@
 """
-This module contains the classes for creating a custom transformer based model for acting as a decision making agent for the trading environment.
-Based on https://github.com/nikhilbarhate99/min-decision-transformer/blob/master/decision_transformer/model.py
-
+Modernized Decision Transformer with Pre-Norm, RMSNorm, SwiGLU, PyTorch SDPA, and optional RoPE.
+Preserves the original API while improving speed and stability.
 """
 
 # import libraries
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-# define the masked causal attention
-class MaskedAttention(nn.Module):
-    def __init__(self, h_dim, max_T, n_heads, drop_p):
+class RMSNorm(nn.Module):
+    def __init__(self, dim, eps: float = 1e-6):
         super().__init__()
+        self.eps = eps
+        self.scale = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        norm_x = torch.mean(x * x, dim=-1, keepdim=True)
+        x = x * torch.rsqrt(norm_x + self.eps)
+        return x * self.scale
+
+
+class SwiGLU(nn.Module):
+    def __init__(self, dim, hidden_dim, drop_p):
+        super().__init__()
+        self.w1 = nn.Linear(dim, hidden_dim)
+        self.w2 = nn.Linear(dim, hidden_dim)
+        self.w3 = nn.Linear(hidden_dim, dim)
+        self.dropout = nn.Dropout(drop_p)
+
+    def forward(self, x):
+        return self.dropout(self.w3(F.silu(self.w1(x)) * self.w2(x)))
+
+
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_position=4096, base=10000.0):
+        super().__init__()
+        if dim % 2 != 0:
+            raise ValueError("RoPE requires even dimension")
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        positions = torch.arange(max_position, dtype=torch.float32)
+        freqs = torch.einsum("i,j->ij", positions, inv_freq)
+        self.register_buffer("cos", torch.cos(freqs))
+        self.register_buffer("sin", torch.sin(freqs))
+
+    def forward(self, seq_len):
+        if seq_len > self.cos.shape[0]:
+            raise ValueError("seq_len exceeds RoPE cache")
+        return self.cos[:seq_len], self.sin[:seq_len]
+
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    cos = cos.to(dtype=q.dtype, device=q.device).unsqueeze(0).unsqueeze(0)
+    sin = sin.to(dtype=q.dtype, device=q.device).unsqueeze(0).unsqueeze(0)
+    q_even, q_odd = q[..., ::2], q[..., 1::2]
+    k_even, k_odd = k[..., ::2], k[..., 1::2]
+    q = torch.cat([q_even * cos - q_odd * sin, q_even * sin + q_odd * cos], dim=-1)
+    k = torch.cat([k_even * cos - k_odd * sin, k_even * sin + k_odd * cos], dim=-1)
+    return q, k
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, h_dim, max_T, n_heads, drop_p, rope_enabled=False, rope_max_position=4096, rope_base=10000.0):
+        super().__init__()
+        assert h_dim % n_heads == 0, "h_dim must be divisible by n_heads"
         self.n_heads = n_heads
+        self.head_dim = h_dim // n_heads
         self.drop_p = drop_p
-        # feed forward networks which create the query, key and value
-        self.Q_net = nn.Linear(h_dim, h_dim)
-        self.K_net = nn.Linear(h_dim, h_dim)
-        self.V_net = nn.Linear(h_dim, h_dim)
+        self.rope_enabled = rope_enabled
+        if rope_enabled:
+            if self.head_dim % 2 != 0:
+                raise ValueError("RoPE requires even head_dim")
+            self.rotary = RotaryEmbedding(self.head_dim, max_position=rope_max_position, base=rope_base)
 
-        # feed forward network which projects the attention to the correct dimension
-        self.proj_net = nn.Linear(h_dim, h_dim)
-
-        # dropout layers
-        self.att_drop = nn.Dropout(drop_p)
+        self.qkv = nn.Linear(h_dim, 3 * h_dim, bias=False)
+        self.proj = nn.Linear(h_dim, h_dim)
         self.proj_drop = nn.Dropout(drop_p)
 
-        # create the mask
         mask = torch.tril(torch.ones(max_T, max_T)).view(1, 1, max_T, max_T)
-
-        # register_buffer will make the mask a constant tensor
-        # so that it will not be included in the model parameters and be updated during backpropagation
         self.register_buffer('mask', mask)
 
     def forward(self, x, key_padding_mask=None):
         # x: [B, T, H]
-        # key_padding_mask: [B, T] with 1 for valid tokens, 0 for padding (optional)
-        B, T, C = x.shape # batch size, sequence length, hidden dimension * number of heads
-        N, D = self.n_heads, C // self.n_heads # number of heads, dimension of each head
+        B, T, C = x.shape
 
-        # compute the query, key and value
-        Q = self.Q_net(x).view(B, T, N, D).transpose(1, 2) # [B, N, T, D]
-        K = self.K_net(x).view(B, T, N, D).transpose(1, 2)
-        V = self.V_net(x).view(B, T, N, D).transpose(1, 2)
+        qkv = self.qkv(x)
+        q, k, v = qkv.chunk(3, dim=-1)
 
-        # compute the attention
-        weights = Q @ K.transpose(2,3) / math.sqrt(D) # QK^T / sqrt(D)
-        
-        # Apply causal mask (lower triangular)
-        weights = weights.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf')) # mask the future tokens 
-        
-        # Apply key padding mask if provided
+        q = q.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)  # [B, N, T, D]
+        k = k.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
+        v = v.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
+
+        if self.rope_enabled:
+            cos, sin = self.rotary(T)
+            q, k = apply_rotary_pos_emb(q, k, cos, sin)
+
+        # Build combined attention mask
+        causal = self.mask[:, :, :T, :T].bool()  # [1,1,T,T]
+
         if key_padding_mask is not None:
-            # Convert to boolean mask: True = keep, False = mask out
-            key_padding_mask = key_padding_mask.to(dtype=torch.bool, device=weights.device)
-            key_mask = key_padding_mask.unsqueeze(1).unsqueeze(2)  # [B, 1, 1, T]
-            weights = weights.masked_fill(~key_mask, float('-inf'))
-        
-        normalized_weights = F.softmax(weights, dim=-1) # softmax along the last dimension
-        # Replace NaN/Inf with 0 (happens when all keys are masked for a query position)
-        normalized_weights = torch.nan_to_num(normalized_weights, nan=0.0, posinf=0.0, neginf=0.0)
-        A = self.att_drop(normalized_weights @ V) # attention with dropout
+            kp = key_padding_mask.view(B, 1, 1, T).to(dtype=torch.bool)
+            combined = causal & kp
+            # Float mask: 0 keep, -inf mask
+            attn_mask = torch.zeros((B, 1, T, T), device=x.device, dtype=q.dtype)
+            attn_mask = attn_mask.masked_fill(~combined, float('-inf'))
+            y = F.scaled_dot_product_attention(
+                q, k, v,
+                attn_mask=attn_mask,
+                dropout_p=self.drop_p if self.training else 0.0
+            )
+        else:
+            y = F.scaled_dot_product_attention(
+                q, k, v,
+                is_causal=True,
+                dropout_p=self.drop_p if self.training else 0.0
+            )
 
-        # compute the output
-        # gather heads and project to correct dimension
-        attention = A.transpose(1, 2).contiguous().view(B, T, N*D)
-        out = self.proj_drop(self.proj_net(attention))
-        out = torch.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        y = self.proj_drop(self.proj(y))
+        y = torch.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+        return y
 
-        return out
 
-# define the attention block with layer normalization and residual connection as well as the feed forward network
-class AttentionBlock(nn.Module):
-    def __init__(self, h_dim, max_T, n_heads, drop_p):
+class ModernBlock(nn.Module):
+    def __init__(self, h_dim, max_T, n_heads, drop_p, rope_enabled=False, rope_max_position=4096, rope_base=10000.0):
         super().__init__()
-        self.attention = MaskedAttention(h_dim, max_T, n_heads, drop_p)
-        self.norm1 = nn.LayerNorm(h_dim)
-        self.norm2 = nn.LayerNorm(h_dim)
-        self.ffn = nn.Sequential(
-            nn.Linear(h_dim, 4*h_dim),
-            nn.GELU(),
-            nn.Linear(4*h_dim, h_dim),
-            nn.Dropout(drop_p)
+        self.norm1 = RMSNorm(h_dim)
+        self.attn = CausalSelfAttention(
+            h_dim,
+            max_T,
+            n_heads,
+            drop_p,
+            rope_enabled=rope_enabled,
+            rope_max_position=rope_max_position,
+            rope_base=rope_base,
         )
+        self.norm2 = RMSNorm(h_dim)
+        self.ffn = SwiGLU(h_dim, 4 * h_dim, drop_p)
 
     def forward(self, x, key_padding_mask=None):
-        # x: [B, T, H]
-        # key_padding_mask: [B, T] with 1 for valid tokens, 0 for padding (optional)
-        # Attention -> LayerNorm -> Residual -> FFN -> LayerNorm -> Residual
-        out = self.norm1(x + self.attention(x, key_padding_mask))
-        out = self.norm2(out + self.ffn(out))
-
-        return out
+        x = x + self.attn(self.norm1(x), key_padding_mask)
+        x = x + self.ffn(self.norm2(x))
+        return x
 
 # define the decision transformer
 class DecisionTransformer(nn.Module):
-    def __init__(self, state_dim, act_dim, n_block, h_dim, context_len, n_heads, drop_p, max_timestep = 4096):
+    def __init__(
+        self,
+        state_dim,
+        act_dim,
+        n_block,
+        h_dim,
+        context_len,
+        n_heads,
+        drop_p,
+        max_timestep=4096,
+        rope_enabled=False,
+        rope_max_position=4096,
+        rope_base=10000.0,
+    ):
         super().__init__()
         self.state_dim = state_dim
         self.act_dim = act_dim
@@ -107,7 +167,18 @@ class DecisionTransformer(nn.Module):
 
         # transformer blocks
         input_seq_len = 3 * context_len
-        blocks = [AttentionBlock(h_dim, input_seq_len, n_heads, drop_p) for _ in range(n_block)]
+        blocks = [
+            ModernBlock(
+                h_dim,
+                input_seq_len,
+                n_heads,
+                drop_p,
+                rope_enabled=rope_enabled,
+                rope_max_position=rope_max_position,
+                rope_base=rope_base,
+            )
+            for _ in range(n_block)
+        ]
         self.transformer = nn.ModuleList(blocks)
 
         # projection heads (project to embedding)
@@ -128,6 +199,8 @@ class DecisionTransformer(nn.Module):
         self.pred_rtg = nn.Linear(h_dim, 1)
         self.pred_state = nn.Linear(h_dim, state_dim)
         self.pred_act = nn.Sequential(*([nn.Linear(h_dim, act_dim)] + ([nn.Tanh()] if use_action_tah else [])))
+        # final norm
+        self.ln_f = RMSNorm(h_dim)
         
         # Default return_scale for inference (can be set during training)
         self.return_scale = 1.0
@@ -171,6 +244,9 @@ class DecisionTransformer(nn.Module):
         # transformer blocks
         for block in self.transformer:
             h = block(h, key_padding_mask=stacked_mask)
+
+        # final pre-norm on output stream
+        h = self.ln_f(h)
 
         # get h reshaped such that its size is (B, 3, T, h_dim) and
         # h[:, 0, t] is conditioned on r_0, s_0, a_0, ..., r_t

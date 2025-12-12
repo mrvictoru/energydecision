@@ -111,6 +111,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-loss-weight", type=float, default=0.1)
     parser.add_argument("--return-loss-weight", type=float, default=0.1)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument(
+        "--rope-enabled",
+        action="store_true",
+        help="Enable rotary positional embeddings inside transformer blocks.",
+    )
+    parser.add_argument(
+        "--rope-max-position",
+        type=int,
+        default=None,
+        help="Override the maximum sequence length cached for RoPE (defaults to context length * 3).",
+    )
+    parser.add_argument(
+        "--rope-base",
+        type=float,
+        default=None,
+        help="Override the RoPE frequency base (defaults to 10000.0).",
+    )
     return parser.parse_args()
 
 
@@ -145,6 +162,9 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict) -> dict:
         "n_heads": 8,
         "drop_p": 0.1,
         "max_timestep": 17567,
+        "rope_enabled": False,
+        "rope_max_position": None,
+        "rope_base": 10000.0,
     }
     model_kwargs = {**defaults, **base_kwargs}
     if args.state_dim is not None:
@@ -155,6 +175,12 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict) -> dict:
         model_kwargs["context_len"] = args.context_length
     if args.max_timestep is not None:
         model_kwargs["max_timestep"] = args.max_timestep
+    if args.rope_enabled:
+        model_kwargs["rope_enabled"] = True
+    if args.rope_max_position is not None:
+        model_kwargs["rope_max_position"] = args.rope_max_position
+    if args.rope_base is not None:
+        model_kwargs["rope_base"] = args.rope_base
     # ensure values are concrete ints where expected
     model_kwargs["state_dim"] = int(model_kwargs["state_dim"])
     model_kwargs["act_dim"] = int(model_kwargs["act_dim"])
@@ -164,6 +190,12 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict) -> dict:
     model_kwargs["n_heads"] = int(model_kwargs["n_heads"])
     model_kwargs["max_timestep"] = int(model_kwargs.get("max_timestep", model_kwargs["context_len"]))
     model_kwargs["drop_p"] = float(model_kwargs["drop_p"])
+    rope_max_pos = model_kwargs.get("rope_max_position")
+    if rope_max_pos is None:
+        rope_max_pos = 3 * model_kwargs["context_len"]
+    model_kwargs["rope_max_position"] = int(rope_max_pos)
+    model_kwargs["rope_base"] = float(model_kwargs.get("rope_base", 10000.0))
+    model_kwargs["rope_enabled"] = bool(model_kwargs.get("rope_enabled", False))
     return model_kwargs
 
 

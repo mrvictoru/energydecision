@@ -211,7 +211,9 @@ def train_decision_transformer(
     ) -> tuple[tuple[torch.Tensor, torch.Tensor] | None, str | None]:
         
         # Apply mask
-        m = mask.unsqueeze(-1).float()
+        mask_bool = mask > 0.5
+        mask_bool = mask_bool.to(dtype=torch.bool)
+        m = mask_bool.unsqueeze(-1).float()
         valid_count = m.sum()
         # Ensure there is at least one valid entry
         if valid_count.item() == 0:
@@ -220,7 +222,7 @@ def train_decision_transformer(
         # Inner computation function
         def _compute():
             ret_pred, state_pred, act_pred = model(
-                states, rtgs, timesteps, actions, attention_mask=mask
+                states, rtgs, timesteps, actions, attention_mask=mask_bool
             )
             if not (_is_finite(ret_pred) and _is_finite(state_pred) and _is_finite(act_pred)):
                 return None, "NaN/Inf in model outputs"
@@ -279,12 +281,14 @@ def train_decision_transformer(
                 if return_scale != 1.0:
                     rtgs = rtgs / return_scale
 
-                m = mask.unsqueeze(-1).float()
+                mask_bool = mask > 0.5
+                mask_bool = mask_bool.to(dtype=torch.bool)
+                m = mask_bool.unsqueeze(-1).float()
                 valid_count = m.sum()
                 if valid_count.item() == 0:
                     val_skipped += 1
                     continue
-                ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask)
+                ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask_bool)
                 loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
                 loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
                 loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
