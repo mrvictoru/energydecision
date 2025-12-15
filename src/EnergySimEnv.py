@@ -332,6 +332,7 @@ class SolarBatteryEnv(gym.Env):
                 "static_deg_sum_raw": -1.0,  # Placeholder for static degradation
                 "num_cycles": 0,  # Placeholder for number of cycles
                 "correction_factor": self.correction_factor,
+                "dynamic_interval": self.correction_interval,
                 "deg_cost": 0.0,  # No degradation cost due to violation
                 "energy_conservation_violation": True
             }
