@@ -40,10 +40,8 @@ This project provides a comprehensive framework for benchmarking control algorit
 
 The easiest way to run the project is via Docker, which sets up a JupyterLab environment with all dependencies.*
 
-```bash*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
-
-docker compose up --build*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
-
+```bash
+sudo docker compose up
 ```
 
 Access JupyterLab at `http://localhost:8888`.*
@@ -69,15 +67,6 @@ pip install -r requirements.txt
 pip install -r torch_req.txt
 ```
 
-### 3. (Optional) Using Docker
-
-Build and run the container, which will spin up a JupyterLab server with all dependencies installed:
-
-```bash
-sudo docker compose up
-```
-
----
 
 ## Project Structure
 
@@ -167,6 +156,8 @@ Train the Decision Transformer using the logs generated in steps 1 & 2.
 This starts a new model with a context length of 60 and saves checkpoints in `models/`:
 
 ```bash
+docker exec -it test_energy_container /bin/bash
+
 python3 train_decision_transformer.py \
     --data-dir ../data \
     --patterns train test_episodes_01 \

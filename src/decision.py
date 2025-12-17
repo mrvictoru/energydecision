@@ -3,7 +3,7 @@ import torch
 import polars as pl
 import warnings
 from typing import Optional
-from EnergySimEnv import SolarBatteryEnv
+from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
 from batterydeg import static_degradation
 from quantile_scenarios import QuantileScenarioGenerator
@@ -60,17 +60,17 @@ def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                 horizon=48, soc_resolution=20, action_resolution=11, static_deg_correction_factor=0.01, # Added SDP params
+                 horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.08,
                  degradation_model='linear', linear_deg_cost_p_kwh=None,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
         """
         env: an instance of SolarBatteryEnv.
-        algorithm: choose between 'rule', 'rl', 'dt', 'mrdp' or 'sdp'.
+        algorithm: choose between 'rule', 'rl', 'dt', 'mrdp', 'sdp', or 'oracle'.
         model: For RL/DT algorithm, a trained model.
         horizon: Time horizon for SDP optimization (default: 48 steps = 24 hours).
         soc_resolution: Resolution of state-of-charge discretization (default: 20 levels).
-        action_resolution: Resolution of action discretization (default: 11 levels, e.g., -1.0, -0.8, ..., 0.8, 1.0).
+        action_resolution: Resolution of action discretization (default: 41 levels, e.g., -1.0, -0.95, ..., 0.95, 1.0).
         dt_gamma: Discount factor for RTG updates in DT inference (default: 0.99, matching training).
         """
         self.env = env
@@ -78,7 +78,7 @@ class Agent:
         self.model = model
         self.rule_presistence = False  # Preset for rule-based action persistence
 
-        if self.algorithm == 'sdp' or self.algorithm == 'mrdp':  # Stochastic Dynamic Programming
+        if self.algorithm in ('sdp', 'mrdp', 'oracle'):
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
             self.subhorizon_specs = subhorizon_specs
             # Normalize shorthand keys (soc_res/action_res) to soc_resolution/action_resolution
@@ -104,6 +104,20 @@ class Agent:
             self.soc_resolution = soc_resolution
             self.action_resolution = action_resolution
             self.static_deg_correction_factor = static_deg_correction_factor
+
+            # Shared DP parameters
+            self.battery_capacity = env.battery_capacity
+            self.max_battery_flow = env.max_battery_flow
+            self.step_duration = env.step_duration
+            self.max_grid_energy = env.max_grid_energy
+            self.battery_life_cost = env.battery_life_cost
+            self.soc_levels_kwh = np.linspace(0, self.battery_capacity, self.soc_resolution)
+
+            if self.algorithm == 'oracle':
+                self.oracle_horizon = horizon
+                self.oracle_action_levels = np.linspace(-1.0, 1.0, action_resolution, dtype=np.float32)
+
+        if self.algorithm == 'sdp' or self.algorithm == 'mrdp':  # Stochastic Dynamic Programming
 
             self.degradation_model = degradation_model
             if self.degradation_model == 'linear':
@@ -315,6 +329,8 @@ class Agent:
             noise = np.random.normal(-0.001, 0.001)
             action_value = min(max(action_value + noise, -1.0), 1.0)
             return [np.float32(action_value)]
+        elif self.algorithm == 'oracle':
+            return self._choose_oracle_action()
         
      # --- SDP Helper Methods ---
 
@@ -342,6 +358,119 @@ class Agent:
     def _soc_to_idx(self, soc_kwh):
         """Maps a continuous SoC value to the index of the nearest discrete level."""
         return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
+
+    # --- Oracle Helper Methods ---
+
+    def _choose_oracle_action(self):
+        """Determines the optimal first action by solving a DP using actual future values."""
+        if not hasattr(self, 'oracle_action_levels'):
+            raise ValueError("Oracle algorithm requested but oracle_action_levels not initialized.")
+
+        remaining_steps = max(0, len(self.env.df) - self.env.current_step)
+        remaining_env_budget = max(0, self.env.max_step - self.env.current_step)
+        horizon = min(self.oracle_horizon, remaining_steps, remaining_env_budget)
+
+        if horizon <= 0:
+            raw_obs = self.env.get_raw_obs()
+            return self.rule_based_action(raw_obs)
+
+        policy_table = self._solve_oracle_dp(self.env.current_step, horizon)
+        if policy_table is None:
+            raw_obs = self.env.get_raw_obs()
+            return self.rule_based_action(raw_obs)
+
+        current_soc_idx = self._soc_to_idx(self.env.battery_level)
+        action_idx = policy_table[0, current_soc_idx]
+        if action_idx == -1:
+            raw_obs = self.env.get_raw_obs()
+            return self.rule_based_action(raw_obs)
+
+        action_value = self.oracle_action_levels[int(action_idx)]
+        noise = np.random.normal(-0.001, 0.001)
+        action_value = min(max(action_value + noise, -1.0), 1.0)
+        return [np.float32(action_value)]
+
+    def _solve_oracle_dp(self, start_index: int, horizon: int):
+        """DP-based oracle over the actual future rows (static degradation only)."""
+        num_soc_levels = len(self.soc_levels_kwh)
+        num_actions = len(self.oracle_action_levels)
+        cost_to_go = np.full((horizon + 1, num_soc_levels), np.inf)
+        policy_table = np.full((horizon, num_soc_levels), -1, dtype=int)
+        cost_to_go[horizon, :] = 0.0
+
+        socs = self.soc_levels_kwh[:, np.newaxis]  # (S,1)
+        battery_energies = self.oracle_action_levels * self.max_battery_flow * self.step_duration  # (A,)
+
+        for t in range(horizon - 1, -1, -1):
+            row = self.env._get_row(start_index + t)
+            solar = row['SolarGen']
+            load = row['HouseLoad']
+            imp_price = row['ImportEnergyPrice']
+            exp_price = row['ExportEnergyPrice']
+
+            battery_reshaped = battery_energies[np.newaxis, :]  # (1, A)
+            clipped_energies = np.clip(
+                battery_reshaped,
+                -socs,
+                self.battery_capacity - socs
+            )
+
+            battery_rates = clipped_energies / self.step_duration
+            battery_charge = np.maximum(clipped_energies, 0.0)
+            battery_discharge = np.maximum(-clipped_energies, 0.0)
+
+            demand = load + battery_charge
+            supply = solar + battery_discharge
+            grid_energy = demand - supply
+            grid_violation = np.abs(grid_energy) > (self.max_grid_energy + 1e-6)
+            energy_price = np.where(grid_energy >= 0, imp_price, exp_price)
+            grid_cost = np.where(grid_energy >= 0, grid_energy * imp_price, -np.abs(grid_energy) * exp_price)
+            grid_cost[grid_violation] = np.inf
+
+            # Compute per-(soc,action) degradation cost with scalar static_degradation calls
+            num_soc = num_soc_levels
+            stage_costs = np.full((num_soc, num_actions), np.inf)
+            for si in range(num_soc):
+                soc_val = float(socs[si, 0])
+                for ai in range(num_actions):
+                    # Skip infeasible/masked entries
+                    if grid_violation[si, ai]:
+                        continue
+                    energy = float(clipped_energies[si, ai])
+                    battery_rate = energy / self.step_duration
+
+                    Id = abs(min(0.0, battery_rate)) / self.battery_capacity
+                    Ich = abs(max(0.0, battery_rate)) / self.battery_capacity
+                    DoD_percent = abs(energy) / self.battery_capacity * 100.0
+
+                    avg_soc = (soc_val + 0.5 * energy) / self.battery_capacity * 100.0
+                    avg_soc = float(np.clip(avg_soc, 0.0, 100.0))
+
+                    if DoD_percent < 1e-6:
+                        degradation_frac = 0.0
+                    else:
+                        degradation_frac = static_degradation(Id, Ich, avg_soc, DoD_percent)
+
+                    degradation_cost = degradation_frac * self.battery_life_cost
+                    stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
+
+            next_socs = socs + clipped_energies
+            next_costs = np.interp(next_socs.ravel(), self.soc_levels_kwh, cost_to_go[t + 1, :]).reshape(next_socs.shape)
+
+            total_costs = stage_costs + next_costs
+            feasible_mask = np.isfinite(total_costs)
+
+            row_min = np.min(np.where(feasible_mask, total_costs, np.inf), axis=1)
+            best_actions = np.argmin(np.where(feasible_mask, total_costs, np.inf), axis=1)
+
+            finite_mask = np.isfinite(row_min)
+            cost_to_go[t, :] = np.where(finite_mask, row_min, np.inf)
+            policy_table[t, :] = -1
+            policy_table[t, finite_mask] = best_actions[finite_mask]
+
+        if not np.any(np.isfinite(cost_to_go[0, :])):
+            return None
+        return policy_table
 
     def _solve_sdp(self, forecasts, start_index: int = 0):
         """
@@ -707,7 +836,7 @@ class Agent:
         terminated, truncated = False, False
         step = 0  # Step counter
         # Decide which obs to use based on agent type
-        if self.algorithm in ['rule', 'sdp']:
+        if self.algorithm in ['rule', 'sdp', 'oracle']:
             # Use raw_obs if available, else fallback to obs
             current_obs = raw_obs
         else:  # 'rl', 'dt', etc.
@@ -773,7 +902,7 @@ class Agent:
                 # Select the correct next_obs for the next step
                 raw_obs = self.env.get_raw_obs()  # Get raw observation if available
                 obs = next_obs
-                if self.algorithm in ['rule', 'sdp']:
+                if self.algorithm in ['rule', 'sdp', 'oracle']:
                     current_obs = raw_obs
                 else:
                     current_obs = obs
@@ -816,8 +945,8 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     Returns: List of DataFrames (one per environment).
     """
     agent_kwargs = agent_kwargs or {}
-    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp','dt']:
-        raise ValueError("Parallel execution is only supported for 'rule', 'sdp', and 'mrdp' algorithms. ")
+    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp','dt', 'oracle']:
+        raise ValueError("Parallel execution is only supported for 'rule', 'sdp', 'mrdp', 'dt', and 'oracle' algorithms. ")
 
     if use_notebook_tqdm:
         from tqdm.notebook import tqdm as tqdm_bar
