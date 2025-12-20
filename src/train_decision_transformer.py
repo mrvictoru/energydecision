@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import random
 from pathlib import Path
@@ -102,6 +103,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional checkpoint path for intermediate saves.",
+    )
+    parser.add_argument(
+        "--loss-csv-path",
+        type=Path,
+        default=None,
+        help="Optional path to save training/validation loss history as CSV.",
     )
     parser.add_argument("--checkpoint-interval", type=int, default=1)
     parser.add_argument("--checkpoints-per-epoch", type=int, default=6)
@@ -208,6 +215,7 @@ def main() -> None:
     config_path = (args.model_config or (model_dir / "decision_transformer_model_kwargs.json")).resolve()
     save_path = (args.save_path or (model_dir / "dt_model.pt")).resolve()
     checkpoint_path = (args.checkpoint_path or (model_dir / "dt_model_checkpoint.pt")).resolve()
+    loss_csv_path = (args.loss_csv_path or (model_dir / "dt_model_loss_history.csv")).resolve()
 
     if not data_dir.is_dir():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
@@ -295,6 +303,13 @@ def main() -> None:
         return_scale=args.return_scale,
         amp_mode=args.amp_mode,
     )
+
+    # store training loss and validation loss history in csv
+    with open(loss_csv_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['epoch', 'train_loss', 'val_loss'])
+        for epoch, (train_loss, val_loss) in enumerate(zip(train_losses, val_losses or [])):
+            writer.writerow([epoch, train_loss, val_loss])
 
     print(f"Training finished; final training loss {train_losses[-1]:.6f}")
     if val_losses:

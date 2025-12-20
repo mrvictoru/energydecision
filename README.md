@@ -169,7 +169,8 @@ python3 train_decision_transformer.py \
     --weight-decay 1e-4 \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model.pt \
-    --rope-enabled
+    --rope-enabled \
+    --amp-enabled
 ```
 
 #### 3.2 Resume from an existing checkpoint
