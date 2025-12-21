@@ -163,14 +163,15 @@ python3 train_decision_transformer.py \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 8 \
-    --checkpoints_per_epoch 10 \
+    --checkpoints-per-epoch 10 \
     --context-length 60 \
     --lr 5e-6 \
     --weight-decay 1e-4 \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model.pt \
+    --loss-csv-path ../models/dt_model_loss_history.csv \
     --rope-enabled \
-    --amp-enabled
+    --amp-mode "auto"
 ```
 
 #### 3.2 Resume from an existing checkpoint
