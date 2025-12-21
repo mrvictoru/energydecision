@@ -255,6 +255,12 @@ class SolarBatteryEnv(gym.Env):
         header.extend([f'{prefix}BatteryLevel', f'{prefix}BatteryDegCost'])
         return header
 
+    def _sanitize_deg_frac(self, frac: float) -> float:
+        """Clamp battery degradation fractions to sane, non-negative bounds."""
+        if not np.isfinite(frac) or frac <= 0.0:
+            return 0.0
+        return float(min(frac, MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR))
+
     def _calculate_grid_reward(self, grid_energy, energy_price):
         # If grid energy exceeds limits, add a violation penalty.
         grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy) > self.max_grid_energy else 0
@@ -264,10 +270,17 @@ class SolarBatteryEnv(gym.Env):
 
     def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
         # battery flow rate is negative for discharge and positive for charge
+        if abs(battery_flow_rate) <= 1e-12 or DoD <= 1e-6:
+            return 0.0, 0.0
+
+        soc = np.clip(float(soc), 0.0, 100.0)
         Id = abs(max(0, -battery_flow_rate) / self.battery_capacity) # discharge c rate
         Ich = abs(max(0, battery_flow_rate) / self.battery_capacity)
-        battery_deg_penalty = static_degradation(Id, Ich, soc, DoD)
-        return battery_deg_penalty*self.correction_factor, battery_deg_penalty # return degradation after correction factor and static degradation
+        DoD_safe = max(float(DoD), 1e-6)
+        raw_frac = static_degradation(Id, Ich, soc, DoD_safe)
+        raw_frac = self._sanitize_deg_frac(raw_frac)
+        corrected_frac = self._sanitize_deg_frac(raw_frac * self.correction_factor)
+        return corrected_frac, raw_frac # return corrected and raw fractions
 
     def step(self, action):
         # ----- Scale Actions -----
@@ -355,7 +368,6 @@ class SolarBatteryEnv(gym.Env):
         # ----- Battery degradation (static and corrected) -----
         # _calculate_battery_degradation returns (corrected_static_fraction, raw_static_fraction)
         corrected_static_frac, raw_static_frac = self._calculate_battery_degradation(DoD, battery_flow_rate, avg_soc)
-        corrected_static_frac = max(0.0, corrected_static_frac)
 
         # Record SoC for dynamic degradation correction (percent)
         self.soc_history.append((self.battery_level / self.battery_capacity) * 100.0)
@@ -382,13 +394,14 @@ class SolarBatteryEnv(gym.Env):
 
         if dynamic_correct and len(self.static_deg_history) > 0:
             dynamic_deg, num_cycles = dynamic_degradation(self.soc_history, self.step_duration)
-            static_deg_sum = np.sum(self.static_deg_history, dtype=np.float64)
-            if not np.isfinite(static_deg_sum) or static_deg_sum <= 1e-12:
+            dynamic_deg = float(dynamic_deg) if np.isfinite(dynamic_deg) else 0.0
+            static_deg_sum = float(np.sum(self.static_deg_history, dtype=np.float64))
+            if static_deg_sum <= 1e-12:
                 static_deg_sum = 1e-12
-            ratio = dynamic_deg / static_deg_sum if np.isfinite(dynamic_deg) else 1.0
+            ratio = dynamic_deg / static_deg_sum if static_deg_sum > 0 else 1.0
             self.correction_factor = float(np.clip(ratio, 0.01, 10.0))
             self.last_dynamic_correction_step = self.current_step
-            corrected_static_frac = max(0.0, raw_static_frac * self.correction_factor)
+            corrected_static_frac = self._sanitize_deg_frac(raw_static_frac * self.correction_factor)
         else:
             dynamic_interval_used = dynamic_interval
 
