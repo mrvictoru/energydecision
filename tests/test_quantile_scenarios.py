@@ -58,7 +58,6 @@ class TestQuantileScenarioGenerator:
         assert generator.n_scenarios == 5
         assert generator.scenario_prefix == "scenario"
         assert len(generator.quantiles) == 5
-        assert len(generator.quantiles) == 5
         expected_quantiles = [1/6, 2/6, 3/6, 4/6, 5/6]
         for actual, expected in zip(generator.quantiles, expected_quantiles):
             assert abs(actual - expected) < 1e-10
@@ -68,7 +67,6 @@ class TestQuantileScenarioGenerator:
         generator = QuantileScenarioGenerator(n_scenarios=3)
         
         assert generator.n_scenarios == 3
-        assert len(generator.quantiles) == 3
         assert len(generator.quantiles) == 3
         expected_quantiles = [1/4, 2/4, 3/4]
         for actual, expected in zip(generator.quantiles, expected_quantiles):
