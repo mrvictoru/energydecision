@@ -238,11 +238,57 @@ Quantile scenario generation benchmark (1000 rows, 5 scenarios):
   Total time: 0.0006s
 ```
 
-## Testing
+## Test Suite Organization
 
-All existing tests pass after these optimizations:
-- `test_reward_logic.py`: 4/6 passed (2 pre-existing failures unrelated to optimizations)
-- `test_quantile_scenarios.py`: 21/21 passed
-- `test_sdp_timing.py`: 1/1 passed
-- `test_sdp_perf.py`: All benchmarks pass
+The test suite has been reorganized for better maintainability:
+
+### Directory Structure
+```
+tests/
+├── __init__.py              # Package marker
+├── conftest.py              # Shared pytest fixtures
+├── test_environment.py      # SolarBatteryEnv tests
+├── test_decision_agent.py   # Agent/SDP/Oracle tests
+├── test_performance.py      # Performance benchmarks
+└── test_quantile_scenarios.py  # QuantileScenarioGenerator tests
+```
+
+### Test Categories
+
+| Test File | Purpose | Test Count |
+|-----------|---------|------------|
+| test_environment.py | Environment functionality, observation handling | 9 |
+| test_decision_agent.py | SDP solver, Oracle agent, policy computation | 8 |
+| test_performance.py | Performance benchmarks and optimization validation | 8 |
+| test_quantile_scenarios.py | Quantile scenario generation | 21 |
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_environment.py -v
+
+# Run performance benchmarks with output
+pytest tests/test_performance.py -v -s
+
+# Run with timing info
+pytest tests/ -v --durations=10
+```
+
+### Example Scripts (in src/)
+
+The following scripts are standalone examples/benchmarks (not pytest tests):
+- `src/sdp_performance_benchmark.py` - MRDP performance comparison
+- `src/mrdp_validation_example.py` - MRDP vs single-horizon SDP comparison
+
+## Test Results
+
+All 46 tests pass after optimizations:
+- `tests/test_environment.py`: 9/9 passed
+- `tests/test_decision_agent.py`: 8/8 passed  
+- `tests/test_performance.py`: 8/8 passed
+- `tests/test_quantile_scenarios.py`: 21/21 passed
 
