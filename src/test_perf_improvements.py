@@ -5,6 +5,7 @@ Run with: python src/test_perf_improvements.py
 """
 
 import time
+import datetime as dt
 import numpy as np
 import polars as pl
 import sys
@@ -22,7 +23,6 @@ def benchmark_env_observation(n_steps=1000):
     # Create a simple test DataFrame
     n_rows = n_steps + 100
     np.random.seed(42)
-    import datetime as dt
     base_time = dt.datetime(2023, 1, 1, 0, 0)
     times = [base_time + dt.timedelta(minutes=i * 30) for i in range(n_rows)]
     
