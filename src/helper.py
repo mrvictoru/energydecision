@@ -103,14 +103,11 @@ def transform_polars_df(
     )
     
     
-    # Create SolarGen from 'GG'
-    pivot = pivot.with_columns(
-        pl.col("GG").fill_null(0.0).alias("SolarGen")
-    )
-    
-    # Ensure 'CL' column exists; if not, create it with a default value of 0.0.
+    # Batch column creation for efficiency (reduce intermediate DataFrame allocations)
+    new_cols = [pl.col("GG").fill_null(0.0).alias("SolarGen")]
     if "CL" not in pivot.columns:
-        pivot = pivot.with_columns(pl.lit(0.0).alias("CL"))
+        new_cols.append(pl.lit(0.0).alias("CL"))
+    pivot = pivot.with_columns(new_cols)
     
     # Create HouseLoad by summing 'GC' and 'CL'
     pivot = pivot.with_columns([

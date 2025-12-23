@@ -110,10 +110,19 @@ class SolarBatteryEnv(gym.Env):
         # --- Normalization Parameters ---
         self.ordered_df_cols_for_obs = [col for col in self.df.columns if col not in ['Time', 'Timestamp']]
         
-        self.df_mins_for_obs = np.array([self.df.select(pl.min(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
-        self.df_maxs_for_obs = np.array([self.df.select(pl.max(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        # Compute min/max in a single aggregation query for efficiency
+        agg_exprs = []
+        for col in self.ordered_df_cols_for_obs:
+            agg_exprs.extend([pl.min(col).alias(f"{col}_min"), pl.max(col).alias(f"{col}_max")])
+        stats = self.df.select(agg_exprs)
+        self.df_mins_for_obs = np.array([stats[f"{col}_min"].item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        self.df_maxs_for_obs = np.array([stats[f"{col}_max"].item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
         self.df_ranges_for_obs = self.df_maxs_for_obs - self.df_mins_for_obs
         self.df_ranges_for_obs[self.df_ranges_for_obs == 0] = 1.0
+        
+        # Pre-compute normalization mask for vectorized operations (optimization)
+        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
+        self._norm_by_capacity_mask = np.array([col in norm_by_capacity_cols for col in self.ordered_df_cols_for_obs])
 
         self.battery_level_min_raw = 0.0
         self.battery_level_max_raw = self.battery_capacity
@@ -189,15 +198,13 @@ class SolarBatteryEnv(gym.Env):
             cyclical_time_features = np.zeros(4, dtype=np.float32)
 
         raw_df_values = np.array([row_dict[col] for col in self.ordered_df_cols_for_obs], dtype=np.float32)
-        # Normalize selected columns by battery_capacity, others by min-max
-        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
-        normalized_df_values = []
-        for i, col in enumerate(self.ordered_df_cols_for_obs):
-            if col in norm_by_capacity_cols:
-                normalized_df_values.append(raw_df_values[i] / (self.battery_capacity + 1e-9))
-            else:
-                normalized_df_values.append((raw_df_values[i] - self.df_mins_for_obs[i]) / self.df_ranges_for_obs[i])
-        normalized_df_values = np.array(normalized_df_values, dtype=np.float32)
+        # Vectorized normalization using pre-computed mask (optimization)
+        # Columns in norm_by_capacity_mask are normalized by battery_capacity, others by min-max
+        normalized_df_values = np.where(
+            self._norm_by_capacity_mask,
+            raw_df_values / (self.battery_capacity + 1e-9),
+            (raw_df_values - self.df_mins_for_obs) / self.df_ranges_for_obs
+        ).astype(np.float32)
         normalized_df_values = np.clip(normalized_df_values, 0.0, 1.0)
 
         raw_battery_level = np.float32(self.battery_level)

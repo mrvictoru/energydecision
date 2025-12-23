@@ -660,14 +660,9 @@ class Agent:
         """
         Vectorized stage cost calculation: compute expected grid cost using scenario arrays
         indexed by absolute row index, with degradation cost added deterministically.
+        
+        Note: Assumes self._scenario_cache is already initialized by _solve_sdp() before calling this method.
         """
-
-        # Ensure scenario cache prepared once if possible
-        if self._scenario_cache is None:
-            try:
-                self._scenario_cache = self.scenario_generator.generate_time_step_scenarios(self.env.df)
-            except Exception:
-                self._scenario_cache = None
 
         # Default fallback: use deterministic forecast values
         deterministic_solar = forecast_step.get('SolarGen')
