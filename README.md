@@ -511,3 +511,15 @@ pytest tests/ -v --durations=10
 *   pytest (for testing)
 
 See `requirements.txt` and `torch_req.txt` for complete dependency lists.
+
+---
+
+## Documentation
+
+Additional documentation for specific components:
+
+| Document | Description |
+|----------|-------------|
+| [MRDP_README.md](MRDP_README.md) | Multi-Resolution Dynamic Programming implementation details |
+| [README.scenario-support.md](README.scenario-support.md) | Quantile-based scenario generation for uncertainty modeling |
+| [PERFORMANCE_IMPROVEMENTS.md](PERFORMANCE_IMPROVEMENTS.md) | Performance optimizations and benchmarks |

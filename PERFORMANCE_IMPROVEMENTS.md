@@ -218,10 +218,22 @@ _nCL_SoC_DoD_nom_denom = _ensure_positive(_CL4(DoD_nom, SoC_nom))
 
 ## Benchmarking
 
-A benchmark script is available at `src/test_perf_improvements.py` to verify the performance improvements:
+Performance benchmarks are included in the test suite. Run with:
 
 ```bash
-cd src && python test_perf_improvements.py
+# Run performance tests with output
+pytest tests/test_performance.py -v -s
+
+# Run all tests
+pytest tests/ -v
+```
+
+### Standalone Benchmark Script
+
+For detailed MRDP performance analysis:
+
+```bash
+python src/sdp_performance_benchmark.py
 ```
 
 Example output:
@@ -291,4 +303,10 @@ All 46 tests pass after optimizations:
 - `tests/test_decision_agent.py`: 8/8 passed  
 - `tests/test_performance.py`: 8/8 passed
 - `tests/test_quantile_scenarios.py`: 21/21 passed
+
+## Related Documentation
+
+- [README.md](README.md) - Main project documentation
+- [MRDP_README.md](MRDP_README.md) - Multi-Resolution Dynamic Programming documentation
+- [README.scenario-support.md](README.scenario-support.md) - Scenario generation for uncertainty modeling
 

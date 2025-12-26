@@ -2,6 +2,8 @@
 
 This document describes the quantile-based scenario generation functionality for Polars DataFrames in the energydecision package.
 
+> **Module Location:** [`src/quantile_scenarios.py`](src/quantile_scenarios.py)
+
 ## Overview
 
 The scenario generation module provides tools for creating multiple scenarios from historical energy data based on quantiles of the data distribution. This is useful for uncertainty modeling in energy decision making applications, where you need to evaluate system performance under different possible future conditions.
@@ -13,12 +15,14 @@ The scenario generation module provides tools for creating multiple scenarios fr
 - **Automatic column detection**: Intelligently identifies numeric columns suitable for scenario generation
 - **Grouped scenario generation**: Generate scenarios within data groups (e.g., by customer, location, time period)
 - **Polars DataFrame integration**: Seamlessly integrates with existing Polars workflows
+- **Monte Carlo expected cost computation**: Calculate expected costs using Monte Carlo sampling or Cartesian product methods
+- **Time-step scenario arrays**: Generate per-timestep scenario arrays for SDP optimization
 
 ## Quick Start
 
 ```python
 import polars as pl
-from scenario_generation import QuantileScenarioGenerator
+from src.quantile_scenarios import QuantileScenarioGenerator
 
 # Load your energy data
 df = pl.read_csv("energy_data.csv")
@@ -115,7 +119,7 @@ Common pattern for energy datasets:
 
 ```python
 import polars as pl
-from scenario_generation import QuantileScenarioGenerator
+from src.quantile_scenarios import QuantileScenarioGenerator
 
 # Load energy data
 df = pl.read_csv("solar_data.csv")
@@ -140,6 +144,50 @@ for scenario_num in range(1, 6):
     
     scenario_data = energy_scenarios.select(['timestamp'] + scenario_cols)
     # Run your energy optimization using scenario_data
+```
+
+### Generate Time-Step Scenario Arrays for SDP
+
+For use with Stochastic Dynamic Programming:
+
+```python
+from src.quantile_scenarios import QuantileScenarioGenerator
+
+generator = QuantileScenarioGenerator(n_scenarios=5)
+
+# Generate per-timestep scenario arrays
+scenario_cache = generator.generate_time_step_scenarios(df)
+
+# Returns dict with arrays for each variable:
+# scenario_cache['solar'] -> (values_array, probabilities_array)
+# scenario_cache['load'] -> (values_array, probabilities_array)
+# etc.
+```
+
+### Expected Cost Computation
+
+Calculate expected costs using Monte Carlo or Cartesian product methods:
+
+```python
+# Monte Carlo expected cost
+mc_cost = generator.expected_cost_monte_carlo(
+    values_solar, probs_solar,
+    values_load, probs_load,
+    values_imp, probs_imp,
+    values_exp, probs_exp,
+    stage_cost_function,
+    n_samples=1000,
+    rng_seed=42
+)
+
+# Exact Cartesian expected cost (for small scenario counts)
+exact_cost = generator.expected_cost_cartesian(
+    values_solar, probs_solar,
+    values_load, probs_load,
+    values_imp, probs_imp,
+    values_exp, probs_exp,
+    stage_cost_function
+)
 ```
 
 ## Utility Functions
@@ -252,8 +300,8 @@ The module provides clear error messages for common issues:
 This scenario generation module is designed to work with the broader energydecision package:
 
 ```python
-from scenario_generation import QuantileScenarioGenerator
-from helper import transform_polars_df
+from src.quantile_scenarios import QuantileScenarioGenerator
+from src.helper import transform_polars_df
 
 # Transform raw energy data
 cleaned_df = transform_polars_df(raw_df)
@@ -265,3 +313,29 @@ scenarios_df = generator.generate_scenarios(cleaned_df)
 # Use with energy decision agents and environments
 # (scenarios_df can be used with SolarBatteryEnv and Agent classes)
 ```
+
+## Testing
+
+The scenario generation module is thoroughly tested. Run tests with:
+
+```bash
+# Run all scenario tests
+pytest tests/test_quantile_scenarios.py -v
+
+# Run specific test
+pytest tests/test_quantile_scenarios.py::TestQuantileScenarioGenerator::test_expected_cost_monte_carlo -v
+```
+
+See [`tests/test_quantile_scenarios.py`](tests/test_quantile_scenarios.py) for 21 comprehensive test cases covering:
+- Initialization and configuration
+- Column validation and auto-detection
+- Scenario generation (basic, grouped, custom prefix)
+- Edge cases (single value, small datasets)
+- Monte Carlo expected cost computation
+- Integration with Polars operations
+
+## Related Documentation
+
+- [README.md](README.md) - Main project documentation
+- [MRDP_README.md](MRDP_README.md) - Multi-Resolution Dynamic Programming documentation
+- [PERFORMANCE_IMPROVEMENTS.md](PERFORMANCE_IMPROVEMENTS.md) - Performance optimization details

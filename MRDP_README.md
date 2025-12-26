@@ -1,18 +1,27 @@
 # Multi-Resolution Dynamic Programming (MRDP) Module
 
-This directory contains the implementation of Multi-Resolution Dynamic Programming (MRDP) infrastructure for the energy decision project's SDP agent.
+This document describes the Multi-Resolution Dynamic Programming (MRDP) infrastructure for the energy decision project's SDP agent.
 
-## Files Added
+> **Module Location:** [`src/sdp_multires.py`](src/sdp_multires.py)
+
+## Overview
+
+MRDP enables efficient long-horizon optimization by using different temporal resolutions: fine-grained discretization for near-term decisions and coarser discretization for far-term planning.
+
+## Files
 
 ### Core Module
-- **`src/sdp_multires.py`** - Main MRDP implementation containing:
+- **[`src/sdp_multires.py`](src/sdp_multires.py)** - Main MRDP implementation containing:
   - `DynamicProgram` class for single sub-horizon optimization
   - `solve_mrdp()` orchestration function for multi-resolution solving
+  - `vectorized_monte_carlo_stage_cost()` for efficient cost computation
+  - `deterministic_stage_cost()` for fallback cost computation
   - Comprehensive docstrings and usage examples
 
-### Testing and Validation
-- **`src/test_mrdp_validation.py`** - Basic functionality tests and performance comparison
-- **`src/mrdp_integration_example.py`** - Complete integration example showing how to extend existing Agent
+### Example Scripts
+- **[`src/mrdp_integration_example.py`](src/mrdp_integration_example.py)** - Complete integration example showing how to extend existing Agent
+- **[`src/mrdp_validation_example.py`](src/mrdp_validation_example.py)** - Basic functionality tests and performance comparison
+- **[`src/sdp_performance_benchmark.py`](src/sdp_performance_benchmark.py)** - Performance benchmarking script
 
 ## Key Features
 
@@ -106,15 +115,30 @@ Speedup: 1.87x
 
 ## Testing
 
-### Run Basic Validation:
+### Run Example Scripts:
 ```bash
 cd /path/to/energydecision
-python3 src/test_mrdp_validation.py
+
+# MRDP validation example
+python src/mrdp_validation_example.py
+
+# Integration example
+python src/mrdp_integration_example.py
+
+# Performance benchmark
+python src/sdp_performance_benchmark.py
 ```
 
-### Run Integration Demo:
+### Run Automated Tests:
 ```bash
-python3 src/mrdp_integration_example.py  
+# Run all tests including SDP/agent tests
+pytest tests/ -v
+
+# Run agent-specific tests
+pytest tests/test_decision_agent.py -v
+
+# Run performance tests
+pytest tests/test_performance.py -v -s
 ```
 
 ### Expected Output:
@@ -156,3 +180,9 @@ python3 src/mrdp_integration_example.py
 - **Hierarchical optimization** with natural resolution boundaries
 
 This MRDP infrastructure enables the team to progressively explore multi-resolution approaches for energy storage optimization while maintaining compatibility with the existing SDP agent framework.
+
+## Related Documentation
+
+- [README.md](README.md) - Main project documentation
+- [README.scenario-support.md](README.scenario-support.md) - Scenario generation for uncertainty modeling
+- [PERFORMANCE_IMPROVEMENTS.md](PERFORMANCE_IMPROVEMENTS.md) - Performance optimization details
