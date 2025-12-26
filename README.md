@@ -13,8 +13,9 @@ This project provides a comprehensive framework for benchmarking control algorit
 *   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
 *   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
 *   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
-*   ~~**Performance optimizations:** Batch queries, vectorize hot paths, precompute constants (see [PERFORMANCE_IMPROVEMENTS.md](PERFORMANCE_IMPROVEMENTS.md))~~
+*   ~~**Performance optimizations:** Batch queries, vectorize hot paths, precompute constants~~
 *   ~~**Test suite reorganization:** Consolidated tests into organized `tests/` directory~~
+*   ~~**Documentation consolidation:** Unified component documentation in COMPONENTS.md~~
 *   **Refactor Agent class:** Refactor Agent class to be less spaghetti
 *   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
 
@@ -91,13 +92,9 @@ energydecision/
 │   ├── decision_transformer.py      # Core Decision Transformer model class
 │   ├── transformer_training.py      # TrajectoryDataset class and train_decision_transformer function
 │   ├── sb3train.py                  # RL training utilities (Stable-Baselines3)
-│   ├── quantile_scenarios.py        # Quantile scenario generation
-│   ├── sdp_multires.py              # Multi-resolution SDP
-│   ├── train_decision_transformer.py    # CLI for Decision Transformer training
-│   ├── mrdp_integration_example.py      # MRDP integration example script
-│   ├── mrdp_validation_example.py       # MRDP validation example script
-│   ├── sdp_performance_benchmark.py     # SDP/MRDP performance benchmark script
-│   └── run_sdp_parallel_example.py      # Parallel SDP example script
+│   ├── quantile_scenarios.py        # Quantile scenario generation for uncertainty modeling
+│   ├── sdp_multires.py              # Multi-resolution dynamic programming solver
+│   └── train_decision_transformer.py    # CLI for Decision Transformer training
 ├── tests/                   # Test suite
 │   ├── conftest.py              # Shared pytest fixtures
 │   ├── test_environment.py      # SolarBatteryEnv tests (9 tests)
@@ -114,10 +111,8 @@ energydecision/
 ├── torch_req.txt            # PyTorch-specific requirements
 ├── docker-compose.yml       # Docker Compose configuration
 ├── Dockerfile               # Dockerfile for building the environment
-├── MRDP_README.md           # MRDP integration documentation
-├── PERFORMANCE_IMPROVEMENTS.md  # Performance optimization documentation
-├── README.md                # Project documentation (this file)
-└── README.scenario-support.md   # Scenario support documentation
+├── COMPONENTS.md            # Comprehensive component documentation
+└── README.md                # Project documentation (this file)
 ```
 
 ---
@@ -516,10 +511,14 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 
 ## Documentation
 
-Additional documentation for specific components:
+For detailed documentation on all source components, see **[COMPONENTS.md](COMPONENTS.md)**, which includes:
 
-| Document | Description |
-|----------|-------------|
-| [MRDP_README.md](MRDP_README.md) | Multi-Resolution Dynamic Programming implementation details |
-| [README.scenario-support.md](README.scenario-support.md) | Quantile-based scenario generation for uncertainty modeling |
-| [PERFORMANCE_IMPROVEMENTS.md](PERFORMANCE_IMPROVEMENTS.md) | Performance optimizations and benchmarks |
+- Environment setup and usage (`EnergySimEnv.py`)
+- Decision agent algorithms (`decision.py`)
+- Multi-Resolution Dynamic Programming (`sdp_multires.py`)
+- Scenario generation (`quantile_scenarios.py`)
+- Battery degradation models (`batterydeg.py`)
+- Data transformation utilities (`helper.py`)
+- Decision Transformer training (`transformer_training.py`)
+- Stable-Baselines3 training (`sb3train.py`)
+- Performance optimization details
