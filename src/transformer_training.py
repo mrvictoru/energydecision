@@ -2,7 +2,8 @@ import polars as pl
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from typing import Optional
+from typing import Optional, Any
+import json
 import os
 import torch.nn.functional as F
 from decision_transformer import DecisionTransformer
@@ -161,6 +162,8 @@ def train_decision_transformer(
     epochs: int = 10,
     device: Optional[str] = None,
     save_path: str = "../models/dt_model.pt",
+    best_model_path: Optional[str] = None,
+    best_metrics_path: Optional[str] = None,
     checkpoint_path: Optional[str] = "../models/dt_checkpoint.pt",
     resume: bool = False,
     checkpoint_interval: int = 1,
@@ -172,10 +175,17 @@ def train_decision_transformer(
     weight_decay: float = 1e-4,
     return_scale: float = 1.0,
     amp_mode: str = "auto",
+    save_best_divergence_ratio: float = 4.0,
+    save_best_min_delta: float = 1e-6,
+    save_best_train_weight: float = 0.0,
 ) -> tuple:
+    
+    # set best_model_path to be save_path with _best.pt suffix if not provided
+    if best_model_path is None:
+        best_model_path = save_path.replace(".pt", "_best.pt")
 
     # AMP setup method
-    def _resolve_amp_settings(device_str: str, mode: str) -> tuple[bool, Optional[GradScaler]]:
+    def _resolve_amp_settings(device_str: str, mode: str) -> tuple[bool, Optional[Any]]:
         applicable = device_str.startswith("cuda")
         if mode == "off":
             allowed = False
@@ -264,9 +274,9 @@ def train_decision_transformer(
             torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
             optimizer.step()
 
-    def _run_validation(epoch: int, segment: int) -> None:
+    def _run_validation(epoch: int, segment: int) -> Optional[float]:
         if val_loader is None or val_ds is None:
-            return
+            return None
         model.eval()
         val_total_loss = 0.0
         val_skipped = 0
@@ -301,9 +311,80 @@ def train_decision_transformer(
             descriptor += f", segment {segment+1}"
         print(f"Validation Loss ({descriptor}): {avg_val_loss:.6f}")
         model.train()
+        return avg_val_loss
+
+    def _maybe_save_best(
+        epoch: int,
+        segment: int,
+        train_loss_est: Optional[float],
+        val_loss: Optional[float],
+    ) -> None:
+        nonlocal best_score, best_val_loss, best_train_loss_est
+        if not best_model_path:
+            return
+
+        # Choose the score used for "best" tracking.
+        if val_loss is None:
+            if train_loss_est is None:
+                return
+            score = float(train_loss_est)
+        else:
+            score = float(val_loss)
+            if train_loss_est is not None:
+                score += float(save_best_train_weight) * float(train_loss_est)
+
+        # Divergence guard: don't save if validation is disproportionately worse than training.
+        if val_loss is not None and train_loss_est is not None:
+            train_floor = max(1e-12, float(train_loss_est))
+            ratio = float(val_loss) / train_floor
+            if ratio > float(save_best_divergence_ratio):
+                return
+
+        if score >= (best_score - float(save_best_min_delta)):
+            return
+
+        best_score = score
+        if val_loss is not None:
+            best_val_loss = float(val_loss)
+        if train_loss_est is not None:
+            best_train_loss_est = float(train_loss_est)
+
+        best_dir = os.path.dirname(best_model_path)
+        if best_dir:
+            os.makedirs(best_dir, exist_ok=True)
+        torch.save(model.state_dict(), best_model_path)
+        if resolved_best_metrics_path:
+            try:
+                meta_dir = os.path.dirname(resolved_best_metrics_path)
+                if meta_dir:
+                    os.makedirs(meta_dir, exist_ok=True)
+                with open(resolved_best_metrics_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "best_score": best_score,
+                            "best_val_loss": best_val_loss,
+                            "best_train_loss_est": best_train_loss_est,
+                            "epoch": epoch,
+                            "segment": segment,
+                            "timestamp": datetime.datetime.now().isoformat(),
+                        },
+                        f,
+                        indent=2,
+                        sort_keys=True,
+                    )
+            except Exception as e:
+                print(f"[WARN] Failed writing best-metric state to {resolved_best_metrics_path}: {e}")
+        tag = f"epoch {epoch}" + (f", segment {segment+1}" if segment >= 0 else "")
+        extra = []
+        if train_loss_est is not None:
+            extra.append(f"train≈{train_loss_est:.6f}")
+        if val_loss is not None:
+            extra.append(f"val={val_loss:.6f}")
+        extra_str = (" (" + ", ".join(extra) + ")") if extra else ""
+        print(f"[BEST] Saved best model weights to {best_model_path} at {tag}{extra_str}")
 
     # Checkpoint saving function
-    def _save_checkpoint(epoch: int, segment: int = -1) -> None:
+    def _save_checkpoint(epoch: int, segment: int = -1, train_loss_est: Optional[float] = None) -> None:
         if not checkpoint_path:
             return
         nonlocal amp_enabled, first_checkpoint_saved
@@ -317,6 +398,9 @@ def train_decision_transformer(
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "log_losses": log_losses,
+            "best_score": best_score,
+            "best_val_loss": best_val_loss,
+            "best_train_loss_est": best_train_loss_est,
             "batch_size": batch_size,
             "lr": lr,
             "use_amp": use_amp,
@@ -334,7 +418,8 @@ def train_decision_transformer(
             print(f"Checkpoint saved to {checkpoint_path} — epoch {epoch}, segment {segment+1}")
         else:
             print(f"Checkpoint saved to {checkpoint_path} at epoch {epoch}")
-        _run_validation(epoch, segment)
+        val_loss = _run_validation(epoch, segment)
+        _maybe_save_best(epoch, segment, train_loss_est=train_loss_est, val_loss=val_loss)
 
     # Checker to ensure model parameters are finite after optimizer step
     def _assert_model_finite() -> None:
@@ -350,6 +435,25 @@ def train_decision_transformer(
 
     log_losses = []
     val_losses = []
+
+    # Best-model tracking state
+    best_score = float("inf")
+    best_val_loss = float("inf")
+    best_train_loss_est = float("inf")
+
+    resolved_best_metrics_path: Optional[str] = None
+    if best_model_path:
+        resolved_best_metrics_path = best_metrics_path or (best_model_path + ".metrics.json")
+        if resolved_best_metrics_path and os.path.exists(resolved_best_metrics_path):
+            try:
+                with open(resolved_best_metrics_path, "r", encoding="utf-8") as f:
+                    best_meta = json.load(f)
+                best_score = float(best_meta.get("best_score", best_score))
+                best_val_loss = float(best_meta.get("best_val_loss", best_val_loss))
+                best_train_loss_est = float(best_meta.get("best_train_loss_est", best_train_loss_est))
+                print(f"[INFO] Restored best-metric state from {resolved_best_metrics_path}")
+            except Exception as e:
+                print(f"[WARN] Could not read best-metric state from {resolved_best_metrics_path}: {e}")
 
     # create DataLoader after device is chosen so pin_memory can be set appropriately
     pin_memory = True if device.startswith("cuda") else False
@@ -392,6 +496,9 @@ def train_decision_transformer(
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
+        best_score = float(checkpoint.get("best_score", best_score))
+        best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
+        best_train_loss_est = float(checkpoint.get("best_train_loss_est", best_train_loss_est))
         last_epoch_saved = checkpoint.get("epoch", 0)
         last_segment_saved = checkpoint.get("segment", -1)
         if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:
@@ -455,6 +562,8 @@ def train_decision_transformer(
                 )
                 batch_action_loss_sum = 0.0
                 batch_count = 0
+                train_loss_ema: Optional[float] = None
+                ema_alpha = 0.05
                 # Iterate over batches
                 for batch_idx, batch in enumerate(progress_bar):
                     if skip_until_batch and batch_idx < skip_until_batch:
@@ -499,6 +608,12 @@ def train_decision_transformer(
                     loss_to_log = loss_action.detach().cpu().item()
                     loss_value = loss.detach().cpu().item()
 
+                    # Track a smooth estimate of training loss for checkpointing decisions.
+                    if train_loss_ema is None:
+                        train_loss_ema = float(loss_value)
+                    else:
+                        train_loss_ema = (1.0 - ema_alpha) * float(train_loss_ema) + ema_alpha * float(loss_value)
+
                     total_loss += loss_value * states.size(0)
                     batch_action_loss_sum += loss_to_log
                     batch_count += 1
@@ -507,7 +622,7 @@ def train_decision_transformer(
                     if checkpoints_per_epoch > 0 and segment_boundaries:
                         while segment_idx < checkpoints_per_epoch and batch_idx + 1 >= segment_boundaries[segment_idx]:
                             if checkpoint_path:
-                                _save_checkpoint(epoch, segment_idx)
+                                _save_checkpoint(epoch, segment_idx, train_loss_est=train_loss_ema)
                             segment_idx += 1
                 # End of epoch logging
                 avg_loss = total_loss / max(1, len(ds) - skipped_batches)
@@ -524,7 +639,7 @@ def train_decision_transformer(
                     resume = False
 
                 if checkpoint_path and (epoch % checkpoint_interval == 0):
-                    _save_checkpoint(epoch)
+                    _save_checkpoint(epoch, train_loss_est=train_loss_ema)
 
             training_finished = True
 
@@ -539,6 +654,9 @@ def train_decision_transformer(
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
+            best_score = float(checkpoint.get("best_score", best_score))
+            best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
+            best_train_loss_est = float(checkpoint.get("best_train_loss_est", best_train_loss_est))
             last_epoch_saved = checkpoint.get("epoch", 0)
             last_segment_saved = checkpoint.get("segment", -1)
             if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:

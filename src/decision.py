@@ -60,7 +60,7 @@ def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                 horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.08,
+                 horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.8,
                  degradation_model='linear', linear_deg_cost_p_kwh=None,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
