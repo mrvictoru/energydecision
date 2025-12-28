@@ -304,7 +304,7 @@ def main() -> None:
     else:
         checkpoint_path_str = None
 
-    trained_model, train_losses, val_losses = train_decision_transformer(
+    trained_model, train_losses, val_losses, history = train_decision_transformer(
         ds=train_dataset,
         model=model,
         batch_size=args.batch_size,
@@ -326,19 +326,98 @@ def main() -> None:
         num_workers=args.num_workers,
         persistent_workers=args.persistent_workers,
         prefetch_factor=args.prefetch_factor,
+        return_history=True,
     )
 
-    # store training loss and validation loss history in csv
-    with open(loss_csv_path, mode='w', newline='') as file:
+    # Store training/validation loss history.
+    # - `loss_csv_path`: epoch-level totals + components.
+    # - `*_checkpoints.csv`: per-checkpoint/segment snapshots.
+    with open(loss_csv_path, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(['epoch', 'train_loss', 'val_loss'])
-        for epoch, (train_loss, val_loss) in enumerate(zip(train_losses, val_losses or [])):
-            writer.writerow([epoch, train_loss, val_loss])
+        writer.writerow(
+            [
+                "epoch",
+                "train_total",
+                "train_action",
+                "train_state",
+                "train_return",
+                "val_total",
+                "val_action",
+                "val_state",
+                "val_return",
+            ]
+        )
+        train_action = history.get("train_action_losses", [])
+        train_state = history.get("train_state_losses", [])
+        train_return = history.get("train_return_losses", [])
+        val_action = history.get("val_action_losses", [])
+        val_state = history.get("val_state_losses", [])
+        val_return = history.get("val_return_losses", [])
 
-    print(f"Training finished; final training loss {train_losses[-1]:.6f}")
+        max_epochs = len(train_losses)
+        for idx in range(max_epochs):
+            epoch_num = idx + 1
+            row = [
+                epoch_num,
+                train_losses[idx],
+                train_action[idx] if idx < len(train_action) else "",
+                train_state[idx] if idx < len(train_state) else "",
+                train_return[idx] if idx < len(train_return) else "",
+                val_losses[idx] if idx < len(val_losses) else "",
+                val_action[idx] if idx < len(val_action) else "",
+                val_state[idx] if idx < len(val_state) else "",
+                val_return[idx] if idx < len(val_return) else "",
+            ]
+            writer.writerow(row)
+
+    checkpoints_csv = loss_csv_path.with_name(loss_csv_path.stem + "_checkpoints" + loss_csv_path.suffix)
+    with open(checkpoints_csv, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "timestamp",
+                "epoch",
+                "segment",
+                "batch_idx",
+                "train_total_avg",
+                "train_total_ema",
+                "train_action_avg",
+                "train_state_avg",
+                "train_return_avg",
+                "train_valid",
+                "val_total",
+                "val_action",
+                "val_state",
+                "val_return",
+                "val_valid",
+            ]
+        )
+        for snap in history.get("loss_history", []):
+            writer.writerow(
+                [
+                    snap.get("timestamp", ""),
+                    snap.get("epoch", ""),
+                    snap.get("segment", ""),
+                    snap.get("batch_idx", ""),
+                    snap.get("train_total_avg", ""),
+                    snap.get("train_total_ema", ""),
+                    snap.get("train_action_avg", ""),
+                    snap.get("train_state_avg", ""),
+                    snap.get("train_return_avg", ""),
+                    snap.get("train_valid", ""),
+                    snap.get("val_total", ""),
+                    snap.get("val_action", ""),
+                    snap.get("val_state", ""),
+                    snap.get("val_return", ""),
+                    snap.get("val_valid", ""),
+                ]
+            )
+
+    print(f"Training finished; final train total loss {train_losses[-1]:.6f}")
     if val_losses:
-        print(f"Final validation loss {val_losses[-1]:.6f}")
+        print(f"Final validation total loss {val_losses[-1]:.6f}")
     print(f"Trained weights available at {save_path}")
+    print(f"Loss history written to {loss_csv_path} and {checkpoints_csv}")
 
 
 if __name__ == "__main__":

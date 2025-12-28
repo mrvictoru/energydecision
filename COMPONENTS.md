@@ -652,9 +652,18 @@ python src/train_decision_transformer.py \
     --weight-decay 1e-4 \
     --checkpoint-path ./models/dt_model_checkpoint.pt \
     --save-path ./models/dt_model.pt \
+    --loss-csv-path ./models/dt_model_loss_history.csv \
     --rope-enabled \
-    --amp-mode "auto"
+    --amp-mode "auto" \
+    --num-workers 6 \
+    --prefetch-factor 2
 ```
+
+Notes:
+
+- `dt_model_loss_history.csv` stores epoch-level train/val totals and component losses.
+- `dt_model_loss_history_checkpoints.csv` stores per-checkpoint/segment snapshots for within-epoch progress.
+- Persistent DataLoader workers are enabled by default; pass `--no-persistent-workers` to disable.
 
 ---
 

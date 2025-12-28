@@ -187,6 +187,7 @@ def train_decision_transformer(
     num_workers: int = 2,
     persistent_workers: bool = True,
     prefetch_factor: int = 2,
+    return_history: bool = False,
 ) -> tuple:
     
     # set best_model_path to be save_path with _best.pt suffix if not provided
@@ -227,7 +228,7 @@ def train_decision_transformer(
         timesteps: torch.Tensor,
         mask: torch.Tensor,
         use_amp_now: bool,
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor] | None, str | None]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None, str | None]:
         
         # Apply mask
         mask_bool = mask > 0.5
@@ -261,7 +262,7 @@ def train_decision_transformer(
             )
             if not torch.isfinite(loss):
                 return None, "non-finite loss"
-            return (loss, loss_a), None
+            return (loss, loss_a, loss_s, loss_r, valid_count), None
 
         # Run with or without autocast
         if use_amp_now:
@@ -283,12 +284,16 @@ def train_decision_transformer(
             torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
             optimizer.step()
 
-    def _run_validation(epoch: int, segment: int) -> Optional[float]:
+    def _run_validation(epoch: int, segment: int) -> Optional[dict[str, float]]:
         if val_loader is None or val_ds is None:
             return None
         model.eval()
-        val_total_loss = 0.0
-        val_skipped = 0
+        val_total_loss_sum = 0.0
+        val_action_loss_sum = 0.0
+        val_state_loss_sum = 0.0
+        val_return_loss_sum = 0.0
+        val_valid_count_sum = 0.0
+        val_skipped_batches = 0
         with torch.no_grad():
             for batch in val_loader:
                 states = batch["states"].to(device, non_blocking=non_blocking).float()
@@ -305,32 +310,60 @@ def train_decision_transformer(
                 m = mask_bool.unsqueeze(-1).float()
                 valid_count = m.sum()
                 if valid_count.item() == 0:
-                    val_skipped += 1
+                    val_skipped_batches += 1
                     continue
                 ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask_bool)
                 loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
                 loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
                 loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
                 loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
-                val_total_loss += loss.item() * states.size(0)
-        avg_val_loss = val_total_loss / max(1, len(val_ds) - val_skipped)
-        val_losses.append(avg_val_loss)
+                vc = float(valid_count.detach().cpu().item())
+                val_total_loss_sum += float(loss.item()) * vc
+                val_action_loss_sum += float(loss_a.item()) * vc
+                val_state_loss_sum += float(loss_s.item()) * vc
+                val_return_loss_sum += float(loss_r.item()) * vc
+                val_valid_count_sum += vc
+
+        denom = max(1.0, val_valid_count_sum)
+        avg_val_total = val_total_loss_sum / denom
+        avg_val_action = val_action_loss_sum / denom
+        avg_val_state = val_state_loss_sum / denom
+        avg_val_return = val_return_loss_sum / denom
+
+        # Do not append to the epoch-level val series here.
+        # Validation is triggered by checkpoints; _save_checkpoint records these stats in `loss_history`
+        # and (for segment=-1) also updates the epoch-level series.
         descriptor = f"epoch {epoch}"
         if segment >= 0:
             descriptor += f", segment {segment+1}"
-        print(f"Validation Loss ({descriptor}): {avg_val_loss:.6f}")
+        print(
+            f"Validation ({descriptor}) — total: {avg_val_total:.6f} "
+            f"(a:{avg_val_action:.6f}, s:{avg_val_state:.6f}, r:{avg_val_return:.6f}) "
+            f"valid={int(val_valid_count_sum)} skipped_batches={val_skipped_batches}"
+        )
         model.train()
-        return avg_val_loss
+        return {
+            "val_total": avg_val_total,
+            "val_action": avg_val_action,
+            "val_state": avg_val_state,
+            "val_return": avg_val_return,
+            "val_valid": float(val_valid_count_sum),
+            "val_skipped_batches": float(val_skipped_batches),
+        }
 
     def _maybe_save_best(
         epoch: int,
         segment: int,
         train_loss_est: Optional[float],
-        val_loss: Optional[float],
+        val_stats: Optional[dict[str, float]],
     ) -> None:
         nonlocal best_score, best_val_loss, best_train_loss_est
         if not best_model_path:
             return
+
+        val_loss = None if val_stats is None else float(val_stats.get("val_total", float("nan")))
+        if val_loss is not None and not math.isfinite(val_loss):
+            val_loss = None
 
         # Choose the score used for "best" tracking.
         if val_loss is None:
@@ -400,6 +433,30 @@ def train_decision_transformer(
         ckpt_dir = os.path.dirname(checkpoint_path)
         if ckpt_dir:
             os.makedirs(ckpt_dir, exist_ok=True)
+        val_stats = _run_validation(epoch, segment)
+        _maybe_save_best(epoch, segment, train_loss_est=train_loss_est, val_stats=val_stats)
+
+        # Record a combined snapshot (useful for plotting training progress).
+        snap = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "epoch": float(epoch),
+            "segment": float(segment),
+        }
+        if train_loss_est is not None:
+            snap["train_total_ema"] = float(train_loss_est)
+        if current_train_snapshot:
+            snap.update(current_train_snapshot)
+        if val_stats:
+            snap.update(val_stats)
+        loss_history.append(snap)
+
+        # Epoch-level validation series: only update on the "epoch checkpoint" (segment == -1).
+        if segment == -1 and val_stats is not None:
+            val_losses.append(float(val_stats.get("val_total", float("nan"))))
+            val_action_losses.append(float(val_stats.get("val_action", float("nan"))))
+            val_state_losses.append(float(val_stats.get("val_state", float("nan"))))
+            val_return_losses.append(float(val_stats.get("val_return", float("nan"))))
+
         checkpoint = {
             "epoch": epoch,
             "segment": segment,
@@ -407,6 +464,13 @@ def train_decision_transformer(
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "log_losses": log_losses,
+            "train_action_losses": train_action_losses,
+            "train_state_losses": train_state_losses,
+            "train_return_losses": train_return_losses,
+            "val_losses": val_losses,
+            "val_action_losses": val_action_losses,
+            "val_state_losses": val_state_losses,
+            "val_return_losses": val_return_losses,
             "best_score": best_score,
             "best_val_loss": best_val_loss,
             "best_train_loss_est": best_train_loss_est,
@@ -414,10 +478,12 @@ def train_decision_transformer(
             "lr": lr,
             "use_amp": use_amp,
             "amp_enabled": amp_enabled,
+            "loss_history": loss_history,
         }
         if scaler is not None:
             checkpoint["scaler_state_dict"] = scaler.state_dict()
         torch.save(checkpoint, checkpoint_path)
+
         # Record that we have a checkpoint on disk and enable AMP if the device supports it.
         first_checkpoint_saved = True
         if amp_allowed and use_amp:
@@ -427,8 +493,18 @@ def train_decision_transformer(
             print(f"Checkpoint saved to {checkpoint_path} — epoch {epoch}, segment {segment+1}")
         else:
             print(f"Checkpoint saved to {checkpoint_path} at epoch {epoch}")
-        val_loss = _run_validation(epoch, segment)
-        _maybe_save_best(epoch, segment, train_loss_est=train_loss_est, val_loss=val_loss)
+
+        # Compact progress print that aligns stored + displayed values.
+        msg = f"[PROGRESS] epoch {epoch}"
+        if segment >= 0:
+            msg += f" seg {segment+1}"
+        if current_train_snapshot and "train_total_avg" in current_train_snapshot:
+            msg += f" | train total(avg) {current_train_snapshot['train_total_avg']:.6f}"
+        if train_loss_est is not None:
+            msg += f" (ema {train_loss_est:.6f})"
+        if val_stats and "val_total" in val_stats:
+            msg += f" | val total {val_stats['val_total']:.6f}"
+        print(msg)
 
     # Checker to ensure model parameters are finite after optimizer step
     def _assert_model_finite() -> None:
@@ -442,8 +518,22 @@ def train_decision_transformer(
     start_time = datetime.datetime.now()
     print(f"Training started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    log_losses = []
-    val_losses = []
+    # Epoch-level loss series (these are what we return).
+    # Use "total" (combined) loss for training/validation so printed + stored match.
+    log_losses: list[float] = []
+    val_losses: list[float] = []
+
+    # Component losses (helpful for debugging/plots). Stored in history + checkpoint.
+    train_action_losses: list[float] = []
+    train_state_losses: list[float] = []
+    train_return_losses: list[float] = []
+    val_action_losses: list[float] = []
+    val_state_losses: list[float] = []
+    val_return_losses: list[float] = []
+
+    # Per-checkpoint / per-epoch snapshots (segment checkpoints + epoch checkpoints).
+    loss_history: list[dict[str, Any]] = []
+    current_train_snapshot: dict[str, float] = {}
 
     # Best-model tracking state
     best_score = float("inf")
@@ -513,6 +603,14 @@ def train_decision_transformer(
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
+        train_action_losses = checkpoint.get("train_action_losses", [])  # type: ignore[assignment]
+        train_state_losses = checkpoint.get("train_state_losses", [])  # type: ignore[assignment]
+        train_return_losses = checkpoint.get("train_return_losses", [])  # type: ignore[assignment]
+        val_losses = checkpoint.get("val_losses", [])  # type: ignore[assignment]
+        val_action_losses = checkpoint.get("val_action_losses", [])  # type: ignore[assignment]
+        val_state_losses = checkpoint.get("val_state_losses", [])  # type: ignore[assignment]
+        val_return_losses = checkpoint.get("val_return_losses", [])  # type: ignore[assignment]
+        loss_history = checkpoint.get("loss_history", [])  # type: ignore[assignment]
         best_score = float(checkpoint.get("best_score", best_score))
         best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
         best_train_loss_est = float(checkpoint.get("best_train_loss_est", best_train_loss_est))
@@ -552,7 +650,11 @@ def train_decision_transformer(
             for epoch in range(start_epoch, epochs + 1):
                 # Set model to training mode
                 model.train()
-                total_loss = 0.0
+                train_total_loss_sum = 0.0
+                train_action_loss_sum = 0.0
+                train_state_loss_sum = 0.0
+                train_return_loss_sum = 0.0
+                train_valid_count_sum = 0.0
                 skipped_batches = 0
                 total_batches = len(loader)
                 segment_boundaries: list[int] = []
@@ -577,7 +679,6 @@ def train_decision_transformer(
                     leave=False,
                     unit="batch",
                 )
-                batch_action_loss_sum = 0.0
                 batch_count = 0
                 train_loss_ema: Optional[float] = None
                 ema_alpha = 0.05
@@ -610,7 +711,7 @@ def train_decision_transformer(
                         skipped_batches += 1
                         progress_bar.write(f"Skipping batch {batch_idx}: {skip_reason}")
                         continue
-                    loss, loss_action = batch_result
+                    loss, loss_a, loss_s, loss_r, valid_count = batch_result
                     # Optimizer step (Backward pass) with error handling
                     try:
                         _step_optimizer(loss, use_amp_now)
@@ -622,8 +723,11 @@ def train_decision_transformer(
                         progress_bar.write(f"Skipping batch {batch_idx}: exception during forward/backward: {e}")
                         continue
                     # Logging
-                    loss_to_log = loss_action.detach().cpu().item()
-                    loss_value = loss.detach().cpu().item()
+                    loss_value = float(loss.detach().cpu().item())
+                    loss_a_value = float(loss_a.detach().cpu().item())
+                    loss_s_value = float(loss_s.detach().cpu().item())
+                    loss_r_value = float(loss_r.detach().cpu().item())
+                    vc = float(valid_count.detach().cpu().item())
 
                     # Track a smooth estimate of training loss for checkpointing decisions.
                     if train_loss_ema is None:
@@ -631,22 +735,50 @@ def train_decision_transformer(
                     else:
                         train_loss_ema = (1.0 - ema_alpha) * float(train_loss_ema) + ema_alpha * float(loss_value)
 
-                    total_loss += loss_value * states.size(0)
-                    batch_action_loss_sum += loss_to_log
+                    train_total_loss_sum += loss_value * vc
+                    train_action_loss_sum += loss_a_value * vc
+                    train_state_loss_sum += loss_s_value * vc
+                    train_return_loss_sum += loss_r_value * vc
+                    train_valid_count_sum += vc
                     batch_count += 1
-                    progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "skipped": skipped_batches})
+
+                    denom = max(1.0, train_valid_count_sum)
+                    avg_total_so_far = train_total_loss_sum / denom
+                    progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "avg": f"{avg_total_so_far:.4f}", "skipped": skipped_batches})
                     # Checkpointing within epoch
                     if checkpoints_per_epoch > 0 and segment_boundaries:
                         while segment_idx < checkpoints_per_epoch and batch_idx + 1 >= segment_boundaries[segment_idx]:
                             if checkpoint_path:
+                                denom = max(1.0, train_valid_count_sum)
+                                current_train_snapshot.clear()
+                                current_train_snapshot.update(
+                                    {
+                                        "train_total_avg": train_total_loss_sum / denom,
+                                        "train_action_avg": train_action_loss_sum / denom,
+                                        "train_state_avg": train_state_loss_sum / denom,
+                                        "train_return_avg": train_return_loss_sum / denom,
+                                        "train_valid": float(train_valid_count_sum),
+                                        "batch_idx": float(batch_idx + 1),
+                                    }
+                                )
                                 _save_checkpoint(epoch, segment_idx, train_loss_est=train_loss_ema)
                             segment_idx += 1
                 # End of epoch logging
-                avg_loss = total_loss / max(1, len(ds) - skipped_batches)
-                avg_action_loss = batch_action_loss_sum / max(1, batch_count)
-                log_losses.append(avg_action_loss)
+                denom = max(1.0, train_valid_count_sum)
+                avg_total = train_total_loss_sum / denom
+                avg_action = train_action_loss_sum / denom
+                avg_state = train_state_loss_sum / denom
+                avg_return = train_return_loss_sum / denom
+
+                log_losses.append(avg_total)
+                train_action_losses.append(avg_action)
+                train_state_losses.append(avg_state)
+                train_return_losses.append(avg_return)
+
                 print(
-                    f"Epoch {epoch}/{epochs} — Loss: {avg_loss:.6f} — Action Loss: {avg_action_loss:.6f} — Skipped batches: {skipped_batches}"
+                    f"Epoch {epoch}/{epochs} — train total: {avg_total:.6f} "
+                    f"(a:{avg_action:.6f}, s:{avg_state:.6f}, r:{avg_return:.6f}) "
+                    f"valid={int(train_valid_count_sum)} skipped_batches={skipped_batches}"
                 )
                 # Step the learning rate scheduler
                 scheduler.step()
@@ -656,6 +788,17 @@ def train_decision_transformer(
                     resume = False
 
                 if checkpoint_path and (epoch % checkpoint_interval == 0):
+                    current_train_snapshot.clear()
+                    current_train_snapshot.update(
+                        {
+                            "train_total_avg": avg_total,
+                            "train_action_avg": avg_action,
+                            "train_state_avg": avg_state,
+                            "train_return_avg": avg_return,
+                            "train_valid": float(train_valid_count_sum),
+                            "batch_idx": float(total_batches),
+                        }
+                    )
                     _save_checkpoint(epoch, train_loss_est=train_loss_ema)
 
             training_finished = True
@@ -671,6 +814,14 @@ def train_decision_transformer(
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
+            train_action_losses = checkpoint.get("train_action_losses", [])  # type: ignore[assignment]
+            train_state_losses = checkpoint.get("train_state_losses", [])  # type: ignore[assignment]
+            train_return_losses = checkpoint.get("train_return_losses", [])  # type: ignore[assignment]
+            val_losses = checkpoint.get("val_losses", [])  # type: ignore[assignment]
+            val_action_losses = checkpoint.get("val_action_losses", [])  # type: ignore[assignment]
+            val_state_losses = checkpoint.get("val_state_losses", [])  # type: ignore[assignment]
+            val_return_losses = checkpoint.get("val_return_losses", [])  # type: ignore[assignment]
+            loss_history = checkpoint.get("loss_history", [])  # type: ignore[assignment]
             best_score = float(checkpoint.get("best_score", best_score))
             best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
             best_train_loss_est = float(checkpoint.get("best_train_loss_est", best_train_loss_est))
@@ -713,11 +864,27 @@ def train_decision_transformer(
 
     # Final checkpoint to capture finished state
     if checkpoint_path:
-        _save_checkpoint(epochs, segment=-1)
+        # Use a distinct segment id so we don't append a duplicate "epoch validation" entry.
+        _save_checkpoint(epochs, segment=-2)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to {save_path}")
+    if return_history:
+        return (
+            model,
+            log_losses,
+            val_losses,
+            {
+                "train_action_losses": train_action_losses,
+                "train_state_losses": train_state_losses,
+                "train_return_losses": train_return_losses,
+                "val_action_losses": val_action_losses,
+                "val_state_losses": val_state_losses,
+                "val_return_losses": val_return_losses,
+                "loss_history": loss_history,
+            },
+        )
     return (model, log_losses, val_losses)
 
 def concat_trajectory_datasets(datasets: list[TrajectoryDataset]) -> ConcatDataset:

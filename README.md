@@ -161,16 +161,29 @@ python3 train_decision_transformer.py \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 8 \
-    --checkpoints-per-epoch 10 \
+    --checkpoints-per-epoch 4 \
     --context-length 60 \
     --lr 5e-6 \
     --weight-decay 1e-4 \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ../models/dt_model.pt \
+    --save-path ../models/dt_model_new.pt \
     --loss-csv-path ../models/dt_model_loss_history.csv \
     --rope-enabled \
-    --amp-mode "auto"
+    --amp-mode "auto" \
+    --num-workers 6 \
+    --prefetch-factor 2
 ```
+
+Notes:
+
+- **DataLoader throughput tuning**:
+    - `--num-workers` controls how many worker processes load/pad batches.
+    - `--prefetch-factor` controls how many batches each worker preloads (only applies when `--num-workers > 0`).
+    - Persistent workers are **enabled by default**; pass `--no-persistent-workers` if you want to disable them.
+- **Loss logging files** (values are consistent between what prints and what’s written):
+    - `--loss-csv-path .../dt_model_loss_history.csv` stores **epoch-level** totals + components (train/val).
+    - A second file is also written next to it: `dt_model_loss_history_checkpoints.csv`, which stores **per-checkpoint/segment** snapshots (useful for plotting progress during an epoch).
+- **Best model weights** are saved alongside your `--save-path` as `*_best.pt` when validation improves without obvious divergence.
 
 #### 3.2 Resume from an existing checkpoint
 
@@ -182,11 +195,13 @@ python3 train_decision_transformer.py \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 8 \
-    --checkpoints_per_epoch 10 \
+    --checkpoints-per-epoch 10 \
     --context-length 60 \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model.pt \
-    --resume
+    --resume \
+    --num-workers 6 \
+    --prefetch-factor 2
 ```
 
 Notes:
