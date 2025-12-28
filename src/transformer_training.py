@@ -43,7 +43,13 @@ class TrajectoryDataset(Dataset):
         self.act_dim = act_dim
         self.gamma = discount_factor
 
-        df = pl.read_parquet(data_path)
+        # Load only the columns needed for DT training to reduce RAM usage.
+        needed_cols = ["episode_id", "step", "norm_observation", "action", "reward"]
+        try:
+            df = pl.read_parquet(data_path, columns=needed_cols)
+        except TypeError:
+            # Older polars versions may not support `columns=` for parquet.
+            df = pl.read_parquet(data_path).select(needed_cols)
 
         # Store all episode data and build sliding window indices
         self.episodes = []  # List of dicts, one per episode
@@ -178,6 +184,9 @@ def train_decision_transformer(
     save_best_divergence_ratio: float = 4.0,
     save_best_min_delta: float = 1e-6,
     save_best_train_weight: float = 0.0,
+    num_workers: int = 2,
+    persistent_workers: bool = True,
+    prefetch_factor: int = 2,
 ) -> tuple:
     
     # set best_model_path to be save_path with _best.pt suffix if not provided
@@ -282,11 +291,11 @@ def train_decision_transformer(
         val_skipped = 0
         with torch.no_grad():
             for batch in val_loader:
-                states = batch["states"].to(device).float()
-                actions = batch["actions"].to(device).float()
-                rtgs = batch["rtgs"].to(device).float()
-                timesteps = batch["timesteps"].to(device)
-                mask = batch["mask"].to(device)
+                states = batch["states"].to(device, non_blocking=non_blocking).float()
+                actions = batch["actions"].to(device, non_blocking=non_blocking).float()
+                rtgs = batch["rtgs"].to(device, non_blocking=non_blocking).float()
+                timesteps = batch["timesteps"].to(device, non_blocking=non_blocking)
+                mask = batch["mask"].to(device, non_blocking=non_blocking)
 
                 if return_scale != 1.0:
                     rtgs = rtgs / return_scale
@@ -457,12 +466,20 @@ def train_decision_transformer(
 
     # create DataLoader after device is chosen so pin_memory can be set appropriately
     pin_memory = True if device.startswith("cuda") else False
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=pin_memory)
-    val_loader = (
-        DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=pin_memory)
-        if val_ds is not None
-        else None
-    )
+    loader_kwargs: dict[str, Any] = {
+        "batch_size": batch_size,
+        "num_workers": int(num_workers),
+        "pin_memory": pin_memory,
+    }
+    if int(num_workers) > 0:
+        loader_kwargs["persistent_workers"] = bool(persistent_workers)
+        loader_kwargs["prefetch_factor"] = int(prefetch_factor)
+
+    loader = DataLoader(ds, shuffle=True, **loader_kwargs)
+    val_loader = DataLoader(val_ds, shuffle=False, **loader_kwargs) if val_ds is not None else None
+
+    # non_blocking transfers only help when using pinned host memory
+    non_blocking = bool(pin_memory)
 
     model = model.to(device)
     
@@ -568,11 +585,11 @@ def train_decision_transformer(
                 for batch_idx, batch in enumerate(progress_bar):
                     if skip_until_batch and batch_idx < skip_until_batch:
                         continue
-                    states = batch["states"].to(device).float()
-                    actions = batch["actions"].to(device).float()
-                    rtgs = batch["rtgs"].to(device).float()
-                    timesteps = batch["timesteps"].to(device)
-                    mask = batch["mask"].to(device)
+                    states = batch["states"].to(device, non_blocking=non_blocking).float()
+                    actions = batch["actions"].to(device, non_blocking=non_blocking).float()
+                    rtgs = batch["rtgs"].to(device, non_blocking=non_blocking).float()
+                    timesteps = batch["timesteps"].to(device, non_blocking=non_blocking)
+                    mask = batch["mask"].to(device, non_blocking=non_blocking)
 
                     if return_scale != 1.0:
                         rtgs = rtgs / return_scale
@@ -582,7 +599,7 @@ def train_decision_transformer(
                         progress_bar.write(f"Skipping batch {batch_idx}: NaN/Inf in inputs")
                         continue
                     # reset gradients
-                    optimizer.zero_grad()
+                    optimizer.zero_grad(set_to_none=True)
                     use_amp_now = _should_use_amp_now()
                     # Forward pass and loss computation
                     batch_result, skip_reason = _forward_and_compute_loss(

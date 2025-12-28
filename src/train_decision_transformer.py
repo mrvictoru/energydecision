@@ -118,6 +118,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-loss-weight", type=float, default=0.1)
     parser.add_argument("--return-loss-weight", type=float, default=0.1)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
+
+    # DataLoader performance tuning
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=2,
+        help="Number of DataLoader workers. Increase to improve throughput if CPU can keep up.",
+    )
+    parser.add_argument(
+        "--no-persistent-workers",
+        dest="persistent_workers",
+        action="store_false",
+        help="Disable persistent DataLoader workers.",
+    )
+    parser.set_defaults(persistent_workers=True)
+    parser.add_argument(
+        "--prefetch-factor",
+        type=int,
+        default=2,
+        help="Batches prefetched per worker (only applies when num-workers > 0).",
+    )
     parser.add_argument(
         "--rope-enabled",
         action="store_true",
@@ -302,6 +323,9 @@ def main() -> None:
         weight_decay=args.weight_decay,
         return_scale=args.return_scale,
         amp_mode=args.amp_mode,
+        num_workers=args.num_workers,
+        persistent_workers=args.persistent_workers,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # store training loss and validation loss history in csv
