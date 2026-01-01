@@ -163,15 +163,16 @@ python3 train_decision_transformer.py \
     --batch-size 8 \
     --checkpoints-per-epoch 4 \
     --context-length 60 \
-    --lr 5e-6 \
+    --lr 1e-5 \
     --weight-decay 1e-4 \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model_new.pt \
     --loss-csv-path ../models/dt_model_loss_history.csv \
     --rope-enabled \
     --amp-mode "auto" \
-    --num-workers 6 \
-    --prefetch-factor 2
+    --num-workers 2 \
+    --prefetch-factor 1 \
+    --no-persistent-workers
 ```
 
 Notes:
