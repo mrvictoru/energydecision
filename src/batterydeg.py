@@ -10,14 +10,19 @@ DoD_nom = 90.0  # Nominal depth of discharge (%)
 
 # The following parameters are derived from "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management (2015)" 
 # by V. Muenzel, J. D. Hoog, M. Brazil, A. Vishwanath, and S. Kalya-naraman
+
+# Pre-compute nominal denominators for efficiency (these are constants)
+_nCL_Id_nom_denom = 4464.0 * math.exp(-0.1382 * Id_nom) + (-1519) * math.exp(-0.4305 * Id_nom)
+_nCL_Ich_nom_denom = 5963.0 * math.exp(-0.6531 * Ich_nom) + 321.4 * math.exp(0.03168 * Ich_nom)
+
 # Normalized cycle life functions
 def nCL_Id(Id):
     e, f, g, h = 4464.0, -0.1382, -1519, -0.4305
-    return (e * math.exp(f * Id) + g * math.exp(h * Id)) / (e * math.exp(f * Id_nom) + g * math.exp(h * Id_nom))
+    return (e * math.exp(f * Id) + g * math.exp(h * Id)) / _nCL_Id_nom_denom
 
 def nCL_Ich(Ich):
     m, n, o, p = 5963.0, -0.6531, 321.4, 0.03168
-    return (m * math.exp(n * Ich) + o * math.exp(p * Ich)) / (m * math.exp(n * Ich_nom) + o * math.exp(p * Ich_nom))
+    return (m * math.exp(n * Ich) + o * math.exp(p * Ich)) / _nCL_Ich_nom_denom
 
 def _ensure_positive(value: float, eps: float = 1e-9) -> float:
     if not np.isfinite(value) or value <= eps:
@@ -25,12 +30,18 @@ def _ensure_positive(value: float, eps: float = 1e-9) -> float:
     return value
 
 
-def nCL_SoC_DoD(SoC, DoD):
+# Helper function for cycle life formula (defined once, not as lambda)
+def _CL4(DoD, SoC):
+    """Cycle life formula with precomputed coefficients."""
     q, s, t, u, v = 1471.0, 214.3, 0.6111, 0.3369, -2.295
-    CL4 = lambda DoD, SoC: q + (20.0 * (s + 100.0 * u) - 200.0 * t) * DoD + s * SoC + t * DoD**2 + u * DoD * SoC + v * SoC**2
-    num = _ensure_positive(CL4(DoD, SoC))
-    den = _ensure_positive(CL4(DoD_nom, SoC_nom))
-    return num / den
+    return q + (20.0 * (s + 100.0 * u) - 200.0 * t) * DoD + s * SoC + t * DoD**2 + u * DoD * SoC + v * SoC**2
+
+# Pre-compute nominal denominator for nCL_SoC_DoD (constant)
+_nCL_SoC_DoD_nom_denom = _ensure_positive(_CL4(DoD_nom, SoC_nom))
+
+def nCL_SoC_DoD(SoC, DoD):
+    num = _ensure_positive(_CL4(DoD, SoC))
+    return num / _nCL_SoC_DoD_nom_denom
 
 # Static multi-factor degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
 def static_degradation(Id, Ich, SoC, DoD):

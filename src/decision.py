@@ -60,7 +60,7 @@ def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                 horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.08,
+                 horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.8,
                  degradation_model='linear', linear_deg_cost_p_kwh=None,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
@@ -660,14 +660,9 @@ class Agent:
         """
         Vectorized stage cost calculation: compute expected grid cost using scenario arrays
         indexed by absolute row index, with degradation cost added deterministically.
+        
+        Note: Assumes self._scenario_cache is already initialized by _solve_sdp() before calling this method.
         """
-
-        # Ensure scenario cache prepared once if possible
-        if self._scenario_cache is None:
-            try:
-                self._scenario_cache = self.scenario_generator.generate_time_step_scenarios(self.env.df)
-            except Exception:
-                self._scenario_cache = None
 
         # Default fallback: use deterministic forecast values
         deterministic_solar = forecast_step.get('SolarGen')

@@ -390,11 +390,22 @@ class QuantileScenarioGenerator:
         # No grouping: compute global quantiles for each variable once
         # For no-group case, build per-variable arrays where each row repeats the global quantiles
         result_mapping: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
-        # Precompute global quantile values per variable
+        
+        # Batch compute all quantiles in a single query for efficiency
+        quantile_exprs = []
+        for vname, col in variables.items():
+            qs = var_quantiles[vname]
+            for i, q in enumerate(qs):
+                quantile_exprs.append(pl.col(col).quantile(q).alias(f"{vname}_q{i}"))
+        
+        # Single query to compute all quantiles
+        quantiles_result = df.select(quantile_exprs)
+        
+        # Extract results from the single query
         global_vals: Dict[str, np.ndarray] = {}
         for vname, col in variables.items():
             qs = var_quantiles[vname]
-            values = np.array([df.select(pl.col(col).quantile(q)).to_series().item() for q in qs], dtype=float)
+            values = np.array([quantiles_result[f"{vname}_q{i}"].item() for i in range(len(qs))], dtype=float)
             global_vals[vname] = values
 
         # Build per-row mapping using time index or row order
