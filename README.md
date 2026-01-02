@@ -18,6 +18,7 @@ This project provides a comprehensive framework for benchmarking control algorit
 *   ~~**Documentation consolidation:** Unified component documentation in COMPONENTS.md~~
 *   **Refactor Agent class:** Refactor Agent class to be less spaghetti
 *   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
+*   **Implement Grid like environment:** To build data pipeline and environment that can also simulate Grid market operation
 
 ## Features
 
