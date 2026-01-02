@@ -115,8 +115,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--return-scale", type=float, default=1.0)
     parser.add_argument("--action-loss-weight", type=float, default=1.0)
-    parser.add_argument("--state-loss-weight", type=float, default=0.1)
-    parser.add_argument("--return-loss-weight", type=float, default=0.1)
+    parser.add_argument("--state-loss-weight", type=float, default=0.01)
+    parser.add_argument("--return-loss-weight", type=float, default=0.002)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
 
     # DataLoader performance tuning
