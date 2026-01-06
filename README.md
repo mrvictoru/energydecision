@@ -202,8 +202,8 @@ python3 train_decision_transformer.py \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model.pt \
     --resume \
-    --num-workers 6 \
-    --prefetch-factor 2
+    --num-workers 2 \
+    --prefetch-factor 1
 ```
 
 Notes:
