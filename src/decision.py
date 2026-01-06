@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import torch
 import polars as pl
@@ -165,6 +166,23 @@ class Agent:
             self.dt_rtgs_buffer = []
             self.dt_timesteps_buffer = []
 
+    @staticmethod
+    def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
+        """Convert a list of RTGs to a safe float32 numpy array."""
+        if not data:
+            return np.zeros(default_shape, dtype=dtype)
+        arr = np.array(data, dtype=np.float64)
+        finite = np.isfinite(arr)
+        if not finite.all():
+            logging.warning(
+                "Found %d non-finite RTG values; replacing with 0 before casting.",
+                int((~finite).sum())
+            )
+            arr = np.where(finite, arr, 0.0)
+        clip_max = np.finfo(np.float32).max
+        arr = np.clip(arr, -clip_max, clip_max)
+        return arr.astype(dtype)
+
     def choose_action(self, obs):
         if self.algorithm == 'rule':
             return self.rule_based_action(obs)
@@ -204,10 +222,11 @@ class Agent:
             if buffer_actions.ndim == 1 and buffer_len > 0:
                 buffer_actions = buffer_actions.reshape(buffer_len, act_dim)
 
-            buffer_rtgs = (
-                np.array(self.dt_rtgs_buffer, dtype=np.float32)
-                if buffer_len > 0 else np.zeros(0, dtype=np.float32)
-            )
+            buffer_rtgs = self._safe_float32_array(
+                self.dt_rtgs_buffer,
+                default_shape=(0, ),
+                dtype=np.float32
+            ) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
 
             buffer_timesteps = (
                 np.array(self.dt_timesteps_buffer, dtype=np.int64)
@@ -285,6 +304,8 @@ class Agent:
             action = action.detach().cpu().numpy()
             action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0).tolist()
             return action
+
+        
         elif self.algorithm == 'sdp' or self.algorithm == 'mrdp':
             current_soc_kwh = obs[-2] # Assuming BatteryLevel is the second to last element
             current_step_env = self.env.current_step # Get current step from env
