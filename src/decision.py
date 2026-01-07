@@ -814,7 +814,18 @@ class Agent:
         return policy_table
 
     def rule_based_action(self, obs):
-        diff = obs[1] - obs[2] # difference between solar generation (obs[1]) and house load (obs[2])
+        # raw_obs layout: 4 cyclical time features, then DF columns in env.ordered_df_cols_for_obs,
+        # then [battery_level_kwh, battery_deg_cost]
+        cyclical_len = 4
+        try:
+            solar_idx = cyclical_len + self.env.ordered_df_cols_for_obs.index('SolarGen')
+            load_idx = cyclical_len + self.env.ordered_df_cols_for_obs.index('HouseLoad')
+        except Exception:
+            # Fallback: assume SolarGen/HouseLoad are the first two DF features
+            solar_idx = cyclical_len
+            load_idx = cyclical_len + 1
+
+        diff = float(obs[solar_idx]) - float(obs[load_idx])  # surplus if positive
         max_flow = self.env.max_battery_flow
         battery_level = obs[-2]/self.env.battery_capacity  # normalize battery level to [0, 1] by dividing battery energy (obs[-2]) by capacity
         noise = np.random.normal(-0.01, 0.01)  # add small noise with standard deviation of 0.01
