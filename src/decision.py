@@ -6,7 +6,7 @@ import warnings
 from typing import Optional
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
-from batterydeg import static_degradation
+from batterydeg import degradation_per_cycle
 from quantile_scenarios import QuantileScenarioGenerator
 from sdp_multires import DynamicProgram, solve_mrdp
 
@@ -448,7 +448,7 @@ class Agent:
             grid_cost = np.where(grid_energy >= 0, grid_energy * imp_price, -np.abs(grid_energy) * exp_price)
             grid_cost[grid_violation] = np.inf
 
-            # Compute per-(soc,action) degradation cost with scalar static_degradation calls
+            # Compute per-(soc,action) degradation cost with linearized wear per kWh
             num_soc = num_soc_levels
             stage_costs = np.full((num_soc, num_actions), np.inf)
             for si in range(num_soc):
@@ -467,11 +467,8 @@ class Agent:
                     avg_soc = (soc_val + 0.5 * energy) / self.battery_capacity * 100.0
                     avg_soc = float(np.clip(avg_soc, 0.0, 100.0))
 
-                    if DoD_percent < 1e-6:
-                        degradation_frac = 0.0
-                    else:
-                        degradation_frac = static_degradation(Id, Ich, avg_soc, DoD_percent)
-
+                    energy_abs = abs(energy)
+                    degradation_frac = self._compute_deg_fraction_linearized(Id, Ich, avg_soc, energy_abs)
                     degradation_cost = degradation_frac * self.battery_life_cost
                     stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
 
@@ -625,14 +622,11 @@ class Agent:
                             rep_soc = self.battery_capacity / 2.0
                             Id_crate = abs(max(0, -battery_rate) / self.battery_capacity)
                             Ich_crate = abs(max(0, battery_rate) / self.battery_capacity)
-                            DoD_percent = abs(energy / self.battery_capacity) * 100.0
                             SoC_avg_percent = (rep_soc + 0.5 * energy) / self.battery_capacity * 100.0
                             SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
-                            if DoD_percent < 1e-6:
-                                degradation_fraction = 0.0
-                            else:
-                                degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent) * self.static_deg_correction_factor
-                            degradation_cost = degradation_fraction * self.battery_life_cost
+                            deg_frac = self._compute_deg_fraction_linearized(Id_crate, Ich_crate, SoC_avg_percent, abs(energy))
+                            deg_frac *= self.static_deg_correction_factor
+                            degradation_cost = deg_frac * self.battery_life_cost
 
                         unique_costs[ui] = stage_cost + degradation_cost
                     else:
@@ -763,16 +757,29 @@ class Agent:
         else:
             Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
             Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
-            DoD_percent = abs(battery_flow_energy / self.battery_capacity) * 100.0
             SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
             SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
-            if DoD_percent < 1e-6:
-                degradation_fraction = 0.0
-            else:
-                degradation_fraction = static_degradation(Id_crate, Ich_crate, SoC_avg_percent, DoD_percent) * self.static_deg_correction_factor
-            degradation_cost = degradation_fraction * self.battery_life_cost
+            deg_frac = self._compute_deg_fraction_linearized(Id_crate, Ich_crate, SoC_avg_percent, abs(battery_flow_energy))
+            deg_frac *= self.static_deg_correction_factor
+            degradation_cost = deg_frac * self.battery_life_cost
 
         return expected_grid_cost + degradation_cost
+
+    def _compute_deg_fraction_linearized(self, Id, Ich, soc_percent, energy_kwh):
+        """
+        Convert a representative full-cycle wear into a per-kWh wear using a base DoD,
+        then scale by the energy moved in this step.
+        """
+        base_DoD = getattr(self.env, "base_deg_DoD", 80.0)
+        if energy_kwh <= 0:
+            return 0.0
+        energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
+        if energy_full_base_cycle <= 0:
+            return 0.0
+        cycle_wear = degradation_per_cycle(Id, Ich, soc_percent, base_DoD)
+        wear_per_kwh = cycle_wear / energy_full_base_cycle
+        frac = wear_per_kwh * energy_kwh
+        return self.env._sanitize_deg_frac(frac)
     
     def _solve_mrdp(self, forecasts, start_index: int = 0):
         """

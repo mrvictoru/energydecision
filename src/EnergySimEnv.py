@@ -6,7 +6,7 @@ from gymnasium import spaces, error, utils
 import numpy as np
 import polars as pl
 
-from batterydeg import static_degradation, dynamic_degradation, degradation_per_cycle
+from batterydeg import static_degradation, dynamic_degradation
 
 # global variables
 VIOLATION_PENALTY = -8964
@@ -58,7 +58,6 @@ class SolarBatteryEnv(gym.Env):
         correction_interval = 100, # steps before dynamic correction
         init_correction_steps = [10, 20, 40 ,70, 110, 160],
         dynamic_interval_min_ratio = 0.25,  # minimum ratio of correction interval when nearing end
-        base_deg_DoD = 80.0,  # reference DoD for per-kWh wear linearization (%)
         step_duration = 0.5 # duration of each step in hours (default half an hour)
     ):
         super(SolarBatteryEnv, self).__init__()
@@ -74,7 +73,6 @@ class SolarBatteryEnv(gym.Env):
         self.battery_life_cost = battery_life_cost
         self.correction_interval = correction_interval
         self.dynamic_interval_min_ratio = dynamic_interval_min_ratio
-        self.base_deg_DoD = base_deg_DoD
         # Automatically determine step_duration from the DataFrame's 'Time' column
         # Assumes 'Time' is in a format compatible with numpy.datetime64 or pandas.Timestamp
         timestamps = self.df['Time'].to_numpy()
@@ -112,10 +110,19 @@ class SolarBatteryEnv(gym.Env):
         # --- Normalization Parameters ---
         self.ordered_df_cols_for_obs = [col for col in self.df.columns if col not in ['Time', 'Timestamp']]
         
-        self.df_mins_for_obs = np.array([self.df.select(pl.min(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
-        self.df_maxs_for_obs = np.array([self.df.select(pl.max(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        # Compute min/max in a single aggregation query for efficiency
+        agg_exprs = []
+        for col in self.ordered_df_cols_for_obs:
+            agg_exprs.extend([pl.min(col).alias(f"{col}_min"), pl.max(col).alias(f"{col}_max")])
+        stats = self.df.select(agg_exprs)
+        self.df_mins_for_obs = np.array([stats[f"{col}_min"].item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
+        self.df_maxs_for_obs = np.array([stats[f"{col}_max"].item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
         self.df_ranges_for_obs = self.df_maxs_for_obs - self.df_mins_for_obs
         self.df_ranges_for_obs[self.df_ranges_for_obs == 0] = 1.0
+        
+        # Pre-compute normalization mask for vectorized operations (optimization)
+        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
+        self._norm_by_capacity_mask = np.array([col in norm_by_capacity_cols for col in self.ordered_df_cols_for_obs])
 
         self.battery_level_min_raw = 0.0
         self.battery_level_max_raw = self.battery_capacity
@@ -191,15 +198,13 @@ class SolarBatteryEnv(gym.Env):
             cyclical_time_features = np.zeros(4, dtype=np.float32)
 
         raw_df_values = np.array([row_dict[col] for col in self.ordered_df_cols_for_obs], dtype=np.float32)
-        # Normalize selected columns by battery_capacity, others by min-max
-        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
-        normalized_df_values = []
-        for i, col in enumerate(self.ordered_df_cols_for_obs):
-            if col in norm_by_capacity_cols:
-                normalized_df_values.append(raw_df_values[i] / (self.battery_capacity + 1e-9))
-            else:
-                normalized_df_values.append((raw_df_values[i] - self.df_mins_for_obs[i]) / self.df_ranges_for_obs[i])
-        normalized_df_values = np.array(normalized_df_values, dtype=np.float32)
+        # Vectorized normalization using pre-computed mask (optimization)
+        # Columns in norm_by_capacity_mask are normalized by battery_capacity, others by min-max
+        normalized_df_values = np.where(
+            self._norm_by_capacity_mask,
+            raw_df_values / (self.battery_capacity + 1e-9),
+            (raw_df_values - self.df_mins_for_obs) / self.df_ranges_for_obs
+        ).astype(np.float32)
         normalized_df_values = np.clip(normalized_df_values, 0.0, 1.0)
 
         raw_battery_level = np.float32(self.battery_level)
@@ -276,37 +281,16 @@ class SolarBatteryEnv(gym.Env):
             return 0.0, 0.0
 
         soc = np.clip(float(soc), 0.0, 100.0)
-
-        # Instantaneous C-rates (1/hour)
-        Id = abs(max(0, -battery_flow_rate) / self.battery_capacity)  # discharge C-rate
-        Ich = abs(max(0, battery_flow_rate) / self.battery_capacity)  # charge C-rate
-
-        # Use a reference full-cycle DoD to compute a representative cycle wear,
-        # then linearize wear per kWh by dividing that cycle wear by the energy moved in that full cycle.
-        base_DoD = float(self.base_deg_DoD)
+        Id = abs(max(0, -battery_flow_rate) / self.battery_capacity) # discharge c rate
+        Ich = abs(max(0, battery_flow_rate) / self.battery_capacity)
         DoD_safe = max(float(DoD), 1e-6)
-
-        # Energy moved in this step (kWh)
-        energy_in_step = abs(battery_flow_rate) * self.step_duration
-
-        # Energy throughput in a representative full cycle (discharge + charge)
-        energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
-        if energy_full_base_cycle <= 0:
-            return 0.0, 0.0
-
-        # Estimate representative cycle wear for base_DoD using current C-rates and SoC
-        cycle_wear_at_base = degradation_per_cycle(Id, Ich, soc, base_DoD)
-
-        # Convert cycle wear (fraction of battery life per full cycle) into wear per kWh
-        wear_per_kwh = cycle_wear_at_base / energy_full_base_cycle
-
-        # Per-step raw degradation fraction (fraction of battery life consumed by this step)
-        raw_frac = wear_per_kwh * energy_in_step
-
-        # Sanitize and apply correction factor as before
+        per_cycle_frac = static_degradation(Id, Ich, soc, DoD_safe)
+        # Convert cycle-level degradation into the fraction consumed by this partial depth of discharge
+        per_step_frac = per_cycle_frac * (DoD_safe / 100.0)
+        raw_frac = per_step_frac
         raw_frac = self._sanitize_deg_frac(raw_frac)
         corrected_frac = self._sanitize_deg_frac(raw_frac * self.correction_factor)
-        return corrected_frac, raw_frac  # return corrected and raw fractions
+        return corrected_frac, raw_frac # return corrected and raw fractions
 
     def step(self, action):
         # ----- Scale Actions -----
