@@ -291,6 +291,11 @@ class SolarBatteryEnv(gym.Env):
         deg_cost: float,
         energy_conservation_violation: bool = False,
         dynamic_updated: bool = False,
+        last_dynamic_deg: float = 0.0,
+        last_num_cycles: int = 0,
+        correction_factor_step: int = -1,
+        soc_history_len: int = 0,
+        static_deg_history_len: int = 0,
     ) -> dict:
         """Convenience helper to build the reward_info dict in one place.
 
@@ -313,7 +318,13 @@ class SolarBatteryEnv(gym.Env):
             "dynamic_interval": int(dynamic_interval),
             "dynamic_updated": bool(dynamic_updated),
             "deg_cost": deg_cost,
+            "last_dynamic_deg": float(last_dynamic_deg),
+            "last_num_cycles": int(last_num_cycles),
+            "correction_factor_step": int(correction_factor_step),
+            "soc_history_len": int(soc_history_len),
+            "static_deg_history_len": int(static_deg_history_len),
             "energy_conservation_violation": bool(energy_conservation_violation),
+
         }
 
     def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
@@ -422,6 +433,11 @@ class SolarBatteryEnv(gym.Env):
                 deg_cost=0.0,
                 energy_conservation_violation=True,
                 dynamic_updated=False,
+                last_dynamic_deg=self.last_dynamic_deg,
+                last_num_cycles=self.last_num_cycles,
+                correction_factor_step=-1,
+                soc_history_len=int(len(self.soc_history)),
+                static_deg_history_len=int(len(self.static_deg_history)),
             )
 
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
@@ -449,6 +465,11 @@ class SolarBatteryEnv(gym.Env):
         # Save raw static estimate to history so dynamic correction is computed against uncorrected statics
         self.static_deg_history.append(raw_static_frac)
 
+        # Capture interval sums and lengths for logging BEFORE any dynamic correction/reset happens
+        static_deg_sum_raw_for_info = float(np.sum(self.static_deg_history, dtype=np.float64))
+        soc_history_len_for_info = int(len(self.soc_history))
+        static_deg_history_len_for_info = int(len(self.static_deg_history))
+
         # Compute dynamic correction at configured intervals
         num_cycles = self.last_num_cycles
         dynamic_deg = self.last_dynamic_deg
@@ -467,6 +488,7 @@ class SolarBatteryEnv(gym.Env):
             dynamic_correct = True
 
         dynamic_updated = False
+        correction_factor_step = -1
         if dynamic_correct and len(self.static_deg_history) > 0 and len(self.soc_history) >= 4:
             dyn_deg, dyn_cycles = dynamic_degradation(self.soc_history, self.step_duration)
             dyn_deg = float(dyn_deg) if np.isfinite(dyn_deg) else 0.0
@@ -478,13 +500,13 @@ class SolarBatteryEnv(gym.Env):
             num_cycles = self.last_num_cycles
             dynamic_updated = True
 
-            static_deg_sum = float(np.sum(self.static_deg_history, dtype=np.float64))
-            static_deg_sum = max(static_deg_sum, 1e-12)
+            static_deg_sum = max(static_deg_sum_raw_for_info, 1e-12)
 
             # Only update correction factor when rainflow found at least one cycle and degradation is positive.
             if dyn_cycles > 0 and dyn_deg > 0.0:
                 ratio = dyn_deg / static_deg_sum
                 self.correction_factor = float(np.clip(ratio, 0.01, 10.0))
+                correction_factor_step = self.current_step
 
             self.last_dynamic_correction_step = self.current_step
             corrected_static_frac = self._sanitize_deg_frac(raw_static_frac * self.correction_factor)
@@ -515,13 +537,18 @@ class SolarBatteryEnv(gym.Env):
             corrected_static_frac=corrected_static_frac,
             raw_static_frac=raw_static_frac,
             dynamic_deg=dynamic_deg,
-            static_deg_sum_raw=float(np.sum(self.static_deg_history, dtype=np.float64)),
+            static_deg_sum_raw=static_deg_sum_raw_for_info,
             num_cycles=num_cycles,
             correction_factor=self.correction_factor,
             dynamic_interval=dynamic_interval_used,
             deg_cost=current_step_deg_cost,
             energy_conservation_violation=False,
             dynamic_updated=dynamic_updated,
+            last_dynamic_deg=self.last_dynamic_deg,
+            last_num_cycles=self.last_num_cycles,
+            correction_factor_step=correction_factor_step,
+            soc_history_len=soc_history_len_for_info,
+            static_deg_history_len=static_deg_history_len_for_info,
         )
 
         # ----- Advance Simulation Step -----

@@ -60,21 +60,52 @@ degradation = static_degradation(Id, Ich, SoC, DoD)
 print(f"Degradation for this cycle: {degradation:.6f}")
 """
 
-# Four-point rainflow counting algorithm
+def _turning_points_with_plateau_handling(soc_profile, eps: float = 1e-6):
+    """
+    Return turning points as (index, soc), robust to plateaus and quantization.
+
+    - Removes consecutive duplicates within eps.
+    - Uses strict peak/trough test with eps margin.
+    - Always includes first and last points.
+    """
+    arr = np.asarray(soc_profile, dtype=float)
+    n = arr.size
+    if n == 0:
+        return []
+    if n == 1:
+        return [(0, float(arr[0]))]
+
+    # 1) compress plateaus: keep only points that change by > eps
+    keep_idx = [0]
+    for i in range(1, n):
+        if abs(arr[i] - arr[keep_idx[-1]]) > eps:
+            keep_idx.append(i)
+
+    arr2 = arr[keep_idx]
+    m = arr2.size
+    if m == 1:
+        return [(keep_idx[0], float(arr2[0]))]
+    if m == 2:
+        return [(keep_idx[0], float(arr2[0])), (keep_idx[1], float(arr2[1]))]
+
+    # 2) turning points
+    tps = [(keep_idx[0], float(arr2[0]))]
+    for i in range(1, m - 1):
+        prev_, curr_, next_ = arr2[i - 1], arr2[i], arr2[i + 1]
+        if (curr_ - prev_ > eps) and (curr_ - next_ > eps):   # peak
+            tps.append((keep_idx[i], float(curr_)))
+        elif (curr_ - prev_ < -eps) and (curr_ - next_ < -eps):  # trough
+            tps.append((keep_idx[i], float(curr_)))
+    tps.append((keep_idx[-1], float(arr2[-1])))
+    return tps
+
+
 def rainflow_counting(soc_profile, step_duration=1.0):
     """
-    Identifies charge-discharge cycles using the rainflow counting algorithm.
-    Now returns a list of cycles where each cycle is a tuple:
-        (SoC_avg, DoD, Id_cycle, Ich_cycle)
-    where the c–rates are computed as:
-        rate = (SoC_max - SoC_min) / (100 * (time difference in hours))
+    Identifies charge-discharge cycles using a simplified four-point rainflow algorithm.
+    Returns list of cycles: (SoC_avg, DoD, Id_cycle, Ich_cycle)
     """
-    # Record turning points as (index, soc)
-    turning_points = []
-    for i in range(1, len(soc_profile) - 1):
-        if (soc_profile[i] > soc_profile[i - 1] and soc_profile[i] > soc_profile[i + 1]) or \
-           (soc_profile[i] < soc_profile[i - 1] and soc_profile[i] < soc_profile[i + 1]):
-            turning_points.append((i, soc_profile[i]))
+    turning_points = _turning_points_with_plateau_handling(soc_profile, eps=1e-6)
 
     cycles = []
     stack = []
@@ -84,40 +115,40 @@ def rainflow_counting(soc_profile, step_duration=1.0):
             r1 = abs(stack[-1][1] - stack[-2][1])
             r2 = abs(stack[-2][1] - stack[-3][1])
             r3 = abs(stack[-3][1] - stack[-4][1])
+
             if r2 <= r1 and r2 <= r3:
-                # Identify cycle using the two central turning points
                 idx1, soc1 = stack[-3]
                 idx2, soc2 = stack[-2]
+
                 SoC_max = max(soc1, soc2)
                 SoC_min = min(soc1, soc2)
                 DoD = SoC_max - SoC_min
+                if DoD <= 1e-9:
+                    # degenerate cycle (flat), discard and remove middle points
+                    del stack[-3:-1]
+                    continue
+
                 SoC_avg = (SoC_max + SoC_min) / 2.0
-                # Estimate cycle duration in hours. Assume turning point indices are 1 step apart in time (scaled by step_duration)
                 delta_time = abs(idx2 - idx1) * step_duration
-                # Avoid division by zero
-                if delta_time == 0:
+
+                if delta_time <= 1e-12:
                     Id_cycle = Ich_cycle = 0.0
                 else:
-                    # Determine the direction of the half-cycle
                     if soc2 > soc1:
-                        # Charging half-cycle: rising SoC -> charge current nonzero
                         Ich_cycle = (soc2 - soc1) / (100.0 * delta_time)
                         Id_cycle = 0.0
                     elif soc2 < soc1:
-                        # Discharging half-cycle: falling SoC -> discharge current nonzero
                         Id_cycle = (soc1 - soc2) / (100.0 * delta_time)
                         Ich_cycle = 0.0
                     else:
-                        # No change
                         Id_cycle = Ich_cycle = 0.0
 
                 cycles.append((SoC_avg, DoD, Id_cycle, Ich_cycle))
-                # Remove the middle two turning points from the stack
                 del stack[-3:-1]
             else:
                 break
-    return cycles
 
+    return cycles
 
 def degradation_per_cycle(Id, Ich, SoC_avg, DoD):
     """
