@@ -6,7 +6,7 @@ from gymnasium import spaces, error, utils
 import numpy as np
 import polars as pl
 
-from batterydeg import static_degradation, dynamic_degradation, degradation_per_cycle
+from batterydeg import static_degradation, dynamic_degradation, degradation_per_cycle, RainflowCounter
 
 # global variables
 VIOLATION_PENALTY = -8964
@@ -65,13 +65,15 @@ class SolarBatteryEnv(gym.Env):
         self.df = df
         self.current_step = 0
         self.max_step = max_step
-        self.battery_capacity = battery_capacity
+        self.initial_battery_capacity = float(battery_capacity)
+        self.battery_capacity = float(battery_capacity)  # effective capacity (fades)
         self.battery_level = init_battery_level
         self.init_battery_level = init_battery_level
         self.max_battery_flow = max_battery_flow
         self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
         self.battery_life_cost = battery_life_cost
+        self.degradation_cost = battery_life_cost
         self.correction_interval = correction_interval
         self.dynamic_interval_min_ratio = dynamic_interval_min_ratio
         self.base_deg_DoD = base_deg_DoD
@@ -93,11 +95,16 @@ class SolarBatteryEnv(gym.Env):
             self.step_duration = step_duration
         self.init_correction_steps = init_correction_steps
 
+        self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
+        self._rainflow_num_cycles = 0
+
         # Initialize state of charge history for dynamic correction
         self.soc_history = []
         self.static_deg_history = []
         self.correction_factor = 1.0
         self.last_dynamic_correction_step = 0
+        self.total_degradation = 0.0
+        self._rainflow_deg_cumulative = 0.0
         
         # Action space (1D): battery_flow(normalized to [-1,1])
         self.action_space = spaces.Box(
@@ -111,6 +118,8 @@ class SolarBatteryEnv(gym.Env):
 
         # --- Normalization Parameters ---
         self.ordered_df_cols_for_obs = [col for col in self.df.columns if col not in ['Time', 'Timestamp']]
+        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
+        self._norm_by_capacity_mask = np.array([col in norm_by_capacity_cols for col in self.ordered_df_cols_for_obs], dtype=bool)
         
         self.df_mins_for_obs = np.array([self.df.select(pl.min(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
         self.df_maxs_for_obs = np.array([self.df.select(pl.max(col)).item() for col in self.ordered_df_cols_for_obs], dtype=np.float32)
@@ -118,7 +127,7 @@ class SolarBatteryEnv(gym.Env):
         self.df_ranges_for_obs[self.df_ranges_for_obs == 0] = 1.0
 
         self.battery_level_min_raw = 0.0
-        self.battery_level_max_raw = self.battery_capacity
+        self.battery_level_max_raw = self.initial_battery_capacity
 
         self.battery_deg_cost_min_raw = 0.0
         # Max raw degradation cost for observation space if not normalizing
@@ -192,14 +201,15 @@ class SolarBatteryEnv(gym.Env):
 
         raw_df_values = np.array([row_dict[col] for col in self.ordered_df_cols_for_obs], dtype=np.float32)
         # Normalize selected columns by battery_capacity, others by min-max
-        norm_by_capacity_cols = {"SolarGen", "HouseLoad", "FutureSolar", "FutureLoad"}
-        normalized_df_values = []
-        for i, col in enumerate(self.ordered_df_cols_for_obs):
-            if col in norm_by_capacity_cols:
-                normalized_df_values.append(raw_df_values[i] / (self.battery_capacity + 1e-9))
-            else:
-                normalized_df_values.append((raw_df_values[i] - self.df_mins_for_obs[i]) / self.df_ranges_for_obs[i])
-        normalized_df_values = np.array(normalized_df_values, dtype=np.float32)
+        normalized_df_values = np.empty_like(raw_df_values)
+        # Vectorized normalization using pre-computed mask
+        cap = self.initial_battery_capacity
+        normalized_df_values[self._norm_by_capacity_mask] = raw_df_values[self._norm_by_capacity_mask] / (cap + 1e-9)
+        normalized_df_values[~self._norm_by_capacity_mask] = (
+            (raw_df_values[~self._norm_by_capacity_mask] - self.df_mins_for_obs[~self._norm_by_capacity_mask])
+            / self.df_ranges_for_obs[~self._norm_by_capacity_mask]
+        )
+        normalized_df_values = normalized_df_values.astype(np.float32)
         normalized_df_values = np.clip(normalized_df_values, 0.0, 1.0)
 
         raw_battery_level = np.float32(self.battery_level)
@@ -232,6 +242,9 @@ class SolarBatteryEnv(gym.Env):
     def reset(self, seed=None, **kwargs):
         super().reset(seed=seed) # Important for Gymnasium compatibility
         self.current_step = 0
+        self.battery_capacity = self.initial_battery_capacity
+        self.total_degradation = 0.0
+        self._rainflow_deg_cumulative = 0.0
         self.battery_level = np.clip(self.init_battery_level, 0, self.battery_capacity)
         # Store SoC at step boundaries (percent). Keep 1 more SoC point than actions.
         self.soc_history = [float((self.battery_level / self.battery_capacity) * 100.0)]
@@ -240,6 +253,8 @@ class SolarBatteryEnv(gym.Env):
         self.last_dynamic_correction_step = 0
         self.last_dynamic_deg = 0.0
         self.last_num_cycles = 0
+        self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
+        self._rainflow_num_cycles = 0
         
         components = self._get_observation_components(current_step_actual_deg_cost=0.0)
         ctf, _, ndfv, _, nef = components
@@ -279,6 +294,7 @@ class SolarBatteryEnv(gym.Env):
         grid_energy: float,
         energy_price: float,
         grid_cost: float,
+        grid_reward: float = 0.0,
         corrected_static_frac: float = 0.0,
         raw_static_frac_unclipped: float = 0.0,
         dynamic_deg: float = 0.0,
@@ -293,6 +309,9 @@ class SolarBatteryEnv(gym.Env):
         last_num_cycles: int = 0,
         correction_factor_step: int = -1,
         correction_ratio_raw: float = -1.0,
+        step_degradation: float = 0.0,
+        total_degradation: float = 0.0,
+        capacity_kwh: float = 0.0,
     ) -> dict:
         """Build the reward/info dict. Keep keys compact and stable for logging."""
         return {
@@ -301,6 +320,7 @@ class SolarBatteryEnv(gym.Env):
             "grid_energy": grid_energy,
             "energy_price": energy_price,
             "grid_cost": grid_cost,
+            "grid_reward": grid_reward,
             "battery_deg_penalty_fraction_corrected": corrected_static_frac,
             "battery_deg_penalty_fraction_raw_unclipped": raw_static_frac_unclipped,
             "dynamic_deg": dynamic_deg,
@@ -315,6 +335,9 @@ class SolarBatteryEnv(gym.Env):
             "correction_factor_step": int(correction_factor_step),
             "correction_ratio_raw": float(correction_ratio_raw),
             "energy_conservation_violation": bool(energy_conservation_violation),
+            "step_degradation": float(step_degradation),
+            "total_degradation": float(total_degradation),
+            "capacity_kwh": float(capacity_kwh),
         }
 
     def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
@@ -429,80 +452,26 @@ class SolarBatteryEnv(gym.Env):
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
 
 
-        # Compute avg SoC robustly:
-        # q_t = battery energy before the operation (kWh)
-        # b_t = energy discharged (kWh, positive for discharge, negative for charge)
-        # SoC_avg_percent = 100 * (q_t - 0.5 * b_t) / B
-        q_t = self.battery_level  # before update
-        # define b_t as positive when discharge, negative when charge
-        b_t = battery_discharge - battery_charge
-        avg_soc = (q_t - 0.5 * b_t) / self.battery_capacity * 100.0
-        avg_soc = np.clip(avg_soc, 0.0, 100.0)
-
-        # Depth of discharge (percentage) for this action
-        DoD = abs(battery_flow_energy / self.battery_capacity) * 100.0  # kWh / kWh -> fraction * 100
-        # ----- Battery degradation (static and corrected) -----
-        # _calculate_battery_degradation returns (corrected_clipped, raw_clipped, raw_unclipped)
-        corrected_static_frac, raw_static_frac, raw_static_frac_unclipped = self._calculate_battery_degradation(DoD, battery_flow_rate, avg_soc)
-
-        # Record SoC for dynamic degradation correction (percent) at step boundary AFTER action
+        # Record SoC for degradation tracking (percent) and feed the counter
         self.soc_history.append(soc_after)
+        new_cycles = self._rainflow_counter.update(soc_after)
 
-        # Save raw static estimate to history so dynamic correction is computed against uncorrected statics
-        self.static_deg_history.append(raw_static_frac_unclipped)
+        step_degradation = 0.0
+        for SoC_avg, DoD, Id_cycle, Ich_cycle in new_cycles:
+            step_degradation += degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
 
-        # Capture interval sums and lengths for logging BEFORE any dynamic correction/reset happens
-        static_deg_sum_raw_for_info = float(np.sum(self.static_deg_history, dtype=np.float64))
+        self._rainflow_num_cycles += len(new_cycles)
+        self._rainflow_deg_cumulative += step_degradation
+        self.total_degradation = min(1.0, self.total_degradation + step_degradation)
+        self.last_dynamic_deg = self._rainflow_deg_cumulative
+        self.last_num_cycles = self._rainflow_num_cycles
 
-        # Compute dynamic correction at configured intervals
-        dynamic_interval_used = self.correction_interval
+        # Capacity fade (normalization remains fixed to initial capacity)
+        self.battery_capacity = max(self.initial_battery_capacity * (1.0 - self.total_degradation), 1e-9)
+        # Ensure stored energy respects faded capacity
+        self.battery_level = min(new_battery_level, self.battery_capacity)
 
-        # Adaptive interval: shrink as simulation nears max_step
-        progress = min(1.0, self.current_step / max(1, self.max_step))
-        interval_ratio = max(self.dynamic_interval_min_ratio, 1.0 - progress)
-        dynamic_interval = max(1, int(self.correction_interval * interval_ratio))
-        dynamic_interval_used = dynamic_interval
-
-        dynamic_correct = False
-        if self.current_step in self.init_correction_steps:
-            dynamic_correct = True
-        elif self.current_step - self.last_dynamic_correction_step >= dynamic_interval:
-            dynamic_correct = True
-
-        dynamic_updated = False
-        correction_factor_step = -1
-        correction_ratio_raw = -1.0
-
-        if dynamic_correct and len(self.static_deg_history) > 0 and len(self.soc_history) >= 4:
-            dyn_deg, dyn_cycles = dynamic_degradation(self.soc_history, self.step_duration)
-            dyn_deg = float(dyn_deg) if np.isfinite(dyn_deg) else 0.0
-
-            # Always record what rainflow returned (for debugging), even if we decide not to update correction_factor.
-            self.last_dynamic_deg = dyn_deg
-            self.last_num_cycles = int(dyn_cycles)
-            dynamic_deg = self.last_dynamic_deg
-            num_cycles = self.last_num_cycles
-            dynamic_updated = True
-
-            static_deg_sum = max(static_deg_sum_raw_for_info, 1e-12)
-
-            # Only update correction factor when rainflow found at least one cycle and degradation is positive.
-            if dyn_cycles > 0 and dyn_deg > 0.0:
-                ratio = dyn_deg / static_deg_sum
-                correction_ratio_raw = float(ratio)
-                self.correction_factor = float(np.clip(ratio, 0.01, 10.0))
-                correction_factor_step = self.current_step
-
-            self.last_dynamic_correction_step = self.current_step
-            corrected_static_frac = self._sanitize_deg_frac(raw_static_frac_unclipped * self.correction_factor)
-
-            # Keep full histories so rainflow runs over cumulative SoC and static wear.
-            # This avoids undercounting long/slow cycles at the expense of heavier rainflow.
-        else:
-            dynamic_interval_used = dynamic_interval
-
-        # Compute per-step degradation cost in USD
-        current_step_deg_cost = max(0.0, corrected_static_frac) * self.battery_life_cost
+        current_step_deg_cost = step_degradation * self.degradation_cost
 
         # ----- Compute Rewards (electricity cost and grid violation)-----
         grid_reward = self._calculate_grid_reward(grid_energy, energy_price)
@@ -513,29 +482,32 @@ class SolarBatteryEnv(gym.Env):
         # Build reward_info
         reward_info = self._make_reward_info(
             battery_flow_energy=battery_flow_energy,
-            battery_level=new_battery_level,
+            battery_level=self.battery_level,
             grid_energy=grid_energy,
             energy_price=energy_price,
             grid_cost=grid_energy * energy_price,
-            corrected_static_frac=corrected_static_frac,
-            raw_static_frac_unclipped=raw_static_frac_unclipped,
-            static_deg_sum_raw=static_deg_sum_raw_for_info,
-            correction_factor=self.correction_factor,
-            dynamic_interval=dynamic_interval_used,
+            grid_reward=grid_reward,
+            corrected_static_frac=0.0,
+            raw_static_frac_unclipped=0.0,
+            static_deg_sum_raw=0.0,
+            correction_factor=1.0,
+            dynamic_interval=self.correction_interval,
             deg_cost=current_step_deg_cost,
             energy_conservation_violation=False,
-            dynamic_updated=dynamic_updated,
-            last_dynamic_deg=self.last_dynamic_deg,
-            last_num_cycles=self.last_num_cycles,
-            correction_factor_step=correction_factor_step,
-            correction_ratio_raw=correction_ratio_raw,
+            dynamic_updated=False,
+            last_dynamic_deg=self._rainflow_deg_cumulative,
+            last_num_cycles=self._rainflow_num_cycles,
+            correction_factor_step=-1,
+            correction_ratio_raw=-1.0,
+            step_degradation=step_degradation,
+            total_degradation=self.total_degradation,
+            capacity_kwh=self.battery_capacity,
         )
 
         # ----- Advance Simulation Step -----
-        self.battery_level = new_battery_level
         self.current_step += 1
         truncated = (self.current_step >= self.max_step)
-        terminated = False
+        terminated = bool(self.total_degradation >= 1.0)
 
         components = self._get_observation_components(current_step_actual_deg_cost=current_step_deg_cost)
         ctf, rdfv, ndfv, ref, nef = components

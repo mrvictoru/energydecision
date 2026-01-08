@@ -53,6 +53,11 @@ def degradation_per_cycle(Id, Ich, SoC_avg, DoD):
     denom = _ensure_positive(nCL * CL_nom)
     return 1 / denom
 
+
+def static_degradation(Id, Ich, SoC_avg, DoD):
+    """Alias for per-cycle degradation used in static estimations."""
+    return degradation_per_cycle(Id, Ich, SoC_avg, DoD)
+
 """
 # Example usage
 Id = 0.3  # Discharge current (C-rate)
@@ -64,96 +69,108 @@ degradation = degradation_per_cycle(Id, Ich, SoC, DoD)
 print(f"Degradation for this cycle: {degradation:.6f}")
 """
 
-def _turning_points_with_plateau_handling(soc_profile, eps: float = 1e-6):
-    """
-    Return turning points as (index, soc), robust to plateaus and quantization.
+class RainflowCounter:
+    def __init__(self, step_duration=1.0, eps=1e-6):
+        self.step_duration = step_duration
+        self.eps = eps
 
-    - Removes consecutive duplicates within eps.
-    - Uses strict peak/trough test with eps margin.
-    - Always includes first and last points.
-    """
-    arr = np.asarray(soc_profile, dtype=float)
-    n = arr.size
-    if n == 0:
+        self.stack = []          # persistent turning point stack for rainflow
+        self.tp_buffer = []      # last few SOC points for turning point detection
+        self.last_soc = None     # for plateau handling
+        self.index = 0           # global index counter
+
+    def _maybe_add_turning_point(self, idx, soc):
+        """
+        Incremental turning point detection using your logic.
+        Returns a list of newly detected turning points (0 or 1).
+        """
+
+        # 1. Plateau handling: ignore if change < eps
+        if self.last_soc is not None and abs(soc - self.last_soc) <= self.eps:
+            return []  # no turning point
+
+        self.last_soc = soc
+        self.tp_buffer.append((idx, soc))
+
+        # Need at least 3 points to detect a turning point
+        if len(self.tp_buffer) < 3:
+            return []
+
+        # Extract last three points
+        (i1, s1), (i2, s2), (i3, s3) = self.tp_buffer[-3:]
+
+        # Peak or trough detection
+        is_peak = (s2 - s1 > self.eps) and (s2 - s3 > self.eps)
+        is_trough = (s2 - s1 < -self.eps) and (s2 - s3 < -self.eps)
+
+        if is_peak or is_trough:
+            # Turning point detected at (i2, s2)
+            return [(i2, s2)]
+
         return []
-    if n == 1:
-        return [(0, float(arr[0]))]
 
-    # 1) compress plateaus: keep only points that change by > eps
-    keep_idx = [0]
-    for i in range(1, n):
-        if abs(arr[i] - arr[keep_idx[-1]]) > eps:
-            keep_idx.append(i)
+    def update(self, soc):
+        """
+        Feed one new SOC value.
+        Returns list of newly closed cycles.
+        """
+        closed_cycles = []
 
-    arr2 = arr[keep_idx]
-    m = arr2.size
-    if m == 1:
-        return [(keep_idx[0], float(arr2[0]))]
-    if m == 2:
-        return [(keep_idx[0], float(arr2[0])), (keep_idx[1], float(arr2[1]))]
+        # 1. Detect turning points incrementally
+        new_tps = self._maybe_add_turning_point(self.index, soc)
+        self.index += 1
 
-    # 2) turning points
-    tps = [(keep_idx[0], float(arr2[0]))]
-    for i in range(1, m - 1):
-        prev_, curr_, next_ = arr2[i - 1], arr2[i], arr2[i + 1]
-        if (curr_ - prev_ > eps) and (curr_ - next_ > eps):   # peak
-            tps.append((keep_idx[i], float(curr_)))
-        elif (curr_ - prev_ < -eps) and (curr_ - next_ < -eps):  # trough
-            tps.append((keep_idx[i], float(curr_)))
-    tps.append((keep_idx[-1], float(arr2[-1])))
-    return tps
+        # 2. Add turning points to rainflow stack
+        for tp in new_tps:
+            self.stack.append(tp)
 
+            # Try to close cycles
+            while len(self.stack) >= 4:
+                r1 = abs(self.stack[-1][1] - self.stack[-2][1])
+                r2 = abs(self.stack[-2][1] - self.stack[-3][1])
+                r3 = abs(self.stack[-3][1] - self.stack[-4][1])
 
-def rainflow_counting(soc_profile, step_duration=1.0):
-    """
-    Identifies charge-discharge cycles using a simplified four-point rainflow algorithm.
-    Returns list of cycles: (SoC_avg, DoD, Id_cycle, Ich_cycle)
-    """
-    turning_points = _turning_points_with_plateau_handling(soc_profile, eps=1e-6)
+                if r2 <= r1 and r2 <= r3:
+                    idx1, soc1 = self.stack[-3]
+                    idx2, soc2 = self.stack[-2]
 
-    cycles = []
-    stack = []
-    for tp in turning_points:
-        stack.append(tp)
-        while len(stack) >= 4:
-            r1 = abs(stack[-1][1] - stack[-2][1])
-            r2 = abs(stack[-2][1] - stack[-3][1])
-            r3 = abs(stack[-3][1] - stack[-4][1])
+                    SoC_max = max(soc1, soc2)
+                    SoC_min = min(soc1, soc2)
+                    DoD = SoC_max - SoC_min
 
-            if r2 <= r1 and r2 <= r3:
-                idx1, soc1 = stack[-3]
-                idx2, soc2 = stack[-2]
+                    if DoD > self.eps:
+                        SoC_avg = (SoC_max + SoC_min) / 2.0
+                        delta_time = abs(idx2 - idx1) * self.step_duration
 
-                SoC_max = max(soc1, soc2)
-                SoC_min = min(soc1, soc2)
-                DoD = SoC_max - SoC_min
-                if DoD <= 1e-9:
-                    # degenerate cycle (flat), discard and remove middle points
-                    del stack[-3:-1]
-                    continue
+                        if delta_time <= 1e-12:
+                            Id_cycle = Ich_cycle = 0.0
+                        else:
+                            if soc2 > soc1:
+                                Ich_cycle = (soc2 - soc1) / delta_time
+                                Id_cycle = 0.0
+                            else:
+                                Id_cycle = (soc1 - soc2) / delta_time
+                                Ich_cycle = 0.0
 
-                SoC_avg = (SoC_max + SoC_min) / 2.0
-                delta_time = abs(idx2 - idx1) * step_duration
+                        closed_cycles.append((SoC_avg, DoD, Id_cycle, Ich_cycle))
+                        
 
-                if delta_time <= 1e-12:
-                    Id_cycle = Ich_cycle = 0.0
+                    # Remove middle points
+                    del self.stack[-3:-1]
                 else:
-                    if soc2 > soc1:
-                        Ich_cycle = (soc2 - soc1) / (100.0 * delta_time)
-                        Id_cycle = 0.0
-                    elif soc2 < soc1:
-                        Id_cycle = (soc1 - soc2) / (100.0 * delta_time)
-                        Ich_cycle = 0.0
-                    else:
-                        Id_cycle = Ich_cycle = 0.0
+                    break
 
-                cycles.append((SoC_avg, DoD, Id_cycle, Ich_cycle))
-                del stack[-3:-1]
-            else:
-                break
+        return closed_cycles
 
-    return cycles
 
+def rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6):
+    """Return all closed cycles for the provided SoC profile."""
+
+    counter = RainflowCounter(step_duration=step_duration, eps=eps)
+    closed_cycles = []
+    for soc in soc_profile:
+        closed_cycles.extend(counter.update(soc))
+    return closed_cycles
 
 
 # Dynamic degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
