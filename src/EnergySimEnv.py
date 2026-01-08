@@ -296,6 +296,9 @@ class SolarBatteryEnv(gym.Env):
         correction_factor_step: int = -1,
         soc_history_len: int = 0,
         static_deg_history_len: int = 0,
+        correction_factor_prev: float = -1.0,
+        correction_ratio: float = -1.0,
+        correction_factor_new: float = -1.0,
     ) -> dict:
         """Convenience helper to build the reward_info dict in one place.
 
@@ -323,6 +326,9 @@ class SolarBatteryEnv(gym.Env):
             "correction_factor_step": int(correction_factor_step),
             "soc_history_len": int(soc_history_len),
             "static_deg_history_len": int(static_deg_history_len),
+            "correction_factor_prev": float(correction_factor_prev),
+            "correction_ratio": float(correction_ratio),
+            "correction_factor_new": float(correction_factor_new),
             "energy_conservation_violation": bool(energy_conservation_violation),
 
         }
@@ -438,6 +444,9 @@ class SolarBatteryEnv(gym.Env):
                 correction_factor_step=-1,
                 soc_history_len=int(len(self.soc_history)),
                 static_deg_history_len=int(len(self.static_deg_history)),
+                correction_factor_prev=float(self.correction_factor),
+                correction_ratio=-1.0,
+                correction_factor_new=float(self.correction_factor),
             )
 
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
@@ -489,6 +498,9 @@ class SolarBatteryEnv(gym.Env):
 
         dynamic_updated = False
         correction_factor_step = -1
+        correction_factor_prev = float(self.correction_factor)
+        correction_ratio = -1.0
+        correction_factor_new = correction_factor_prev
         if dynamic_correct and len(self.static_deg_history) > 0 and len(self.soc_history) >= 4:
             dyn_deg, dyn_cycles = dynamic_degradation(self.soc_history, self.step_duration)
             dyn_deg = float(dyn_deg) if np.isfinite(dyn_deg) else 0.0
@@ -505,8 +517,10 @@ class SolarBatteryEnv(gym.Env):
             # Only update correction factor when rainflow found at least one cycle and degradation is positive.
             if dyn_cycles > 0 and dyn_deg > 0.0:
                 ratio = dyn_deg / static_deg_sum
+                correction_ratio = float(ratio)
                 self.correction_factor = float(np.clip(ratio, 0.01, 10.0))
                 correction_factor_step = self.current_step
+                correction_factor_new = float(self.correction_factor)
 
             self.last_dynamic_correction_step = self.current_step
             corrected_static_frac = self._sanitize_deg_frac(raw_static_frac * self.correction_factor)
@@ -549,6 +563,9 @@ class SolarBatteryEnv(gym.Env):
             correction_factor_step=correction_factor_step,
             soc_history_len=soc_history_len_for_info,
             static_deg_history_len=static_deg_history_len_for_info,
+            correction_factor_prev=correction_factor_prev,
+            correction_ratio=correction_ratio,
+            correction_factor_new=correction_factor_new,
         )
 
         # ----- Advance Simulation Step -----
