@@ -43,11 +43,15 @@ def nCL_SoC_DoD(SoC, DoD):
     num = _ensure_positive(_CL4(DoD, SoC))
     return num / _nCL_SoC_DoD_nom_denom
 
-# Static multi-factor degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
-def static_degradation(Id, Ich, SoC, DoD):
-    nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC, DoD))
-    denom = _ensure_positive(CL_nom * nCL)
-    return 0.5 / denom
+
+def degradation_per_cycle(Id, Ich, SoC_avg, DoD):
+    """
+    Calculates the fractional degradation caused by a single cycle using
+    effective discharge and charge C-rates (Id and Ich) for that cycle.
+    """
+    nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC_avg, DoD))
+    denom = _ensure_positive(nCL * CL_nom)
+    return 1 / denom
 
 """
 # Example usage
@@ -56,7 +60,7 @@ Ich = 0.1  # Charge current (C-rate)
 SoC = 60  # Average state of charge (%)
 DoD = 80  # Depth of discharge (%)
 
-degradation = static_degradation(Id, Ich, SoC, DoD)
+degradation = degradation_per_cycle(Id, Ich, SoC, DoD)
 print(f"Degradation for this cycle: {degradation:.6f}")
 """
 
@@ -150,14 +154,7 @@ def rainflow_counting(soc_profile, step_duration=1.0):
 
     return cycles
 
-def degradation_per_cycle(Id, Ich, SoC_avg, DoD):
-    """
-    Calculates the fractional degradation caused by a single cycle using
-    effective discharge and charge C-rates (Id and Ich) for that cycle.
-    """
-    nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC_avg, DoD))
-    denom = _ensure_positive(nCL * CL_nom)
-    return 1 / denom
+
 
 # Dynamic degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
 # Total degradation calculation

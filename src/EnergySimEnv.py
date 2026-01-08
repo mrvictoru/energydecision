@@ -242,13 +242,12 @@ class SolarBatteryEnv(gym.Env):
         self.last_num_cycles = 0
         
         components = self._get_observation_components(current_step_actual_deg_cost=0.0)
-        ctf, rdfv, ndfv, ref, nef = components
+        ctf, _, ndfv, _, nef = components
 
         info = {}
 
         primary_obs = np.concatenate((ctf, ndfv, nef))
 
-            
         return primary_obs, info
 
     # ... (get_observation_header, _calculate_grid_reward, _calculate_battery_degradation, render) ...
@@ -280,40 +279,30 @@ class SolarBatteryEnv(gym.Env):
         grid_energy: float,
         energy_price: float,
         grid_cost: float,
-        grid_reward: float,
-        corrected_static_frac: float,
-        raw_static_frac: float,
-        dynamic_deg: float,
-        static_deg_sum_raw: float,
-        num_cycles: int,
-        correction_factor: float,
-        dynamic_interval: int,
-        deg_cost: float,
+        corrected_static_frac: float = 0.0,
+        raw_static_frac_unclipped: float = 0.0,
+        dynamic_deg: float = 0.0,
+        static_deg_sum_raw: float = 0.0,
+        num_cycles: int = 0,
+        correction_factor: float = 1.0,
+        dynamic_interval: int = 0,
+        deg_cost: float = 0.0,
         energy_conservation_violation: bool = False,
         dynamic_updated: bool = False,
         last_dynamic_deg: float = 0.0,
         last_num_cycles: int = 0,
         correction_factor_step: int = -1,
-        soc_history_len: int = 0,
-        static_deg_history_len: int = 0,
-        correction_factor_prev: float = -1.0,
-        correction_ratio: float = -1.0,
-        correction_factor_new: float = -1.0,
+        correction_ratio_raw: float = -1.0,
     ) -> dict:
-        """Convenience helper to build the reward_info dict in one place.
-
-        Keep keys stable across early-return and normal-return paths so callers
-        only need to update this function when adding debug fields.
-        """
+        """Build the reward/info dict. Keep keys compact and stable for logging."""
         return {
             "battery_flow_energy": battery_flow_energy,
             "battery_level": battery_level,
             "grid_energy": grid_energy,
             "energy_price": energy_price,
             "grid_cost": grid_cost,
-            "grid_reward": grid_reward,
             "battery_deg_penalty_fraction_corrected": corrected_static_frac,
-            "battery_deg_penalty_fraction_raw": raw_static_frac,
+            "battery_deg_penalty_fraction_raw_unclipped": raw_static_frac_unclipped,
             "dynamic_deg": dynamic_deg,
             "static_deg_sum_raw": static_deg_sum_raw,
             "num_cycles": int(num_cycles),
@@ -324,19 +313,14 @@ class SolarBatteryEnv(gym.Env):
             "last_dynamic_deg": float(last_dynamic_deg),
             "last_num_cycles": int(last_num_cycles),
             "correction_factor_step": int(correction_factor_step),
-            "soc_history_len": int(soc_history_len),
-            "static_deg_history_len": int(static_deg_history_len),
-            "correction_factor_prev": float(correction_factor_prev),
-            "correction_ratio": float(correction_ratio),
-            "correction_factor_new": float(correction_factor_new),
+            "correction_ratio_raw": float(correction_ratio_raw),
             "energy_conservation_violation": bool(energy_conservation_violation),
-
         }
 
     def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
         # battery flow rate is negative for discharge and positive for charge
         if abs(battery_flow_rate) <= 1e-12 or DoD <= 1e-6:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0
 
         soc = np.clip(float(soc), 0.0, 100.0)
 
@@ -347,7 +331,6 @@ class SolarBatteryEnv(gym.Env):
         # Use a reference full-cycle DoD to compute a representative cycle wear,
         # then linearize wear per kWh by dividing that cycle wear by the energy moved in that full cycle.
         base_DoD = float(self.base_deg_DoD)
-        DoD_safe = max(float(DoD), 1e-6)
 
         # Energy moved in this step (kWh)
         energy_in_step = abs(battery_flow_rate) * self.step_duration
@@ -355,7 +338,7 @@ class SolarBatteryEnv(gym.Env):
         # Energy throughput in a representative full cycle (discharge + charge)
         energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
         if energy_full_base_cycle <= 0:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0
 
         # Estimate representative cycle wear for base_DoD using current C-rates and SoC
         cycle_wear_at_base = degradation_per_cycle(Id, Ich, soc, base_DoD)
@@ -364,12 +347,12 @@ class SolarBatteryEnv(gym.Env):
         wear_per_kwh = cycle_wear_at_base / energy_full_base_cycle
 
         # Per-step raw degradation fraction (fraction of battery life consumed by this step)
-        raw_frac = wear_per_kwh * energy_in_step
+        raw_frac_unclipped = wear_per_kwh * energy_in_step
 
-        # Sanitize and apply correction factor as before
-        raw_frac = self._sanitize_deg_frac(raw_frac)
-        corrected_frac = self._sanitize_deg_frac(raw_frac * self.correction_factor)
-        return corrected_frac, raw_frac  # return corrected and raw fractions
+        # Sanitize and apply correction factor as before (capped for penalty/obs)
+        raw_frac = self._sanitize_deg_frac(raw_frac_unclipped)
+        corrected_frac = self._sanitize_deg_frac(raw_frac_unclipped * self.correction_factor)
+        return corrected_frac, raw_frac, raw_frac_unclipped  # corrected/clipped, raw/clipped, raw/unclipped
 
     def step(self, action):
         # ----- Scale Actions -----
@@ -428,9 +411,8 @@ class SolarBatteryEnv(gym.Env):
                 grid_energy=grid_energy,
                 energy_price=energy_price,
                 grid_cost=0.0,
-                grid_reward=0.0,
                 corrected_static_frac=0.0,
-                raw_static_frac=0.0,
+                raw_static_frac_unclipped=0.0,
                 dynamic_deg=-1.0,
                 static_deg_sum_raw=-1.0,
                 num_cycles=0,
@@ -441,12 +423,7 @@ class SolarBatteryEnv(gym.Env):
                 dynamic_updated=False,
                 last_dynamic_deg=self.last_dynamic_deg,
                 last_num_cycles=self.last_num_cycles,
-                correction_factor_step=-1,
-                soc_history_len=int(len(self.soc_history)),
-                static_deg_history_len=int(len(self.static_deg_history)),
-                correction_factor_prev=float(self.correction_factor),
-                correction_ratio=-1.0,
-                correction_factor_new=float(self.correction_factor),
+                correction_ratio_raw=-1.0,
             )
 
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
@@ -465,23 +442,19 @@ class SolarBatteryEnv(gym.Env):
         # Depth of discharge (percentage) for this action
         DoD = abs(battery_flow_energy / self.battery_capacity) * 100.0  # kWh / kWh -> fraction * 100
         # ----- Battery degradation (static and corrected) -----
-        # _calculate_battery_degradation returns (corrected_static_fraction, raw_static_fraction)
-        corrected_static_frac, raw_static_frac = self._calculate_battery_degradation(DoD, battery_flow_rate, avg_soc)
+        # _calculate_battery_degradation returns (corrected_clipped, raw_clipped, raw_unclipped)
+        corrected_static_frac, raw_static_frac, raw_static_frac_unclipped = self._calculate_battery_degradation(DoD, battery_flow_rate, avg_soc)
 
         # Record SoC for dynamic degradation correction (percent) at step boundary AFTER action
         self.soc_history.append(soc_after)
 
         # Save raw static estimate to history so dynamic correction is computed against uncorrected statics
-        self.static_deg_history.append(raw_static_frac)
+        self.static_deg_history.append(raw_static_frac_unclipped)
 
         # Capture interval sums and lengths for logging BEFORE any dynamic correction/reset happens
         static_deg_sum_raw_for_info = float(np.sum(self.static_deg_history, dtype=np.float64))
-        soc_history_len_for_info = int(len(self.soc_history))
-        static_deg_history_len_for_info = int(len(self.static_deg_history))
 
         # Compute dynamic correction at configured intervals
-        num_cycles = self.last_num_cycles
-        dynamic_deg = self.last_dynamic_deg
         dynamic_interval_used = self.correction_interval
 
         # Adaptive interval: shrink as simulation nears max_step
@@ -498,9 +471,8 @@ class SolarBatteryEnv(gym.Env):
 
         dynamic_updated = False
         correction_factor_step = -1
-        correction_factor_prev = float(self.correction_factor)
-        correction_ratio = -1.0
-        correction_factor_new = correction_factor_prev
+        correction_ratio_raw = -1.0
+
         if dynamic_correct and len(self.static_deg_history) > 0 and len(self.soc_history) >= 4:
             dyn_deg, dyn_cycles = dynamic_degradation(self.soc_history, self.step_duration)
             dyn_deg = float(dyn_deg) if np.isfinite(dyn_deg) else 0.0
@@ -517,17 +489,15 @@ class SolarBatteryEnv(gym.Env):
             # Only update correction factor when rainflow found at least one cycle and degradation is positive.
             if dyn_cycles > 0 and dyn_deg > 0.0:
                 ratio = dyn_deg / static_deg_sum
-                correction_ratio = float(ratio)
+                correction_ratio_raw = float(ratio)
                 self.correction_factor = float(np.clip(ratio, 0.01, 10.0))
                 correction_factor_step = self.current_step
-                correction_factor_new = float(self.correction_factor)
 
             self.last_dynamic_correction_step = self.current_step
-            corrected_static_frac = self._sanitize_deg_frac(raw_static_frac * self.correction_factor)
+            corrected_static_frac = self._sanitize_deg_frac(raw_static_frac_unclipped * self.correction_factor)
 
-            # Reset histories to make the correction interval behave like a window
-            self.soc_history = [soc_after]
-            self.static_deg_history = []
+            # Keep full histories so rainflow runs over cumulative SoC and static wear.
+            # This avoids undercounting long/slow cycles at the expense of heavier rainflow.
         else:
             dynamic_interval_used = dynamic_interval
 
@@ -547,12 +517,9 @@ class SolarBatteryEnv(gym.Env):
             grid_energy=grid_energy,
             energy_price=energy_price,
             grid_cost=grid_energy * energy_price,
-            grid_reward=grid_reward,
             corrected_static_frac=corrected_static_frac,
-            raw_static_frac=raw_static_frac,
-            dynamic_deg=dynamic_deg,
+            raw_static_frac_unclipped=raw_static_frac_unclipped,
             static_deg_sum_raw=static_deg_sum_raw_for_info,
-            num_cycles=num_cycles,
             correction_factor=self.correction_factor,
             dynamic_interval=dynamic_interval_used,
             deg_cost=current_step_deg_cost,
@@ -561,11 +528,7 @@ class SolarBatteryEnv(gym.Env):
             last_dynamic_deg=self.last_dynamic_deg,
             last_num_cycles=self.last_num_cycles,
             correction_factor_step=correction_factor_step,
-            soc_history_len=soc_history_len_for_info,
-            static_deg_history_len=static_deg_history_len_for_info,
-            correction_factor_prev=correction_factor_prev,
-            correction_ratio=correction_ratio,
-            correction_factor_new=correction_factor_new,
+            correction_ratio_raw=correction_ratio_raw,
         )
 
         # ----- Advance Simulation Step -----
