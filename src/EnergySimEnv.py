@@ -72,7 +72,6 @@ class SolarBatteryEnv(gym.Env):
         self.max_battery_flow = max_battery_flow
         self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
-        self.battery_life_cost = battery_life_cost
         self.degradation_cost = battery_life_cost
         self.dynamic_interval_min_ratio = dynamic_interval_min_ratio
         self.base_deg_DoD = base_deg_DoD
@@ -134,11 +133,11 @@ class SolarBatteryEnv(gym.Env):
         self.battery_deg_cost_min_raw = 0.0
         # Max raw degradation cost for observation space if not normalizing
         # (Used if raw obs is primary, or for the raw_obs in info dict)
-        self.battery_deg_cost_max_raw_obs_bound = MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR * self.battery_life_cost
+        self.battery_deg_cost_max_raw_obs_bound = MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR * battery_life_cost
         if self.battery_deg_cost_max_raw_obs_bound == 0: self.battery_deg_cost_max_raw_obs_bound = 1.0
 
         # Max degradation cost for normalization purposes (used if norm_obs is primary)
-        self.battery_deg_cost_max_for_norm = MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM * self.battery_life_cost
+        self.battery_deg_cost_max_for_norm = MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM * battery_life_cost
         if self.battery_deg_cost_max_for_norm == 0: self.battery_deg_cost_max_for_norm = 1.0
         
         # --- Observation Space Definition (for the primary observation) ---
@@ -347,45 +346,6 @@ class SolarBatteryEnv(gym.Env):
             return float(value), ""
         except ValueError as exc:
             return 0.0, str(exc)
-
-    def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
-        # battery flow rate is negative for discharge and positive for charge
-        if abs(battery_flow_rate) <= 1e-12 or DoD <= 1e-6:
-            return 0.0, 0.0, 0.0
-
-        soc = np.clip(float(soc), 0.0, 100.0)
-
-        # Instantaneous C-rates (1/hour)
-        Id = abs(max(0, -battery_flow_rate) / self.battery_capacity)  # discharge C-rate
-        Ich = abs(max(0, battery_flow_rate) / self.battery_capacity)  # charge C-rate
-
-        # Use a reference full-cycle DoD to compute a representative cycle wear,
-        # then linearize wear per kWh by dividing that cycle wear by the energy moved in that full cycle.
-        base_DoD = float(self.base_deg_DoD)
-
-        # Energy moved in this step (kWh)
-        energy_in_step = abs(battery_flow_rate) * self.step_duration
-
-        # Energy throughput in a representative full cycle (discharge + charge)
-        energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
-        if energy_full_base_cycle <= 0:
-            return 0.0, 0.0, 0.0
-
-        # Estimate representative cycle wear for base_DoD using current C-rates and SoC
-        cycle_wear_at_base, deg_err = self._safe_degradation_per_cycle(Id, Ich, soc, base_DoD)
-        if deg_err:
-            return 0.0, 0.0, 0.0
-
-        # Convert cycle wear (fraction of battery life per full cycle) into wear per kWh
-        wear_per_kwh = cycle_wear_at_base / energy_full_base_cycle
-
-        # Per-step raw degradation fraction (fraction of battery life consumed by this step)
-        raw_frac_unclipped = wear_per_kwh * energy_in_step
-
-        # Sanitize and apply correction factor as before (capped for penalty/obs)
-        raw_frac = self._sanitize_deg_frac(raw_frac_unclipped)
-        corrected_frac = self._sanitize_deg_frac(raw_frac_unclipped * self.correction_factor)
-        return corrected_frac, raw_frac, raw_frac_unclipped  # corrected/clipped, raw/clipped, raw/unclipped
 
     def step(self, action):
         # ----- Scale Actions -----

@@ -874,6 +874,9 @@ class Agent:
         max_flow = self.env.max_battery_flow
         battery_level = obs[-2]/self.env.battery_capacity  # normalize battery level to [0, 1] by dividing battery energy (obs[-2]) by capacity
         noise = np.random.normal(-0.01, 0.01)  # add small noise with standard deviation of 0.01
+        safe_margin_pct = max(getattr(self.env, "base_deg_DoD", 80.0) / 2.0, 5.0)
+        safe_lower_norm = min(safe_margin_pct / 100.0, 0.5)
+        safe_upper_norm = max(1.0 - safe_lower_norm, safe_lower_norm)
         # this is to check
         if self.rule_presistence and battery_level < 0.9:  # battery is not full
             #continue charging.
@@ -896,6 +899,15 @@ class Agent:
         else:
             # No action needed; add noise to zero action.
             result = 0.0 + noise
+
+        if battery_level < safe_lower_norm:
+            # Encourage charging when SoC is below the degradation-safe window
+            result = max(result, 0.2)
+        elif battery_level > safe_upper_norm:
+            # Encourage discharging when SoC is above the degradation-safe window
+            result = min(result, -0.2)
+
+        result = float(np.clip(result, -1.0, 1.0))
     
         return [np.float32(result)]  # Return as a list to match expected action format
     
