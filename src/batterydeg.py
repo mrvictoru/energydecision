@@ -3,6 +3,7 @@ import numpy as np
 
 # Parameters (example values, adjust as needed)
 CL_nom = 3650.0  # Nominal cycle life
+T_nom = 25.0  # Nominal temperature (°C)
 Id_nom = 0.25  # Nominal discharge current (C-rate)
 Ich_nom = 0.125  # Nominal charge current (C-rate)
 SoC_nom = 50.0  # Nominal state of charge (%)
@@ -11,52 +12,177 @@ DoD_nom = 90.0  # Nominal depth of discharge (%)
 # The following parameters are derived from "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management (2015)" 
 # by V. Muenzel, J. D. Hoog, M. Brazil, A. Vishwanath, and S. Kalya-naraman
 
-# Pre-compute nominal denominators for efficiency (these are constants)
-_nCL_Id_nom_denom = 4464.0 * math.exp(-0.1382 * Id_nom) + (-1519) * math.exp(-0.4305 * Id_nom)
-_nCL_Ich_nom_denom = 5963.0 * math.exp(-0.6531 * Ich_nom) + 321.4 * math.exp(0.03168 * Ich_nom)
+# =============================================================================
+# Muenzel et al. (2015) multi-factor cycle life model
+#
+# Implements:
+#   - Eq. (4), (7): temperature model + normalization
+#   - Eq. (5), (8): discharge current model + normalization
+#   - Eq. (6), (9): charge current model + normalization
+#   - Eq. (13): constrained SOCav–DOD 2D polynomial CL4(DOD, SOCav)
+#   - Normalization consistent with Eq. (1)/(3): nCL = CL(condition) / CL(nominal)
+#   - Eq. (3): CL = CL_nom * Π nCL(...)
+#   - Per-cycle degradation as 1 / CL (as used for Dk in Eq. (24))
+#
+# Notes:
+#   - SOCav and DOD are in percent [0, 100].
+#   - Currents are in C-rate units.
+#   - Temperature in °C.
+#   - The SOC–DOD polynomial is only meaningful in the feasible region:
+#       DOD <= 2*SOCav and DOD <= 2*(100 - SOCav).
+# =============================================================================
 
-# Normalized cycle life functions
-def nCL_Id(Id):
-    e, f, g, h = 4464.0, -0.1382, -1519, -0.4305
-    return (e * math.exp(f * Id) + g * math.exp(h * Id)) / _nCL_Id_nom_denom
 
-def nCL_Ich(Ich):
-    m, n, o, p = 5963.0, -0.6531, 321.4, 0.03168
-    return (m * math.exp(n * Ich) + o * math.exp(p * Ich)) / _nCL_Ich_nom_denom
-
-def _ensure_positive(value: float, eps: float = 1e-9) -> float:
-    if not np.isfinite(value) or value <= eps:
+def _ensure_positive(x: float, eps: float = 1e-12) -> float:
+    if not np.isfinite(x) or x <= eps:
         return eps
-    return value
+    return x
 
 
-# Helper function for cycle life formula (defined once, not as lambda)
-def _CL4(DoD, SoC):
-    """Cycle life formula with precomputed coefficients."""
-    q, s, t, u, v = 1471.0, 214.3, 0.6111, 0.3369, -2.295
-    return q + (20.0 * (s + 100.0 * u) - 200.0 * t) * DoD + s * SoC + t * DoD**2 + u * DoD * SoC + v * SoC**2
-
-# Pre-compute nominal denominator for nCL_SoC_DoD (constant)
-_nCL_SoC_DoD_nom_denom = _ensure_positive(_CL4(DoD_nom, SoC_nom))
-
-def nCL_SoC_DoD(SoC, DoD):
-    num = _ensure_positive(_CL4(DoD, SoC))
-    return num / _nCL_SoC_DoD_nom_denom
+def _in_feasible_soc_dod_region(soc_av: float, dod: float) -> bool:
+    return (
+        0.0 <= soc_av <= 100.0
+        and 0.0 <= dod <= 100.0
+        and dod <= 2.0 * soc_av
+        and dod <= 2.0 * (100.0 - soc_av)
+    )
 
 
-def degradation_per_cycle(Id, Ich, SoC_avg, DoD):
+class DegradationModel:
     """
-    Calculates the fractional degradation caused by a single cycle using
-    effective discharge and charge C-rates (Id and Ich) for that cycle.
+    Implementation of Multi-Factor Battery Cycle Life Prediction Methodology Muenzel et al. (2015).
+
+    You must provide:
+      - CL_nom: nominal cycle life (cycles to EOL at nominal conditions)
+      - nominal conditions: T_nom, Id_nom, Ich_nom, SOCav_nom, DOD_nom
+
+    Then call:
+      - cycle_life(...)
+      - degradation_per_cycle(...)
     """
-    nCL = (nCL_Id(Id) * nCL_Ich(Ich) * nCL_SoC_DoD(SoC_avg, DoD))
-    denom = _ensure_positive(nCL * CL_nom)
-    return 1 / denom
+
+    # ---- Table 2 coefficients (as shown in your extracted text) ----
+    # Temperature model: CL(T) = a*T^3 - b*T^2 + c*T + d
+    _a, _b, _c, _d = 0.0039, 1.95, 67.51, 2070.0
+
+    # Discharge current model: CL(Id) = e*exp(f*Id) + g*exp(h*Id)
+    _e, _f, _g, _h = 4464.0, -0.1382, -1519.0, -0.4305
+
+    # Charge current model: CL(Ich) = m*exp(n*Ich) + o*exp(p*Ich)
+    _m, _n, _o, _p = 5963.0, -0.6531, 321.4, 0.03168
+
+    # SOCav–DOD constrained polynomial coefficients (Eq. 13 fit): q, s, t, u, v
+    _q, _s, _t, _u, _v = 1471.0, 214.3, 0.6111, 0.3369, -2.295
+
+    def __init__(
+        self,
+        *,
+        CL_nom: float = CL_nom,
+        T_nom: float = T_nom,
+        Id_nom: float = Id_nom,
+        Ich_nom: float = Ich_nom,
+        SOCav_nom: float = SoC_nom,
+        DOD_nom: float = DoD_nom,
+        enforce_feasible_region: bool = True,
+    ):
+        self.CL_nom = float(CL_nom)
+        self.T_nom = float(T_nom)
+        self.Id_nom = float(Id_nom)
+        self.Ich_nom = float(Ich_nom)
+        self.SOCav_nom = float(SOCav_nom)
+        self.DOD_nom = float(DOD_nom)
+        self.enforce_feasible_region = bool(enforce_feasible_region)
+
+        # Precompute denominators for normalization
+        self._den_T = _ensure_positive(self._CL_T(self.T_nom))
+        self._den_Id = _ensure_positive(self._CL_Id(self.Id_nom))
+        self._den_Ich = _ensure_positive(self._CL_Ich(self.Ich_nom))
+        self._den_soc_dod = _ensure_positive(self._CL4(self.DOD_nom, self.SOCav_nom))
+
+    # -------------------------------------------------------------------------
+    # Individual CL factor models (unnormalized), from the paper
+    # -------------------------------------------------------------------------
+    def _CL_T(self, T: float) -> float:
+        a, b, c, d = self._a, self._b, self._c, self._d
+        return a * T**3 - b * T**2 + c * T + d
+
+    def _CL_Id(self, Id: float) -> float:
+        e, f, g, h = self._e, self._f, self._g, self._h
+        return e * math.exp(f * Id) + g * math.exp(h * Id)
+
+    def _CL_Ich(self, Ich: float) -> float:
+        m, n, o, p = self._m, self._n, self._o, self._p
+        return m * math.exp(n * Ich) + o * math.exp(p * Ich)
+
+    def _CL4(self, DOD: float, SOCav: float) -> float:
+        """
+        Constrained SOCav–DOD polynomial CL4(DOD, SOCav) as per Eq. (13).
+
+        Eq. (13) is the same quadratic form as Eq. (10), but with r constrained.
+        r is defined by Eq. (12):
+            r = (u/(2v))*(s + 100u) - 200t
+        """
+        q, s, t, u, v = self._q, self._s, self._t, self._u, self._v
+        r = (u / (2.0 * v)) * (s + 100.0 * u) - 200.0 * t
+        return q + r * DOD + s * SOCav + t * DOD**2 + u * DOD * SOCav + v * SOCav**2
+
+    # -------------------------------------------------------------------------
+    # Normalized cycle life multipliers nCL (paper framework Eq. 3)
+    # -------------------------------------------------------------------------
+    def nCL_T(self, T: float) -> float:
+        return _ensure_positive(self._CL_T(float(T))) / self._den_T
+
+    def nCL_Id(self, Id: float) -> float:
+        return _ensure_positive(self._CL_Id(float(Id))) / self._den_Id
+
+    def nCL_Ich(self, Ich: float) -> float:
+        return _ensure_positive(self._CL_Ich(float(Ich))) / self._den_Ich
+
+    def nCL_SOCav_DOD(self, SOCav: float, DOD: float) -> float:
+        SOCav = float(SOCav)
+        DOD = float(DOD)
+
+        if self.enforce_feasible_region and (not _in_feasible_soc_dod_region(SOCav, DOD)):
+            raise ValueError(
+                f"Infeasible SOCav/DOD combination: SOCav={SOCav}, DOD={DOD}. "
+                "Feasible region requires DOD <= 2*SOCav and DOD <= 2*(100 - SOCav)."
+            )
+
+        return _ensure_positive(self._CL4(DOD, SOCav)) / self._den_soc_dod
+
+    # -------------------------------------------------------------------------
+    # Combined cycle life + degradation
+    # -------------------------------------------------------------------------
+    def cycle_life(self, *, T: float, Id: float, Ich: float, SOCav: float, DOD: float) -> float:
+        """
+        Combined cycle life per Eq. (3):
+            CL = CL_nom * nCL(T) * nCL(Id) * nCL(Ich) * nCL(SOCav, DOD)
+        """
+        mult = (
+            self.nCL_T(T)
+            * self.nCL_Id(Id)
+            * self.nCL_Ich(Ich)
+            * self.nCL_SOCav_DOD(SOCav, DOD)
+        )
+        return _ensure_positive(self.CL_nom * mult)
+
+    def degradation_per_cycle(self, *, T: float, Id: float, Ich: float, SOCav: float, DOD: float) -> float:
+        """
+        Fractional degradation per cycle, consistent with Eq. (24) style usage:
+            D = 1 / CL
+        """
+        CL = self.cycle_life(T=T, Id=Id, Ich=Ich, SOCav=SOCav, DOD=DOD)
+        return 1.0 / _ensure_positive(CL)
 
 
 def static_degradation(Id, Ich, SoC_avg, DoD):
     """Alias for per-cycle degradation used in static estimations."""
-    return degradation_per_cycle(Id, Ich, SoC_avg, DoD)
+    model = DegradationModel()
+
+    d = model.degradation_per_cycle(T=25.0, Id=Id, Ich=Ich, SOCav=SoC_avg, DOD=DoD)
+    print("Degradation per cycle:", d)
+    print("Equivalent cycle life:", 1.0 / d)
+    return d
 
 """
 # Example usage

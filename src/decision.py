@@ -6,7 +6,7 @@ import warnings
 from typing import Optional
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
-from batterydeg import degradation_per_cycle
+from batterydeg import DegradationModel, RainflowCounter
 from quantile_scenarios import QuantileScenarioGenerator
 from sdp_multires import DynamicProgram, solve_mrdp
 
@@ -62,7 +62,7 @@ def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
                  horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.8,
-                 degradation_model='linear', linear_deg_cost_p_kwh=None,
+                 degradation_model='rainflow', linear_deg_cost_p_kwh=None,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
         """
@@ -129,6 +129,12 @@ class Agent:
                     # Example: assume 3650 cycles (10 years daily), adjust as needed
                     cycle_life = 3650
                     self.linear_deg_cost_per_kwh = env.battery_life_cost / (env.battery_capacity * cycle_life)
+            elif self.degradation_model == 'rainflow':
+                # initialize degradation model
+                self.degradation_temperature = getattr(self.env, 'degradation_temperature', 25.0)
+                self.cycle_degradation_model = DegradationModel()
+            else:
+                raise ValueError(f"Unsupported degradation_model: {self.degradation_model}")
 
             # Store env parameters needed for SDP calculations
             self.battery_capacity = env.battery_capacity
@@ -165,6 +171,8 @@ class Agent:
             self.dt_actions_buffer = []
             self.dt_rtgs_buffer = []
             self.dt_timesteps_buffer = []
+        
+        
 
     @staticmethod
     def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
@@ -182,6 +190,15 @@ class Agent:
         clip_max = np.finfo(np.float32).max
         arr = np.clip(arr, -clip_max, clip_max)
         return arr.astype(dtype)
+
+    def _degradation_per_cycle(self, Id, Ich, soc_percent, DoD):
+        return self.cycle_degradation_model.degradation_per_cycle(
+            T=self.degradation_temperature,
+            Id=Id,
+            Ich=Ich,
+            SOCav=soc_percent,
+            DOD=DoD,
+        )
 
     def choose_action(self, obs):
         if self.algorithm == 'rule':
@@ -460,16 +477,21 @@ class Agent:
                     energy = float(clipped_energies[si, ai])
                     battery_rate = energy / self.step_duration
 
-                    Id = abs(min(0.0, battery_rate)) / self.battery_capacity
-                    Ich = abs(max(0.0, battery_rate)) / self.battery_capacity
-                    DoD_percent = abs(energy) / self.battery_capacity * 100.0
+                    if self.degradation_model == 'rainflow':
+                        soc_next = soc_val + energy
+                        deg_frac = self._compute_deg_fraction_rainflow(soc_val, soc_next)
+                    else:
+                        Id = abs(min(0.0, battery_rate)) / self.battery_capacity
+                        Ich = abs(max(0.0, battery_rate)) / self.battery_capacity
+                        DoD_percent = abs(energy) / self.battery_capacity * 100.0
 
-                    avg_soc = (soc_val + 0.5 * energy) / self.battery_capacity * 100.0
-                    avg_soc = float(np.clip(avg_soc, 0.0, 100.0))
+                        avg_soc = (soc_val + 0.5 * energy) / self.battery_capacity * 100.0
+                        avg_soc = float(np.clip(avg_soc, 0.0, 100.0))
 
-                    energy_abs = abs(energy)
-                    degradation_frac = self._compute_deg_fraction_linearized(Id, Ich, avg_soc, energy_abs)
-                    degradation_cost = degradation_frac * self.battery_life_cost
+                        energy_abs = abs(energy)
+                        deg_frac = self._compute_deg_fraction_linearized(Id, Ich, avg_soc, energy_abs)
+
+                    degradation_cost = deg_frac * self.battery_life_cost
                     stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
 
             next_socs = socs + clipped_energies
@@ -754,6 +776,10 @@ class Agent:
         # Add degradation cost deterministically
         if self.degradation_model == 'linear':
             degradation_cost = self.linear_deg_cost_per_kwh * abs(battery_flow_energy)
+        elif self.degradation_model == 'rainflow':
+            soc_next_kwh = soc_kwh + battery_flow_energy
+            deg_frac = self._compute_deg_fraction_rainflow(soc_kwh, soc_next_kwh)
+            degradation_cost = deg_frac * self.battery_life_cost
         else:
             Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
             Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
@@ -776,10 +802,29 @@ class Agent:
         energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
         if energy_full_base_cycle <= 0:
             return 0.0
-        cycle_wear = degradation_per_cycle(Id, Ich, soc_percent, base_DoD)
+        cycle_wear = self._degradation_per_cycle(Id, Ich, soc_percent, base_DoD)
         wear_per_kwh = cycle_wear / energy_full_base_cycle
         frac = wear_per_kwh * energy_kwh
         return self.env._sanitize_deg_frac(frac)
+
+    def _compute_deg_fraction_rainflow(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
+        """Estimate degradation for a single step using the rainflow counter."""
+        if self.battery_capacity <= 0:
+            return 0.0
+
+        start_pct = np.clip((soc_start_kwh / self.battery_capacity) * 100.0, 0.0, 100.0)
+        end_pct = np.clip((soc_end_kwh / self.battery_capacity) * 100.0, 0.0, 100.0)
+
+        counter = RainflowCounter(step_duration=self.step_duration)
+        cycles = []
+        for val in (start_pct, end_pct, start_pct):
+            cycles.extend(counter.update(val))
+
+        deg_frac = 0.0
+        for SoC_avg, DoD, Id_cycle, Ich_cycle in cycles:
+            deg_frac += self._degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
+
+        return self.env._sanitize_deg_frac(deg_frac)
     
     def _solve_mrdp(self, forecasts, start_index: int = 0):
         """
