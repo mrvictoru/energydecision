@@ -55,7 +55,6 @@ class SolarBatteryEnv(gym.Env):
         max_step=1000,
         render_mode=None,
         battery_life_cost=5000.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
-        correction_interval = 100, # steps before dynamic correction
         init_correction_steps = [10, 20, 40 ,70, 110, 160],
         dynamic_interval_min_ratio = 0.25,  # minimum ratio of correction interval when nearing end
         base_deg_DoD = 80.0,  # reference DoD for per-kWh wear linearization (%)
@@ -75,7 +74,6 @@ class SolarBatteryEnv(gym.Env):
         self.render_mode = render_mode
         self.battery_life_cost = battery_life_cost
         self.degradation_cost = battery_life_cost
-        self.correction_interval = correction_interval
         self.dynamic_interval_min_ratio = dynamic_interval_min_ratio
         self.base_deg_DoD = base_deg_DoD
         # Automatically determine step_duration from the DataFrame's 'Time' column
@@ -311,6 +309,7 @@ class SolarBatteryEnv(gym.Env):
         current_step: int = 0,
         new_cycles_in_step: int = 0,
         rainflow_cumulative_deg: float = 0.0,
+        deg_error: str = "",
     ) -> dict:
         """Build a compact reward/info dict with key debugging signals about degradation and cycles."""
         return {
@@ -332,7 +331,22 @@ class SolarBatteryEnv(gym.Env):
             "total_degradation": float(total_degradation),
             "capacity_kwh": float(capacity_kwh),
             "current_step": int(current_step),
+            "deg_error": deg_error,
         }
+
+    def _safe_degradation_per_cycle(self, Id: float, Ich: float, soc: float, DoD: float):
+        """Compute degradation per cycle; return (value, error_message)."""
+        try:
+            value = self.degradation_model.degradation_per_cycle(
+                T=self.degradation_temperature,
+                Id=Id,
+                Ich=Ich,
+                SOCav=soc,
+                DOD=DoD,
+            )
+            return float(value), ""
+        except ValueError as exc:
+            return 0.0, str(exc)
 
     def _calculate_battery_degradation(self, DoD, battery_flow_rate, soc):
         # battery flow rate is negative for discharge and positive for charge
@@ -358,13 +372,9 @@ class SolarBatteryEnv(gym.Env):
             return 0.0, 0.0, 0.0
 
         # Estimate representative cycle wear for base_DoD using current C-rates and SoC
-        cycle_wear_at_base = self.degradation_model.degradation_per_cycle(
-            T=self.degradation_temperature,
-            Id=Id,
-            Ich=Ich,
-            SOCav=soc,
-            DOD=base_DoD,
-        )
+        cycle_wear_at_base, deg_err = self._safe_degradation_per_cycle(Id, Ich, soc, base_DoD)
+        if deg_err:
+            return 0.0, 0.0, 0.0
 
         # Convert cycle wear (fraction of battery life per full cycle) into wear per kWh
         wear_per_kwh = cycle_wear_at_base / energy_full_base_cycle
@@ -435,7 +445,6 @@ class SolarBatteryEnv(gym.Env):
                 energy_price=energy_price,
                 grid_cost=0.0,
                 grid_reward=VIOLATION_PENALTY,
-                dynamic_interval=self.correction_interval,
                 deg_cost=0.0,
                 energy_conservation_violation=False,
                 last_dynamic_deg=self._rainflow_deg_cumulative,
@@ -456,14 +465,39 @@ class SolarBatteryEnv(gym.Env):
         new_cycles = self._rainflow_counter.update(soc_after)
 
         step_degradation = 0.0
+        deg_error = ""
         for SoC_avg, DoD, Id_cycle, Ich_cycle in new_cycles:
-            step_degradation += self.degradation_model.degradation_per_cycle(
-                T=self.degradation_temperature,
-                Id=Id_cycle,
-                Ich=Ich_cycle,
-                SOCav=SoC_avg,
-                DOD=DoD,
+            inc, err = self._safe_degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
+            if err:
+                deg_error = err
+                break
+            step_degradation += inc
+
+        if deg_error:
+            reward_info = self._make_reward_info(
+                battery_flow_energy=battery_flow_energy,
+                battery_level=new_battery_level,
+                grid_energy=grid_energy,
+                energy_price=energy_price,
+                grid_cost=0.0,
+                grid_reward=VIOLATION_PENALTY,
+                deg_cost=0.0,
+                energy_conservation_violation=False,
+                last_dynamic_deg=self._rainflow_deg_cumulative,
+                last_num_cycles=self._rainflow_num_cycles,
+                new_cycles_in_step=0,
+                rainflow_cumulative_deg=self._rainflow_deg_cumulative,
+                current_step=self.current_step,
+                step_degradation=0.0,
+                total_degradation=self.total_degradation,
+                capacity_kwh=self.battery_capacity,
+                deg_error=deg_error,
             )
+
+            components = self._get_observation_components()
+            ctf, rdfv, ndfv, ref, nef = components
+            primary_obs = np.concatenate((ctf, ndfv, nef))
+            return primary_obs, float(VIOLATION_PENALTY), True, False, reward_info
 
         self._rainflow_num_cycles += len(new_cycles)
         self._rainflow_deg_cumulative += step_degradation
@@ -492,7 +526,6 @@ class SolarBatteryEnv(gym.Env):
             energy_price=energy_price,
             grid_cost=grid_energy * energy_price,
             grid_reward=grid_reward,
-            dynamic_interval=self.correction_interval,
             deg_cost=current_step_deg_cost,
             energy_conservation_violation=False,
             last_dynamic_deg=self._rainflow_deg_cumulative,
