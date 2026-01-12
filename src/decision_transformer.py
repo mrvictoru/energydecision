@@ -265,6 +265,59 @@ class DecisionTransformer(nn.Module):
 
         return return_preds, state_preds, act_preds
     
+    def load_from_checkpoint(self, checkpoint_or_state, map_location=None, strict: bool = True):
+        """
+        Robust loading of a checkpoint (path or state-dict). If the checkpoint contains
+        RoPE buffers (rotary.cos / rotary.sin) this will create RotaryEmbedding
+        instances with matching max_position for each attention block before loading.
+        Falls back to strict=False if strict=True fails.
+        """
+        # load state dict if a path was provided
+        if isinstance(checkpoint_or_state, (str, bytes)):
+            state = torch.load(checkpoint_or_state, map_location=map_location)
+        else:
+            state = checkpoint_or_state
+
+        # detect rotary cos buffers and patch local blocks to match checkpoint shape
+        cos_keys = [k for k in state.keys() if k.endswith(".rotary.cos")]
+        if cos_keys:
+            for k in cos_keys:
+                # expected format: "transformer.{i}.attn.rotary.cos"
+                parts = k.split(".")
+                idx = next((int(p) for p in parts if p.isdigit()), None)
+                if idx is None or not hasattr(self, "transformer") or idx >= len(self.transformer):
+                    continue
+                cos_buf = state[k]
+                max_pos = int(cos_buf.shape[0])
+                half_dim = int(cos_buf.shape[1])
+                inferred_dim = half_dim * 2
+
+                block = self.transformer[idx]
+                attn = getattr(block, "attn", None)
+                if attn is None:
+                    continue
+
+                head_dim = getattr(attn, "head_dim", None)
+                if head_dim is None:
+                    head_dim = inferred_dim
+                # ensure even head dim
+                if head_dim % 2 != 0:
+                    head_dim = inferred_dim
+
+                # create a RotaryEmbedding with matching max_position
+                attn.rotary = RotaryEmbedding(head_dim, max_position=max_pos)
+                attn.rope_enabled = True
+
+        # attempt strict load, fall back to non-strict if needed
+        try:
+            self.load_state_dict(state, strict=strict)
+        except RuntimeError as e:
+            if strict:
+                print("Strict load failed, retrying with strict=False (missing/unexpected keys may be present).")
+                self.load_state_dict(state, strict=False)
+            else:
+                raise e
+    
     def get_action(self, states, actions, rtg, timesteps, attention_mask=None):
         """
         Convenience method to get the last action prediction from the model.

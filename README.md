@@ -18,6 +18,7 @@ This project provides a comprehensive framework for benchmarking control algorit
 *   ~~**Documentation consolidation:** Unified component documentation in COMPONENTS.md~~
 *   **Refactor Agent class:** Refactor Agent class to be less spaghetti
 *   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
+*   **Implement Grid like environment:** To build data pipeline and environment that can also simulate Grid market operation
 
 ## Features
 
@@ -156,7 +157,7 @@ This starts a new model with a context length of 60 and saves checkpoints in `mo
 ```bash
 docker exec -it test_energy_container /bin/bash
 
-python3 train_decision_transformer.py \
+python3 pretrain_decision_transformer.py \
     --data-dir ../data \
     --patterns train test_episodes_01 \
     --epochs 2 \
@@ -191,7 +192,7 @@ Notes:
 If you already have a compatible checkpoint (same model config, especially `context_len`), you can resume:
 
 ```bash
-python3 train_decision_transformer.py \
+python3 pretrain_decision_transformer.py \
     --data-dir ../data \
     --patterns train test_episodes_01 \
     --epochs 2 \
@@ -201,8 +202,8 @@ python3 train_decision_transformer.py \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model.pt \
     --resume \
-    --num-workers 6 \
-    --prefetch-factor 2
+    --num-workers 2 \
+    --prefetch-factor 1
 ```
 
 Notes:
@@ -217,13 +218,13 @@ If your previous run used a different `context_length` (or other model config) a
 ```bash
 rm -f models/dt_model_checkpoint.pt
 
-python3 src/train_decision_transformer.py \
+python3 pretrain_decision_transformer.py \
     --data-dir ./data \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 6 \
     --context-length 60 \
-    --checkpoint-path ./models/dt_model_checkpoint.pt \
+    --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ./models/dt_model.pt
 ```
 
@@ -236,15 +237,15 @@ If you see `NonFiniteParameterError` in the logs:
 - Reduce the learning rate, e.g.:
 
 ```bash
-python3 src/train_decision_transformer.py \
+python3 pretrain_decision_transformer.py \
     --data-dir ./data \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 6 \
     --context-length 60 \
     --lr 1e-6 \
-    --checkpoint-path ./models/dt_model_checkpoint.pt \
-    --save-path models/dt_model.pt
+    --checkpoint-path ../models/dt_model_checkpoint.pt \
+    --save-path ../models/dt_model.pt
 ```
 
 - Ensure your `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
