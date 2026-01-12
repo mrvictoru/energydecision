@@ -9,54 +9,15 @@ from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 from batterydeg import DegradationModel, RainflowCounter
 from quantile_scenarios import QuantileScenarioGenerator
 from sdp_multires import DynamicProgram, solve_mrdp
+from algorithm_helpers import (
+    DegradationCalculator, 
+    OracleHelper,
+    interpolate_ctg, 
+    compute_grid_cost
+)
 
 import concurrent.futures
 from tqdm.notebook import tqdm
-
-# Helper functions for SDP implementation
-def interpolate_ctg(soc_levels_kwh, ctg_array, soc_value):
-    """
-    Linearly interpolate cost-to-go values for a continuous SoC between discrete levels.
-    Clamps at the ends if soc_value is outside the range.
-    
-    Args:
-        soc_levels_kwh: Array of discrete SoC levels in kWh
-        ctg_array: Array of cost-to-go values corresponding to soc_levels_kwh
-        soc_value: Continuous SoC value to interpolate at
-    
-    Returns:
-        Interpolated cost-to-go value
-    """
-    # Clamp soc_value to the bounds of soc_levels_kwh
-    soc_value = np.clip(soc_value, soc_levels_kwh[0], soc_levels_kwh[-1])
-    
-    # Use numpy's interp function for linear interpolation
-    return np.interp(soc_value, soc_levels_kwh, ctg_array)
-
-
-def compute_grid_cost(grid_energy, import_price, export_price, max_grid_energy):
-    """
-    Compute grid cost with explicit import/export semantics and grid limit checking.
-    
-    Args:
-        grid_energy: Grid energy (positive = import, negative = export)
-        import_price: Price per kWh for importing energy
-        export_price: Price per kWh for exporting energy (revenue)
-        max_grid_energy: Maximum allowed grid energy (absolute value)
-    
-    Returns:
-        Grid cost (positive = cost, negative = revenue, np.inf if limit exceeded)
-    """
-    # Check grid limits first
-    if abs(grid_energy) > max_grid_energy + 1e-6:  # Add small tolerance
-        return np.inf
-    
-    if grid_energy > 0:  # Importing energy
-        return grid_energy * import_price
-    else:  # Exporting energy (grid_energy is negative)
-        # Export generates revenue, so cost is negative (revenue reduces total cost)
-        export_revenue = abs(grid_energy) * export_price
-        return -export_revenue
 
 
 class Agent:
@@ -117,23 +78,44 @@ class Agent:
             if self.algorithm == 'oracle':
                 self.oracle_horizon = horizon
                 self.oracle_action_levels = np.linspace(-1.0, 1.0, action_resolution, dtype=np.float32)
+                
+                # Initialize Oracle helper with degradation calculator
+                self.degradation_temperature = getattr(self.env, 'degradation_temperature', 25.0)
+                self.degradation_calc = DegradationCalculator(
+                    battery_capacity=env.battery_capacity,
+                    step_duration=env.step_duration,
+                    battery_life_cost=env.battery_life_cost,
+                    degradation_temperature=self.degradation_temperature
+                )
+                self.oracle_helper = OracleHelper(
+                    env=env,
+                    degradation_calc=self.degradation_calc,
+                    degradation_model='linear',  # Oracle uses linearized model by default
+                    linear_deg_cost_p_kwh=None
+                )
 
         if self.algorithm == 'sdp' or self.algorithm == 'mrdp':  # Stochastic Dynamic Programming
 
             self.degradation_model = degradation_model
+            
+            # Initialize centralized degradation calculator
+            self.degradation_temperature = getattr(self.env, 'degradation_temperature', 25.0)
+            self.degradation_calc = DegradationCalculator(
+                battery_capacity=env.battery_capacity,
+                step_duration=env.step_duration,
+                battery_life_cost=env.battery_life_cost,
+                degradation_temperature=self.degradation_temperature
+            )
+            
+            # Linear degradation cost (if using linear model)
             if self.degradation_model == 'linear':
-                # If not provided, default to battery_life_cost / (battery_capacity * cycle_life)
                 if linear_deg_cost_p_kwh is not None:
                     self.linear_deg_cost_per_kwh = linear_deg_cost_p_kwh
                 else:
                     # Example: assume 3650 cycles (10 years daily), adjust as needed
                     cycle_life = 3650
                     self.linear_deg_cost_per_kwh = env.battery_life_cost / (env.battery_capacity * cycle_life)
-            elif self.degradation_model == 'rainflow':
-                # initialize degradation model
-                self.degradation_temperature = getattr(self.env, 'degradation_temperature', 25.0)
-                self.cycle_degradation_model = DegradationModel()
-            else:
+            elif self.degradation_model != 'rainflow':
                 raise ValueError(f"Unsupported degradation_model: {self.degradation_model}")
 
             # Store env parameters needed for SDP calculations
@@ -190,15 +172,6 @@ class Agent:
         clip_max = np.finfo(np.float32).max
         arr = np.clip(arr, -clip_max, clip_max)
         return arr.astype(dtype)
-
-    def _degradation_per_cycle(self, Id, Ich, soc_percent, DoD):
-        return self.cycle_degradation_model.degradation_per_cycle(
-            T=self.degradation_temperature,
-            Id=Id,
-            Ich=Ich,
-            SOCav=soc_percent,
-            DOD=DoD,
-        )
 
     def choose_action(self, obs):
         if self.algorithm == 'rule':
@@ -412,7 +385,16 @@ class Agent:
             raw_obs = self.env.get_raw_obs()
             return self.rule_based_action(raw_obs)
 
-        policy_table = self._solve_oracle_dp(self.env.current_step, horizon)
+        # Use OracleHelper to solve the DP problem
+        policy_table = self.oracle_helper.solve_oracle_dp(
+            start_index=self.env.current_step,
+            horizon=horizon,
+            soc_levels_kwh=self.soc_levels_kwh,
+            action_levels=self.oracle_action_levels,
+            max_battery_flow=self.max_battery_flow,
+            step_duration=self.step_duration
+        )
+        
         if policy_table is None:
             raw_obs = self.env.get_raw_obs()
             return self.rule_based_action(raw_obs)
@@ -427,90 +409,6 @@ class Agent:
         noise = np.random.normal(-0.001, 0.001)
         action_value = min(max(action_value + noise, -1.0), 1.0)
         return [np.float32(action_value)]
-
-    def _solve_oracle_dp(self, start_index: int, horizon: int):
-        """DP-based oracle over the actual future rows (static degradation only)."""
-        num_soc_levels = len(self.soc_levels_kwh)
-        num_actions = len(self.oracle_action_levels)
-        cost_to_go = np.full((horizon + 1, num_soc_levels), np.inf)
-        policy_table = np.full((horizon, num_soc_levels), -1, dtype=int)
-        cost_to_go[horizon, :] = 0.0
-
-        socs = self.soc_levels_kwh[:, np.newaxis]  # (S,1)
-        battery_energies = self.oracle_action_levels * self.max_battery_flow * self.step_duration  # (A,)
-
-        for t in range(horizon - 1, -1, -1):
-            row = self.env._get_row(start_index + t)
-            solar = row['SolarGen']
-            load = row['HouseLoad']
-            imp_price = row['ImportEnergyPrice']
-            exp_price = row['ExportEnergyPrice']
-
-            battery_reshaped = battery_energies[np.newaxis, :]  # (1, A)
-            clipped_energies = np.clip(
-                battery_reshaped,
-                -socs,
-                self.battery_capacity - socs
-            )
-
-            battery_rates = clipped_energies / self.step_duration
-            battery_charge = np.maximum(clipped_energies, 0.0)
-            battery_discharge = np.maximum(-clipped_energies, 0.0)
-
-            demand = load + battery_charge
-            supply = solar + battery_discharge
-            grid_energy = demand - supply
-            grid_violation = np.abs(grid_energy) > (self.max_grid_energy + 1e-6)
-            energy_price = np.where(grid_energy >= 0, imp_price, exp_price)
-            grid_cost = np.where(grid_energy >= 0, grid_energy * imp_price, -np.abs(grid_energy) * exp_price)
-            grid_cost[grid_violation] = np.inf
-
-            # Compute per-(soc,action) degradation cost with linearized wear per kWh
-            num_soc = num_soc_levels
-            stage_costs = np.full((num_soc, num_actions), np.inf)
-            for si in range(num_soc):
-                soc_val = float(socs[si, 0])
-                for ai in range(num_actions):
-                    # Skip infeasible/masked entries
-                    if grid_violation[si, ai]:
-                        continue
-                    energy = float(clipped_energies[si, ai])
-                    battery_rate = energy / self.step_duration
-
-                    if self.degradation_model == 'rainflow':
-                        soc_next = soc_val + energy
-                        deg_frac = self._compute_deg_fraction_rainflow(soc_val, soc_next)
-                    else:
-                        Id = abs(min(0.0, battery_rate)) / self.battery_capacity
-                        Ich = abs(max(0.0, battery_rate)) / self.battery_capacity
-                        DoD_percent = abs(energy) / self.battery_capacity * 100.0
-
-                        avg_soc = (soc_val + 0.5 * energy) / self.battery_capacity * 100.0
-                        avg_soc = float(np.clip(avg_soc, 0.0, 100.0))
-
-                        energy_abs = abs(energy)
-                        deg_frac = self._compute_deg_fraction_linearized(Id, Ich, avg_soc, energy_abs)
-
-                    degradation_cost = deg_frac * self.battery_life_cost
-                    stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
-
-            next_socs = socs + clipped_energies
-            next_costs = np.interp(next_socs.ravel(), self.soc_levels_kwh, cost_to_go[t + 1, :]).reshape(next_socs.shape)
-
-            total_costs = stage_costs + next_costs
-            feasible_mask = np.isfinite(total_costs)
-
-            row_min = np.min(np.where(feasible_mask, total_costs, np.inf), axis=1)
-            best_actions = np.argmin(np.where(feasible_mask, total_costs, np.inf), axis=1)
-
-            finite_mask = np.isfinite(row_min)
-            cost_to_go[t, :] = np.where(finite_mask, row_min, np.inf)
-            policy_table[t, :] = -1
-            policy_table[t, finite_mask] = best_actions[finite_mask]
-
-        if not np.any(np.isfinite(cost_to_go[0, :])):
-            return None
-        return policy_table
 
     def _solve_sdp(self, forecasts, start_index: int = 0):
         """
@@ -641,13 +539,17 @@ class Agent:
                         if self.degradation_model == 'linear':
                             degradation_cost = self.linear_deg_cost_per_kwh * abs(energy)
                         else:
+                            # Use centralized degradation calculator
                             rep_soc = self.battery_capacity / 2.0
                             Id_crate = abs(max(0, -battery_rate) / self.battery_capacity)
                             Ich_crate = abs(max(0, battery_rate) / self.battery_capacity)
                             SoC_avg_percent = (rep_soc + 0.5 * energy) / self.battery_capacity * 100.0
                             SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
-                            deg_frac = self._compute_deg_fraction_linearized(Id_crate, Ich_crate, SoC_avg_percent, abs(energy))
-                            deg_frac *= self.static_deg_correction_factor
+                            deg_frac = self.degradation_calc.compute_linearized_degradation(
+                                Id_crate, Ich_crate, SoC_avg_percent, abs(energy),
+                                base_DoD=getattr(self.env, "base_deg_DoD", 80.0),
+                                correction_factor=self.static_deg_correction_factor
+                            )
                             degradation_cost = deg_frac * self.battery_life_cost
 
                         unique_costs[ui] = stage_cost + degradation_cost
@@ -778,53 +680,22 @@ class Agent:
             degradation_cost = self.linear_deg_cost_per_kwh * abs(battery_flow_energy)
         elif self.degradation_model == 'rainflow':
             soc_next_kwh = soc_kwh + battery_flow_energy
-            deg_frac = self._compute_deg_fraction_rainflow(soc_kwh, soc_next_kwh)
+            deg_frac = self.degradation_calc.compute_rainflow_degradation(soc_kwh, soc_next_kwh)
             degradation_cost = deg_frac * self.battery_life_cost
         else:
+            # Use centralized degradation calculator for linearized model
             Id_crate = abs(max(0, -battery_flow_rate) / self.battery_capacity)
             Ich_crate = abs(max(0, battery_flow_rate) / self.battery_capacity)
             SoC_avg_percent = (soc_kwh + 0.5 * battery_flow_energy) / self.battery_capacity * 100.0
             SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
-            deg_frac = self._compute_deg_fraction_linearized(Id_crate, Ich_crate, SoC_avg_percent, abs(battery_flow_energy))
-            deg_frac *= self.static_deg_correction_factor
+            deg_frac = self.degradation_calc.compute_linearized_degradation(
+                Id_crate, Ich_crate, SoC_avg_percent, abs(battery_flow_energy),
+                base_DoD=getattr(self.env, "base_deg_DoD", 80.0),
+                correction_factor=self.static_deg_correction_factor
+            )
             degradation_cost = deg_frac * self.battery_life_cost
 
         return expected_grid_cost + degradation_cost
-
-    def _compute_deg_fraction_linearized(self, Id, Ich, soc_percent, energy_kwh):
-        """
-        Convert a representative full-cycle wear into a per-kWh wear using a base DoD,
-        then scale by the energy moved in this step.
-        """
-        base_DoD = getattr(self.env, "base_deg_DoD", 80.0)
-        if energy_kwh <= 0:
-            return 0.0
-        energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
-        if energy_full_base_cycle <= 0:
-            return 0.0
-        cycle_wear = self._degradation_per_cycle(Id, Ich, soc_percent, base_DoD)
-        wear_per_kwh = cycle_wear / energy_full_base_cycle
-        frac = wear_per_kwh * energy_kwh
-        return self.env._sanitize_deg_frac(frac)
-
-    def _compute_deg_fraction_rainflow(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
-        """Estimate degradation for a single step using the rainflow counter."""
-        if self.battery_capacity <= 0:
-            return 0.0
-
-        start_pct = np.clip((soc_start_kwh / self.battery_capacity) * 100.0, 0.0, 100.0)
-        end_pct = np.clip((soc_end_kwh / self.battery_capacity) * 100.0, 0.0, 100.0)
-
-        counter = RainflowCounter(step_duration=self.step_duration)
-        cycles = []
-        for val in (start_pct, end_pct, start_pct):
-            cycles.extend(counter.update(val))
-
-        deg_frac = 0.0
-        for SoC_avg, DoD, Id_cycle, Ich_cycle in cycles:
-            deg_frac += self._degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
-
-        return self.env._sanitize_deg_frac(deg_frac)
     
     def _solve_mrdp(self, forecasts, start_index: int = 0):
         """
