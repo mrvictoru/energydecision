@@ -95,7 +95,10 @@ class DegradationCalculator:
         wear_per_kwh = cycle_wear / energy_full_base_cycle
         frac = wear_per_kwh * energy_kwh * correction_factor
         
-        return float(np.clip(frac, 0.0, 1.0))
+        # Sanitize: ensure non-negative and finite
+        if not np.isfinite(frac) or frac <= 0.0:
+            return 0.0
+        return float(min(frac, 1.0))
     
     def compute_rainflow_degradation(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
         """
@@ -129,7 +132,10 @@ class DegradationCalculator:
         for SoC_avg, DoD, Id_cycle, Ich_cycle in cycles:
             deg_frac += self.degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
         
-        return float(np.clip(deg_frac, 0.0, 1.0))
+        # Sanitize: ensure non-negative and finite
+        if not np.isfinite(deg_frac) or deg_frac <= 0.0:
+            return 0.0
+        return float(min(deg_frac, 1.0))
 
 
 def interpolate_ctg(soc_levels_kwh: np.ndarray, ctg_array: np.ndarray, soc_value: float) -> float:

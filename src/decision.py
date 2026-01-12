@@ -548,7 +548,7 @@ class Agent:
                             deg_frac = self.degradation_calc.compute_linearized_degradation(
                                 Id_crate, Ich_crate, SoC_avg_percent, abs(energy),
                                 base_DoD=getattr(self.env, "base_deg_DoD", 80.0),
-                                correction_factor=self.static_deg_correction_factor
+                                correction_factor=getattr(self, "static_deg_correction_factor", 1.0)
                             )
                             degradation_cost = deg_frac * self.battery_life_cost
 
@@ -691,7 +691,7 @@ class Agent:
             deg_frac = self.degradation_calc.compute_linearized_degradation(
                 Id_crate, Ich_crate, SoC_avg_percent, abs(battery_flow_energy),
                 base_DoD=getattr(self.env, "base_deg_DoD", 80.0),
-                correction_factor=self.static_deg_correction_factor
+                correction_factor=getattr(self, "static_deg_correction_factor", 1.0)
             )
             degradation_cost = deg_frac * self.battery_life_cost
 
