@@ -184,21 +184,11 @@ def static_degradation(Id, Ich, SoC_avg, DoD):
     print("Equivalent cycle life:", 1.0 / d)
     return d
 
-"""
-# Example usage
-Id = 0.3  # Discharge current (C-rate)
-Ich = 0.1  # Charge current (C-rate)
-SoC = 60  # Average state of charge (%)
-DoD = 80  # Depth of discharge (%)
-
-degradation = degradation_per_cycle(Id, Ich, SoC, DoD)
-print(f"Degradation for this cycle: {degradation:.6f}")
-"""
 
 class RainflowCounter:
     def __init__(self, step_duration=1.0, eps=1e-6):
         self.step_duration = step_duration
-        self.eps = eps
+        self.eps = eps          # tolerance for turning point detection
 
         self.stack = []          # persistent turning point stack for rainflow
         self.tp_buffer = []      # last few SOC points for turning point detection
@@ -299,53 +289,3 @@ def rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6):
     return closed_cycles
 
 
-# Dynamic degradation model, provides the fractional life utilization of a battery for a given charge or discharge decision
-# Total degradation calculation
-def dynamic_degradation(soc_profile, step_duration=0.5):
-    """
-    Calculates the total degradation over a given SoC profile.
-    It now uses the enhanced rainflow counting to return cycles with their
-    average SoC, DoD, and effective discharge and charging C-rates.
-    """
-    cycles = rainflow_counting(soc_profile, step_duration)
-    total_degradation = 0.0
-    for SoC_avg, DoD, Id_cycle, Ich_cycle in cycles:
-        degradation = degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
-        total_degradation += degradation
-    return total_degradation, len(cycles)
-  
-
-# simulate RL with Hybrid degradation approach
-def hybrid_rl_simulation(steps, soc_profile, correction_interval):
-    static_cumulative_degradation = 0
-    dynamic_cumulative_degradation = 0
-    correction_factor = 1.0
-    degradation_history = []
-
-    for step in range(steps):
-        # Example operational parameters
-        Id, Ich, SoC, DoD = 0.3, 0.1, soc_profile[step], 20  # Example values
-
-        # Static degradation estimation
-        degradation = static_degradation(Id, Ich, SoC, DoD, correction_factor)
-        static_cumulative_degradation += degradation
-
-        # Save degradation history (for dynamic correction)
-        degradation_history.append(SoC)
-
-        # Periodic correction using the dynamic model
-        if step > 0 and step % correction_interval == 0:
-            dynamic_cumulative_degradation = dynamic_degradation(degradation_history)
-            correction_factor = dynamic_cumulative_degradation / static_cumulative_degradation
-            print(f"Correction factor updated to: {correction_factor:.3f}")
-            # Reset history for next correction interval
-            degradation_history = []
-
-    print(f"Total Static Degradation: {static_cumulative_degradation:.6f}")
-    print(f"Total Dynamic Degradation: {dynamic_cumulative_degradation:.6f}")
-
-"""
-# Example usage
-soc_profile = np.linspace(20, 80, 100)  # Simplified SoC profile over 100 steps
-hybrid_rl_simulation(steps=100, soc_profile=soc_profile, correction_interval=20)
-"""

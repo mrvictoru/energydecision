@@ -73,17 +73,6 @@ class TestSolarBatteryEnv:
         assert info['grid_reward'] <= 0, "Grid reward should be non-positive (represents cost)"
         assert reward <= 0, "Total reward should be non-positive"
 
-    def test_dynamic_correction_factor_behavior(self, env):
-        """Test that correction factor is updated at specified intervals."""
-        env.reset()
-        env.init_correction_steps = [1]  # Trigger correction at step 1
-        
-        for _ in range(2):
-            obs, reward, terminated, truncated, info = env.step(np.array([-0.5]))
-        
-        assert 'correction_factor' in info, "Correction factor should be in info dict"
-        assert 0 <= info['correction_factor'] <= 10, "Correction factor should be in reasonable range"
-
     def test_battery_capacity_constraints(self, env):
         """Test that battery level stays within capacity constraints."""
         env.reset()

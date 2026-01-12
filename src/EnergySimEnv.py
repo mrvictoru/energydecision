@@ -55,8 +55,6 @@ class SolarBatteryEnv(gym.Env):
         max_step=1000,
         render_mode=None,
         battery_life_cost=5000.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
-        init_correction_steps = [10, 20, 40 ,70, 110, 160],
-        dynamic_interval_min_ratio = 0.25,  # minimum ratio of correction interval when nearing end
         base_deg_DoD = 80.0,  # reference DoD for per-kWh wear linearization (%)
         step_duration = 0.5, # duration of each step in hours (default half an hour)
         degradation_temperature = 25.0,
@@ -73,7 +71,6 @@ class SolarBatteryEnv(gym.Env):
         self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
         self.degradation_cost = battery_life_cost
-        self.dynamic_interval_min_ratio = dynamic_interval_min_ratio
         self.base_deg_DoD = base_deg_DoD
         # Automatically determine step_duration from the DataFrame's 'Time' column
         # Assumes 'Time' is in a format compatible with numpy.datetime64 or pandas.Timestamp
@@ -91,7 +88,6 @@ class SolarBatteryEnv(gym.Env):
                 self.step_duration = step_duration
         else:
             self.step_duration = step_duration
-        self.init_correction_steps = init_correction_steps
 
         self.degradation_temperature = float(degradation_temperature)
         self.degradation_model = DegradationModel()
@@ -99,11 +95,9 @@ class SolarBatteryEnv(gym.Env):
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
         self._rainflow_num_cycles = 0
 
-        # Initialize state of charge history for dynamic correction
+        # Initialize state of charge history
         self.soc_history = []
         self.static_deg_history = []
-        self.correction_factor = 1.0
-        self.last_dynamic_correction_step = 0
         self.total_degradation = 0.0
         self._rainflow_deg_cumulative = 0.0
         
@@ -250,8 +244,6 @@ class SolarBatteryEnv(gym.Env):
         # Store SoC at step boundaries (percent). Keep 1 more SoC point than actions.
         self.soc_history = [float((self.battery_level / self.battery_capacity) * 100.0)]
         self.static_deg_history = []
-        self.correction_factor = 1.0
-        self.last_dynamic_correction_step = 0
         self.last_dynamic_deg = 0.0
         self.last_num_cycles = 0
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
@@ -296,7 +288,6 @@ class SolarBatteryEnv(gym.Env):
         energy_price: float,
         grid_cost: float,
         grid_reward: float = 0.0,
-        dynamic_interval: int = 0,
         deg_cost: float = 0.0,
         energy_conservation_violation: bool = False,
         dynamic_updated: bool = False,
@@ -318,7 +309,6 @@ class SolarBatteryEnv(gym.Env):
             "energy_price": float(energy_price),
             "grid_cost": float(grid_cost),
             "grid_reward": float(grid_reward),
-            "dynamic_interval": int(dynamic_interval),
             "dynamic_updated": bool(dynamic_updated),
             "deg_cost": float(deg_cost),
             "last_dynamic_deg": float(last_dynamic_deg),

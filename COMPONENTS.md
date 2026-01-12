@@ -441,46 +441,54 @@ scenarios_df = generator.generate_scenarios(
 
 ### Overview
 
-Implements semi-empirical battery degradation models based on lithium-ion battery aging research. Supports both static (throughput-based) and dynamic (rainflow counting) approaches.
+Implements semi-empirical battery degradation models (Muenzel et al., 2015). The primary interface is the **class-based** `DegradationModel`, which encapsulates nominal parameters and exposes methods for normalized cycle-life factors, combined cycle-life, and per-cycle degradation. Helper functions and a rainflow-based dynamic counting implementation are also provided for convenience and compatibility.
 
 ### Available Models
 
-1. **Static Degradation**: Based on discharge rate, charge rate, state of charge, and depth of discharge
-2. **Dynamic Degradation**: Uses rainflow counting for cycle-based aging
+1. **DegradationModel (class)** — Recommended API. Provides:
+   - `nCL_T(T)`, `nCL_Id(Id)`, `nCL_Ich(Ich)`, `nCL_SOCav_DOD(SOCav, DOD)` — normalized cycle-life factors
+   - `cycle_life(T, Id, Ich, SOCav, DOD)` — combined cycle life (CL)
+   - `degradation_per_cycle(T, Id, Ich, SOCav, DOD)` — fractional degradation per cycle (1 / CL)
+2. **Static helper** — `static_degradation(Id, Ich, SoC_avg, DoD)` (convenience wrapper using a default `DegradationModel`)
+3. **Dynamic / Rainflow** — `RainflowCounter`, `rainflow_counting(...)`, `dynamic_degradation(...)` for extracting closed cycles and computing cumulative aging from SoC time series
 
 ### Basic Usage
 
 ```python
-from src.batterydeg import static_degradation, nCL_Id, nCL_Ich, nCL_SoC_DoD
-
-# Compute normalized cycle life factors
-discharge_factor = nCL_Id(Id=0.3)   # Discharge rate (C-rate)
-charge_factor = nCL_Ich(Ich=0.15)   # Charge rate (C-rate)
-soc_dod_factor = nCL_SoC_DoD(SoC=50.0, DoD=80.0)  # State of charge, depth of discharge
-
-# Compute static degradation cost
-deg_cost = static_degradation(
-    Id=0.3,      # Discharge C-rate
-    Ich=0.15,    # Charge C-rate
-    SoC=50.0,    # State of charge (%)
-    DoD=80.0     # Depth of discharge (%)
+from src.batterydeg import (
+    DegradationModel,
+    static_degradation,
+    rainflow_counting,
+    dynamic_degradation,
 )
+
+# Create a model (use defaults or pass custom nominal parameters)
+model = DegradationModel(CL_nom=3650.0, T_nom=25.0, Id_nom=0.25, Ich_nom=0.125, SOCav_nom=50.0, DOD_nom=90.0)
+
+# Normalized factors
+discharge_factor = model.nCL_Id(0.3)
+charge_factor = model.nCL_Ich(0.15)
+soc_dod_factor = model.nCL_SOCav_DOD(50.0, 80.0)
+
+# Combined cycle life and per-cycle degradation
+CL = model.cycle_life(T=25.0, Id=0.3, Ich=0.1, SOCav=50.0, DOD=80.0)
+deg_per_cycle = model.degradation_per_cycle(T=25.0, Id=0.3, Ich=0.1, SOCav=50.0, DOD=80.0)
+
+# Static convenience wrapper (keeps backward compatibility)
+deg_cost = static_degradation(Id=0.3, Ich=0.15, SoC_avg=50.0, DoD=80.0)
+
+# Dynamic / rainflow-based total degradation
+soc_profile = [20, 40, 60, 40, 20]  # example SoC time series
+cycles = rainflow_counting(soc_profile, step_duration=0.5)
+total_deg, n_cycles = dynamic_degradation(soc_profile, step_duration=0.5)
 ```
+
+> **Note:** Former top-level helper names (e.g. `nCL_Id`) are now instance methods on `DegradationModel` (e.g. `model.nCL_Id(...)`). Update tests or call sites accordingly.
 
 ### Integration with Environment
 
-The degradation model is automatically integrated into `SolarBatteryEnv`:
+`SolarBatteryEnv` creates and uses a `DegradationModel` by default (so per-step degradation costs are computed automatically and exposed via `info['deg_cost']`). If you need custom nominal parameters or deterministic behaviour for analysis, create your own `DegradationModel` instance and attach it to the environment before running episodes.
 
-```python
-env = SolarBatteryEnv(
-    dataset,
-    battery_life_cost=1000.0,  # Replacement cost in $
-)
-
-# During step(), degradation cost is computed and subtracted from reward
-obs, reward, terminated, truncated, info = env.step(action)
-deg_cost = info['deg_cost']  # Degradation cost for this step
-```
 
 ---
 
