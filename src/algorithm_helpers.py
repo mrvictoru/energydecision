@@ -291,13 +291,12 @@ class OracleHelper:
                         deg_frac = self.degradation_calc.compute_rainflow_degradation(
                             soc_val, soc_next
                         )
-                    else:  # linear
-                        if self.degradation_model == 'linear':
-                            degradation_cost = self.linear_deg_cost_per_kwh * abs(energy)
-                            stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
-                            continue
-                        
-                        # Linearized model with class-based degradation
+                        degradation_cost = deg_frac * self.env.battery_life_cost
+                    elif self.degradation_model == 'linear':
+                        # Simple linear degradation: cost per kWh throughput
+                        degradation_cost = self.linear_deg_cost_per_kwh * abs(energy)
+                    else:
+                        # Linearized class-based degradation model
                         Id = abs(min(0.0, battery_rate)) / self.env.battery_capacity
                         Ich = abs(max(0.0, battery_rate)) / self.env.battery_capacity
                         avg_soc = (soc_val + 0.5 * energy) / self.env.battery_capacity * 100.0
@@ -306,8 +305,8 @@ class OracleHelper:
                         deg_frac = self.degradation_calc.compute_linearized_degradation(
                             Id, Ich, avg_soc, energy_abs
                         )
+                        degradation_cost = deg_frac * self.env.battery_life_cost
                     
-                    degradation_cost = deg_frac * self.env.battery_life_cost
                     stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
             
             # Compute next SoCs and future costs

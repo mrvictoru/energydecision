@@ -7,7 +7,6 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import numpy as np
-import polars as pl
 
 # Test that algorithm_helpers module works
 from algorithm_helpers import DegradationCalculator, OracleHelper, interpolate_ctg, compute_grid_cost
