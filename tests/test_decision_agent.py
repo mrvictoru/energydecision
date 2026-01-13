@@ -102,17 +102,18 @@ class TestSDPSolver:
 
     def test_sdp_solve_returns_valid_policy(self, sdp_agent):
         """Test that SDP solve returns a valid policy table."""
-        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.horizon)
+        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.sdp_solver.horizon)
         
-        policy_table = sdp_agent._solve_sdp(forecasts, start_index=sdp_agent.env.current_step)
+        # Use the new SDPSolver directly
+        policy_table = sdp_agent.sdp_solver.solve(forecasts, start_index=sdp_agent.env.current_step)
         
-        assert policy_table.shape[0] == sdp_agent.horizon, "Policy table should have horizon rows"
+        assert policy_table.shape[0] == sdp_agent.sdp_solver.horizon, "Policy table should have horizon rows"
         assert policy_table.shape[1] == len(sdp_agent.soc_levels_kwh), "Policy table should have soc_resolution columns"
 
     def test_sdp_policy_values_valid(self, sdp_agent):
         """Test that policy values are within valid action range."""
-        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.horizon)
-        policy_table = sdp_agent._solve_sdp(forecasts, start_index=sdp_agent.env.current_step)
+        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.sdp_solver.horizon)
+        policy_table = sdp_agent.sdp_solver.solve(forecasts, start_index=sdp_agent.env.current_step)
         
         # Valid policy values are -1 (infeasible) or 0 to action_resolution-1
         valid_policies = (policy_table >= -1) & (policy_table < sdp_agent.action_resolution)
@@ -121,11 +122,11 @@ class TestSDPSolver:
     def test_scenario_cache_initialization(self, sdp_agent):
         """Test that scenario cache is properly initialized."""
         # Initially cache should be None
-        assert sdp_agent._scenario_cache is None
+        assert sdp_agent.sdp_solver._scenario_cache is None
         
-        # After solving, cache should be populated
-        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.horizon)
-        sdp_agent._solve_sdp(forecasts, start_index=sdp_agent.env.current_step)
+        # After solving, cache may be populated
+        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.sdp_solver.horizon)
+        sdp_agent.sdp_solver.solve(forecasts, start_index=sdp_agent.env.current_step)
         
         # Cache may or may not be set depending on settings
         # Just check it doesn't raise an error
@@ -162,16 +163,16 @@ class TestSDPPerformance:
         start = time.perf_counter()
         
         try:
-            agent._scenario_cache = agent.scenario_generator.generate_time_step_scenarios(performance_env.df)
+            agent.sdp_solver._scenario_cache = agent.sdp_solver.scenario_generator.generate_time_step_scenarios(performance_env.df)
         except Exception:
             pytest.skip("Scenario generation not available")
         
-        forecasts = agent._get_forecasts(performance_env.current_step, agent.horizon)
-        policy_table = agent._solve_sdp(forecasts, start_index=performance_env.current_step)
+        forecasts = agent._get_forecasts(performance_env.current_step, agent.sdp_solver.horizon)
+        policy_table = agent.sdp_solver.solve(forecasts, start_index=performance_env.current_step)
         
         duration = time.perf_counter() - start
         
-        assert policy_table.shape[0] == agent.horizon
+        assert policy_table.shape[0] == agent.sdp_solver.horizon
         assert duration < 60, f"SDP solve took too long: {duration:.2f}s"
         
         print(f"SDP solve time: {duration:.3f} seconds")
