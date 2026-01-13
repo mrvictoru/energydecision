@@ -40,7 +40,6 @@ class MRDPSolver:
                  use_monte_carlo: bool = False,
                  mc_samples: int = 100,
                  mc_seed: Optional[int] = None,
-                 static_deg_correction_factor: float = 0.8,
                  scenario_generator: Optional[Any] = None):
         """
         Initialize MRDP solver.
@@ -56,7 +55,6 @@ class MRDPSolver:
             use_monte_carlo: Whether to use Monte Carlo
             mc_samples: Number of Monte Carlo samples
             mc_seed: Random seed
-            static_deg_correction_factor: Degradation correction factor
             scenario_generator: Optional scenario generator
         """
         self.env = env
@@ -64,7 +62,6 @@ class MRDPSolver:
         self.use_monte_carlo = use_monte_carlo
         self.mc_samples = mc_samples
         self.mc_seed = mc_seed
-        self.static_deg_correction_factor = static_deg_correction_factor
         self.scenario_generator = scenario_generator
         
         # Create SDP solver for each sub-horizon
@@ -78,7 +75,6 @@ class MRDPSolver:
                 use_monte_carlo=use_monte_carlo,
                 mc_samples=mc_samples,
                 mc_seed=mc_seed,
-                static_deg_correction_factor=static_deg_correction_factor,
                 scenario_generator=scenario_generator
             )
             # Override step duration for this sub-horizon

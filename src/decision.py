@@ -20,8 +20,7 @@ from tqdm.notebook import tqdm
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
-                 horizon=48, soc_resolution=20, action_resolution=41, static_deg_correction_factor=0.8,
-                 degradation_model='rainflow', linear_deg_cost_p_kwh=None,
+                 horizon=72, soc_resolution=20, action_resolution=41,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
         """
@@ -63,7 +62,6 @@ class Agent:
             self.horizon = horizon
             self.soc_resolution = soc_resolution
             self.action_resolution = action_resolution
-            self.static_deg_correction_factor = static_deg_correction_factor
 
             # Shared DP parameters
             self.battery_capacity = env.battery_capacity
@@ -91,11 +89,10 @@ class Agent:
                     horizon=horizon,
                     soc_resolution=soc_resolution,
                     action_resolution=action_resolution,
-                        use_monte_carlo=use_monte_carlo,
-                        mc_samples=mc_samples,
-                        mc_seed=mc_seed,
-                        static_deg_correction_factor=static_deg_correction_factor,
-                        scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
+                    use_monte_carlo=use_monte_carlo,
+                    mc_samples=mc_samples,
+                    mc_seed=mc_seed,
+                    scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
                     )
                     
                     # Keep these for backward compatibility
@@ -110,7 +107,6 @@ class Agent:
                     use_monte_carlo=use_monte_carlo,
                     mc_samples=mc_samples,
                     mc_seed=mc_seed,
-                    static_deg_correction_factor=static_deg_correction_factor,
                     scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
                 )
                 

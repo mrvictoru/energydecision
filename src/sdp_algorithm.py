@@ -41,7 +41,6 @@ class SDPSolver:
                  use_monte_carlo: bool = False,
                  mc_samples: int = 100,
                  mc_seed: Optional[int] = None,
-                 static_deg_correction_factor: float = 0.8,
                  scenario_generator: Optional[Any] = None):
         """
         Initialize SDP solver.
@@ -60,7 +59,6 @@ class SDPSolver:
             use_monte_carlo: Whether to use Monte Carlo for uncertainty
             mc_samples: Number of Monte Carlo samples
             mc_seed: Random seed for reproducibility
-            static_deg_correction_factor: Correction factor for degradation
             scenario_generator: Optional scenario generator for uncertainty
         """
         # Environment parameters
@@ -77,7 +75,6 @@ class SDPSolver:
         self.action_resolution = action_resolution
         
         # Degradation configuration (rainflow-only)
-        self.static_deg_correction_factor = static_deg_correction_factor
         self.degradation_calc = DegradationCalculator(
             battery_capacity=self.battery_capacity,
             step_duration=self.step_duration,
