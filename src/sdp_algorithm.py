@@ -38,8 +38,6 @@ class SDPSolver:
                  horizon: int,
                  soc_resolution: int,
                  action_resolution: int,
-                 degradation_model: str = 'linear',
-                 linear_deg_cost_p_kwh: Optional[float] = None,
                  use_monte_carlo: bool = False,
                  mc_samples: int = 100,
                  mc_seed: Optional[int] = None,
@@ -48,13 +46,17 @@ class SDPSolver:
         """
         Initialize SDP solver.
         
+        Notes:
+            - This solver uses **rainflow-based** degradation exclusively. The
+              `DegradationCalculator` provides the `compute_rainflow_degradation`
+              method which is used to estimate per-step degradation based on SoC
+              transitions.
+
         Args:
             env: Environment with battery and grid parameters
             horizon: Number of time steps to optimize over
             soc_resolution: Number of discrete SoC levels
             action_resolution: Number of discrete action levels
-            degradation_model: 'linear', 'rainflow', or default (linearized)
-            linear_deg_cost_p_kwh: Cost per kWh for linear model
             use_monte_carlo: Whether to use Monte Carlo for uncertainty
             mc_samples: Number of Monte Carlo samples
             mc_seed: Random seed for reproducibility
@@ -74,8 +76,7 @@ class SDPSolver:
         self.soc_resolution = soc_resolution
         self.action_resolution = action_resolution
         
-        # Degradation configuration
-        self.degradation_model = degradation_model
+        # Degradation configuration (rainflow-only)
         self.static_deg_correction_factor = static_deg_correction_factor
         self.degradation_calc = DegradationCalculator(
             battery_capacity=self.battery_capacity,
@@ -83,13 +84,6 @@ class SDPSolver:
             battery_life_cost=self.battery_life_cost,
             degradation_temperature=getattr(env, 'degradation_temperature', 25.0)
         )
-        
-        if self.degradation_model == 'linear':
-            if linear_deg_cost_p_kwh is not None:
-                self.linear_deg_cost_per_kwh = linear_deg_cost_p_kwh
-            else:
-                cycle_life = 3650
-                self.linear_deg_cost_per_kwh = env.battery_life_cost / (env.battery_capacity * cycle_life)
         
         # Uncertainty handling
         self.use_monte_carlo = use_monte_carlo
@@ -320,24 +314,24 @@ class SDPSolver:
         return compute_grid_cost(grid_energy, import_price, export_price, self.max_grid_energy)
     
     def _compute_degradation_cost(self, energy: float, battery_rate: float) -> float:
-        """Compute battery degradation cost for energy throughput."""
-        if self.degradation_model == 'linear':
-            return self.linear_deg_cost_per_kwh * abs(energy)
+        """Compute battery degradation cost for energy throughput using rainflow counting.
         
-        # Use representative SoC at battery midpoint
+        A representative SoC is used for the per-step estimation (midpoint of capacity)
+        because `_compute_single_stage_cost` is evaluated on unique energy values only
+        and does not have direct access to the current state's SoC. This keeps the
+        computation efficient while using the rainflow-based estimator for wear.
+        """
+        if abs(energy) <= 0.0:
+            return 0.0
+
+        # Representative SoC (kWh) at midpoint of battery
         rep_soc = self.battery_capacity / 2.0
-        Id_crate = abs(max(0, -battery_rate) / self.battery_capacity)
-        Ich_crate = abs(max(0, battery_rate) / self.battery_capacity)
-        SoC_avg_percent = (rep_soc + 0.5 * energy) / self.battery_capacity * 100.0
-        SoC_avg_percent = np.clip(SoC_avg_percent, 0, 100)
-        
-        deg_frac = self.degradation_calc.compute_linearized_degradation(
-            Id_crate, Ich_crate, SoC_avg_percent, abs(energy),
-            base_DoD=getattr(self.env, "base_deg_DoD", 80.0),
-            correction_factor=self.static_deg_correction_factor
-        )
-        
-        return deg_frac * self.battery_life_cost
+        soc_next = rep_soc + energy
+
+        # Compute rainflow-based degradation fraction for this SoC transition
+        deg_frac = self.degradation_calc.compute_rainflow_degradation(rep_soc, soc_next)
+        return float(deg_frac * self.battery_life_cost)
+
     
     def _compute_future_costs(self, next_cost_to_go: np.ndarray) -> np.ndarray:
         """

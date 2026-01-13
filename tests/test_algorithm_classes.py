@@ -41,8 +41,7 @@ def test_sdp_solver_initialization():
         env=env,
         horizon=24,
         soc_resolution=10,
-        action_resolution=7,
-        degradation_model='linear'
+        action_resolution=7
     )
     
     assert solver.horizon == 24

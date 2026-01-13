@@ -37,8 +37,6 @@ class MRDPSolver:
     def __init__(self,
                  env: Any,
                  subhorizon_specs: List[Dict],
-                 degradation_model: str = 'linear',
-                 linear_deg_cost_p_kwh: Optional[float] = None,
                  use_monte_carlo: bool = False,
                  mc_samples: int = 100,
                  mc_seed: Optional[int] = None,
@@ -55,8 +53,6 @@ class MRDPSolver:
                 - 'soc_resolution': Number of SoC levels
                 - 'action_resolution': Number of action levels
                 - 'step_duration': Time step duration
-            degradation_model: 'linear', 'rainflow', or default
-            linear_deg_cost_p_kwh: Cost per kWh for linear model
             use_monte_carlo: Whether to use Monte Carlo
             mc_samples: Number of Monte Carlo samples
             mc_seed: Random seed
@@ -65,8 +61,6 @@ class MRDPSolver:
         """
         self.env = env
         self.subhorizon_specs = subhorizon_specs or self._default_subhorizon_specs()
-        self.degradation_model = degradation_model
-        self.linear_deg_cost_p_kwh = linear_deg_cost_p_kwh
         self.use_monte_carlo = use_monte_carlo
         self.mc_samples = mc_samples
         self.mc_seed = mc_seed
@@ -81,8 +75,6 @@ class MRDPSolver:
                 horizon=spec['length'],
                 soc_resolution=spec['soc_resolution'],
                 action_resolution=spec['action_resolution'],
-                degradation_model=degradation_model,
-                linear_deg_cost_p_kwh=linear_deg_cost_p_kwh,
                 use_monte_carlo=use_monte_carlo,
                 mc_samples=mc_samples,
                 mc_seed=mc_seed,

@@ -84,48 +84,44 @@ class Agent:
                     action_resolution=action_resolution
                 )
 
-        if self.algorithm == 'sdp':
-            # Initialize self-contained SDP solver
-            self.sdp_solver = SDPSolver(
-                env=env,
-                horizon=horizon,
-                soc_resolution=soc_resolution,
-                action_resolution=action_resolution,
-                degradation_model=degradation_model,
-                linear_deg_cost_p_kwh=linear_deg_cost_p_kwh,
-                use_monte_carlo=use_monte_carlo,
-                mc_samples=mc_samples,
-                mc_seed=mc_seed,
-                static_deg_correction_factor=static_deg_correction_factor,
-                scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
-            )
+            if self.algorithm == 'sdp':
+                # Initialize self-contained SDP solver (rainflow-only degradation)
+                self.sdp_solver = SDPSolver(
+                    env=env,
+                    horizon=horizon,
+                    soc_resolution=soc_resolution,
+                    action_resolution=action_resolution,
+                        use_monte_carlo=use_monte_carlo,
+                        mc_samples=mc_samples,
+                        mc_seed=mc_seed,
+                        static_deg_correction_factor=static_deg_correction_factor,
+                        scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
+                    )
+                    
+                    # Keep these for backward compatibility
+                self.soc_levels_kwh = self.sdp_solver.soc_levels_kwh
+                self.action_levels_norm = self.sdp_solver.action_levels_norm
             
-            # Keep these for backward compatibility
-            self.soc_levels_kwh = self.sdp_solver.soc_levels_kwh
-            self.action_levels_norm = self.sdp_solver.action_levels_norm
-            
-        elif self.algorithm == 'mrdp':
-            # Initialize self-contained MRDP solver
-            self.mrdp_solver = MRDPSolver(
-                env=env,
-                subhorizon_specs=subhorizon_specs,
-                degradation_model=degradation_model,
-                linear_deg_cost_p_kwh=linear_deg_cost_p_kwh,
-                use_monte_carlo=use_monte_carlo,
-                mc_samples=mc_samples,
-                mc_seed=mc_seed,
-                static_deg_correction_factor=static_deg_correction_factor,
-                scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
-            )
-            
-            # Keep these for backward compatibility
-            if subhorizon_specs and len(subhorizon_specs) > 0:
-                first_spec = subhorizon_specs[0]
-                self.soc_levels_kwh = np.linspace(0, env.battery_capacity, first_spec['soc_resolution'])
-                self.action_levels_norm = np.linspace(-1.0, 1.0, first_spec['action_resolution'])
-            else:
-                self.soc_levels_kwh = np.linspace(0, env.battery_capacity, soc_resolution)
-                self.action_levels_norm = np.linspace(-1.0, 1.0, action_resolution)
+            elif self.algorithm == 'mrdp':
+                # Initialize self-contained MRDP solver
+                self.mrdp_solver = MRDPSolver(
+                    env=env,
+                    subhorizon_specs=subhorizon_specs,
+                    use_monte_carlo=use_monte_carlo,
+                    mc_samples=mc_samples,
+                    mc_seed=mc_seed,
+                    static_deg_correction_factor=static_deg_correction_factor,
+                    scenario_generator=QuantileScenarioGenerator(n_scenarios=5)
+                )
+                
+                # Keep these for backward compatibility
+                if subhorizon_specs and len(subhorizon_specs) > 0:
+                    first_spec = subhorizon_specs[0]
+                    self.soc_levels_kwh = np.linspace(0, env.battery_capacity, first_spec['soc_resolution'])
+                    self.action_levels_norm = np.linspace(-1.0, 1.0, first_spec['action_resolution'])
+                else:
+                    self.soc_levels_kwh = np.linspace(0, env.battery_capacity, soc_resolution)
+                    self.action_levels_norm = np.linspace(-1.0, 1.0, action_resolution)
         elif self.algorithm == 'dt':
             self.rtg_value = rtg_value  # Initial Return-to-go value for DT input
             self.dt_gamma = dt_gamma    # Discount factor for RTG updates

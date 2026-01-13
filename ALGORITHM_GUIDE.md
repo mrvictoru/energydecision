@@ -267,7 +267,7 @@ agent = Agent(env, algorithm='mrdp', subhorizon_specs=subhorizon_specs)
 
 ```python
 # Linear (fastest)
-agent = Agent(env, algorithm='sdp', degradation_model='linear')
+agent = Agent(env, algorithm='sdp')  # SDP uses rainflow-based degradation internally
 
 # Rainflow counting (most accurate)
 agent = Agent(env, algorithm='sdp', degradation_model='rainflow')

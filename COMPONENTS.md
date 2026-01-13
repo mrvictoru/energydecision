@@ -175,8 +175,7 @@ agent_kwargs = {
     'algorithm': 'sdp',
     'soc_resolution': 21,
     'action_resolution': 41,
-    'degradation_model': 'linear',
-    'linear_deg_cost_p_kwh': 0.2,
+    # SDP uses rainflow-based degradation internally; no need to pass degradation_model
 }
 
 episode_logs = run_episodes_parallel(
