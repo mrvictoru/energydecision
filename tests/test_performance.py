@@ -21,7 +21,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from EnergySimEnv import SolarBatteryEnv
-from batterydeg import static_degradation, nCL_Id, nCL_Ich, nCL_SoC_DoD
+from batterydeg import static_degradation, DegradationModel
 from quantile_scenarios import QuantileScenarioGenerator
 
 
@@ -103,19 +103,21 @@ class TestDegradationPerformance:
         assert per_call_us < 100, f"Degradation calculation too slow: {per_call_us:.2f}μs"
 
     def test_nCL_functions_precomputed(self):
-        """Verify that nCL functions use precomputed denominators."""
-        # Test that functions return consistent results
-        result1 = nCL_Id(0.3)
-        result2 = nCL_Id(0.3)
+        """Verify that `DegradationModel` nCL methods return consistent results."""
+        model = DegradationModel()
+
+        # Test that methods return consistent results
+        result1 = model.nCL_Id(0.3)
+        result2 = model.nCL_Id(0.3)
         assert result1 == result2, "nCL_Id should return consistent results"
-        
-        result1 = nCL_Ich(0.15)
-        result2 = nCL_Ich(0.15)
+
+        result1 = model.nCL_Ich(0.15)
+        result2 = model.nCL_Ich(0.15)
         assert result1 == result2, "nCL_Ich should return consistent results"
-        
-        result1 = nCL_SoC_DoD(50.0, 80.0)
-        result2 = nCL_SoC_DoD(50.0, 80.0)
-        assert result1 == result2, "nCL_SoC_DoD should return consistent results"
+
+        result1 = model.nCL_SOCav_DOD(50.0, 80.0)
+        result2 = model.nCL_SOCav_DOD(50.0, 80.0)
+        assert result1 == result2, "nCL_SOCav_DOD should return consistent results"
 
 
 class TestQuantileScenarioPerformance:

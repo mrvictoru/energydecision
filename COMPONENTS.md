@@ -8,7 +8,7 @@ This document provides comprehensive documentation for all key components in the
 
 1. [Environment (`EnergySimEnv.py`)](#1-environment-energysimenvpy)
 2. [Decision Agent (`decision.py`)](#2-decision-agent-decisionpy)
-3. [Multi-Resolution Dynamic Programming (`sdp_multires.py`)](#3-multi-resolution-dynamic-programming-sdp_multiirespy)
+3. [Multi-Resolution Dynamic Programming (`mrdp_algorithm.py`)](#3-multi-resolution-dynamic-programming-mrdp_algorithmpy)
 4. [Scenario Generation (`quantile_scenarios.py`)](#4-scenario-generation-quantile_scenariospy)
 5. [Battery Degradation (`batterydeg.py`)](#5-battery-degradation-batterydegpy)
 6. [Data Transformation (`helper.py`)](#6-data-transformation-helperpy)
@@ -698,7 +698,7 @@ from src.EnergySimEnv import SolarBatteryEnv
 from src.decision import Agent, run_episodes_parallel
 
 # MRDP
-from src.sdp_multires import solve_mrdp, DynamicProgram
+from src.mrdp_algorithm import MRDPSolver
 
 # Scenarios
 from src.quantile_scenarios import QuantileScenarioGenerator
