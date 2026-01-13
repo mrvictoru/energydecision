@@ -30,6 +30,8 @@ This project provides a comprehensive framework for benchmarking control algorit
     *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 via Stable-Baselines3.
     *   **Offline RL:** Decision Transformer (DT) trained on mixed behavioral logs.
 
+    Brief implementation notes: the optimization solvers are implemented as self-contained classes to make the algorithm flow easy to follow—`SDPSolver` (`src/sdp_algorithm.py`), `MRDPSolver` (`src/mrdp_algorithm.py`), and `OracleSolver` (`src/oracle_algorithm.py`). Use `Agent(env, algorithm='sdp'|'mrdp'|'oracle')` to run the solver of your choice. See `COMPONENTS.md` for short examples and `ALGORITHM_GUIDE.md` for a step-by-step reading guide (kept as internal reference).
+
 *   **Battery Degradation:** Detailed semi-empirical models (Rainflow counting, throughput, C-rate) in [`src/batterydeg.py`](src/batterydeg.py).
 
 *   **Quantile Scenarios:** Scenario generation for uncertainty modeling in [`src/quantile_scenarios.py`](src/quantile_scenarios.py).

@@ -190,11 +190,31 @@ print(f"Completed {len(episode_logs)} episodes")
 
 ---
 
-## 3. Multi-Resolution Dynamic Programming (deprecated)
+## 3. Algorithm Implementations (SDP, MRDP, Oracle)
 
-**Note:** The legacy `sdp_multires.py` module has been removed from the repository. MRDP functionality is now implemented in **`src/mrdp_algorithm.py`** which provides the `MRDPSolver` class and accompanying utilities.
+The project implements three primary optimization solvers as self-contained classes to make the algorithm flow easy to read and test:
 
-If you relied on the old `sdp_multires` examples, switch to the `MRDPSolver` API or run the Agent with `algorithm='mrdp'`, which uses `MRDPSolver` internally. For usage and examples, see the **MRDP** section in `ALGORITHM_GUIDE.md`.
+- **Stochastic Dynamic Programming (SDP)** — `src/sdp_algorithm.py` implements the `SDPSolver` class. Use this for standard receding-horizon stochastic DP with Monte Carlo or deterministic stage costs. Example:
+
+```python
+from src.sdp_algorithm import SDPSolver
+solver = SDPSolver(env, horizon=48, soc_resolution=20, action_resolution=41)
+policy = solver.solve(forecasts, start_index=0)
+```
+
+- **Multi-Resolution Dynamic Programming (MRDP)** — `src/mrdp_algorithm.py` implements the `MRDPSolver` class and is recommended for long horizons where a coarse-far/ fine-near decomposition improves speed. Run the Agent with `algorithm='mrdp'` to use it.
+
+```python
+from src.mrdp_algorithm import MRDPSolver
+mrdp = MRDPSolver(env, subhorizon_specs=subhorizon_specs)
+policy = mrdp.solve(forecasts, start_index=0)
+```
+
+- **Oracle (perfect information)** — `src/oracle_algorithm.py` implements `OracleSolver` for benchmarking using actual future values.
+
+Agent integration: The `Agent` class creates and calls these solvers based on the `algorithm` parameter (e.g., `'sdp'`, `'mrdp'`, `'oracle'`). This makes it easy to switch solvers without changing calling code.
+
+> For a detailed reading guide (step ordering and helper methods), see `ALGORITHM_GUIDE.md` (kept as a reference document).
 
 ---
 
