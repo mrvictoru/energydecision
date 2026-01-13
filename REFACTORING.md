@@ -96,7 +96,7 @@ Total Cost = Grid Cost + Degradation Cost
 
 2. **Explicit Dependencies**
    - Clear imports from `batterydeg.py` for degradation models
-   - Clear imports from `sdp_multires.py` for multi-resolution DP
+   - Clear imports from `mrdp_algorithm.py` for multi-resolution DP
    - Clear imports from `quantile_scenarios.py` for uncertainty modeling
 
 3. **Reduced Code Duplication**

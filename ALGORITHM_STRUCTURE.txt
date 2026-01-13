@@ -30,11 +30,10 @@ To understand SDP algorithm, you had to read:
 │  [line 42+]            │  │  generate_time_step_scenarios()  │ │
 └────────────────────────┘  └──────────────────────────────────┘ │
                                                                   │
-For MRDP, you also need:                                          │
+For MRDP, see the single-file MRDP implementation:         │
 ┌──────────────────────────────────────────────────────────────┐ │
-│ sdp_multires.py                                              │ │
-│  ├─ solve_mrdp() [line 421]                                 │ │
-│  └─ DynamicProgram class [line 170+]                        │ │
+│ mrdp_algorithm.py                                            │ │
+│  ├─ MRDPSolver (single-file MRDP implementation)            │ │
 └──────────────────────────────────────────────────────────────┘ │
                                                                   │
 Plus batterydeg.py for degradation models!                        │

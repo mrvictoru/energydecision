@@ -9,7 +9,7 @@ This guide explains how the SDP, MRDP, and Oracle algorithms are implemented in 
 **Before**: To understand how an algorithm works, you had to jump between multiple files:
 - `decision.py` - Agent class and choose_action logic
 - `algorithm_helpers.py` - Degradation calculations
-- `sdp_multires.py` - Multi-resolution DP infrastructure
+- (legacy) `sdp_multires.py` - deprecated (use `mrdp_algorithm.py` instead) 
 - `quantile_scenarios.py` - Uncertainty modeling
 
 This made it difficult to:

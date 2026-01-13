@@ -94,7 +94,7 @@ energydecision/
 │   ├── transformer_training.py      # TrajectoryDataset class and train_decision_transformer function
 │   ├── sb3train.py                  # RL training utilities (Stable-Baselines3)
 │   ├── quantile_scenarios.py        # Quantile scenario generation for uncertainty modeling
-│   ├── sdp_multires.py              # Multi-resolution dynamic programming solver
+│   ├── mrdp_algorithm.py           # Multi-resolution dynamic programming (MRDP) implementation
 │   └── train_decision_transformer.py    # CLI for Decision Transformer training
 ├── tests/                   # Test suite
 │   ├── conftest.py              # Shared pytest fixtures
@@ -532,7 +532,7 @@ For detailed documentation on all source components, see **[COMPONENTS.md](COMPO
 
 - Environment setup and usage (`EnergySimEnv.py`)
 - Decision agent algorithms (`decision.py`)
-- Multi-Resolution Dynamic Programming (`sdp_multires.py`)
+- Multi-Resolution Dynamic Programming (`mrdp_algorithm.py`) (legacy `sdp_multires.py` removed) 
 - Scenario generation (`quantile_scenarios.py`)
 - Battery degradation models (`batterydeg.py`)
 - Data transformation utilities (`helper.py`)

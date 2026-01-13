@@ -190,136 +190,11 @@ print(f"Completed {len(episode_logs)} episodes")
 
 ---
 
-## 3. Multi-Resolution Dynamic Programming (`sdp_multires.py`)
+## 3. Multi-Resolution Dynamic Programming (deprecated)
 
-### Overview
+**Note:** The legacy `sdp_multires.py` module has been removed from the repository. MRDP functionality is now implemented in **`src/mrdp_algorithm.py`** which provides the `MRDPSolver` class and accompanying utilities.
 
-MRDP enables efficient long-horizon optimization by using different temporal resolutions:
-- **Fine resolution** for near-term decisions (immediate actions matter most)
-- **Coarse resolution** for far-term planning (reduce computational cost)
-
-### Key Features
-
-- **1.5-2x speedup** over single-horizon SDP
-- **Consistent solution quality** with traditional SDP
-- **Configurable sub-horizons** for different use cases
-- **Monte Carlo and deterministic** stage cost computation
-
-### Basic Usage
-
-```python
-import numpy as np
-from src.sdp_multires import solve_mrdp, DynamicProgram
-
-# Define sub-horizon specifications
-subhorizon_specs = [
-    {
-        'start': 0, 'length': 12,      # First 12 steps (fine resolution)
-        'soc_resolution': 20, 
-        'action_resolution': 11,
-        'step_duration': 0.5           # 30-minute steps
-    },
-    {
-        'start': 12, 'length': 36,     # Next 36 steps (coarse resolution)
-        'soc_resolution': 10, 
-        'action_resolution': 5,
-        'step_duration': 1.0           # 1-hour steps
-    }
-]
-
-# Create stage cost function
-def stage_cost_function(t_global_idx, unique_energy_values):
-    """Compute stage costs for battery energy values at time t."""
-    # Your cost calculation logic here
-    costs = np.zeros(len(unique_energy_values))
-    # ... compute costs based on forecasts, prices, etc.
-    return costs
-
-# Solve using MRDP
-policy_table, cost_to_go = solve_mrdp(
-    env=env,
-    forecasts=forecasts,
-    subhorizon_specs=subhorizon_specs,
-    global_start_index=0,
-    stage_cost_function=stage_cost_function
-)
-
-# Extract optimal action for current state
-current_soc_idx = int(env.battery_level / env.battery_capacity * (subhorizon_specs[0]['soc_resolution'] - 1))
-action_idx = policy_table[0, current_soc_idx]
-```
-
-### Integration with Existing Agent
-
-```python
-from src.decision import Agent
-from src.sdp_multires import solve_mrdp
-
-# Create base agent
-agent = Agent(env, algorithm='sdp', horizon=48, soc_resolution=15, action_resolution=9)
-
-# Create stage cost function that wraps Agent's logic
-def create_agent_stage_cost_function(agent, forecasts):
-    def stage_cost_function(t_global_idx, unique_energy_values):
-        if t_global_idx < 0 or t_global_idx >= len(forecasts):
-            return np.full(len(unique_energy_values), np.inf)
-            
-        forecast_step = forecasts[t_global_idx]
-        costs = np.empty(len(unique_energy_values))
-        
-        for i, energy in enumerate(unique_energy_values):
-            battery_rate = energy / agent.step_duration
-            rep_soc = agent.battery_capacity / 2.0
-            costs[i] = agent._calculate_sdp_stage_cost(
-                t_global_idx, rep_soc, battery_rate, energy, forecast_step
-            )
-        return costs
-    return stage_cost_function
-
-# Get forecasts and solve
-forecasts = agent._get_forecasts(env.current_step, horizon=48)
-stage_cost_fn = create_agent_stage_cost_function(agent, forecasts)
-
-policy_table, cost_to_go = solve_mrdp(
-    env=env,
-    forecasts=forecasts,
-    subhorizon_specs=subhorizon_specs,
-    global_start_index=env.current_step,
-    stage_cost_function=stage_cost_fn
-)
-```
-
-### Vectorized Monte Carlo Stage Cost
-
-```python
-from src.sdp_multires import vectorized_monte_carlo_stage_cost, deterministic_stage_cost
-
-# Vectorized Monte Carlo (for stochastic optimization)
-unique_energies = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
-sampled_solar = np.random.normal(2.0, 0.5, 1000)
-sampled_load = np.random.normal(3.0, 0.3, 1000)
-sampled_imp_price = np.random.normal(0.15, 0.02, 1000)
-sampled_exp_price = np.random.normal(0.08, 0.01, 1000)
-
-mc_costs = vectorized_monte_carlo_stage_cost(
-    unique_energies, sampled_solar, sampled_load, sampled_imp_price, sampled_exp_price,
-    max_grid_energy=20.0, degradation_cost=0.01
-)
-
-# Deterministic (for point forecasts)
-det_costs = deterministic_stage_cost(
-    unique_energies, 
-    solar=2.0, load=3.0, import_price=0.15, export_price=0.08,
-    max_grid_energy=20.0, degradation_cost=0.01
-)
-```
-
-### Performance Comparison
-
-| Approach | Horizon | SoC × Actions × Steps | Solve Time | Speedup |
-|----------|---------|----------------------|------------|---------|
-| Single-horizon | 48 | 15 × 9 × 48 | 1.68s | 1.0x |
-| Multi-resolution | 48 | 15×9×16 + 8×5×32 | 0.90s | 1.87x |
+If you relied on the old `sdp_multires` examples, switch to the `MRDPSolver` API or run the Agent with `algorithm='mrdp'`, which uses `MRDPSolver` internally. For usage and examples, see the **MRDP** section in `ALGORITHM_GUIDE.md`.
 
 ---
 
@@ -804,7 +679,7 @@ pytest tests/ -v --durations=10
 |------|-------------|
 | `EnergySimEnv.py` | Gymnasium environment for solar-battery-grid simulation |
 | `decision.py` | Agent class with rule-based, SDP, Oracle, RL, and DT algorithms |
-| `sdp_multires.py` | Multi-resolution dynamic programming solver |
+| `mrdp_algorithm.py` | Multi-resolution dynamic programming solver |
 | `quantile_scenarios.py` | Scenario generation for uncertainty modeling |
 | `batterydeg.py` | Battery degradation models |
 | `helper.py` | Data transformation and evaluation utilities |
