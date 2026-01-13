@@ -34,18 +34,18 @@ class OracleSolver:
     def __init__(self,
                  env: Any,
                  horizon: int,
-                 action_resolution: int,
-                 degradation_model: str = 'linear',
-                 linear_deg_cost_p_kwh: Optional[float] = None):
+                 action_resolution: int):
         """
         Initialize Oracle solver.
         
+        This solver uses **rainflow-based** degradation exclusively (no other
+        degradation model options are supported). The `DegradationCalculator`
+        instance is used to compute rainflow degradation between SoC states.
+
         Args:
             env: Environment with battery parameters and data
             horizon: Number of steps to look ahead
             action_resolution: Number of discrete action levels
-            degradation_model: 'linear', 'rainflow', or default (linearized)
-            linear_deg_cost_p_kwh: Cost per kWh for linear model
         """
         # Environment parameters
         self.env = env
@@ -59,21 +59,13 @@ class OracleSolver:
         self.horizon = horizon
         self.action_resolution = action_resolution
         
-        # Degradation configuration
-        self.degradation_model = degradation_model
+        # Degradation configuration (rainflow-only)
         self.degradation_calc = DegradationCalculator(
             battery_capacity=self.battery_capacity,
             step_duration=self.step_duration,
             battery_life_cost=self.battery_life_cost,
             degradation_temperature=getattr(env, 'degradation_temperature', 25.0)
         )
-        
-        if self.degradation_model == 'linear':
-            if linear_deg_cost_p_kwh is not None:
-                self.linear_deg_cost_per_kwh = linear_deg_cost_p_kwh
-            else:
-                cycle_life = 3650
-                self.linear_deg_cost_per_kwh = env.battery_life_cost / (env.battery_capacity * cycle_life)
         
         # Discretization - use same SoC levels as SDP for fair comparison
         self.soc_resolution = 20  # Standard resolution
@@ -203,26 +195,12 @@ class OracleSolver:
                 energy = float(clipped_energies[si, ai])
                 battery_rate = energy / self.step_duration
                 
-                # Compute degradation cost
-                if self.degradation_model == 'rainflow':
-                    soc_next = soc_val + energy
-                    deg_frac = self.degradation_calc.compute_rainflow_degradation(
-                        soc_val, soc_next
-                    )
-                    degradation_cost = deg_frac * self.battery_life_cost
-                elif self.degradation_model == 'linear':
-                    degradation_cost = self.linear_deg_cost_per_kwh * abs(energy)
-                else:
-                    # Linearized class-based degradation
-                    Id = abs(min(0.0, battery_rate)) / self.battery_capacity
-                    Ich = abs(max(0.0, battery_rate)) / self.battery_capacity
-                    avg_soc = (soc_val + 0.5 * energy) / self.battery_capacity * 100.0
-                    avg_soc = float(np.clip(avg_soc, 0.0, 100.0))
-                    
-                    deg_frac = self.degradation_calc.compute_linearized_degradation(
-                        Id, Ich, avg_soc, abs(energy)
-                    )
-                    degradation_cost = deg_frac * self.battery_life_cost
+                # Compute degradation cost using rainflow counting only
+                soc_next = soc_val + energy
+                deg_frac = self.degradation_calc.compute_rainflow_degradation(
+                    soc_val, soc_next
+                )
+                degradation_cost = deg_frac * self.battery_life_cost
                 
                 stage_costs[si, ai] = float(grid_cost[si, ai]) + degradation_cost
         

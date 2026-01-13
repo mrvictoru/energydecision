@@ -77,13 +77,11 @@ class Agent:
                 self.oracle_horizon = horizon
                 self.oracle_action_levels = np.linspace(-1.0, 1.0, action_resolution, dtype=np.float32)
                 
-                # Initialize self-contained Oracle solver
+                # Initialize self-contained Oracle solver (rainflow-only)
                 self.oracle_solver = OracleSolver(
                     env=env,
                     horizon=horizon,
-                    action_resolution=action_resolution,
-                    degradation_model='linear',
-                    linear_deg_cost_p_kwh=linear_deg_cost_p_kwh
+                    action_resolution=action_resolution
                 )
 
         if self.algorithm == 'sdp':

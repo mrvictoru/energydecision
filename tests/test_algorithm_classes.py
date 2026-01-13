@@ -112,8 +112,7 @@ def test_oracle_solver_initialization():
     solver = OracleSolver(
         env=env,
         horizon=24,
-        action_resolution=7,
-        degradation_model='linear'
+        action_resolution=7
     )
     
     assert solver.horizon == 24
