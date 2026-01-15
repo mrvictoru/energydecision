@@ -34,6 +34,7 @@ class OracleSolver:
     def __init__(self,
                  env: Any,
                  horizon: int,
+                 soc_resolution: int,
                  action_resolution: int):
         """
         Initialize Oracle solver.
@@ -45,7 +46,7 @@ class OracleSolver:
         Args:
             env: Environment with battery parameters and data
             horizon: Number of steps to look ahead
-            action_resolution: Number of discrete action levels
+            soc_resolution: Number of discrete SoC levels
         """
         # Environment parameters
         self.env = env
@@ -57,6 +58,7 @@ class OracleSolver:
         
         # Algorithm parameters
         self.horizon = horizon
+        self.soc_resolution = soc_resolution
         self.action_resolution = action_resolution
         
         # Degradation configuration (rainflow-only)
@@ -68,9 +70,8 @@ class OracleSolver:
         )
         
         # Discretization - use same SoC levels as SDP for fair comparison
-        self.soc_resolution = 20  # Standard resolution
-        self.soc_levels_kwh = np.linspace(0, self.battery_capacity, self.soc_resolution)
-        self.action_levels = np.linspace(-1.0, 1.0, self.action_resolution, dtype=np.float32)
+        self.soc_levels_kwh = np.linspace(0, self.battery_capacity, soc_resolution)
+        self.action_levels = np.linspace(-1.0, 1.0, action_resolution, dtype=np.float32)
         self.battery_energies = self.action_levels * self.max_battery_flow * self.step_duration
     
     def solve(self, start_index: int, horizon: int) -> Optional[np.ndarray]:

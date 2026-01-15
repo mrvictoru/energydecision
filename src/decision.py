@@ -79,6 +79,7 @@ class Agent:
                 self.oracle_solver = OracleSolver(
                     env=env,
                     horizon=horizon,
+                    soc_resolution=soc_resolution,
                     action_resolution=action_resolution
                 )
 

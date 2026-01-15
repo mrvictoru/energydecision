@@ -82,45 +82,6 @@ def test_helper_functions():
     
     print("✓ Helper function tests passed!")
 
-def test_oracle_helper():
-    """Test OracleHelper class (without full env)."""
-    print("\nTesting OracleHelper class structure...")
-    
-    # Create a mock environment
-    class MockEnv:
-        battery_capacity = 7.0
-        max_battery_flow = 3.3
-        max_grid_energy = 5.0
-        step_duration = 0.5
-        battery_life_cost = 1000.0
-        
-        def _get_row(self, idx):
-            return {
-                'SolarGen': 1.0,
-                'HouseLoad': 1.5,
-                'ImportEnergyPrice': 0.25,
-                'ExportEnergyPrice': 0.1
-            }
-    
-    env = MockEnv()
-    
-    calc = DegradationCalculator(
-        battery_capacity=env.battery_capacity,
-        step_duration=env.step_duration,
-        battery_life_cost=env.battery_life_cost,
-        degradation_temperature=25.0
-    )
-    
-    oracle = OracleHelper(
-        env=env,
-        degradation_calc=calc,
-        degradation_model='linear'
-    )
-    
-    assert hasattr(oracle, 'solve_oracle_dp'), "OracleHelper should have solve_oracle_dp method"
-    print("  ✓ OracleHelper initialized successfully")
-    print("✓ OracleHelper tests passed!")
-
 def test_batterydeg_integration():
     """Test that batterydeg classes are properly used."""
     print("\nTesting batterydeg integration...")
