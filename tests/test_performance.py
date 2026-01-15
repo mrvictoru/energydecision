@@ -21,7 +21,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from EnergySimEnv import SolarBatteryEnv
-from batterydeg import static_degradation, nCL_Id, nCL_Ich, nCL_SoC_DoD
+from batterydeg import static_degradation, DegradationModel
 from quantile_scenarios import QuantileScenarioGenerator
 
 
@@ -103,19 +103,21 @@ class TestDegradationPerformance:
         assert per_call_us < 100, f"Degradation calculation too slow: {per_call_us:.2f}μs"
 
     def test_nCL_functions_precomputed(self):
-        """Verify that nCL functions use precomputed denominators."""
-        # Test that functions return consistent results
-        result1 = nCL_Id(0.3)
-        result2 = nCL_Id(0.3)
+        """Verify that `DegradationModel` nCL methods return consistent results."""
+        model = DegradationModel()
+
+        # Test that methods return consistent results
+        result1 = model.nCL_Id(0.3)
+        result2 = model.nCL_Id(0.3)
         assert result1 == result2, "nCL_Id should return consistent results"
-        
-        result1 = nCL_Ich(0.15)
-        result2 = nCL_Ich(0.15)
+
+        result1 = model.nCL_Ich(0.15)
+        result2 = model.nCL_Ich(0.15)
         assert result1 == result2, "nCL_Ich should return consistent results"
-        
-        result1 = nCL_SoC_DoD(50.0, 80.0)
-        result2 = nCL_SoC_DoD(50.0, 80.0)
-        assert result1 == result2, "nCL_SoC_DoD should return consistent results"
+
+        result1 = model.nCL_SOCav_DOD(50.0, 80.0)
+        result2 = model.nCL_SOCav_DOD(50.0, 80.0)
+        assert result1 == result2, "nCL_SOCav_DOD should return consistent results"
 
 
 class TestQuantileScenarioPerformance:
@@ -165,80 +167,13 @@ class TestQuantileScenarioPerformance:
         assert 'export_price' in result
 
 
-class TestMRDPPerformance:
-    """Benchmark tests for MRDP (Multi-Resolution Dynamic Programming)."""
-    
-    @pytest.fixture
-    def mrdp_test_data(self):
-        """Create test data for MRDP benchmarks."""
-        from sdp_multires import (
-            clear_stage_cost_cache,
-            get_stage_cost_cache_stats,
-            vectorized_monte_carlo_stage_cost,
-            deterministic_stage_cost
-        )
-        
-        # Create synthetic forecasts
-        np.random.seed(42)
-        horizon = 48
-        forecasts = []
-        for t in range(horizon):
-            hour_of_day = (t * 0.5) % 24
-            solar_pattern = max(0, np.sin(np.pi * (hour_of_day - 6) / 12)) if 6 <= hour_of_day <= 18 else 0
-            load_pattern = 0.3 + 0.4 * (1 + np.sin(np.pi * (hour_of_day - 6) / 12))
-            
-            forecasts.append({
-                'SolarGen': max(0, solar_pattern * 8.0 + np.random.normal(0, 0.5)),
-                'HouseLoad': max(0.1, load_pattern * 5.0 + np.random.normal(0, 0.3)),
-                'ImportEnergyPrice': 0.15 + np.random.normal(0, 0.01),
-                'ExportEnergyPrice': 0.08 + np.random.normal(0, 0.005)
-            })
-        
-        return {
-            'forecasts': forecasts,
-            'clear_cache': clear_stage_cost_cache,
-            'get_stats': get_stage_cost_cache_stats,
-            'vectorized_mc': vectorized_monte_carlo_stage_cost,
-            'deterministic': deterministic_stage_cost
-        }
+# MRDP-related performance tests removed.
+# The legacy `sdp_multires.py` implementation was deprecated and removed.
+# MRDP functionality is now provided by `src/mrdp_algorithm.py`; dedicated MRDP tests
+# should be created or enabled in the test suite that target `mrdp_algorithm.MRDPSolver`.
 
-    def test_vectorized_monte_carlo_performance(self, mrdp_test_data):
-        """Benchmark vectorized Monte Carlo stage cost computation."""
-        unique_energies = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
-        n_samples = 1000
-        
-        np.random.seed(456)
-        sampled_solar = np.random.exponential(1.5, n_samples)
-        sampled_load = np.random.gamma(2.0, 1.0, n_samples)
-        sampled_imp = np.random.uniform(0.10, 0.20, n_samples)
-        sampled_exp = np.random.uniform(0.05, 0.10, n_samples)
-        
-        max_grid_energy = 15.0
-        degradation_cost = 0.01
-        
-        start = time.perf_counter()
-        mc_costs = mrdp_test_data['vectorized_mc'](
-            unique_energies, sampled_solar, sampled_load, sampled_imp, sampled_exp,
-            max_grid_energy, degradation_cost
-        )
-        mc_time = time.perf_counter() - start
-        
-        start = time.perf_counter()
-        det_costs = mrdp_test_data['deterministic'](
-            unique_energies,
-            np.mean(sampled_solar), np.mean(sampled_load),
-            np.mean(sampled_imp), np.mean(sampled_exp),
-            max_grid_energy, degradation_cost
-        )
-        det_time = time.perf_counter() - start
-        
-        print(f"\nMonte Carlo vs Deterministic stage cost:")
-        print(f"  Vectorized MC time: {mc_time*1e6:.2f}μs")
-        print(f"  Deterministic time: {det_time*1e6:.2f}μs")
-        
-        # Both should be fast
-        assert mc_time < 0.1, f"Vectorized MC too slow: {mc_time:.4f}s"
-        assert det_time < 0.01, f"Deterministic too slow: {det_time:.4f}s"
+# NOTE: If you want me to add MRDP-specific benchmarks for `mrdp_algorithm.py`, I can
+# add a new `TestMRDPPerformance` class that imports and exercises those APIs.
 
 
 # Summary benchmark that can be run standalone

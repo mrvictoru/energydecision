@@ -70,7 +70,7 @@ class SolarBatteryEnv(gym.Env):
         self.max_battery_flow = max_battery_flow
         self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
-        self.degradation_cost = battery_life_cost
+        self.battery_life_cost = battery_life_cost
         self.base_deg_DoD = base_deg_DoD
         # Automatically determine step_duration from the DataFrame's 'Time' column
         # Assumes 'Time' is in a format compatible with numpy.datetime64 or pandas.Timestamp
@@ -460,7 +460,7 @@ class SolarBatteryEnv(gym.Env):
         # Ensure stored energy respects faded capacity
         self.battery_level = min(new_battery_level, self.battery_capacity)
 
-        current_step_deg_cost = step_degradation * self.degradation_cost
+        current_step_deg_cost = step_degradation * self.battery_life_cost
 
         # ----- Compute Rewards (electricity cost and grid violation)-----
         grid_reward = self._calculate_grid_reward(grid_energy, energy_price)
