@@ -164,15 +164,54 @@ class DegradationModel:
             * self.nCL_Ich(Ich)
             * self.nCL_SOCav_DOD(SOCav, DOD)
         )
-        return _ensure_positive(self.CL_nom * mult)
+        return self.CL_nom * mult
 
-    def degradation_per_cycle(self, *, T: float, Id: float, Ich: float, SOCav: float, DOD: float) -> float:
+    def degradation_per_cycle(
+        self,
+        *,
+        T: float,
+        Id: float,
+        Ich: float,
+        SOCav: float,
+        DOD: float,
+    ) -> float:
         """
-        Fractional degradation per cycle, consistent with Eq. (24) style usage:
-            D = 1 / CL
+        Robust, paper-faithful degradation per cycle.
+
+        - Enforces SOC–DOD feasibility
+        - Caps C-rates to physically meaningful bounds
+        - Rejects invalid cycle life instead of masking it
         """
-        CL = self.cycle_life(T=T, Id=Id, Ich=Ich, SOCav=SOCav, DOD=DOD)
-        return 1.0 / _ensure_positive(CL)
+
+        # ---- Clamp SOC/DOD to feasible region (Eqs. 14–17) ----
+        SOCav = float(np.clip(SOCav, 0.0, 100.0))
+        DOD = float(max(DOD, 0.0))
+        DOD = min(DOD, 2.0 * SOCav, 2.0 * (100.0 - SOCav))
+
+        if DOD <= 0.0:
+            return 0.0  # no cycle → no degradation
+
+        # ---- Cap C-rates (paper data valid up to ~4–5C) ----
+        Id = float(min(max(Id, 0.0), 5.0))
+        Ich = float(min(max(Ich, 0.0), 5.0))
+
+        # ---- Compute cycle life ----
+        CL = self.cycle_life(
+            T=T,
+            Id=Id,
+            Ich=Ich,
+            SOCav=SOCav,
+            DOD=DOD,
+        )
+
+        # ---- Explicit validation instead of masking ----
+        if not np.isfinite(CL) or CL <= 0.0:
+            raise ValueError(
+                f"Invalid cycle life detected: "
+                f"CL={CL}, SOCav={SOCav}, DOD={DOD}, Id={Id}, Ich={Ich}"
+            )
+
+        return 1.0 / CL
 
 
 def static_degradation(Id, Ich, SoC_avg, DoD):
