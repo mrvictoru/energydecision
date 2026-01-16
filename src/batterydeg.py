@@ -212,6 +212,49 @@ class DegradationModel:
             )
 
         return 1.0 / CL
+    
+    def debug_degradation_per_cycle(
+        self,
+        *,
+        T: float,
+        Id: float,
+        Ich: float,
+        SOCav: float,
+        DOD: float,
+    ) -> dict:
+        SOCav_c = float(np.clip(SOCav, 0.0, 100.0))
+        DOD_c = float(max(DOD, 0.0))
+        DOD_c = min(DOD_c, 2.0 * SOCav_c, 2.0 * (100.0 - SOCav_c))
+
+        Id_c = float(min(max(Id, 0.0), 5.0))
+        Ich_c = float(min(max(Ich, 0.0), 5.0))
+
+        nT = self.nCL_T(T)
+        nId = self.nCL_Id(Id_c)
+        nIch = self.nCL_Ich(Ich_c)
+        CL4 = self._CL4(DOD_c, SOCav_c)
+        nSOC = self.nCL_SOCav_DOD(SOCav_c, DOD_c)
+
+        mult = nT * nId * nIch * nSOC
+        CL = self.CL_nom * mult
+
+        return {
+            "SOCav_in": SOCav,
+            "DOD_in": DOD,
+            "SOCav": SOCav_c,
+            "DOD": DOD_c,
+            "Id": Id_c,
+            "Ich": Ich_c,
+            "nCL_T": nT,
+            "nCL_Id": nId,
+            "nCL_Ich": nIch,
+            "CL4_raw": CL4,
+            "nCL_SOCav_DOD": nSOC,
+            "mult": mult,
+            "CL": CL,
+            "degradation": None if CL <= 0 else 1.0 / CL,
+        }
+
 
 
 def static_degradation(Id, Ich, SoC_avg, DoD):

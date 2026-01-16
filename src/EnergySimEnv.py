@@ -13,6 +13,23 @@ VIOLATION_PENALTY = -8964
 MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR = 0.001  # 0.1% of battery_life_cost per step
 MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM = 0.0001  # 0.01% of battery_life_cost per step
 
+DEG_INCIDENT_FIELDS = [
+    "episode_id",
+    "step",
+    "SOCav",
+    "DOD",
+    "Id",
+    "Ich",
+    "nCL_T",
+    "nCL_Id",
+    "nCL_Ich",
+    "nCL_SOCav_DOD",
+    "CL4_raw",
+    "mult",
+    "CL",
+    "step_degradation",
+]
+
 class SolarBatteryEnv(gym.Env):
     """
     A gym environment for solar-battery-grid energy management.
@@ -94,6 +111,9 @@ class SolarBatteryEnv(gym.Env):
 
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
         self._rainflow_num_cycles = 0
+
+        # Empty list for debugging
+        self.deg_incidents = []
 
         # Initialize state of charge history
         self.soc_history = []
@@ -249,6 +269,8 @@ class SolarBatteryEnv(gym.Env):
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
         self._rainflow_num_cycles = 0
         
+        self.deg_incidents = []
+
         components = self._get_observation_components(current_step_actual_deg_cost=0.0)
         ctf, _, ndfv, _, nef = components
 
@@ -285,10 +307,6 @@ class SolarBatteryEnv(gym.Env):
         battery_flow_energy: float,
         battery_level: float,
         grid_energy: float,
-        energy_price: float,
-        grid_cost: float,
-        grid_reward: float = 0.0,
-        deg_cost: float = 0.0,
         energy_conservation_violation: bool = False,
         dynamic_updated: bool = False,
         last_dynamic_deg: float = 0.0,
@@ -300,17 +318,24 @@ class SolarBatteryEnv(gym.Env):
         new_cycles_in_step: int = 0,
         rainflow_cumulative_deg: float = 0.0,
         deg_error: str = "",
+        deg_SOCav: float = 0.0,
+        deg_DOD: float = 0.0,
+        deg_Id: float = 0.0,
+        deg_Ich: float = 0.0,
+        deg_nCL_T: float = 0.0,
+        deg_nCL_Id: float = 0.0,
+        deg_nCL_Ich: float = 0.0,
+        deg_nCL_SOCav_DOD: float = 0.0,
+        deg_CL4_raw: float = 0.0,
+        deg_mult: float = 0.0,
+        deg_CL: float = 0.0,
     ) -> dict:
         """Build a compact reward/info dict with key debugging signals about degradation and cycles."""
         return {
             "battery_flow_energy": float(battery_flow_energy),
             "battery_level": float(battery_level),
             "grid_energy": float(grid_energy),
-            "energy_price": float(energy_price),
-            "grid_cost": float(grid_cost),
-            "grid_reward": float(grid_reward),
             "dynamic_updated": bool(dynamic_updated),
-            "deg_cost": float(deg_cost),
             "last_dynamic_deg": float(last_dynamic_deg),
             "last_num_cycles": int(last_num_cycles),
             "new_cycles_in_step": int(new_cycles_in_step),
@@ -321,6 +346,17 @@ class SolarBatteryEnv(gym.Env):
             "capacity_kwh": float(capacity_kwh),
             "current_step": int(current_step),
             "deg_error": deg_error,
+            "deg_SOCav": float(deg_SOCav),
+            "deg_DOD": float(deg_DOD),
+            "deg_Id": float(deg_Id),
+            "deg_Ich": float(deg_Ich),
+            "deg_nCL_T": float(deg_nCL_T),
+            "deg_nCL_Id": float(deg_nCL_Id),
+            "deg_nCL_Ich": float(deg_nCL_Ich),
+            "deg_nCL_SOCav_DOD": float(deg_nCL_SOCav_DOD),
+            "deg_CL4_raw": float(deg_CL4_raw),
+            "deg_mult": float(deg_mult),
+            "deg_CL": float(deg_CL),
         }
 
     def _safe_degradation_per_cycle(self, Id: float, Ich: float, soc: float, DoD: float):
@@ -333,7 +369,7 @@ class SolarBatteryEnv(gym.Env):
                 SOCav=soc,
                 DOD=DoD,
             )
-            return float(value), ""
+            return float(value), None
         except ValueError as exc:
             return 0.0, str(exc)
 
@@ -392,10 +428,6 @@ class SolarBatteryEnv(gym.Env):
                 battery_flow_energy=battery_flow_energy,
                 battery_level=new_battery_level,
                 grid_energy=grid_energy,
-                energy_price=energy_price,
-                grid_cost=0.0,
-                grid_reward=VIOLATION_PENALTY,
-                deg_cost=0.0,
                 energy_conservation_violation=False,
                 last_dynamic_deg=self._rainflow_deg_cumulative,
                 last_num_cycles=self._rainflow_num_cycles,
@@ -428,10 +460,6 @@ class SolarBatteryEnv(gym.Env):
                 battery_flow_energy=battery_flow_energy,
                 battery_level=new_battery_level,
                 grid_energy=grid_energy,
-                energy_price=energy_price,
-                grid_cost=0.0,
-                grid_reward=VIOLATION_PENALTY,
-                deg_cost=0.0,
                 energy_conservation_violation=False,
                 last_dynamic_deg=self._rainflow_deg_cumulative,
                 last_num_cycles=self._rainflow_num_cycles,
@@ -467,25 +495,41 @@ class SolarBatteryEnv(gym.Env):
 
         # Final reward: trade-off energy cost vs degradation cost
         reward = grid_reward - current_step_deg_cost
+        # check if step degradation is abnormally large
 
-        # Build reward_info
+        if step_degradation > 1e-2:  # realistic explosion threshold
+            debug = self.degradation_model.debug_degradation_per_cycle(
+                T=self.degradation_temperature,
+                Id=Id_cycle,
+                Ich=Ich_cycle,
+                SOCav=SoC_avg,
+                DOD=DoD,
+            )
+
+            incident = {
+                "episode_id": None,  # fill later
+                "step": self.current_step,
+                "step_degradation": step_degradation,
+            }
+
+            for k in DEG_INCIDENT_FIELDS :
+                incident[k] = float(debug.get(k)) if debug.get(k) is not None else None
+
+            self.deg_incidents.append(incident)
+
         reward_info = self._make_reward_info(
             battery_flow_energy=battery_flow_energy,
             battery_level=self.battery_level,
             grid_energy=grid_energy,
-            energy_price=energy_price,
-            grid_cost=grid_energy * energy_price,
-            grid_reward=grid_reward,
-            deg_cost=current_step_deg_cost,
             energy_conservation_violation=False,
             last_dynamic_deg=self._rainflow_deg_cumulative,
             last_num_cycles=self._rainflow_num_cycles,
-            new_cycles_in_step=len(new_cycles),
-            rainflow_cumulative_deg=self._rainflow_deg_cumulative,
-            current_step=self.current_step,
             step_degradation=step_degradation,
             total_degradation=self.total_degradation,
             capacity_kwh=self.battery_capacity,
+            current_step=self.current_step,
+            new_cycles_in_step=len(new_cycles),
+            rainflow_cumulative_deg=self._rainflow_deg_cumulative
         )
 
         # ----- Advance Simulation Step -----
@@ -497,8 +541,10 @@ class SolarBatteryEnv(gym.Env):
         ctf, rdfv, ndfv, ref, nef = components
 
         primary_obs = np.concatenate((ctf, ndfv, nef))
+        info = reward_info
+        info["deg_incident"] = len(self.deg_incidents) > 0
 
-        return primary_obs, float(reward), terminated, truncated, reward_info
+        return primary_obs, float(reward), terminated, truncated, info
 
     def render(self, **kwargs):
         if self.render_mode == 'human':

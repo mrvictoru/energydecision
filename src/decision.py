@@ -17,6 +17,23 @@ from oracle_algorithm import OracleSolver
 import concurrent.futures
 from tqdm.notebook import tqdm
 
+DEG_INCIDENT_FIELDS = [
+    "episode_id",
+    "step",
+    "SOCav",
+    "DOD",
+    "Id",
+    "Ich",
+    "nCL_T",
+    "nCL_Id",
+    "nCL_Ich",
+    "nCL_SOCav_DOD",
+    "CL4_raw",
+    "mult",
+    "CL",
+    "step_degradation",
+]
+
 
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
@@ -277,7 +294,7 @@ class Agent:
             # Get forecasts for horizon
             forecasts = self._get_forecasts(current_step_env, self.sdp_solver.horizon)
             if not forecasts:
-                print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
+                #print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
                 return self.rule_based_action(obs)
             
             # Solve using self-contained SDP solver
@@ -288,7 +305,7 @@ class Agent:
             optimal_action_idx = policy_table[0, soc_idx]
             
             if optimal_action_idx == -1:
-                print(f"Warning: No optimal action found for SoC {current_soc_kwh:.2f}. Using zero action.")
+                #print(f"Warning: No optimal action found for SoC {current_soc_kwh:.2f}. Using zero action.")
                 action_value = 0.0008964
             else:
                 action_value = self.action_levels_norm[int(optimal_action_idx)]
@@ -305,7 +322,7 @@ class Agent:
             total_horizon = sum(int(spec.get('length', 0)) for spec in self.mrdp_solver.subhorizon_specs)
             forecasts = self._get_forecasts(current_step_env, total_horizon)
             if not forecasts:
-                print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
+                #print("Warning: Not enough forecast data for full horizon. Using rule-based action.")
                 return self.rule_based_action(obs)
             
             # Solve using self-contained MRDP solver
@@ -316,7 +333,7 @@ class Agent:
             optimal_action_idx = policy_table[0, soc_idx]
             
             if optimal_action_idx == -1:
-                print(f"Warning: No optimal action found for SoC {current_soc_kwh:.2f}. Using zero action.")
+                #print(f"Warning: No optimal action found for SoC {current_soc_kwh:.2f}. Using zero action.")
                 action_value = 0.0008964
             else:
                 action_value = self.action_levels_norm[int(optimal_action_idx)]
@@ -535,21 +552,39 @@ class Agent:
                 #pbar.close()
             print("Sim Complete")
 
-        return pl.DataFrame(logs)
+        episode_df = pl.DataFrame(logs)
+
+        incident_df = (
+            pl.DataFrame(self.env.deg_incidents)
+            if self.env.deg_incidents
+            else pl.DataFrame(schema={
+                "step": pl.Int64,
+                "step_degradation": pl.Float64,
+                **{k: pl.Float64 for k in DEG_INCIDENT_FIELDS},
+            })
+        )
+
+        return episode_df, incident_df
+
 
 
 def run_single(agent_class, env, agent_kwargs, render, display_progress=False):
     agent = agent_class(env, **agent_kwargs)
-    return agent.run_episode(render=render, display_progress=display_progress)
+    episode_df, incident_df = agent.run_episode(
+        render=render,
+        display_progress=display_progress
+    )
+    return episode_df, incident_df
 
 def run_single_with_logging(agent_class, env, agent_kwargs, render, idx, display_progress=False):
     import time
     print(f"[START] Episode {idx}")
     start = time.time()
-    result = run_single(agent_class, env, agent_kwargs, render, display_progress=display_progress)
+    episode_df, incident_df = run_single(agent_class, env, agent_kwargs, render, display_progress=display_progress)
     elapsed = time.time() - start
     print(f"[DONE]  Episode {idx} (Elapsed: {elapsed:.2f} sec)")
-    return result
+    return episode_df, incident_df
+
 
 # this can be used to run multiple episodes in parallel
 def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, max_workers=4, use_notebook_tqdm=False, display_indi_prog=False):
@@ -570,15 +605,24 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     else:
         from tqdm import tqdm as tqdm_bar
 
-    results = []
+    episode_logs = []
+    incident_logs = []
+
+    for f in futures:
+        ep_df, inc_df = f.result()
+        episode_logs.append(ep_df)
+        incident_logs.append(inc_df)
+
     print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx, display_indi_prog) for idx, env in enumerate(envs)]
         for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
-            results.append(f.result())
+            ep_df, inc_df = f.result()
+            episode_logs.append(ep_df)
+            incident_logs.append(inc_df)
     print(f"[INFO] All episodes complete.")
-    return results
+    return episode_logs, incident_logs
 
 # This function runs a trained SB3 model on a vectorized environment and collects episode trajectories.
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv

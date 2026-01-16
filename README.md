@@ -1,6 +1,6 @@
 # Energy Decision: Solar-Battery Control Benchmark
 
-This project provides a comprehensive framework for benchmarking control algorithms in residential solar-battery systems. It integrates a high-fidelity Gymnasium environment, diverse baselines (Rule-based, SDP, MRDP), Online Reinforcement Learning (SB3), and Offline Reinforcement Learning (Decision Transformer). The goal is to minimize energy costs while considering battery degradation.
+This project provides a comprehensive framework for benchmarking control algorithms in residential solar-battery systems. It integrates a high-fidelity Gymnasium environment, diverse baselines (Rule-based, SDP etc), Online Reinforcement Learning (SB3), and Offline Reinforcement Learning (Decision Transformer). The goal is to minimize energy costs while considering battery degradation.
 
 ## Status
 
@@ -16,9 +16,11 @@ This project provides a comprehensive framework for benchmarking control algorit
 *   ~~**Performance optimizations:** Batch queries, vectorize hot paths, precompute constants~~
 *   ~~**Test suite reorganization:** Consolidated tests into organized `tests/` directory~~
 *   ~~**Documentation consolidation:** Unified component documentation in COMPONENTS.md~~
-*   **Refactor Agent class:** Refactor Agent class to be less spaghetti
-*   **Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter
+*   ~~**Refactor Agent class:** Refactor Agent class to be less spaghetti~~
+*   ~~**Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter~~
 *   **Implement Grid like environment:** To build data pipeline and environment that can also simulate Grid market operation
+*   **Hyperparameter tuning for DT:** Use Optuna or other hyperparameter tuning library to find the best hyperparameters for Decision Transformer model
+*   **RL fine-tuning with DT:** Use the Decision Transformer model to initialize an online RL agent and fine-tune it in the environment, with GRPO or other RL algorithms
 
 ## Features
 
@@ -78,6 +80,9 @@ pip install -r torch_req.txt
 
 ```
 energydecision/
+├── ALGORITHM_GUIDE.md       # Algorithm guide and internal references
+├── COMPONENTS.md            # Comprehensive component documentation
+├── report.md                # Project report / notes
 ├── data/                    # Datasets and generated parquet logs
 │   ├── *.csv                # Solar home electricity data, household data, customer splits
 │   ├── *.parquet            # Episode logs for different algorithms
@@ -93,28 +98,35 @@ energydecision/
 │   ├── batterydeg.py                # Battery degradation models (static and dynamic)
 │   ├── helper.py                    # Data transformation, preparation, and evaluation utilities
 │   ├── decision_transformer.py      # Core Decision Transformer model class
-│   ├── transformer_training.py      # TrajectoryDataset class and train_decision_transformer function
+│   ├── transformer_training.py      # TrajectoryDataset and training helpers for DT
+│   ├── pretrain_decision_transformer.py  # CLI to pretrain Decision Transformer
 │   ├── sb3train.py                  # RL training utilities (Stable-Baselines3)
 │   ├── quantile_scenarios.py        # Quantile scenario generation for uncertainty modeling
-│   ├── mrdp_algorithm.py           # Multi-resolution dynamic programming (MRDP) implementation
-│   └── train_decision_transformer.py    # CLI for Decision Transformer training
+│   ├── mrdp_algorithm.py            # Multi-resolution dynamic programming (MRDP) implementation
+│   ├── sdp_algorithm.py             # Stochastic Dynamic Programming implementation
+│   ├── oracle_algorithm.py          # Oracle solver for benchmarking
+│   └── algorithm_helpers.py         # Helper utilities for algorithm implementations
 ├── tests/                   # Test suite
+│   ├── __init__.py
 │   ├── conftest.py              # Shared pytest fixtures
-│   ├── test_environment.py      # SolarBatteryEnv tests (9 tests)
-│   ├── test_decision_agent.py   # Agent/SDP/Oracle tests (8 tests)
-│   ├── test_performance.py      # Performance benchmarks (8 tests)
-│   └── test_quantile_scenarios.py   # Quantile scenario tests (21 tests)
-├── test_simrun.ipynb        # Main simulation notebook
-├── test_sb3train.ipynb      # Online RL training notebook
-├── test_eval.ipynb          # Evaluation notebook
-├── DemoEnv.ipynb            # Demo notebook for environment usage
-├── Demosb3.ipynb            # Demo notebook for Stable-Baselines3 usage
-├── testrun.ipynb            # Example Jupyter notebook for running simulations
+│   ├── test_environment.py      # SolarBatteryEnv tests
+│   ├── test_decision_agent.py   # Agent/SDP/Oracle tests
+│   ├── test_performance.py      # Performance benchmarks
+│   ├── test_quantile_scenarios.py   # Quantile scenario tests
+│   ├── test_algorithm_classes.py
+│   └── test_refactoring.py
+├── notebooks/               # Useful example notebooks
+│   ├── DemoEnv.ipynb
+│   ├── Demosb3.ipynb
+│   ├── test_simrun.ipynb
+│   ├── test_sb3train.ipynb
+│   ├── test_eval.ipynb
+│   ├── test_grid_sim.ipynb
+│   └── testrun.ipynb
 ├── requirements.txt         # Python package requirements
 ├── torch_req.txt            # PyTorch-specific requirements
 ├── docker-compose.yml       # Docker Compose configuration
 ├── Dockerfile               # Dockerfile for building the environment
-├── COMPONENTS.md            # Comprehensive component documentation
 └── README.md                # Project documentation (this file)
 ```
 
