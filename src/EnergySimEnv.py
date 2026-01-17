@@ -317,18 +317,8 @@ class SolarBatteryEnv(gym.Env):
         current_step: int = 0,
         new_cycles_in_step: int = 0,
         rainflow_cumulative_deg: float = 0.0,
-        deg_error: str = "",
-        deg_SOCav: float = 0.0,
-        deg_DOD: float = 0.0,
-        deg_Id: float = 0.0,
-        deg_Ich: float = 0.0,
-        deg_nCL_T: float = 0.0,
-        deg_nCL_Id: float = 0.0,
-        deg_nCL_Ich: float = 0.0,
-        deg_nCL_SOCav_DOD: float = 0.0,
-        deg_CL4_raw: float = 0.0,
-        deg_mult: float = 0.0,
-        deg_CL: float = 0.0,
+        deg_incident: bool = False,
+        deg_error: str = ""
     ) -> dict:
         """Build a compact reward/info dict with key debugging signals about degradation and cycles."""
         return {
@@ -345,18 +335,8 @@ class SolarBatteryEnv(gym.Env):
             "total_degradation": float(total_degradation),
             "capacity_kwh": float(capacity_kwh),
             "current_step": int(current_step),
-            "deg_error": deg_error,
-            "deg_SOCav": float(deg_SOCav),
-            "deg_DOD": float(deg_DOD),
-            "deg_Id": float(deg_Id),
-            "deg_Ich": float(deg_Ich),
-            "deg_nCL_T": float(deg_nCL_T),
-            "deg_nCL_Id": float(deg_nCL_Id),
-            "deg_nCL_Ich": float(deg_nCL_Ich),
-            "deg_nCL_SOCav_DOD": float(deg_nCL_SOCav_DOD),
-            "deg_CL4_raw": float(deg_CL4_raw),
-            "deg_mult": float(deg_mult),
-            "deg_CL": float(deg_CL),
+            "deg_incident": deg_incident,
+            "deg_error": deg_error
         }
 
     def _safe_degradation_per_cycle(self, Id: float, Ich: float, soc: float, DoD: float):
@@ -529,7 +509,8 @@ class SolarBatteryEnv(gym.Env):
             capacity_kwh=self.battery_capacity,
             current_step=self.current_step,
             new_cycles_in_step=len(new_cycles),
-            rainflow_cumulative_deg=self._rainflow_deg_cumulative
+            rainflow_cumulative_deg=self._rainflow_deg_cumulative,
+            deg_incident=len(self.deg_incidents) > 0
         )
 
         # ----- Advance Simulation Step -----
@@ -541,10 +522,8 @@ class SolarBatteryEnv(gym.Env):
         ctf, rdfv, ndfv, ref, nef = components
 
         primary_obs = np.concatenate((ctf, ndfv, nef))
-        info = reward_info
-        info["deg_incident"] = len(self.deg_incidents) > 0
 
-        return primary_obs, float(reward), terminated, truncated, info
+        return primary_obs, float(reward), terminated, truncated, reward_info
 
     def render(self, **kwargs):
         if self.render_mode == 'human':

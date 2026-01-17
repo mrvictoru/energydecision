@@ -130,25 +130,42 @@ class DegradationModel:
     # Normalized cycle life multipliers nCL (paper framework Eq. 3)
     # -------------------------------------------------------------------------
     def nCL_T(self, T: float) -> float:
-        return _ensure_positive(self._CL_T(float(T))) / self._den_T
+        raw = self._CL_T(float(T))
+        if raw <= 0.0 or not np.isfinite(raw):
+            # temperature outside fit → treat as no degradation change
+            return 1.0
+        return raw / self._den_T
 
     def nCL_Id(self, Id: float) -> float:
-        return _ensure_positive(self._CL_Id(float(Id))) / self._den_Id
+        raw = self._CL_Id(float(Id))
+        if raw <= 0.0 or not np.isfinite(raw):
+            return 1.0
+        return raw / self._den_Id
 
     def nCL_Ich(self, Ich: float) -> float:
-        return _ensure_positive(self._CL_Ich(float(Ich))) / self._den_Ich
+        raw = self._CL_Ich(float(Ich))
+        if raw <= 0.0 or not np.isfinite(raw):
+            return 1.0
+        return raw / self._den_Ich
 
     def nCL_SOCav_DOD(self, SOCav: float, DOD: float) -> float:
         SOCav = float(SOCav)
         DOD = float(DOD)
 
         if self.enforce_feasible_region and (not _in_feasible_soc_dod_region(SOCav, DOD)):
+            # outside feasible region → clamp in degradation_per_cycle, not here
             raise ValueError(
                 f"Infeasible SOCav/DOD combination: SOCav={SOCav}, DOD={DOD}. "
                 "Feasible region requires DOD <= 2*SOCav and DOD <= 2*(100 - SOCav)."
             )
 
-        return _ensure_positive(self._CL4(DOD, SOCav)) / self._den_soc_dod
+        CL4_raw = self._CL4(DOD, SOCav)
+
+        # Key change: negative or tiny CL4 means "model not reliable here" → no extra wear
+        if (not np.isfinite(CL4_raw)) or CL4_raw <= 0.0:
+            return 1.0
+
+        return CL4_raw / self._den_soc_dod
 
     # -------------------------------------------------------------------------
     # Combined cycle life + degradation

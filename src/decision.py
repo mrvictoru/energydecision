@@ -608,11 +608,6 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     episode_logs = []
     incident_logs = []
 
-    for f in futures:
-        ep_df, inc_df = f.result()
-        episode_logs.append(ep_df)
-        incident_logs.append(inc_df)
-
     print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
