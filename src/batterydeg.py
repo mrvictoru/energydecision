@@ -33,10 +33,18 @@ DoD_nom = 90.0  # Nominal depth of discharge (%)
 # =============================================================================
 
 
-def _ensure_positive(x: float, eps: float = 1e-12) -> float:
-    if not np.isfinite(x) or x <= eps:
-        return eps
-    return x
+def _safe_den(value: float, name: str) -> float:
+    """
+    Safe denominator guard for RL environments.
+    If the nominal denominator is invalid, fall back to 1.0 (neutral multiplier).
+    This avoids exceptions and avoids catastrophic degradation.
+    """
+    if not np.isfinite(value) or value <= 0.0:
+        # Log once if you want, but do NOT raise
+        print(f"[WARN] Invalid denominator {name}={value}, using 1.0 fallback")
+        return 1.0
+    return value
+
 
 
 def _in_feasible_soc_dod_region(soc_av: float, dod: float) -> bool:
@@ -94,10 +102,11 @@ class DegradationModel:
         self.enforce_feasible_region = bool(enforce_feasible_region)
 
         # Precompute denominators for normalization
-        self._den_T = _ensure_positive(self._CL_T(self.T_nom))
-        self._den_Id = _ensure_positive(self._CL_Id(self.Id_nom))
-        self._den_Ich = _ensure_positive(self._CL_Ich(self.Ich_nom))
-        self._den_soc_dod = _ensure_positive(self._CL4(self.DOD_nom, self.SOCav_nom))
+        self._den_T = _safe_den(self._CL_T(self.T_nom), "CL_T(T_nom)")
+        self._den_Id = _safe_den(self._CL_Id(self.Id_nom), "CL_Id(Id_nom)")
+        self._den_Ich = _safe_den(self._CL_Ich(self.Ich_nom), "CL_Ich(Ich_nom)")
+        self._den_soc_dod = _safe_den(self._CL4(self.DOD_nom, self.SOCav_nom), "CL4(DOD_nom, SOCav_nom)")
+
 
     # -------------------------------------------------------------------------
     # Individual CL factor models (unnormalized), from the paper
