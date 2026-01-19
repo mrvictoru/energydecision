@@ -214,12 +214,12 @@ class DegradationModel:
         DOD = float(max(DOD, 0.0))
         DOD = min(DOD, 2.0 * SOCav, 2.0 * (100.0 - SOCav))
 
-        if DOD <= 0.0:
-            return 0.0  # no cycle → no degradation
+        if DOD <= 3.0 or (DOD < 5.0 and SOCav > 96.0):
+            return 0.0  # no cycle / known instability at high SOC → no degradation 
 
-        # ---- Cap C-rates (paper data valid up to ~4–5C) ----
-        Id = float(min(max(Id, 0.0), 5.0))
-        Ich = float(min(max(Ich, 0.0), 5.0))
+        # ---- Cap C-rates (paper data valid up to ~3C) ----
+        Id = float(min(max(Id, 0.0), 3.0))
+        Ich = float(min(max(Ich, 0.0), 3.0))
 
         # ---- Compute cycle life ----
         CL = self.cycle_life(
@@ -294,7 +294,7 @@ def static_degradation(Id, Ich, SoC_avg, DoD):
 
 
 class RainflowCounter:
-    def __init__(self, step_duration=1.0, eps=1e-6):
+    def __init__(self, step_duration=1.0, eps=0.1, max_c_rate=1.0): # eps in percent SoC, smaller than 0.1% is ignored
         self.step_duration = step_duration
         self.eps = eps          # tolerance for turning point detection
 
@@ -302,6 +302,7 @@ class RainflowCounter:
         self.tp_buffer = []      # last few SOC points for turning point detection
         self.last_soc = None     # for plateau handling
         self.index = 0           # global index counter
+        self.max_c_rate = max_c_rate
 
     def _maybe_add_turning_point(self, idx, soc):
         """
@@ -371,9 +372,13 @@ class RainflowCounter:
                         else:
                             if soc2 > soc1:
                                 Ich_cycle = (soc2 - soc1) / delta_time
+                                # conduct clamping based on max C-rate
+                                Ich_cycle = min(Ich_cycle, self.max_c_rate)
                                 Id_cycle = 0.0
                             else:
                                 Id_cycle = (soc1 - soc2) / delta_time
+                                # conduct clamping based on max C-rate
+                                Id_cycle = min(Id_cycle, self.max_c_rate)
                                 Ich_cycle = 0.0
 
                         closed_cycles.append((SoC_avg, DoD, Id_cycle, Ich_cycle))

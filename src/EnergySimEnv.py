@@ -10,8 +10,8 @@ from batterydeg import DegradationModel, RainflowCounter
 
 # global variables
 VIOLATION_PENALTY = -8964
-MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR = 0.001  # 0.1% of battery_life_cost per step
-MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM = 0.0001  # 0.01% of battery_life_cost per step
+MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR = 0.01  # 1% of battery_life_cost per step
+MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM = 0.001  # 0.1% of battery_life_cost per step
 
 DEG_INCIDENT_FIELDS = [
     "episode_id",
@@ -109,7 +109,7 @@ class SolarBatteryEnv(gym.Env):
         self.degradation_temperature = float(degradation_temperature)
         self.degradation_model = DegradationModel()
 
-        self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
+        self._rainflow_counter = RainflowCounter(step_duration=self.step_duration, max_c_rate=self.max_battery_flow / self.initial_battery_capacity)
         self._rainflow_num_cycles = 0
 
         # Empty list for debugging
@@ -288,12 +288,6 @@ class SolarBatteryEnv(gym.Env):
         header.extend([f"{prefix}{col}" for col in self.ordered_df_cols_for_obs])
         header.extend([f'{prefix}BatteryLevel', f'{prefix}BatteryDegCost'])
         return header
-
-    def _sanitize_deg_frac(self, frac: float) -> float:
-        """Clamp battery degradation fractions to sane, non-negative bounds."""
-        if not np.isfinite(frac) or frac <= 0.0:
-            return 0.0
-        return float(min(frac, MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR))
 
     def _calculate_grid_reward(self, grid_energy, energy_price):
         # If grid energy exceeds limits, add a violation penalty.
@@ -477,7 +471,7 @@ class SolarBatteryEnv(gym.Env):
         reward = grid_reward - current_step_deg_cost
         # check if step degradation is abnormally large
 
-        if step_degradation > 1e-2:  # realistic explosion threshold
+        if step_degradation > 0.05:  # realistic explosion threshold
             debug = self.degradation_model.debug_degradation_per_cycle(
                 T=self.degradation_temperature,
                 Id=Id_cycle,
@@ -488,12 +482,12 @@ class SolarBatteryEnv(gym.Env):
 
             incident = {
                 "episode_id": None,  # fill later
-                "step": self.current_step,
-                "step_degradation": step_degradation,
             }
 
             for k in DEG_INCIDENT_FIELDS :
                 incident[k] = float(debug.get(k)) if debug.get(k) is not None else None
+            incident["step"] = self.current_step
+            incident["step_degradation"] = float(step_degradation)
 
             self.deg_incidents.append(incident)
 
