@@ -19,6 +19,9 @@ Building on the existing observation space from `SolarBatteryEnv`, add the follo
 ```python
 # Energy Market
 - current_energy_price       # Current Regional Reference Price ($/MWh), normalized [0, 1]
+                             # Note: Energy prices can go negative in renewable-heavy grids.
+                             # Consider clipping to [min_observed, max_observed] before normalization
+                             # or using symmetric range [-1, 1] to handle negative prices
 - forecast_energy_price_1h   # Forecast price 1 hour ahead, normalized [0, 1]
 - forecast_energy_price_4h   # Forecast price 4 hours ahead, normalized [0, 1]
 - regional_demand            # Total regional demand (MW), normalized [0, 1]

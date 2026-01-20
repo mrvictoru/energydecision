@@ -43,6 +43,33 @@ FUEL_TYPES = [
     "gas_ccgt", "gas_ocgt", "gas_recip", "hydro", "battery_discharging"
 ]
 
+# Synthetic data generation constants (for demonstration purposes)
+# In production, replace with actual AEMO data from NEMWEB
+ENERGY_PRICE_BASE = 50.0  # Base energy price ($/MWh)
+ENERGY_PRICE_VARIANCE = 0.3  # Price variance factor
+DEMAND_BASE = 5000.0  # Base demand (MW)
+DEMAND_PEAK_FACTOR = 2000.0  # Peak demand increase (MW)
+DEMAND_VARIANCE = 500.0  # Demand variance (MW)
+
+FCAS_REG_BASE_PRICE = 10.0  # Base FCAS regulation price ($/MW/h)
+FCAS_CONT_BASE_PRICE = 5.0  # Base FCAS contingency price ($/MW/h)
+FCAS_PRICE_VARIANCE = 0.5  # FCAS price variance factor
+FCAS_ENABLEMENT_BASE = 50.0  # Base FCAS enablement (MW)
+FCAS_ENABLEMENT_VARIANCE = 30.0  # FCAS enablement variance (MW)
+
+SOLAR_GEN_PEAK = 1000.0  # Peak solar generation (MW)
+SOLAR_GEN_RELIABILITY_MIN = 80.0  # Min reliability factor (%)
+SOLAR_GEN_RELIABILITY_RANGE = 20.0  # Reliability range (%)
+WIND_GEN_BASE = 300.0  # Base wind generation (MW)
+WIND_GEN_VARIANCE = 200.0  # Wind generation variance (MW)
+COAL_GEN_BASE = 2000.0  # Base coal generation (MW)
+COAL_GEN_VARIANCE = 100.0  # Coal generation variance (MW)
+GAS_GEN_BASE = 500.0  # Base gas generation (MW)
+GAS_GEN_PEAK_FACTOR = 300.0  # Gas peak factor (MW)
+HYDRO_GEN_BASE = 400.0  # Base hydro generation (MW)
+HYDRO_GEN_VARIANCE = 200.0  # Hydro generation variance (MW)
+BATTERY_GEN_PEAK = 100.0  # Peak battery discharge (MW)
+
 
 def get_cache_dir(base_dir: str = "data/aemo") -> Path:
     """
@@ -114,7 +141,6 @@ def fetch_aemo_dispatch_price(
     
     # Create synthetic but realistic price data
     # Prices typically range from $30-300/MWh with peaks during high demand
-    base_price = 50.0
     hour_factor = [
         1.0 if 0 <= h < 6 else  # Low prices overnight
         1.2 if 6 <= h < 9 else  # Morning ramp
@@ -124,8 +150,8 @@ def fetch_aemo_dispatch_price(
         for h in date_range.hour
     ]
     
-    prices = [float(base_price * hf * (1 + 0.3 * (hash(str(dt)) % 100) / 100)) for dt, hf in zip(date_range, hour_factor)]
-    demand = [float(5000 + 2000 * hf + 500 * (hash(str(dt)) % 100) / 100) for dt, hf in zip(date_range, hour_factor)]
+    prices = [float(ENERGY_PRICE_BASE * hf * (1 + ENERGY_PRICE_VARIANCE * (hash(str(dt)) % 100) / 100)) for dt, hf in zip(date_range, hour_factor)]
+    demand = [float(DEMAND_BASE + DEMAND_PEAK_FACTOR * hf + DEMAND_VARIANCE * (hash(str(dt)) % 100) / 100) for dt, hf in zip(date_range, hour_factor)]
     
     df = pl.DataFrame({
         "SETTLEMENTDATE": date_range.tolist(),
@@ -197,10 +223,10 @@ def fetch_aemo_fcas_price(
     # FCAS prices are typically lower than energy prices
     # Regulation services: $5-50/MW/h
     # Contingency services: $2-30/MW/h
-    base_price = 10.0 if "REG" in service else 5.0
+    base_price = FCAS_REG_BASE_PRICE if "REG" in service else FCAS_CONT_BASE_PRICE
     
-    prices = [float(base_price * (1 + 0.5 * (hash(str(dt) + service) % 100) / 100)) for dt in date_range]
-    enablement = [float(50 + 30 * (hash(str(dt) + service) % 100) / 100) for dt in date_range]
+    prices = [float(base_price * (1 + FCAS_PRICE_VARIANCE * (hash(str(dt) + service) % 100) / 100)) for dt in date_range]
+    enablement = [float(FCAS_ENABLEMENT_BASE + FCAS_ENABLEMENT_VARIANCE * (hash(str(dt) + service) % 100) / 100) for dt in date_range]
     
     df = pl.DataFrame({
         "SETTLEMENTDATE": date_range.tolist(),
@@ -280,37 +306,37 @@ def fetch_aemo_generation_by_fuel(
         if fuel_type == "solar":
             # Solar follows sun pattern: 0 at night, peak midday
             generation = [
-                float(max(0, 1000 * (1 - abs(12 - h) / 12) * (hash(str(dt)) % 20 + 80) / 100))
+                float(max(0, SOLAR_GEN_PEAK * (1 - abs(12 - h) / 12) * (hash(str(dt)) % SOLAR_GEN_RELIABILITY_RANGE + SOLAR_GEN_RELIABILITY_MIN) / 100))
                 if 6 <= h <= 18 else 0.0
                 for dt, h in zip(date_range, date_range.hour)
             ]
         elif fuel_type == "wind":
             # Wind is more variable and can occur anytime
             generation = [
-                float(300 + 200 * (hash(str(dt) + "wind") % 100) / 100)
+                float(WIND_GEN_BASE + WIND_GEN_VARIANCE * (hash(str(dt) + "wind") % 100) / 100)
                 for dt in date_range
             ]
         elif fuel_type in ["coal_black", "coal_brown"]:
             # Coal baseload: relatively constant
             generation = [
-                float(2000 + 100 * (hash(str(dt) + fuel_type) % 100) / 100)
+                float(COAL_GEN_BASE + COAL_GEN_VARIANCE * (hash(str(dt) + fuel_type) % 100) / 100)
                 for dt in date_range
             ]
         elif fuel_type.startswith("gas"):
             # Gas: follows demand pattern
             generation = [
-                float(500 + 300 * (1 if 9 <= h <= 21 else 0.5) * (hash(str(dt) + fuel_type) % 100) / 100)
+                float(GAS_GEN_BASE + GAS_GEN_PEAK_FACTOR * (1 if 9 <= h <= 21 else 0.5) * (hash(str(dt) + fuel_type) % 100) / 100)
                 for dt, h in zip(date_range, date_range.hour)
             ]
         elif fuel_type == "hydro":
             generation = [
-                float(400 + 200 * (hash(str(dt) + "hydro") % 100) / 100)
+                float(HYDRO_GEN_BASE + HYDRO_GEN_VARIANCE * (hash(str(dt) + "hydro") % 100) / 100)
                 for dt in date_range
             ]
         elif fuel_type == "battery_discharging":
             # Batteries discharge during peak times
             generation = [
-                float(max(0, 100 * (1 if 17 <= h <= 21 else 0) * (hash(str(dt)) % 100) / 100))
+                float(max(0, BATTERY_GEN_PEAK * (1 if 17 <= h <= 21 else 0) * (hash(str(dt)) % 100) / 100))
                 for dt, h in zip(date_range, date_range.hour)
             ]
         else:
