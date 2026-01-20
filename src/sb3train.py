@@ -166,6 +166,19 @@ def chunked(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i+n]
 
+def get_chunk_size(total_items, max_envs):
+    """Return the largest divisor of total_items that is <= max_envs.
+
+    This ensures we can split the dataset into equal-size chunks so
+    `model.set_env` won't complain about mismatched environment counts.
+    """
+    if total_items <= 0:
+        raise ValueError("total_items must be positive")
+    for i in range(min(max_envs, total_items), 0, -1):
+        if total_items % i == 0:
+            return i
+    return 1
+
 def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model=False):
     """
     Trains a reinforcement learning model using Stable Baselines3, with hyperparameter tuning via Optuna,
@@ -188,10 +201,11 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
     tuning_vec = None
     if is_env_list:
         print("Detected list of environment functions; using chunked training.")
-        num_chunks = math.ceil(len(env_fns) / MAX_ENVS)
+        chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
+        num_chunks = math.ceil(len(env_fns) / chunk_size)
         per_chunk_timesteps = math.ceil(total_timesteps / max(1, num_chunks))
         # use a small DummyVecEnv (first chunk) for hyperparameter tuning
-        tuning_chunk = list(next(chunked(env_fns, MAX_ENVS)))
+        tuning_chunk = list(next(chunked(env_fns, chunk_size)))
         tuning_vec = DummyVecEnv(tuning_chunk)
         tune_env_for_opt = tuning_vec
     else:
@@ -258,7 +272,8 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         # If we were given a list of env_fns, create the first chunk SubprocVecEnv to construct the model.
         initial_vec = None
         if is_env_list:
-            first_chunk_fns = list(next(chunked(env_fns, MAX_ENVS)))
+            chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
+            first_chunk_fns = list(next(chunked(env_fns, chunk_size)))
             initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
             model_args["env"] = initial_vec
         else:
@@ -271,7 +286,8 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
     else:
         # default model construction
         if is_env_list:
-            first_chunk_fns = list(next(chunked(env_fns, MAX_ENVS)))
+            chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
+            first_chunk_fns = list(next(chunked(env_fns, chunk_size)))
             initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
             model = model_class("MlpPolicy", initial_vec, verbose=0)
         else:
@@ -293,7 +309,8 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
     if is_env_list:
         remaining = total_timesteps
         # If we created an initial_vec above, use it as the first chunk's env
-        chunks_iter = chunked(env_fns, MAX_ENVS)
+        chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
+        chunks_iter = chunked(env_fns, chunk_size)
         # reuse the already-created initial_vec for the first chunk
         first_chunk_fns = list(next(chunks_iter))
         current_vec = None
