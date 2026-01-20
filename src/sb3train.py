@@ -1,8 +1,10 @@
 import optuna
 import inspect
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO, A2C, DDPG, SAC, TD3
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
@@ -157,31 +159,47 @@ def ddpg_model_kwargs_fn(trial, vec_env=None):
         action_noise=action_noise
     )
 
+MAX_ENVS = 64                 # tune to your RAM/CPU
+EPOCHS_PER_CHUNK = 2          # tune
 
-def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model = False):
+def chunked(lst, n):
+    for i in range(0, len(lst), n):
+        yield lst[i:i+n]
+
+def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model=False):
     """
     Trains a reinforcement learning model using Stable Baselines3, with hyperparameter tuning via Optuna,
     and evaluates its performance before and after training.
-    Args:
-        model_class (type): The RL algorithm class to use (must be one of [PPO, A2C, DDPG, SAC, TD3]).
-        vec_env (VecEnv): The vectorized environment for training.
-        eval_env_fn (callable): A function that returns a new evaluation environment instance.
-        test_timesteps (int, optional): Number of timesteps for each Optuna trial during hyperparameter tuning. Default is 40,000.
-        total_timesteps (int, optional): Total number of timesteps to train the final model. Default is 4,000,000.
-        n_trials (int, optional): Number of Optuna trials for hyperparameter optimization. Default is 10.
-        n_jobs (int, optional): Number of parallel jobs for Optuna optimization. Default is 10.
-    Returns:
-        model: The trained RL model instance.
-        eval_result (dict): Dictionary containing mean and standard deviation of rewards before and after training.
-    Raises:
-        ValueError: If model_class is not one of the supported algorithms or eval_env_fn is not callable.
-    Note:
-        - The function performs hyperparameter tuning using Optuna.
-        - It plots the model before and after training and plots the results.
+
+    Supports two modes for `vec_env`:
+      - A VecEnv instance (existing behavior)
+      - A list/tuple of environment factory functions (callables that return envs)
+        In the latter case the function will train in chunks of at most `MAX_ENVS` envs to avoid
+        exhausting system resources (CPU/RAM). Total timesteps are approximately evenly
+        distributed across chunks.
     """
     eval_result = {}
+
+    # Determine if we were given a list of env factory functions
+    is_env_list = isinstance(vec_env, (list, tuple)) and len(vec_env) > 0 and callable(vec_env[0])
+    env_fns = list(vec_env) if is_env_list else None
+
+    # If we have a list of envs, prepare a small dummy vec env for tuning
+    tuning_vec = None
+    if is_env_list:
+        print("Detected list of environment functions; using chunked training.")
+        num_chunks = math.ceil(len(env_fns) / MAX_ENVS)
+        per_chunk_timesteps = math.ceil(total_timesteps / max(1, num_chunks))
+        # use a small DummyVecEnv (first chunk) for hyperparameter tuning
+        tuning_chunk = list(next(chunked(env_fns, MAX_ENVS)))
+        tuning_vec = DummyVecEnv(tuning_chunk)
+        tune_env_for_opt = tuning_vec
+    else:
+        print("Using provided vectorized environment for training.")
+        tune_env_for_opt = vec_env
+
     if default_model is False:
-        # Check if model_class is one of the supported algorithms
+        # Validate algorithm selection
         if model_class not in [PPO, A2C, DDPG, SAC, TD3]:
             raise ValueError("model_class must be one of [PPO, A2C, DDPG, SAC, TD3]")
         if model_class == PPO:
@@ -194,73 +212,138 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
             model_kwargs_fn = sac_model_kwargs_fn
         elif model_class == TD3:
             model_kwargs_fn = td3_model_kwargs_fn
-        else:
-            raise ValueError("model_class must be one of [PPO, A2C, DDPG, SAC, TD3]")
         if not callable(eval_env_fn):
             raise ValueError("eval_env_fn must be a callable function that returns a new environment instance.")
-        
-        
-        
-        print("Tuning hyperparameters for class {}...".format(model_class.__name__))
+
+        print(f"Tuning hyperparameters for class {model_class.__name__}...")
         study = optuna.create_study(direction="maximize")
         study.optimize(
             lambda trial: optimize_sb3(
-                trial, 
-                model_class, 
-                vec_env, 
-                eval_env_fn, 
+                trial,
+                model_class,
+                tune_env_for_opt,
+                eval_env_fn,
                 model_kwargs_fn,
-                total_timesteps=test_timesteps
-            ), n_trials=n_trials, n_jobs=n_jobs
+                total_timesteps=test_timesteps,
+            ),
+            n_trials=n_trials,
+            n_jobs=n_jobs,
         )
         best_params = study.best_trial.params
-        print("Best trial for class {}:".format(model_class.__name__))
+        print(f"Best trial for class {model_class.__name__}:")
         print(best_params)
 
         if best_params["net_arch"] == "small":
             net_arch = [64, 64]
-        elif best_params["net_arch"] == "medium":   
+        elif best_params["net_arch"] == "medium":
             net_arch = [256, 256]
         else:
-            net_arch = [400, 300]   
-        
-        # Build the argument dictionary
+            net_arch = [400, 300]
+
+        # Build model argument dict (env will be set appropriately below)
         model_args = {
             "policy": "MlpPolicy",
-            "env": vec_env,
+            "env": None,  # placeholder
             "verbose": 0,
             "learning_rate": best_params["learning_rate"],
             "gamma": best_params["gamma"],
             "policy_kwargs": dict(net_arch=net_arch),
-            "device": "cpu" if model_class != DDPG else "cuda"
+            "device": "cpu" if model_class != DDPG else "cuda",
         }
-        # Optionally add arguments if present in best_params
         optional_args = ["clip_range", "ent_coef", "vf_coef", "tau", "batch_size", "action_noise"]
         for arg in optional_args:
             if arg in best_params:
                 model_args[arg] = best_params[arg]
 
-        # Filter out arguments not in the model's __init__ signature
+        # If we were given a list of env_fns, create the first chunk SubprocVecEnv to construct the model.
+        initial_vec = None
+        if is_env_list:
+            first_chunk_fns = list(next(chunked(env_fns, MAX_ENVS)))
+            initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
+            model_args["env"] = initial_vec
+        else:
+            model_args["env"] = vec_env
+
+        # Filter and construct the model
         valid_args = inspect.signature(model_class.__init__).parameters
         filtered_args = {k: v for k, v in model_args.items() if k in valid_args}
-
         model = model_class(**filtered_args)
     else:
-        # Use default model parameters
-        model = model_class("MlpPolicy", vec_env, verbose=0)
+        # default model construction
+        if is_env_list:
+            first_chunk_fns = list(next(chunked(env_fns, MAX_ENVS)))
+            initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
+            model = model_class("MlpPolicy", initial_vec, verbose=0)
+        else:
+            model = model_class("MlpPolicy", vec_env, verbose=0)
 
-    # evaluate the model before training
+    # Close the small tuning vec if we created one
+    if tuning_vec is not None:
+        try:
+            tuning_vec.close()
+        except Exception:
+            pass
+
+    # Evaluate pre-training
     mean_reward, std_reward = evaluate_policy(model, Monitor(eval_env_fn()), n_eval_episodes=5, deterministic=False)
-    eval_result['Pre_training']={'mean_reward': mean_reward, 'std_reward': std_reward}
-    
-    # Train the model with the best hyperparameters
+    eval_result["Pre_training"] = {"mean_reward": mean_reward, "std_reward": std_reward}
+
+    # Train the model, honoring chunking if necessary
     print("Training the model with the best hyperparameters...")
-    model.learn(total_timesteps=total_timesteps)
+    if is_env_list:
+        remaining = total_timesteps
+        # If we created an initial_vec above, use it as the first chunk's env
+        chunks_iter = chunked(env_fns, MAX_ENVS)
+        # reuse the already-created initial_vec for the first chunk
+        first_chunk_fns = list(next(chunks_iter))
+        current_vec = None
+        if 'initial_vec' in locals() and initial_vec is not None:
+            current_vec = initial_vec
+        else:
+            current_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
+
+        # train on the first chunk
+        chunk_steps = min(remaining, per_chunk_timesteps)
+        num_envs = current_vec.num_envs if hasattr(current_vec, 'num_envs') else len(first_chunk_fns)
+        print(f"Chunk 1: envs={num_envs}, steps={chunk_steps}")
+        model.learn(total_timesteps=chunk_steps, reset_num_timesteps=False)
+        remaining -= chunk_steps
+
+        chunk_idx = 2
+        # iterate remaining chunks
+        for chunk_fns in chunks_iter:
+            if remaining <= 0:
+                break
+            new_vec = SubprocVecEnv(list(chunk_fns), start_method="forkserver")
+            num_envs = new_vec.num_envs if hasattr(new_vec, 'num_envs') else len(chunk_fns)
+            chunk_steps = min(remaining, per_chunk_timesteps)
+            print(f"Chunk {chunk_idx}: envs={num_envs}, steps={chunk_steps}")
+            # replace env on the model
+            model.set_env(new_vec)
+            # close previous vec (if different)
+            try:
+                if current_vec is not None:
+                    current_vec.close()
+            except Exception:
+                pass
+            current_vec = new_vec
+            model.learn(total_timesteps=chunk_steps, reset_num_timesteps=False)
+            remaining -= chunk_steps
+            chunk_idx += 1
+
+        # close final vec
+        try:
+            if current_vec is not None:
+                current_vec.close()
+        except Exception:
+            pass
+    else:
+        model.learn(total_timesteps=total_timesteps)
 
     # evaluate the model after training
     mean_reward, std_reward = evaluate_policy(model, Monitor(eval_env_fn()), n_eval_episodes=5, deterministic=False)
-    eval_result['Post_training']={'mean_reward': mean_reward, 'std_reward': std_reward}
-    
+    eval_result['Post_training'] = {'mean_reward': mean_reward, 'std_reward': std_reward}
+
     print("training complete.")
 
     # plot the pre training mean_reward and std_reward against the post training mean_reward and std_reward
