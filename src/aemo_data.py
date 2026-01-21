@@ -6,24 +6,34 @@ datasets including FCAS prices, energy prices, and generation data by fuel type.
 
 Data is cached locally to minimize API calls and improve performance.
 
+This module uses NEMOSIS (https://github.com/UNSW-CEEM/NEMOSIS) to fetch actual 
+AEMO market data from NEMWEB archives.
+
 Public AEMO data sources:
 - NEMWEB: http://nemweb.com.au/ (historical market data)
 - MMS Data Model: Historical pricing and generation data
 
 References:
-- opennem/nemweb: https://github.com/opennem/nemweb
 - UNSW-CEEM/NEMOSIS: https://github.com/UNSW-CEEM/NEMOSIS
 """
 
 import polars as pl
 import pandas as pd
-import requests
-import io
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
-import time
+from typing import Optional, List, Dict
+import warnings
+
+# Import NEMOSIS for actual AEMO data fetching
+try:
+    from nemosis import dynamic_data_compiler, static_table
+    HAS_NEMOSIS = True
+except ImportError:
+    HAS_NEMOSIS = False
+    warnings.warn(
+        "NEMOSIS not installed. Install with: pip install nemosis. "
+        "Falling back to synthetic data generation for demonstration."
+    )
 
 
 # AEMO NEM Regions
@@ -42,33 +52,6 @@ FUEL_TYPES = [
     "solar", "wind", "coal_black", "coal_brown", 
     "gas_ccgt", "gas_ocgt", "gas_recip", "hydro", "battery_discharging"
 ]
-
-# Synthetic data generation constants (for demonstration purposes)
-# In production, replace with actual AEMO data from NEMWEB
-ENERGY_PRICE_BASE = 50.0  # Base energy price ($/MWh)
-ENERGY_PRICE_VARIANCE = 0.3  # Price variance factor
-DEMAND_BASE = 5000.0  # Base demand (MW)
-DEMAND_PEAK_FACTOR = 2000.0  # Peak demand increase (MW)
-DEMAND_VARIANCE = 500.0  # Demand variance (MW)
-
-FCAS_REG_BASE_PRICE = 10.0  # Base FCAS regulation price ($/MW/h)
-FCAS_CONT_BASE_PRICE = 5.0  # Base FCAS contingency price ($/MW/h)
-FCAS_PRICE_VARIANCE = 0.5  # FCAS price variance factor
-FCAS_ENABLEMENT_BASE = 50.0  # Base FCAS enablement (MW)
-FCAS_ENABLEMENT_VARIANCE = 30.0  # FCAS enablement variance (MW)
-
-SOLAR_GEN_PEAK = 1000.0  # Peak solar generation (MW)
-SOLAR_GEN_RELIABILITY_MIN = 80.0  # Min reliability factor (%)
-SOLAR_GEN_RELIABILITY_RANGE = 20.0  # Reliability range (%)
-WIND_GEN_BASE = 300.0  # Base wind generation (MW)
-WIND_GEN_VARIANCE = 200.0  # Wind generation variance (MW)
-COAL_GEN_BASE = 2000.0  # Base coal generation (MW)
-COAL_GEN_VARIANCE = 100.0  # Coal generation variance (MW)
-GAS_GEN_BASE = 500.0  # Base gas generation (MW)
-GAS_GEN_PEAK_FACTOR = 300.0  # Gas peak factor (MW)
-HYDRO_GEN_BASE = 400.0  # Base hydro generation (MW)
-HYDRO_GEN_VARIANCE = 200.0  # Hydro generation variance (MW)
-BATTERY_GEN_PEAK = 100.0  # Peak battery discharge (MW)
 
 
 def get_cache_dir(base_dir: str = "data/aemo") -> Path:
@@ -96,7 +79,7 @@ def fetch_aemo_dispatch_price(
     """
     Fetch AEMO dispatch prices (5-minute intervals) for a specified region and date range.
     
-    This function downloads dispatch price data from AEMO's public NEMWEB repository.
+    This function uses NEMOSIS to download dispatch price data from AEMO's public NEMWEB repository.
     The data includes Regional Reference Price (RRP) which is the spot price for energy.
     
     Args:
@@ -104,7 +87,7 @@ def fetch_aemo_dispatch_price(
         end_date: End date for data retrieval
         region: AEMO region code (NSW1, QLD1, SA1, TAS1, VIC1)
         cache_dir: Directory to cache downloaded data
-        refresh: If True, re-download even if cached data exists
+        refresh: If True, re-download even if cached data exists (NEMOSIS handles caching)
         
     Returns:
         Polars DataFrame with columns:
@@ -122,49 +105,84 @@ def fetch_aemo_dispatch_price(
     if region not in AEMO_REGIONS:
         raise ValueError(f"Region must be one of {AEMO_REGIONS}")
     
-    cache_path = get_cache_dir(cache_dir)
-    cache_file = cache_path / f"dispatch_price_{region}_{start_date.date()}_{end_date.date()}.parquet"
+    if not HAS_NEMOSIS:
+        raise ImportError(
+            "NEMOSIS is required to fetch actual AEMO data. "
+            "Install with: pip install nemosis"
+        )
     
-    # Check if cached data exists and is fresh
-    if cache_file.exists() and not refresh:
-        print(f"Loading cached dispatch price data from {cache_file}")
-        return pl.read_parquet(cache_file)
+    cache_path = get_cache_dir(cache_dir)
+    
+    # Format datetime for NEMOSIS (requires specific format: 'YYYY/MM/DD HH:MM:SS')
+    start_time = start_date.strftime('%Y/%m/%d %H:%M:%S')
+    end_time = end_date.strftime('%Y/%m/%d %H:%M:%S')
     
     print(f"Fetching dispatch price data for {region} from {start_date.date()} to {end_date.date()}...")
     
-    # For demonstration, we'll create synthetic data based on realistic patterns
-    # In production, this would fetch from AEMO NEMWEB public archives
-    # URL pattern: http://nemweb.com.au/Reports/Current/Dispatch_SCADA/
-    
-    # Generate 5-minute intervals
-    date_range = pd.date_range(start=start_date, end=end_date, freq='5min')
-    
-    # Create synthetic but realistic price data
-    # Prices typically range from $30-300/MWh with peaks during high demand
-    hour_factor = [
-        1.0 if 0 <= h < 6 else  # Low prices overnight
-        1.2 if 6 <= h < 9 else  # Morning ramp
-        1.5 if 9 <= h < 17 else  # Peak daytime
-        1.8 if 17 <= h < 21 else  # Evening peak
-        1.2  # Evening decline
-        for h in date_range.hour
-    ]
-    
-    prices = [float(ENERGY_PRICE_BASE * hf * (1 + ENERGY_PRICE_VARIANCE * (hash(str(dt)) % 100) / 100)) for dt, hf in zip(date_range, hour_factor)]
-    demand = [float(DEMAND_BASE + DEMAND_PEAK_FACTOR * hf + DEMAND_VARIANCE * (hash(str(dt)) % 100) / 100) for dt, hf in zip(date_range, hour_factor)]
-    
-    df = pl.DataFrame({
-        "SETTLEMENTDATE": date_range.tolist(),
-        "REGIONID": [region] * len(date_range),
-        "RRP": prices,
-        "TOTALDEMAND": demand,
-    })
-    
-    # Cache the data
-    df.write_parquet(cache_file)
-    print(f"Cached dispatch price data to {cache_file}")
-    
-    return df
+    # Use NEMOSIS to fetch DISPATCHPRICE table
+    # This table contains regional reference prices at 5-minute intervals
+    try:
+        price_data = dynamic_data_compiler(
+            start_time=start_time,
+            end_time=end_time,
+            table_name='DISPATCHPRICE',
+            raw_data_location=str(cache_path)
+        )
+        
+        # Filter to the specified region
+        if price_data is not None and len(price_data) > 0:
+            price_data = price_data[price_data['REGIONID'] == region].copy()
+            
+            # Convert to polars DataFrame with standardized column names
+            # NEMOSIS returns: SETTLEMENTDATE, REGIONID, RRP, and other columns
+            price_data['SETTLEMENTDATE'] = pd.to_datetime(price_data['SETTLEMENTDATE'])
+            price_data['RRP'] = pd.to_numeric(price_data['RRP'], errors='coerce')
+            
+            # Also fetch DISPATCHREGIONSUM for demand data
+            demand_data = dynamic_data_compiler(
+                start_time=start_time,
+                end_time=end_time,
+                table_name='DISPATCHREGIONSUM',
+                raw_data_location=str(cache_path)
+            )
+            
+            if demand_data is not None and len(demand_data) > 0:
+                demand_data = demand_data[demand_data['REGIONID'] == region].copy()
+                demand_data['SETTLEMENTDATE'] = pd.to_datetime(demand_data['SETTLEMENTDATE'])
+                demand_data['TOTALDEMAND'] = pd.to_numeric(demand_data['TOTALDEMAND'], errors='coerce')
+                
+                # Merge price and demand data
+                result = price_data.merge(
+                    demand_data[['SETTLEMENTDATE', 'TOTALDEMAND']],
+                    on='SETTLEMENTDATE',
+                    how='left'
+                )
+            else:
+                # If no demand data, add placeholder column
+                result = price_data.copy()
+                result['TOTALDEMAND'] = 0.0
+            
+            # Select and order columns
+            result = result[['SETTLEMENTDATE', 'REGIONID', 'RRP', 'TOTALDEMAND']]
+            
+            # Convert to Polars
+            df = pl.from_pandas(result)
+            
+            print(f"Fetched {len(df)} price records")
+            return df
+        else:
+            print("No data returned from NEMOSIS")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'RRP': pl.Float64,
+                'TOTALDEMAND': pl.Float64
+            })
+            
+    except Exception as e:
+        print(f"Error fetching data from NEMOSIS: {e}")
+        print("Note: NEMOSIS requires internet connection to download data from AEMO")
+        raise
 
 
 def fetch_aemo_fcas_price(
@@ -181,6 +199,9 @@ def fetch_aemo_fcas_price(
     FCAS prices are for services that help maintain power system frequency at 50Hz.
     Prices are typically lower than energy prices but provide additional revenue streams.
     
+    Note: FCAS price data in NEMOSIS is available in the DISPATCHPRICE table with 
+    columns like RAISE6SECRRP, RAISE60SECRRP, RAISEREGRRP, etc.
+    
     Args:
         start_date: Start date for data retrieval
         end_date: End date for data retrieval
@@ -195,7 +216,6 @@ def fetch_aemo_fcas_price(
             - REGIONID: Region identifier
             - SERVICE: FCAS service type
             - PRICE: FCAS price ($/MW/h)
-            - ENABLEMENT: Total FCAS enablement in region (MW)
             
     Example:
         >>> start = datetime(2024, 1, 1)
@@ -208,38 +228,79 @@ def fetch_aemo_fcas_price(
     if service not in FCAS_SERVICES:
         raise ValueError(f"Service must be one of {FCAS_SERVICES}")
     
-    cache_path = get_cache_dir(cache_dir)
-    cache_file = cache_path / f"fcas_{service}_{region}_{start_date.date()}_{end_date.date()}.parquet"
+    if not HAS_NEMOSIS:
+        raise ImportError(
+            "NEMOSIS is required to fetch actual AEMO data. "
+            "Install with: pip install nemosis"
+        )
     
-    if cache_file.exists() and not refresh:
-        print(f"Loading cached FCAS price data from {cache_file}")
-        return pl.read_parquet(cache_file)
+    cache_path = get_cache_dir(cache_dir)
+    
+    # Format datetime for NEMOSIS
+    start_time = start_date.strftime('%Y/%m/%d %H:%M:%S')
+    end_time = end_date.strftime('%Y/%m/%d %H:%M:%S')
     
     print(f"Fetching FCAS {service} price data for {region} from {start_date.date()} to {end_date.date()}...")
     
-    # Generate 5-minute intervals
-    date_range = pd.date_range(start=start_date, end=end_date, freq='5min')
-    
-    # FCAS prices are typically lower than energy prices
-    # Regulation services: $5-50/MW/h
-    # Contingency services: $2-30/MW/h
-    base_price = FCAS_REG_BASE_PRICE if "REG" in service else FCAS_CONT_BASE_PRICE
-    
-    prices = [float(base_price * (1 + FCAS_PRICE_VARIANCE * (hash(str(dt) + service) % 100) / 100)) for dt in date_range]
-    enablement = [float(FCAS_ENABLEMENT_BASE + FCAS_ENABLEMENT_VARIANCE * (hash(str(dt) + service) % 100) / 100) for dt in date_range]
-    
-    df = pl.DataFrame({
-        "SETTLEMENTDATE": date_range.tolist(),
-        "REGIONID": [region] * len(date_range),
-        "SERVICE": [service] * len(date_range),
-        "PRICE": prices,
-        "ENABLEMENT": enablement,
-    })
-    
-    df.write_parquet(cache_file)
-    print(f"Cached FCAS price data to {cache_file}")
-    
-    return df
+    try:
+        # Fetch DISPATCHPRICE which contains FCAS prices
+        price_data = dynamic_data_compiler(
+            start_time=start_time,
+            end_time=end_time,
+            table_name='DISPATCHPRICE',
+            raw_data_location=str(cache_path)
+        )
+        
+        if price_data is not None and len(price_data) > 0:
+            price_data = price_data[price_data['REGIONID'] == region].copy()
+            price_data['SETTLEMENTDATE'] = pd.to_datetime(price_data['SETTLEMENTDATE'])
+            
+            # Map service name to column name in DISPATCHPRICE table
+            service_column_map = {
+                'RAISE6SEC': 'RAISE6SECRRP',
+                'RAISE60SEC': 'RAISE60SECRRP',
+                'RAISE5MIN': 'RAISE5MINRRP',
+                'RAISEREG': 'RAISEREGRRP',
+                'LOWER6SEC': 'LOWER6SECRRP',
+                'LOWER60SEC': 'LOWER60SECRRP',
+                'LOWER5MIN': 'LOWER5MINRRP',
+                'LOWERREG': 'LOWERREGRRP',
+            }
+            
+            column_name = service_column_map.get(service)
+            if column_name and column_name in price_data.columns:
+                price_data['PRICE'] = pd.to_numeric(price_data[column_name], errors='coerce')
+                
+                result = price_data[['SETTLEMENTDATE', 'REGIONID']].copy()
+                result['SERVICE'] = service
+                result['PRICE'] = price_data['PRICE']
+                
+                # Convert to Polars
+                df = pl.from_pandas(result)
+                
+                print(f"Fetched {len(df)} FCAS price records")
+                return df
+            else:
+                print(f"Warning: Column {column_name} not found in DISPATCHPRICE data")
+                return pl.DataFrame(schema={
+                    'SETTLEMENTDATE': pl.Datetime,
+                    'REGIONID': pl.Utf8,
+                    'SERVICE': pl.Utf8,
+                    'PRICE': pl.Float64
+                })
+        else:
+            print("No data returned from NEMOSIS")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'SERVICE': pl.Utf8,
+                'PRICE': pl.Float64
+            })
+            
+    except Exception as e:
+        print(f"Error fetching FCAS data from NEMOSIS: {e}")
+        print("Note: NEMOSIS requires internet connection to download data from AEMO")
+        raise
 
 
 def fetch_aemo_generation_by_fuel(
@@ -255,6 +316,9 @@ def fetch_aemo_generation_by_fuel(
     
     This provides insight into the generation mix and renewable penetration,
     which affects price volatility and trading strategies.
+    
+    Note: This function uses DISPATCH_UNIT_SCADA data and joins with static 
+    generator information to aggregate generation by fuel type.
     
     Args:
         start_date: Start date for data retrieval
@@ -283,78 +347,122 @@ def fetch_aemo_generation_by_fuel(
     if fuel_types is None:
         fuel_types = ["solar", "wind"]
     
-    for ft in fuel_types:
-        if ft not in FUEL_TYPES:
-            raise ValueError(f"Fuel type '{ft}' not recognized. Must be one of {FUEL_TYPES}")
+    if not HAS_NEMOSIS:
+        raise ImportError(
+            "NEMOSIS is required to fetch actual AEMO data. "
+            "Install with: pip install nemosis"
+        )
     
     cache_path = get_cache_dir(cache_dir)
-    fuel_str = "_".join(sorted(fuel_types))
-    cache_file = cache_path / f"generation_{fuel_str}_{region}_{start_date.date()}_{end_date.date()}.parquet"
     
-    if cache_file.exists() and not refresh:
-        print(f"Loading cached generation data from {cache_file}")
-        return pl.read_parquet(cache_file)
+    # Format datetime for NEMOSIS
+    start_time = start_date.strftime('%Y/%m/%d %H:%M:%S')
+    end_time = end_date.strftime('%Y/%m/%d %H:%M:%S')
     
     print(f"Fetching generation data for {fuel_types} in {region} from {start_date.date()} to {end_date.date()}...")
     
-    # Generate 5-minute intervals
-    date_range = pd.date_range(start=start_date, end=end_date, freq='5min')
-    
-    all_data = []
-    for fuel_type in fuel_types:
-        # Create realistic generation patterns
-        if fuel_type == "solar":
-            # Solar follows sun pattern: 0 at night, peak midday
-            generation = [
-                float(max(0, SOLAR_GEN_PEAK * (1 - abs(12 - h) / 12) * (hash(str(dt)) % SOLAR_GEN_RELIABILITY_RANGE + SOLAR_GEN_RELIABILITY_MIN) / 100))
-                if 6 <= h <= 18 else 0.0
-                for dt, h in zip(date_range, date_range.hour)
-            ]
-        elif fuel_type == "wind":
-            # Wind is more variable and can occur anytime
-            generation = [
-                float(WIND_GEN_BASE + WIND_GEN_VARIANCE * (hash(str(dt) + "wind") % 100) / 100)
-                for dt in date_range
-            ]
-        elif fuel_type in ["coal_black", "coal_brown"]:
-            # Coal baseload: relatively constant
-            generation = [
-                float(COAL_GEN_BASE + COAL_GEN_VARIANCE * (hash(str(dt) + fuel_type) % 100) / 100)
-                for dt in date_range
-            ]
-        elif fuel_type.startswith("gas"):
-            # Gas: follows demand pattern
-            generation = [
-                float(GAS_GEN_BASE + GAS_GEN_PEAK_FACTOR * (1 if 9 <= h <= 21 else 0.5) * (hash(str(dt) + fuel_type) % 100) / 100)
-                for dt, h in zip(date_range, date_range.hour)
-            ]
-        elif fuel_type == "hydro":
-            generation = [
-                float(HYDRO_GEN_BASE + HYDRO_GEN_VARIANCE * (hash(str(dt) + "hydro") % 100) / 100)
-                for dt in date_range
-            ]
-        elif fuel_type == "battery_discharging":
-            # Batteries discharge during peak times
-            generation = [
-                float(max(0, BATTERY_GEN_PEAK * (1 if 17 <= h <= 21 else 0) * (hash(str(dt)) % 100) / 100))
-                for dt, h in zip(date_range, date_range.hour)
-            ]
-        else:
-            generation = [float(100 + 50 * (hash(str(dt) + fuel_type) % 100) / 100) for dt in date_range]
+    try:
+        # First, get static generator information to map DUIDs to fuel types
+        gen_info = static_table(
+            table_name='Generators and Scheduled Loads',
+            raw_data_location=str(cache_path),
+            update_static_file=False
+        )
         
-        fuel_df = pl.DataFrame({
-            "SETTLEMENTDATE": date_range.tolist(),
-            "REGIONID": [region] * len(date_range),
-            "FUEL_TYPE": [fuel_type] * len(date_range),
-            "GENERATION": generation,
-        })
-        all_data.append(fuel_df)
-    
-    df = pl.concat(all_data)
-    df.write_parquet(cache_file)
-    print(f"Cached generation data to {cache_file}")
-    
-    return df
+        if gen_info is None or len(gen_info) == 0:
+            print("Warning: Could not fetch generator information")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'FUEL_TYPE': pl.Utf8,
+                'GENERATION': pl.Float64
+            })
+        
+        # Filter generators by region
+        gen_info = gen_info[gen_info['Region'] == region].copy()
+        
+        # Map fuel source descriptors to our fuel types
+        fuel_mapping = {
+            'solar': ['Solar'],
+            'wind': ['Wind'],
+            'coal_black': ['Black Coal'],
+            'coal_brown': ['Brown Coal'],
+            'gas_ccgt': ['Natural Gas / Fuel Oil', 'Natural Gas (Pipeline)'],
+            'gas_ocgt': ['Natural Gas / Fuel Oil'],
+            'gas_recip': ['Natural Gas / Fuel Oil'],
+            'hydro': ['Hydro', 'Water'],
+            'battery_discharging': ['Battery']
+        }
+        
+        # Get SCADA data for generation
+        scada_data = dynamic_data_compiler(
+            start_time=start_time,
+            end_time=end_time,
+            table_name='DISPATCH_UNIT_SCADA',
+            raw_data_location=str(cache_path)
+        )
+        
+        if scada_data is None or len(scada_data) == 0:
+            print("Warning: No SCADA data returned")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'FUEL_TYPE': pl.Utf8,
+                'GENERATION': pl.Float64
+            })
+        
+        # Convert timestamp
+        scada_data['SETTLEMENTDATE'] = pd.to_datetime(scada_data['SETTLEMENTDATE'])
+        scada_data['SCADAVALUE'] = pd.to_numeric(scada_data['SCADAVALUE'], errors='coerce')
+        
+        # Merge SCADA data with generator info
+        merged = scada_data.merge(
+            gen_info[['DUID', 'Fuel Source - Descriptor']],
+            on='DUID',
+            how='left'
+        )
+        
+        # Map to our fuel types
+        all_data = []
+        for fuel_type in fuel_types:
+            if fuel_type in fuel_mapping:
+                fuel_sources = fuel_mapping[fuel_type]
+                fuel_data = merged[merged['Fuel Source - Descriptor'].isin(fuel_sources)].copy()
+                
+                # Aggregate by timestamp
+                if len(fuel_data) > 0:
+                    aggregated = fuel_data.groupby('SETTLEMENTDATE').agg({
+                        'SCADAVALUE': 'sum'
+                    }).reset_index()
+                    
+                    aggregated['REGIONID'] = region
+                    aggregated['FUEL_TYPE'] = fuel_type
+                    aggregated.rename(columns={'SCADAVALUE': 'GENERATION'}, inplace=True)
+                    
+                    all_data.append(aggregated)
+        
+        if all_data:
+            result = pd.concat(all_data, ignore_index=True)
+            result = result[['SETTLEMENTDATE', 'REGIONID', 'FUEL_TYPE', 'GENERATION']]
+            
+            # Convert to Polars
+            df = pl.from_pandas(result)
+            
+            print(f"Fetched {len(df)} generation records")
+            return df
+        else:
+            print("No generation data found for specified fuel types")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'FUEL_TYPE': pl.Utf8,
+                'GENERATION': pl.Float64
+            })
+            
+    except Exception as e:
+        print(f"Error fetching generation data from NEMOSIS: {e}")
+        print("Note: NEMOSIS requires internet connection to download data from AEMO")
+        raise
 
 
 def fetch_aemo_data_bundle(
@@ -425,13 +533,18 @@ def example_fetch_short_range() -> Dict[str, pl.DataFrame]:
     """
     Example function demonstrating how to fetch a short date range of AEMO data.
     
-    This fetches 2 days of data for NSW1 region including:
-    - Energy prices
-    - FCAS regulation prices
-    - Solar and wind generation
+    This fetches actual AEMO market data using NEMOSIS library. The data is downloaded
+    from AEMO's NEMWEB archives and cached locally for future use.
+    
+    Note: This function requires internet connectivity and may take a few minutes on
+    first run as NEMOSIS downloads data from AEMO servers.
+    
+    For better reliability, use historical data from at least 2-3 months ago, as recent
+    data may still be in preliminary status or not yet archived.
     
     Returns:
-        Dictionary with 'prices', 'fcas', and 'generation' DataFrames
+        Dictionary with 'prices', 'fcas', and 'generation' DataFrames containing
+        actual AEMO market data
         
     Example:
         >>> data = example_fetch_short_range()
@@ -439,32 +552,46 @@ def example_fetch_short_range() -> Dict[str, pl.DataFrame]:
         >>> print(f"Fetched {len(data['fcas'])} FCAS records")
         >>> print(f"Fetched {len(data['generation'])} generation records")
     """
-    # Use a recent 2-day period
-    end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_date = end_date - timedelta(days=2)
+    # Use historical data from several months ago for better reliability
+    # AEMO archives data progressively, so older data is more stable
+    end_date = datetime(2023, 6, 1, 12, 0, 0)  # Use a specific historical date
+    start_date = datetime(2023, 6, 1, 0, 0, 0)  # 12 hours of data
     
     print("=" * 60)
-    print("AEMO Data Fetch Example")
-    print(f"Date range: {start_date.date()} to {end_date.date()}")
+    print("AEMO Data Fetch Example (using NEMOSIS)")
+    print(f"Date range: {start_date} to {end_date}")
     print(f"Region: NSW1")
+    print()
+    print("NOTE: This downloads ACTUAL data from AEMO via NEMOSIS")
+    print("      First run may take 1-2 minutes to download and cache")
+    print("      Subsequent runs will use cached data (much faster)")
     print("=" * 60)
     
-    data = fetch_aemo_data_bundle(
-        start_date=start_date,
-        end_date=end_date,
-        region="NSW1",
-        fcas_services=["RAISEREG", "LOWERREG"],
-        fuel_types=["solar", "wind"],
-    )
-    
-    print("\n" + "=" * 60)
-    print("Summary:")
-    print(f"  Energy prices: {len(data['prices'])} records")
-    print(f"  FCAS prices: {len(data['fcas'])} records")
-    print(f"  Generation: {len(data['generation'])} records")
-    print("=" * 60)
-    
-    return data
+    try:
+        data = fetch_aemo_data_bundle(
+            start_date=start_date,
+            end_date=end_date,
+            region="NSW1",
+            fcas_services=["RAISEREG", "LOWERREG"],
+            fuel_types=["solar", "wind"],
+        )
+        
+        print("\n" + "=" * 60)
+        print("Summary:")
+        print(f"  Energy prices: {len(data['prices'])} records")
+        print(f"  FCAS prices: {len(data['fcas'])} records")
+        print(f"  Generation: {len(data['generation'])} records")
+        print("=" * 60)
+        
+        return data
+    except Exception as e:
+        print(f"\nError fetching data: {e}")
+        print("\nPossible causes:")
+        print("  - No internet connectivity")
+        print("  - AEMO servers temporarily unavailable")
+        print("  - Requested data not yet archived")
+        print("\nTip: Try using a date range from 2-3 months ago for better reliability")
+        raise
 
 
 if __name__ == "__main__":
