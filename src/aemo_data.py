@@ -216,6 +216,7 @@ def fetch_aemo_fcas_price(
             - REGIONID: Region identifier
             - SERVICE: FCAS service type
             - PRICE: FCAS price ($/MW/h)
+            - ENABLEMENT: FCAS availability/enablement (MW) - from RRPAVAILABILITY columns
             
     Example:
         >>> start = datetime(2024, 1, 1)
@@ -256,37 +257,50 @@ def fetch_aemo_fcas_price(
             price_data['SETTLEMENTDATE'] = pd.to_datetime(price_data['SETTLEMENTDATE'])
             
             # Map service name to column name in DISPATCHPRICE table
+            # Price columns end with RRP, availability/enablement columns end with RRPAVAILABILITY
             service_column_map = {
-                'RAISE6SEC': 'RAISE6SECRRP',
-                'RAISE60SEC': 'RAISE60SECRRP',
-                'RAISE5MIN': 'RAISE5MINRRP',
-                'RAISEREG': 'RAISEREGRRP',
-                'LOWER6SEC': 'LOWER6SECRRP',
-                'LOWER60SEC': 'LOWER60SECRRP',
-                'LOWER5MIN': 'LOWER5MINRRP',
-                'LOWERREG': 'LOWERREGRRP',
+                'RAISE6SEC': ('RAISE6SECRRP', 'RAISE6SECRRPAVAILABILITY'),
+                'RAISE60SEC': ('RAISE60SECRRP', 'RAISE60SECRRPAVAILABILITY'),
+                'RAISE5MIN': ('RAISE5MINRRP', 'RAISE5MINRRPAVAILABILITY'),
+                'RAISEREG': ('RAISEREGRRP', 'RAISEREGRRPAVAILABILITY'),
+                'LOWER6SEC': ('LOWER6SECRRP', 'LOWER6SECRRPAVAILABILITY'),
+                'LOWER60SEC': ('LOWER60SECRRP', 'LOWER60SECRRPAVAILABILITY'),
+                'LOWER5MIN': ('LOWER5MINRRP', 'LOWER5MINRRPAVAILABILITY'),
+                'LOWERREG': ('LOWERREGRRP', 'LOWERREGRRPAVAILABILITY'),
             }
             
-            column_name = service_column_map.get(service)
-            if column_name and column_name in price_data.columns:
-                price_data['PRICE'] = pd.to_numeric(price_data[column_name], errors='coerce')
+            columns = service_column_map.get(service)
+            if columns:
+                price_col, availability_col = columns
                 
-                result = price_data[['SETTLEMENTDATE', 'REGIONID']].copy()
-                result['SERVICE'] = service
-                result['PRICE'] = price_data['PRICE']
-                
-                # Convert to Polars
-                df = pl.from_pandas(result)
-                
-                print(f"Fetched {len(df)} FCAS price records")
-                return df
+                if price_col in price_data.columns:
+                    price_data['PRICE'] = pd.to_numeric(price_data[price_col], errors='coerce')
+                    
+                    # Try to get availability/enablement data if available
+                    if availability_col in price_data.columns:
+                        price_data['ENABLEMENT'] = pd.to_numeric(price_data[availability_col], errors='coerce')
+                    else:
+                        # If availability column not present, set to 0 as placeholder
+                        price_data['ENABLEMENT'] = 0.0
+                    
+                    result = price_data[['SETTLEMENTDATE', 'REGIONID']].copy()
+                    result['SERVICE'] = service
+                    result['PRICE'] = price_data['PRICE']
+                    result['ENABLEMENT'] = price_data['ENABLEMENT']
+                    
+                    # Convert to Polars
+                    df = pl.from_pandas(result)
+                    
+                    print(f"Fetched {len(df)} FCAS price records")
+                    return df
             else:
-                print(f"Warning: Column {column_name} not found in DISPATCHPRICE data")
+                print(f"Warning: Price column for service {service} not found in DISPATCHPRICE data")
                 return pl.DataFrame(schema={
                     'SETTLEMENTDATE': pl.Datetime,
                     'REGIONID': pl.Utf8,
                     'SERVICE': pl.Utf8,
-                    'PRICE': pl.Float64
+                    'PRICE': pl.Float64,
+                    'ENABLEMENT': pl.Float64
                 })
         else:
             print("No data returned from NEMOSIS")
@@ -294,7 +308,8 @@ def fetch_aemo_fcas_price(
                 'SETTLEMENTDATE': pl.Datetime,
                 'REGIONID': pl.Utf8,
                 'SERVICE': pl.Utf8,
-                'PRICE': pl.Float64
+                'PRICE': pl.Float64,
+                'ENABLEMENT': pl.Float64
             })
             
     except Exception as e:
