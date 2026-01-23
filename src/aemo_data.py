@@ -199,8 +199,8 @@ def fetch_aemo_fcas_price(
     FCAS prices are for services that help maintain power system frequency at 50Hz.
     Prices are typically lower than energy prices but provide additional revenue streams.
     
-    Note: FCAS price data in NEMOSIS is available in the DISPATCHPRICE table with 
-    columns like RAISE6SECRRP, RAISE60SECRRP, RAISEREGRRP, etc.
+    Note: This function returns regional FCAS prices only. For unit-specific enablement
+    and dispatch data, use fetch_aemo_unit_dispatch().
     
     Args:
         start_date: Start date for data retrieval
@@ -216,7 +216,6 @@ def fetch_aemo_fcas_price(
             - REGIONID: Region identifier
             - SERVICE: FCAS service type
             - PRICE: FCAS price ($/MW/h)
-            - ENABLEMENT: FCAS availability/enablement (MW) - from RRPAVAILABILITY columns
             
     Example:
         >>> start = datetime(2024, 1, 1)
@@ -257,50 +256,37 @@ def fetch_aemo_fcas_price(
             price_data['SETTLEMENTDATE'] = pd.to_datetime(price_data['SETTLEMENTDATE'])
             
             # Map service name to column name in DISPATCHPRICE table
-            # Price columns end with RRP, availability/enablement columns end with RRPAVAILABILITY
             service_column_map = {
-                'RAISE6SEC': ('RAISE6SECRRP', 'RAISE6SECRRPAVAILABILITY'),
-                'RAISE60SEC': ('RAISE60SECRRP', 'RAISE60SECRRPAVAILABILITY'),
-                'RAISE5MIN': ('RAISE5MINRRP', 'RAISE5MINRRPAVAILABILITY'),
-                'RAISEREG': ('RAISEREGRRP', 'RAISEREGRRPAVAILABILITY'),
-                'LOWER6SEC': ('LOWER6SECRRP', 'LOWER6SECRRPAVAILABILITY'),
-                'LOWER60SEC': ('LOWER60SECRRP', 'LOWER60SECRRPAVAILABILITY'),
-                'LOWER5MIN': ('LOWER5MINRRP', 'LOWER5MINRRPAVAILABILITY'),
-                'LOWERREG': ('LOWERREGRRP', 'LOWERREGRRPAVAILABILITY'),
+                'RAISE6SEC': 'RAISE6SECRRP',
+                'RAISE60SEC': 'RAISE60SECRRP',
+                'RAISE5MIN': 'RAISE5MINRRP',
+                'RAISEREG': 'RAISEREGRRP',
+                'LOWER6SEC': 'LOWER6SECRRP',
+                'LOWER60SEC': 'LOWER60SECRRP',
+                'LOWER5MIN': 'LOWER5MINRRP',
+                'LOWERREG': 'LOWERREGRRP',
             }
             
-            columns = service_column_map.get(service)
-            if columns:
-                price_col, availability_col = columns
+            price_col = service_column_map.get(service)
+            if price_col and price_col in price_data.columns:
+                price_data['PRICE'] = pd.to_numeric(price_data[price_col], errors='coerce')
                 
-                if price_col in price_data.columns:
-                    price_data['PRICE'] = pd.to_numeric(price_data[price_col], errors='coerce')
-                    
-                    # Try to get availability/enablement data if available
-                    if availability_col in price_data.columns:
-                        price_data['ENABLEMENT'] = pd.to_numeric(price_data[availability_col], errors='coerce')
-                    else:
-                        # If availability column not present, set to 0 as placeholder
-                        price_data['ENABLEMENT'] = 0.0
-                    
-                    result = price_data[['SETTLEMENTDATE', 'REGIONID']].copy()
-                    result['SERVICE'] = service
-                    result['PRICE'] = price_data['PRICE']
-                    result['ENABLEMENT'] = price_data['ENABLEMENT']
-                    
-                    # Convert to Polars
-                    df = pl.from_pandas(result)
-                    
-                    print(f"Fetched {len(df)} FCAS price records")
-                    return df
+                result = price_data[['SETTLEMENTDATE', 'REGIONID']].copy()
+                result['SERVICE'] = service
+                result['PRICE'] = price_data['PRICE']
+                
+                # Convert to Polars
+                df = pl.from_pandas(result)
+                
+                print(f"Fetched {len(df)} FCAS price records")
+                return df
             else:
                 print(f"Warning: Price column for service {service} not found in DISPATCHPRICE data")
                 return pl.DataFrame(schema={
                     'SETTLEMENTDATE': pl.Datetime,
                     'REGIONID': pl.Utf8,
                     'SERVICE': pl.Utf8,
-                    'PRICE': pl.Float64,
-                    'ENABLEMENT': pl.Float64
+                    'PRICE': pl.Float64
                 })
         else:
             print("No data returned from NEMOSIS")
@@ -308,12 +294,187 @@ def fetch_aemo_fcas_price(
                 'SETTLEMENTDATE': pl.Datetime,
                 'REGIONID': pl.Utf8,
                 'SERVICE': pl.Utf8,
-                'PRICE': pl.Float64,
-                'ENABLEMENT': pl.Float64
+                'PRICE': pl.Float64
             })
             
     except Exception as e:
         print(f"Error fetching FCAS data from NEMOSIS: {e}")
+        print("Note: NEMOSIS requires internet connection to download data from AEMO")
+        raise
+
+
+def fetch_aemo_unit_dispatch(
+    start_date: datetime,
+    end_date: datetime,
+    duid: Optional[str] = None,
+    region: Optional[str] = None,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """
+    Fetch unit-specific dispatch data from AEMO DISPATCHLOAD table.
+    
+    This function provides detailed dispatch information for individual units (DUIDs),
+    including energy dispatch targets and FCAS enablement across all services. This is
+    essential for calculating actual FCAS revenue and understanding operational constraints.
+    
+    The DISPATCHLOAD table contains the dispatch targets set by AEMO for each unit in
+    each 5-minute interval, including:
+    - Energy dispatch (TOTALCLEARED)
+    - FCAS enablement for each service (raise/lower, regulation/contingency)
+    - Availability and bid data
+    
+    Args:
+        start_date: Start date for data retrieval
+        end_date: End date for data retrieval
+        duid: Specific Dispatch Unit ID to fetch (e.g., "LBBG1"). If None, fetches all units
+        region: Filter by AEMO region (NSW1, QLD1, SA1, TAS1, VIC1). If None, fetches all regions
+        cache_dir: Directory to cache downloaded data
+        refresh: If True, re-download even if cached data exists
+        
+    Returns:
+        Polars DataFrame with columns:
+            - SETTLEMENTDATE: Datetime of the dispatch interval
+            - DUID: Dispatch Unit ID
+            - TOTALCLEARED: Total energy dispatch target (MW)
+            - RAISE6SECACTUALAVAILABILITY: Enabled capacity for 6-second raise (MW)
+            - RAISE60SECACTUALAVAILABILITY: Enabled capacity for 60-second raise (MW)
+            - RAISE5MINACTUALAVAILABILITY: Enabled capacity for 5-minute raise (MW)
+            - RAISEREGACTUALAVAILABILITY: Enabled capacity for regulation raise (MW)
+            - LOWER6SECACTUALAVAILABILITY: Enabled capacity for 6-second lower (MW)
+            - LOWER60SECACTUALAVAILABILITY: Enabled capacity for 60-second lower (MW)
+            - LOWER5MINACTUALAVAILABILITY: Enabled capacity for 5-minute lower (MW)
+            - LOWERREGACTUALAVAILABILITY: Enabled capacity for regulation lower (MW)
+            - Additional columns: AVAILABILITY, RAMPUPRATE, RAMPDOWNRATE, etc.
+            
+    Example:
+        >>> # Fetch dispatch data for a specific battery unit
+        >>> start = datetime(2024, 1, 1)
+        >>> end = datetime(2024, 1, 2)
+        >>> dispatch = fetch_aemo_unit_dispatch(start, end, duid="LBBG1")
+        >>> print(dispatch.head())
+        >>> 
+        >>> # Calculate FCAS revenue for a unit
+        >>> # Revenue = Enablement (MW) * Price ($/MW/h) * interval duration (hours)
+    """
+    if region and region not in AEMO_REGIONS:
+        raise ValueError(f"Region must be one of {AEMO_REGIONS}")
+    
+    if not HAS_NEMOSIS:
+        raise ImportError(
+            "NEMOSIS is required to fetch actual AEMO data. "
+            "Install with: pip install nemosis"
+        )
+    
+    cache_path = get_cache_dir(cache_dir)
+    
+    # Format datetime for NEMOSIS
+    start_time = start_date.strftime('%Y/%m/%d %H:%M:%S')
+    end_time = end_date.strftime('%Y/%m/%d %H:%M:%S')
+    
+    duid_str = f" for DUID {duid}" if duid else ""
+    region_str = f" in {region}" if region else ""
+    print(f"Fetching unit dispatch data{duid_str}{region_str} from {start_date.date()} to {end_date.date()}...")
+    
+    try:
+        # Fetch DISPATCHLOAD which contains unit-specific dispatch and FCAS enablement
+        dispatch_data = dynamic_data_compiler(
+            start_time=start_time,
+            end_time=end_time,
+            table_name='DISPATCHLOAD',
+            raw_data_location=str(cache_path)
+        )
+        
+        if dispatch_data is None or len(dispatch_data) == 0:
+            print("No dispatch data returned from NEMOSIS")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'DUID': pl.Utf8,
+                'TOTALCLEARED': pl.Float64,
+                'RAISE6SECACTUALAVAILABILITY': pl.Float64,
+                'RAISE60SECACTUALAVAILABILITY': pl.Float64,
+                'RAISE5MINACTUALAVAILABILITY': pl.Float64,
+                'RAISEREGACTUALAVAILABILITY': pl.Float64,
+                'LOWER6SECACTUALAVAILABILITY': pl.Float64,
+                'LOWER60SECACTUALAVAILABILITY': pl.Float64,
+                'LOWER5MINACTUALAVAILABILITY': pl.Float64,
+                'LOWERREGACTUALAVAILABILITY': pl.Float64,
+            })
+        
+        # Filter by DUID if specified
+        if duid:
+            dispatch_data = dispatch_data[dispatch_data['DUID'] == duid].copy()
+            if len(dispatch_data) == 0:
+                print(f"Warning: No data found for DUID {duid}")
+                return pl.DataFrame(schema={
+                    'SETTLEMENTDATE': pl.Datetime,
+                    'DUID': pl.Utf8,
+                    'TOTALCLEARED': pl.Float64,
+                    'RAISE6SECACTUALAVAILABILITY': pl.Float64,
+                    'RAISE60SECACTUALAVAILABILITY': pl.Float64,
+                    'RAISE5MINACTUALAVAILABILITY': pl.Float64,
+                    'RAISEREGACTUALAVAILABILITY': pl.Float64,
+                    'LOWER6SECACTUALAVAILABILITY': pl.Float64,
+                    'LOWER60SECACTUALAVAILABILITY': pl.Float64,
+                    'LOWER5MINACTUALAVAILABILITY': pl.Float64,
+                    'LOWERREGACTUALAVAILABILITY': pl.Float64,
+                })
+        
+        # Convert timestamp
+        dispatch_data['SETTLEMENTDATE'] = pd.to_datetime(dispatch_data['SETTLEMENTDATE'])
+        
+        # Select relevant columns (all FCAS enablement columns and energy dispatch)
+        # ACTUALAVAILABILITY columns represent the enabled capacity for each FCAS service
+        columns_to_keep = ['SETTLEMENTDATE', 'DUID']
+        
+        # Energy dispatch
+        if 'TOTALCLEARED' in dispatch_data.columns:
+            columns_to_keep.append('TOTALCLEARED')
+            dispatch_data['TOTALCLEARED'] = pd.to_numeric(dispatch_data['TOTALCLEARED'], errors='coerce')
+        
+        # FCAS enablement columns
+        fcas_columns = [
+            'RAISE6SECACTUALAVAILABILITY',
+            'RAISE60SECACTUALAVAILABILITY',
+            'RAISE5MINACTUALAVAILABILITY',
+            'RAISEREGACTUALAVAILABILITY',
+            'LOWER6SECACTUALAVAILABILITY',
+            'LOWER60SECACTUALAVAILABILITY',
+            'LOWER5MINACTUALAVAILABILITY',
+            'LOWERREGACTUALAVAILABILITY',
+        ]
+        
+        for col in fcas_columns:
+            if col in dispatch_data.columns:
+                columns_to_keep.append(col)
+                dispatch_data[col] = pd.to_numeric(dispatch_data[col], errors='coerce')
+        
+        # Filter by region if specified (need to join with generator info for region)
+        if region:
+            try:
+                gen_info = static_table(
+                    table_name='Generators and Scheduled Loads',
+                    raw_data_location=str(cache_path),
+                    update_static_file=False
+                )
+                if gen_info is not None and len(gen_info) > 0:
+                    region_duids = gen_info[gen_info['Region'] == region]['DUID'].tolist()
+                    dispatch_data = dispatch_data[dispatch_data['DUID'].isin(region_duids)].copy()
+            except Exception as e:
+                print(f"Warning: Could not filter by region: {e}")
+        
+        # Select only the columns that exist
+        available_columns = [col for col in columns_to_keep if col in dispatch_data.columns]
+        result = dispatch_data[available_columns].copy()
+        
+        # Convert to Polars
+        df = pl.from_pandas(result)
+        
+        print(f"Fetched {len(df)} dispatch records for {df['DUID'].n_unique()} unique units")
+        return df
+        
+    except Exception as e:
+        print(f"Error fetching unit dispatch data from NEMOSIS: {e}")
         print("Note: NEMOSIS requires internet connection to download data from AEMO")
         raise
 
@@ -550,6 +711,88 @@ def fetch_aemo_data_bundle(
         'prices': prices,
         'fcas': fcas,
         'generation': generation,
+    }
+
+
+def fetch_aemo_data_bundle_with_dispatch(
+    start_date: datetime,
+    end_date: datetime,
+    region: str = "NSW1",
+    duid: Optional[str] = None,
+    fcas_services: Optional[List[str]] = None,
+    fuel_types: Optional[List[str]] = None,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+) -> Dict[str, pl.DataFrame]:
+    """
+    Comprehensive function to fetch AEMO market data including unit-specific dispatch.
+    
+    This function fetches regional market prices, regional generation mix, and
+    unit-specific dispatch/enablement data in one call. Use this for analyzing
+    individual unit performance and FCAS participation.
+    
+    Returns a dictionary with keys: 'prices', 'fcas', 'generation', 'unit_dispatch'
+    
+    Args:
+        start_date: Start date for data retrieval
+        end_date: End date for data retrieval
+        region: AEMO region code
+        duid: Specific Dispatch Unit ID to fetch (optional). If None, fetches all units in region
+        fcas_services: List of FCAS services to fetch (default: ["RAISEREG", "LOWERREG"])
+        fuel_types: List of fuel types to fetch (default: ["solar", "wind"])
+        cache_dir: Directory to cache downloaded data
+        refresh: If True, re-download even if cached data exists
+        
+    Returns:
+        Dictionary containing:
+            - 'prices': Energy price DataFrame (regional)
+            - 'fcas': FCAS price DataFrame (regional, combined services)
+            - 'generation': Generation DataFrame (regional, combined fuel types)
+            - 'unit_dispatch': Unit-specific dispatch and FCAS enablement DataFrame
+            
+    Example:
+        >>> # Fetch data for a specific battery unit
+        >>> start = datetime(2024, 1, 1)
+        >>> end = datetime(2024, 1, 2)
+        >>> data = fetch_aemo_data_bundle_with_dispatch(
+        ...     start, end, region="NSW1", duid="LBBG1",
+        ...     fcas_services=["RAISEREG", "LOWERREG"]
+        ... )
+        >>> print(data['prices'].head())
+        >>> print(data['unit_dispatch'].head())
+        >>> 
+        >>> # Calculate FCAS revenue for the unit
+        >>> # Join unit_dispatch with fcas prices on SETTLEMENTDATE and SERVICE
+    """
+    if fcas_services is None:
+        fcas_services = ["RAISEREG", "LOWERREG"]
+    if fuel_types is None:
+        fuel_types = ["solar", "wind"]
+    
+    duid_str = f" for DUID {duid}" if duid else ""
+    print(f"Fetching comprehensive AEMO data bundle for {region}{duid_str} from {start_date.date()} to {end_date.date()}...")
+    
+    # Fetch energy prices
+    prices = fetch_aemo_dispatch_price(start_date, end_date, region, cache_dir, refresh)
+    
+    # Fetch FCAS prices for all requested services
+    fcas_dfs = []
+    for service in fcas_services:
+        fcas_df = fetch_aemo_fcas_price(start_date, end_date, region, service, cache_dir, refresh)
+        fcas_dfs.append(fcas_df)
+    fcas = pl.concat(fcas_dfs) if fcas_dfs else pl.DataFrame()
+    
+    # Fetch generation data
+    generation = fetch_aemo_generation_by_fuel(start_date, end_date, region, fuel_types, cache_dir, refresh)
+    
+    # Fetch unit-specific dispatch data
+    unit_dispatch = fetch_aemo_unit_dispatch(start_date, end_date, duid, region, cache_dir, refresh)
+    
+    return {
+        'prices': prices,
+        'fcas': fcas,
+        'generation': generation,
+        'unit_dispatch': unit_dispatch,
     }
 
 
