@@ -546,13 +546,7 @@ def fetch_aemo_generation_by_fuel(
                 update_static_file=False
             )
         except Exception as excel_error:
-            if 'Excel file format cannot be determined' in str(excel_error):
-                raise ImportError(
-                    "Excel reading library (openpyxl) is required to fetch generator information. "
-                    "Install with: pip install openpyxl"
-                ) from excel_error
-            else:
-                raise
+            raise excel_error
         
         if gen_info is None or len(gen_info) == 0:
             print("Warning: Could not fetch generator information")
