@@ -482,7 +482,37 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
     Tries once with the requested refresh flag, and on Excel-format errors
     tries to convert any cached .xls files to .xlsx using xls2xlsx, then retries
     the read. Raises a helpful error if still failing.
+    
+    Also detects if AEMO's server returned an HTML error page instead of the Excel file.
     """
+    # Helper to check if a file is an HTML error page from AEMO
+    def _is_html_error_file(file_path):
+        """Check if file contains AEMO's HTML error message."""
+        try:
+            with open(file_path, 'rb') as f:
+                # Read first 1KB to check for HTML markers
+                content = f.read(1024)
+                content_lower = content.lower()
+                # Check for HTML tags and AEMO error message
+                if (b'<html' in content_lower or b'<!doctype' in content_lower) and \
+                   (b'sorry' in content_lower or b'failed' in content_lower or b'error' in content_lower):
+                    return True
+        except Exception:
+            pass
+        return False
+    
+    # Check if any existing cached files are HTML error pages
+    try:
+        cache_files = list(cache_path.glob('*'))
+        for cache_file in cache_files:
+            if cache_file.suffix.lower() in ['.xls', '.xlsx'] and _is_html_error_file(cache_file):
+                print(f"Detected corrupted/HTML error file in cache: {cache_file.name}")
+                print(f"Deleting corrupted file and forcing re-download...")
+                cache_file.unlink()
+                refresh = True  # Force refresh if we deleted a corrupted file
+    except Exception as e:
+        print(f"Warning: Could not check cache for corrupted files: {e}")
+    
     try:
         return static_table(
             table_name='Generators and Scheduled Loads',
@@ -552,12 +582,35 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                     ) from excel_error
 
             # Try a forced refresh (redownload) in case cached file is corrupt or was HTML
+            print("Attempting forced refresh to re-download static table...")
             try:
-                return static_table(
+                result = static_table(
                     table_name='Generators and Scheduled Loads',
                     raw_data_location=str(cache_path),
                     update_static_file=True,
                 )
+                # Check if the newly downloaded file is an HTML error
+                try:
+                    files = sorted([p.name for p in Path(cache_path).iterdir()])
+                    for f in files:
+                        file_path = Path(cache_path) / f
+                        if file_path.suffix.lower() in ['.xls', '.xlsx']:
+                            if _is_html_error_file(file_path):
+                                raise ValueError(
+                                    "AEMO server returned an HTML error page instead of the Excel file. "
+                                    "The server may be experiencing issues or rate-limiting requests.\n\n"
+                                    "The downloaded file contains: 'Sorry, your request has failed...'\n\n"
+                                    "Fixes:\n"
+                                    " - Wait a few minutes and try again (AEMO server may be temporarily unavailable)\n"
+                                    " - Delete the corrupted cache file manually:\n"
+                                    f"     rm {file_path}\n"
+                                    " - Delete the entire cache directory and retry:\n"
+                                    f"     rm -rf {cache_path}\n"
+                                    " - Try using a different date range or region to reduce load on AEMO servers\n"
+                                )
+                except Exception:
+                    pass  # Continue with the result if check failed
+                return result
             except Exception as excel_error2:
                 # Provide helpful diagnostics including cache listing
                 try:
@@ -567,15 +620,20 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                 raise ValueError(
                     "Failed to read NEMOSIS static table 'Generators and Scheduled Loads'. "
                     "Pandas could not determine the Excel format for the cached file. "
-                    "This usually means the cached file is missing a .xlsx/.xls extension, is "
-                    "corrupt/empty, or is not an Excel file (for example an HTML error page).\n\n"
+                    "This usually means:\n"
+                    " 1. AEMO's server returned an HTML error page instead of the Excel file\n"
+                    "    (error message: 'Sorry, your request has failed...')\n"
+                    " 2. The cached file is corrupt, empty, or has wrong extension\n"
+                    " 3. The file format is .xls (old Excel) instead of .xlsx\n\n"
                     f"Cache directory: {cache_path}\n"
                     f"Cache dir listing (first 50 entries): {files[:50]}\n\n"
                     "Fixes:\n"
-                    " - If files end with .xls, install 'xls2xlsx' in the Jupyter env and retry:\n"
-                    "     docker compose exec app python3 -m pip install xls2xlsx\n"
-                    " - Delete the cache directory and retry (rm -rf data/aemo) OR\n"
-                    " - Call fetch_aemo_generation_by_fuel(..., refresh=True) to force a re-download.\n"
+                    " - Wait a few minutes and try again (AEMO server may be temporarily unavailable)\n"
+                    " - Delete the cache directory and retry:\n"
+                    f"     rm -rf {cache_path}\n"
+                    " - If files end with .xls, install 'xls2xlsx' in the Jupyter env:\n"
+                    "     pip install xls2xlsx\n"
+                    " - Call fetch_aemo_generation_by_fuel(..., refresh=True) to force re-download\n"
                 ) from excel_error2
         # Re-raise other exceptions
         raise
