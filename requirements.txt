@@ -15,3 +15,4 @@ requests
 optuna
 nemosis
 openpyxl
+xls2xlsx

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional, List, Dict
 import warnings
 
+
 # Import NEMOSIS for actual AEMO data fetching
 try:
     from nemosis import dynamic_data_compiler, static_table
@@ -452,11 +453,7 @@ def fetch_aemo_unit_dispatch(
         # Filter by region if specified (need to join with generator info for region)
         if region:
             try:
-                gen_info = static_table(
-                    table_name='Generators and Scheduled Loads',
-                    raw_data_location=str(cache_path),
-                    update_static_file=False
-                )
+                gen_info = _get_generators_static_table(cache_path, refresh)
                 if gen_info is not None and len(gen_info) > 0:
                     region_duids = gen_info[gen_info['Region'] == region]['DUID'].tolist()
                     dispatch_data = dispatch_data[dispatch_data['DUID'].isin(region_duids)].copy()
@@ -476,6 +473,111 @@ def fetch_aemo_unit_dispatch(
     except Exception as e:
         print(f"Error fetching unit dispatch data from NEMOSIS: {e}")
         print("Note: NEMOSIS requires internet connection to download data from AEMO")
+        raise
+
+
+def _get_generators_static_table(cache_path: Path, refresh: bool):
+    """
+    Helper to robustly load the 'Generators and Scheduled Loads' static table.
+    Tries once with the requested refresh flag, and on Excel-format errors
+    tries to convert any cached .xls files to .xlsx using xls2xlsx, then retries
+    the read. Raises a helpful error if still failing.
+    """
+    try:
+        return static_table(
+            table_name='Generators and Scheduled Loads',
+            raw_data_location=str(cache_path),
+            update_static_file=bool(refresh),
+        )
+    except Exception as excel_error:
+        msg = str(excel_error)
+        if 'Excel file format cannot be determined' in msg:
+            # Inspect cache for .xls files and attempt conversion to .xlsx
+            try:
+                files = sorted([p.name for p in Path(cache_path).iterdir()])
+            except Exception:
+                files = []
+
+            xls_files = [f for f in files if f.lower().endswith('.xls')]
+            if xls_files:
+                converted = []
+                conversion_errors = []
+                try:
+                    from xls2xlsx import XLS2XLSX
+                except Exception:
+                    raise ImportError(
+                        "Found .xls cached files in the NEMOSIS cache but 'xls2xlsx' is not installed.\n"
+                        "Install it in the Jupyter environment, e.g.:\n"
+                        "  docker compose exec app python3 -m pip install xls2xlsx\n"
+                        "Then restart the notebook kernel (or reload this module) and retry.\n\n"
+                        f"Cache directory: {cache_path}\n"
+                        f"Cache dir listing (first 50 entries): {files[:50]}"
+                    ) from excel_error
+
+                for f in xls_files:
+                    xls_path = Path(cache_path) / f
+                    xlsx_name = xls_path.stem + '.xlsx'
+                    xlsx_path = Path(cache_path) / xlsx_name
+                    # Skip conversion if xlsx already exists
+                    if xlsx_path.exists():
+                        converted.append(str(xlsx_path.name))
+                        continue
+                    try:
+                        x2x = XLS2XLSX(str(xls_path))
+                        x2x.to_xlsx(str(xlsx_path))
+                        converted.append(str(xlsx_path.name))
+                    except Exception as conv_err:
+                        conversion_errors.append((str(xls_path.name), str(conv_err)))
+
+                # If we converted at least one file, try reading again
+                if converted:
+                    try:
+                        return static_table(
+                            table_name='Generators and Scheduled Loads',
+                            raw_data_location=str(cache_path),
+                            update_static_file=False,
+                        )
+                    except Exception:
+                        # fall through to forced refresh below
+                        pass
+
+                # If conversions failed and no success, raise informative error
+                if conversion_errors and not converted:
+                    raise ValueError(
+                        "Failed to convert cached .xls files to .xlsx.\n"
+                        "Conversion errors: " + ", ".join([f"{n}: {e}" for n, e in conversion_errors]) + "\n\n"
+                        f"Cache directory: {cache_path}\n"
+                        f"Cache dir listing (first 50 entries): {files[:50]}\n\n"
+                        "Fix: Install 'xls2xlsx' or delete the cache directory and retry (rm -rf data/aemo),"
+                    ) from excel_error
+
+            # Try a forced refresh (redownload) in case cached file is corrupt or was HTML
+            try:
+                return static_table(
+                    table_name='Generators and Scheduled Loads',
+                    raw_data_location=str(cache_path),
+                    update_static_file=True,
+                )
+            except Exception as excel_error2:
+                # Provide helpful diagnostics including cache listing
+                try:
+                    files = sorted([p.name for p in Path(cache_path).iterdir()])
+                except Exception:
+                    files = []
+                raise ValueError(
+                    "Failed to read NEMOSIS static table 'Generators and Scheduled Loads'. "
+                    "Pandas could not determine the Excel format for the cached file. "
+                    "This usually means the cached file is missing a .xlsx/.xls extension, is "
+                    "corrupt/empty, or is not an Excel file (for example an HTML error page).\n\n"
+                    f"Cache directory: {cache_path}\n"
+                    f"Cache dir listing (first 50 entries): {files[:50]}\n\n"
+                    "Fixes:\n"
+                    " - If files end with .xls, install 'xls2xlsx' in the Jupyter env and retry:\n"
+                    "     docker compose exec app python3 -m pip install xls2xlsx\n"
+                    " - Delete the cache directory and retry (rm -rf data/aemo) OR\n"
+                    " - Call fetch_aemo_generation_by_fuel(..., refresh=True) to force a re-download.\n"
+                ) from excel_error2
+        # Re-raise other exceptions
         raise
 
 
@@ -540,11 +642,7 @@ def fetch_aemo_generation_by_fuel(
     try:
         # First, get static generator information to map DUIDs to fuel types
         try:
-            gen_info = static_table(
-                table_name='Generators and Scheduled Loads',
-                raw_data_location=str(cache_path),
-                update_static_file=False
-            )
+            gen_info = _get_generators_static_table(cache_path, refresh)
         except Exception as excel_error:
             raise excel_error
         
