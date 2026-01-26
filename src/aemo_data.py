@@ -22,6 +22,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict
+import os
 import warnings
 
 
@@ -53,6 +54,106 @@ FUEL_TYPES = [
     "solar", "wind", "coal_black", "coal_brown", 
     "gas_ccgt", "gas_ocgt", "gas_recip", "hydro", "battery_discharging"
 ]
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+def _pick_sheet_with_columns(sheets: Dict[str, pd.DataFrame], required_columns: List[str]) -> Optional[pd.DataFrame]:
+    required_lower = {c.lower() for c in required_columns}
+    for _, sheet in sheets.items():
+        sheet = _normalize_columns(sheet)
+        cols_lower = {c.lower() for c in sheet.columns}
+        if required_lower.issubset(cols_lower):
+            return sheet
+    return None
+
+
+def _read_generator_info_file(file_path: Path) -> pd.DataFrame:
+    suffix = file_path.suffix.lower()
+    if suffix == ".csv":
+        df = pd.read_csv(file_path)
+        return _normalize_columns(df)
+
+    # Excel: load all sheets, then pick the one that looks like generator info.
+    sheets = pd.read_excel(file_path, sheet_name=None)
+    if isinstance(sheets, dict) and sheets:
+        picked = _pick_sheet_with_columns(sheets, ["DUID", "Region"])
+        if picked is not None:
+            return picked
+        # Fall back to first sheet
+        first_sheet = next(iter(sheets.values()))
+        return _normalize_columns(first_sheet)
+
+    # pandas can return a DataFrame for some excel engines; normalize and return.
+    if isinstance(sheets, pd.DataFrame):
+        return _normalize_columns(sheets)
+
+    raise ValueError(f"Could not read generator info file: {file_path}")
+
+
+def _auto_detect_generator_info_file() -> Optional[Path]:
+    """Best-effort lookup for a locally downloaded generator info XLS/XLSX/CSV."""
+    candidates: List[Path] = []
+    repo_root = Path(__file__).resolve().parent.parent
+    for p in [repo_root / "src/data/aemo", repo_root / "data/aemo"]:
+        if p.exists() and p.is_dir():
+            for ext in ("*.xls", "*.xlsx", "*.csv"):
+                candidates.extend(sorted(p.glob(ext)))
+
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = None) -> Optional[pd.DataFrame]:
+    """
+    Retrieve generator static info (DUID -> Region/Fuel descriptor).
+
+    Tries NEMOSIS `static_table()` first; if that fails (e.g. AEMO blocks downloads),
+    falls back to a user-provided local XLS/XLSX/CSV.
+    """
+    # 1) Try NEMOSIS static_table (preferred when it works)
+    try:
+        gen_info = static_table(
+            table_name='Generators and Scheduled Loads',
+            raw_data_location=str(cache_path),
+            update_static_file=False
+        )
+        if gen_info is not None and len(gen_info) > 0:
+            return _normalize_columns(gen_info)
+    except Exception:
+        pass
+
+    # 2) Fall back to local file
+    resolved: Optional[Path] = None
+    if generator_info_path:
+        resolved = Path(generator_info_path)
+    else:
+        env_path = os.getenv("AEMO_GENERATORS_FILE")
+        if env_path:
+            resolved = Path(env_path)
+
+    if resolved is None:
+        resolved = _auto_detect_generator_info_file()
+
+    if resolved is None:
+        return None
+
+    if not resolved.is_absolute():
+        repo_root = Path(__file__).resolve().parent.parent
+        resolved = (repo_root / resolved).resolve()
+
+    if not resolved.exists():
+        return None
+
+    try:
+        return _read_generator_info_file(resolved)
+    except Exception:
+        return None
 
 
 def get_cache_dir(base_dir: str = "data/aemo") -> Path:
@@ -309,6 +410,7 @@ def fetch_aemo_unit_dispatch(
     end_date: datetime,
     duid: Optional[str] = None,
     region: Optional[str] = None,
+    generator_info_path: Optional[str] = None,
     cache_dir: str = "data/aemo",
     refresh: bool = False,
 ) -> pl.DataFrame:
@@ -450,15 +552,24 @@ def fetch_aemo_unit_dispatch(
                 columns_to_keep.append(col)
                 dispatch_data[col] = pd.to_numeric(dispatch_data[col], errors='coerce')
         
-        # Filter by region if specified (need to join with generator info for region)
+        # Filter by region if specified (requires generator static info)
         if region:
+            # Prefer the robust static-table reader which attempts conversions and forced refreshes
+            gen_info = None
             try:
                 gen_info = _get_generators_static_table(cache_path, refresh)
-                if gen_info is not None and len(gen_info) > 0:
-                    region_duids = gen_info[gen_info['Region'] == region]['DUID'].tolist()
-                    dispatch_data = dispatch_data[dispatch_data['DUID'].isin(region_duids)].copy()
-            except Exception as e:
-                print(f"Warning: Could not filter by region: {e}")
+            except Exception:
+                # Fall back to local file or env var when the static_table path fails
+                gen_info = _get_generator_info(cache_path, generator_info_path=generator_info_path)
+
+            if gen_info is not None and 'Region' in gen_info.columns and 'DUID' in gen_info.columns:
+                region_duids = gen_info[gen_info['Region'] == region]['DUID'].tolist()
+                dispatch_data = dispatch_data[dispatch_data['DUID'].isin(region_duids)].copy()
+            else:
+                print(
+                    "Warning: Could not load generator static info to filter by region. "
+                    "Provide `generator_info_path` (or set env var AEMO_GENERATORS_FILE)."
+                )
         
         # Select only the columns that exist
         available_columns = [col for col in columns_to_keep if col in dispatch_data.columns]
@@ -644,6 +755,7 @@ def fetch_aemo_generation_by_fuel(
     end_date: datetime,
     region: str = "NSW1",
     fuel_types: Optional[List[str]] = None,
+    generator_info_path: Optional[str] = None,
     cache_dir: str = "data/aemo",
     refresh: bool = False,
 ) -> pl.DataFrame:
@@ -701,11 +813,16 @@ def fetch_aemo_generation_by_fuel(
         # First, get static generator information to map DUIDs to fuel types
         try:
             gen_info = _get_generators_static_table(cache_path, refresh)
-        except Exception as excel_error:
-            raise excel_error
+        except Exception:
+            # If robust static-table loading fails (HTML/corrupt cache, conversion issues),
+            # fall back to a local file if available (AEMO_GENERATORS_FILE or src/data/aemo autodetect).
+            gen_info = _get_generator_info(cache_path, generator_info_path=generator_info_path)
         
         if gen_info is None or len(gen_info) == 0:
-            print("Warning: Could not fetch generator information")
+            print(
+                "Warning: Could not load generator static info (DUID/Region/Fuel). "
+                "Provide `generator_info_path` (or set env var AEMO_GENERATORS_FILE)."
+            )
             return pl.DataFrame(schema={
                 'SETTLEMENTDATE': pl.Datetime,
                 'REGIONID': pl.Utf8,
@@ -714,6 +831,17 @@ def fetch_aemo_generation_by_fuel(
             })
         
         # Filter generators by region
+        if 'Region' not in gen_info.columns or 'DUID' not in gen_info.columns:
+            print(
+                "Warning: Generator info file is missing required columns (need 'DUID' and 'Region')."
+            )
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'FUEL_TYPE': pl.Utf8,
+                'GENERATION': pl.Float64
+            })
+
         gen_info = gen_info[gen_info['Region'] == region].copy()
         
         # Map fuel source descriptors to our fuel types
@@ -751,8 +879,21 @@ def fetch_aemo_generation_by_fuel(
         scada_data['SCADAVALUE'] = pd.to_numeric(scada_data['SCADAVALUE'], errors='coerce')
         
         # Merge SCADA data with generator info
+        fuel_col = 'Fuel Source - Descriptor'
+        if fuel_col not in gen_info.columns:
+            print(
+                "Warning: Generator info is missing 'Fuel Source - Descriptor' column; "
+                "cannot aggregate by fuel type."
+            )
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'FUEL_TYPE': pl.Utf8,
+                'GENERATION': pl.Float64
+            })
+
         merged = scada_data.merge(
-            gen_info[['DUID', 'Fuel Source - Descriptor']],
+            gen_info[['DUID', fuel_col]],
             on='DUID',
             how='left'
         )
@@ -762,7 +903,7 @@ def fetch_aemo_generation_by_fuel(
         for fuel_type in fuel_types:
             if fuel_type in fuel_mapping:
                 fuel_sources = fuel_mapping[fuel_type]
-                fuel_data = merged[merged['Fuel Source - Descriptor'].isin(fuel_sources)].copy()
+                fuel_data = merged[merged[fuel_col].isin(fuel_sources)].copy()
                 
                 # Aggregate by timestamp
                 if len(fuel_data) > 0:
@@ -806,6 +947,7 @@ def fetch_aemo_data_bundle(
     region: str = "NSW1",
     fcas_services: Optional[List[str]] = None,
     fuel_types: Optional[List[str]] = None,
+    generator_info_path: Optional[str] = None,
     cache_dir: str = "data/aemo",
     refresh: bool = False,
 ) -> Dict[str, pl.DataFrame]:
@@ -855,7 +997,9 @@ def fetch_aemo_data_bundle(
     fcas = pl.concat(fcas_dfs)
     
     # Fetch generation data
-    generation = fetch_aemo_generation_by_fuel(start_date, end_date, region, fuel_types, cache_dir, refresh)
+    generation = fetch_aemo_generation_by_fuel(
+        start_date, end_date, region, fuel_types, generator_info_path, cache_dir, refresh
+    )
     
     return {
         'prices': prices,
@@ -871,6 +1015,7 @@ def fetch_aemo_data_bundle_with_dispatch(
     duid: Optional[str] = None,
     fcas_services: Optional[List[str]] = None,
     fuel_types: Optional[List[str]] = None,
+    generator_info_path: Optional[str] = None,
     cache_dir: str = "data/aemo",
     refresh: bool = False,
 ) -> Dict[str, pl.DataFrame]:
@@ -933,10 +1078,14 @@ def fetch_aemo_data_bundle_with_dispatch(
     fcas = pl.concat(fcas_dfs) if fcas_dfs else pl.DataFrame()
     
     # Fetch generation data
-    generation = fetch_aemo_generation_by_fuel(start_date, end_date, region, fuel_types, cache_dir, refresh)
+    generation = fetch_aemo_generation_by_fuel(
+        start_date, end_date, region, fuel_types, generator_info_path, cache_dir, refresh
+    )
     
     # Fetch unit-specific dispatch data
-    unit_dispatch = fetch_aemo_unit_dispatch(start_date, end_date, duid, region, cache_dir, refresh)
+    unit_dispatch = fetch_aemo_unit_dispatch(
+        start_date, end_date, duid, region, generator_info_path, cache_dir, refresh
+    )
     
     return {
         'prices': prices,
