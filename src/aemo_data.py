@@ -440,14 +440,14 @@ def fetch_aemo_unit_dispatch(
             - SETTLEMENTDATE: Datetime of the dispatch interval
             - DUID: Dispatch Unit ID
             - TOTALCLEARED: Total energy dispatch target (MW)
-            - RAISE6SECACTUALAVAILABILITY: Enabled capacity for 6-second raise (MW)
-            - RAISE60SECACTUALAVAILABILITY: Enabled capacity for 60-second raise (MW)
-            - RAISE5MINACTUALAVAILABILITY: Enabled capacity for 5-minute raise (MW)
-            - RAISEREGACTUALAVAILABILITY: Enabled capacity for regulation raise (MW)
-            - LOWER6SECACTUALAVAILABILITY: Enabled capacity for 6-second lower (MW)
-            - LOWER60SECACTUALAVAILABILITY: Enabled capacity for 60-second lower (MW)
-            - LOWER5MINACTUALAVAILABILITY: Enabled capacity for 5-minute lower (MW)
-            - LOWERREGACTUALAVAILABILITY: Enabled capacity for regulation lower (MW)
+            - RAISE6SEC: Enabled capacity for 6-second raise (MW)
+            - RAISE60SEC: Enabled capacity for 60-second raise (MW)
+            - RAISE5MIN: Enabled capacity for 5-minute raise (MW)
+            - RAISEREG: Enabled capacity for regulation raise (MW)
+            - LOWER6SEC: Enabled capacity for 6-second lower (MW)
+            - LOWER60SEC: Enabled capacity for 60-second lower (MW)
+            - LOWER5MIN: Enabled capacity for 5-minute lower (MW)
+            - LOWERREG: Enabled capacity for regulation lower (MW)
             - Additional columns: AVAILABILITY, RAMPUPRATE, RAMPDOWNRATE, etc.
             
     Example:
@@ -494,14 +494,14 @@ def fetch_aemo_unit_dispatch(
                 'SETTLEMENTDATE': pl.Datetime,
                 'DUID': pl.Utf8,
                 'TOTALCLEARED': pl.Float64,
-                'RAISE6SECACTUALAVAILABILITY': pl.Float64,
-                'RAISE60SECACTUALAVAILABILITY': pl.Float64,
-                'RAISE5MINACTUALAVAILABILITY': pl.Float64,
-                'RAISEREGACTUALAVAILABILITY': pl.Float64,
-                'LOWER6SECACTUALAVAILABILITY': pl.Float64,
-                'LOWER60SECACTUALAVAILABILITY': pl.Float64,
-                'LOWER5MINACTUALAVAILABILITY': pl.Float64,
-                'LOWERREGACTUALAVAILABILITY': pl.Float64,
+                'RAISE6SEC': pl.Float64,
+                'RAISE60SEC': pl.Float64,
+                'RAISE5MIN': pl.Float64,
+                'RAISEREG': pl.Float64,
+                'LOWER6SEC': pl.Float64,
+                'LOWER60SEC': pl.Float64,
+                'LOWER5MIN': pl.Float64,
+                'LOWERREG': pl.Float64,
             })
         
         # Filter by DUID if specified
@@ -513,14 +513,14 @@ def fetch_aemo_unit_dispatch(
                     'SETTLEMENTDATE': pl.Datetime,
                     'DUID': pl.Utf8,
                     'TOTALCLEARED': pl.Float64,
-                    'RAISE6SECACTUALAVAILABILITY': pl.Float64,
-                    'RAISE60SECACTUALAVAILABILITY': pl.Float64,
-                    'RAISE5MINACTUALAVAILABILITY': pl.Float64,
-                    'RAISEREGACTUALAVAILABILITY': pl.Float64,
-                    'LOWER6SECACTUALAVAILABILITY': pl.Float64,
-                    'LOWER60SECACTUALAVAILABILITY': pl.Float64,
-                    'LOWER5MINACTUALAVAILABILITY': pl.Float64,
-                    'LOWERREGACTUALAVAILABILITY': pl.Float64,
+                    'RAISE6SEC': pl.Float64,
+                    'RAISE60SEC': pl.Float64,
+                    'RAISE5MIN': pl.Float64,
+                    'RAISEREG': pl.Float64,
+                    'LOWER6SEC': pl.Float64,
+                    'LOWER60SEC': pl.Float64,
+                    'LOWER5MIN': pl.Float64,
+                    'LOWERREG': pl.Float64,
                 })
         
         # Convert timestamp
@@ -536,15 +536,16 @@ def fetch_aemo_unit_dispatch(
             dispatch_data['TOTALCLEARED'] = pd.to_numeric(dispatch_data['TOTALCLEARED'], errors='coerce')
         
         # FCAS enablement columns
+        # Note: DISPATCHLOAD uses shorter column names without "ACTUALAVAILABILITY" suffix
         fcas_columns = [
-            'RAISE6SECACTUALAVAILABILITY',
-            'RAISE60SECACTUALAVAILABILITY',
-            'RAISE5MINACTUALAVAILABILITY',
-            'RAISEREGACTUALAVAILABILITY',
-            'LOWER6SECACTUALAVAILABILITY',
-            'LOWER60SECACTUALAVAILABILITY',
-            'LOWER5MINACTUALAVAILABILITY',
-            'LOWERREGACTUALAVAILABILITY',
+            'RAISE6SEC',
+            'RAISE60SEC',
+            'RAISE5MIN',
+            'RAISEREG',
+            'LOWER6SEC',
+            'LOWER60SEC',
+            'LOWER5MIN',
+            'LOWERREG',
         ]
         
         for col in fcas_columns:
