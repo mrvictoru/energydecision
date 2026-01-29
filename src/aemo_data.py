@@ -506,9 +506,15 @@ def fetch_aemo_unit_dispatch(
         
         # Filter by DUID if specified
         if duid:
+            initial_count = len(dispatch_data)
             dispatch_data = dispatch_data[dispatch_data['DUID'] == duid].copy()
+            filtered_count = len(dispatch_data)
+            print(f"DUID filter: {initial_count} records before filter, {filtered_count} after filtering for '{duid}'")
+            
             if len(dispatch_data) == 0:
                 print(f"Warning: No data found for DUID {duid}")
+                # Check if DUID exists in the full dataset with different formatting
+                print(f"Hint: Check if DUID '{duid}' exists in DISPATCHLOAD table for this date range")
                 return pl.DataFrame(schema={
                     'SETTLEMENTDATE': pl.Datetime,
                     'DUID': pl.Utf8,
@@ -554,7 +560,8 @@ def fetch_aemo_unit_dispatch(
                 dispatch_data[col] = pd.to_numeric(dispatch_data[col], errors='coerce')
         
         # Filter by region if specified (requires generator static info)
-        if region:
+        # NOTE: Only filter by region if DUID was NOT specified (DUID already implies region)
+        if region and not duid:
             # Prefer the robust static-table reader which attempts conversions and forced refreshes
             gen_info = None
             try:
@@ -565,7 +572,10 @@ def fetch_aemo_unit_dispatch(
 
             if gen_info is not None and 'Region' in gen_info.columns and 'DUID' in gen_info.columns:
                 region_duids = gen_info[gen_info['Region'] == region]['DUID'].tolist()
+                before_region_filter = len(dispatch_data)
                 dispatch_data = dispatch_data[dispatch_data['DUID'].isin(region_duids)].copy()
+                after_region_filter = len(dispatch_data)
+                print(f"Region filter: {before_region_filter} records before filter, {after_region_filter} after filtering for region '{region}'")
             else:
                 print(
                     "Warning: Could not load generator static info to filter by region. "
