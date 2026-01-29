@@ -345,18 +345,75 @@ def find_problematic_episodes(
     max_timestep: int | None = None,
     rtg_percentile_for_scale: int = 90,
     target_90th_after_scaling: float = 10.0,
+    # NEW: allow suggesting return_scale even if 'rtg' is not stored
+    discount_factor: float = 0.99,
+    compute_rtgs_if_missing: bool = True,
+    # NEW: choose what RTG distribution to base the return_scale on
+    #  - 'rtg0': abs(RTG at first step) per episode (best match for "desired return" conditioning)
+    #  - 'episode_median': abs(RTG) median per episode (previous behavior)
+    #  - 'all_values': sample abs(RTG) values across steps (capped) for fuller distribution
+    return_scale_method: str = "rtg0",
+    max_rtg_samples: int = 200_000,
+    rtg_sample_seed: int = 123,
 ) -> tuple[List[Dict[str, Any]], float]:
     """
     Scan all_logs (algo -> list of episode DataFrames) and return:
       - reports: list of problem dicts (algorithm, episode_index, rows, issues)
-      - suggested_return_scale: automatic suggestion based on rtg distribution
+      - suggested_return_scale: automatic suggestion based on RTG distribution
 
-    The suggested_return_scale is computed so that the chosen percentile (default 90th)
-    of absolute rtg values divided by the suggested scale is approximately
-    `target_90th_after_scaling` (default 10.0). This brings most RTG into a small range.
+    The suggested_return_scale is computed so that the chosen percentile
+    of absolute RTG values divided by the suggested scale is approximately
+    `target_90th_after_scaling`.
+
+    Notes on return_scale_method:
+      * 'rtg0' is usually the most relevant for DT inference because the RTG token
+        is commonly set from a single desired return (similar to "episode start RTG").
+      * If episodes have very different lengths/noise, 'episode_median' can be more robust.
     """
     reports: List[Dict[str, Any]] = []
-    all_rtgs: List[float] = []
+
+    # Collect RTG stats for scale suggestion
+    rtg0_abs: List[float] = []           # abs(rtg at t=0) per episode
+    rtg_episode_med_abs: List[float] = []  # median abs(rtg) per episode
+    rtg_all_abs_samples: List[float] = []  # sampled abs(rtg) across steps
+
+    rng = np.random.default_rng(seed=int(rtg_sample_seed))
+
+    def _compute_rtgs_from_rewards(rewards: np.ndarray, gamma: float) -> np.ndarray:
+        """Discounted return-to-go computed backward: rtg[t] = r[t] + gamma * rtg[t+1]."""
+        r = np.asarray(rewards, dtype=np.float64)
+        rtg = np.zeros_like(r, dtype=np.float64)
+        running = 0.0
+        # Handle NaNs/Infs conservatively: treat non-finite reward as 0 for RTG computation
+        for t in range(r.size - 1, -1, -1):
+            val = r[t]
+            if not np.isfinite(val):
+                val = 0.0
+            running = float(val) + float(gamma) * running
+            rtg[t] = running
+        return rtg
+
+    def _push_rtg_stats(rtg: np.ndarray) -> None:
+        if rtg.size == 0:
+            return
+        finite = rtg[np.isfinite(rtg)]
+        if finite.size == 0:
+            return
+
+        rtg0_abs.append(float(abs(finite[0])))
+        rtg_episode_med_abs.append(float(np.nanmedian(np.abs(finite))))
+
+        if return_scale_method == "all_values":
+            # sample from per-step RTG abs values, but cap total memory
+            absvals = np.abs(finite)
+            remaining = max(0, int(max_rtg_samples) - len(rtg_all_abs_samples))
+            if remaining <= 0:
+                return
+            if absvals.size <= remaining:
+                rtg_all_abs_samples.extend(absvals.astype(float).tolist())
+            else:
+                idx = rng.choice(absvals.size, size=remaining, replace=False)
+                rtg_all_abs_samples.extend(absvals[idx].astype(float).tolist())
 
     for algo, episodes in all_logs.items():
         for ep_idx, df in enumerate(episodes):
@@ -364,18 +421,27 @@ def find_problematic_episodes(
             if df.is_empty():
                 issues.append("empty_episode")
             else:
-                # Collect rtg values for scale suggestion
+                # --- RTG extraction (from stored 'rtg' OR computed from 'reward') ---
+                rtg_arr: Optional[np.ndarray] = None
                 if "rtg" in df.columns:
                     try:
                         arr = df["rtg"].to_numpy()
                         if arr.size and arr.dtype.kind in "fc":
-                            finite = arr[np.isfinite(arr)]
-                            if finite.size:
-                                all_rtgs.append(float(np.nanmedian(np.abs(finite))))  # median per episode
+                            rtg_arr = arr
                     except Exception:
-                        pass
+                        rtg_arr = None
+                elif compute_rtgs_if_missing and "reward" in df.columns:
+                    try:
+                        r = df["reward"].to_numpy()
+                        if r.size and r.dtype.kind in "fc":
+                            rtg_arr = _compute_rtgs_from_rewards(r, float(discount_factor))
+                    except Exception:
+                        rtg_arr = None
 
-                # NaN/Inf checks
+                if rtg_arr is not None:
+                    _push_rtg_stats(rtg_arr)
+
+                # --- NaN/Inf checks ---
                 for col in df.columns:
                     try:
                         arr = df[col].to_numpy()
@@ -388,7 +454,7 @@ def find_problematic_episodes(
                         if n_nan or n_posinf or n_neginf:
                             issues.append(f"{col}: NaN={n_nan},+Inf={n_posinf},-Inf={n_neginf}")
 
-                # magnitude checks
+                # --- magnitude checks ---
                 if "reward" in df.columns:
                     try:
                         arr = df["reward"].to_numpy()
@@ -398,12 +464,10 @@ def find_problematic_episodes(
                     except Exception:
                         pass
 
-                if "rtg" in df.columns and rtg_thresh is not None:
+                if rtg_thresh is not None and rtg_arr is not None:
                     try:
-                        arr = df["rtg"].to_numpy()
-                        if arr.size and arr.dtype.kind in "fc":
-                            if np.nanmax(np.abs(arr)) > rtg_thresh:
-                                issues.append(f"rtg_mag>{rtg_thresh}")
+                        if np.nanmax(np.abs(rtg_arr)) > rtg_thresh:
+                            issues.append(f"rtg_mag>{rtg_thresh}")
                     except Exception:
                         pass
 
@@ -441,26 +505,37 @@ def find_problematic_episodes(
                                 pass
 
             if issues:
-                reports.append({
-                    "algorithm": algo,
-                    "episode_index": int(ep_idx),
-                    "rows": int(df.height) if not df.is_empty() else 0,
-                    "issues": issues,
-                })
+                reports.append(
+                    {
+                        "algorithm": algo,
+                        "episode_index": int(ep_idx),
+                        "rows": int(df.height) if not df.is_empty() else 0,
+                        "issues": issues,
+                    }
+                )
 
-    # compute suggested return_scale from collected episode medians of |rtg|
+    # --- compute suggested return_scale from collected RTG stats ---
     suggested_return_scale = 1.0
-    if all_rtgs:
-        try:
-            arr = np.array(all_rtgs, dtype=float)
-            p = float(np.nanpercentile(arr, rtg_percentile_for_scale))
-            # choose scale so that p / scale ~= target_90th_after_scaling
+    method = str(return_scale_method).strip().lower()
+    if method not in {"rtg0", "episode_median", "all_values"}:
+        raise ValueError("return_scale_method must be one of: 'rtg0', 'episode_median', 'all_values'")
+
+    if method == "rtg0":
+        src = np.array(rtg0_abs, dtype=float)
+        src_name = "abs(rtg[t=0]) per-episode"
+    elif method == "episode_median":
+        src = np.array(rtg_episode_med_abs, dtype=float)
+        src_name = "median(abs(rtg)) per-episode"
+    else:
+        src = np.array(rtg_all_abs_samples, dtype=float)
+        src_name = f"sampled abs(rtg) values (cap={max_rtg_samples})"
+
+    if src.size:
+        src = src[np.isfinite(src)]
+        if src.size:
+            p = float(np.nanpercentile(src, rtg_percentile_for_scale))
             if p > 0:
                 suggested_return_scale = max(1.0, p / float(target_90th_after_scaling))
-            else:
-                suggested_return_scale = 1.0
-        except Exception:
-            suggested_return_scale = 1.0
 
     # concise summary
     if not reports:
@@ -471,13 +546,16 @@ def find_problematic_episodes(
         for algo, c in cnt.items():
             print(f"  {algo}: {c} episodes")
         import pandas as pd
+
         print("First 20 problem rows:")
         print(pd.DataFrame(reports).head(20).to_string(index=False))
 
-    print(f"\nSuggested return_scale (to bring ~{rtg_percentile_for_scale}th pct episode-median |rtg| to ~{target_90th_after_scaling}): {suggested_return_scale:.4g}")
+    print(
+        f"\nSuggested return_scale using {src_name}, percentile={rtg_percentile_for_scale} -> target~{target_90th_after_scaling}: "
+        f"{suggested_return_scale:.4g}"
+    )
 
     return reports, suggested_return_scale
-
 
 
 import json

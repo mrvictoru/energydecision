@@ -175,11 +175,13 @@ python3 pretrain_decision_transformer.py \
     --data-dir ../data \
     --patterns train test_episodes_01 \
     --epochs 2 \
-    --batch-size 8 \
+    --batch-size 6 \
     --checkpoints-per-epoch 4 \
     --context-length 60 \
-    --lr 1e-5 \
+    --lr 5e-6 \
     --weight-decay 1e-4 \
+    --return-scale 1000.0 \
+    --return-loss-weight 0.0005 \
     --checkpoint-path ../models/dt_model_checkpoint.pt \
     --save-path ../models/dt_model_new.pt \
     --loss-csv-path ../models/dt_model_loss_history.csv \

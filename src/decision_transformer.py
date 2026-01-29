@@ -7,6 +7,8 @@ Preserves the original API while improving speed and stability.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
+import json
 
 
 class RMSNorm(nn.Module):
@@ -272,11 +274,45 @@ class DecisionTransformer(nn.Module):
         instances with matching max_position for each attention block before loading.
         Falls back to strict=False if strict=True fails.
         """
-        # load state dict if a path was provided
+        # load from disk if a path was provided
+        sidecar_meta = None
         if isinstance(checkpoint_or_state, (str, bytes)):
-            state = torch.load(checkpoint_or_state, map_location=map_location)
+            ckpt_path = checkpoint_or_state.decode() if isinstance(checkpoint_or_state, (bytes, bytearray)) else str(checkpoint_or_state)
+            state = torch.load(ckpt_path, map_location=map_location)
+
+            # Best-effort: load inference metadata from sidecar
+            meta_path = ckpt_path + ".meta.json"
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        sidecar_meta = json.load(f)
+                except Exception:
+                    sidecar_meta = None
         else:
             state = checkpoint_or_state
+
+        # Accept multiple formats:
+        # 1) raw state_dict (backwards compatible)
+        # 2) training checkpoint dict from transformer_training.py
+        # 3) a bundle dict with keys like {model_state_dict, meta}
+        meta = None
+        if isinstance(state, dict) and "model_state_dict" in state and isinstance(state.get("model_state_dict"), dict):
+            meta = state.get("meta") if isinstance(state.get("meta"), dict) else None
+            # transformer_training checkpoint stores return_scale at top-level
+            if meta is None and "return_scale" in state:
+                meta = {"return_scale": state.get("return_scale")}
+            state = state["model_state_dict"]
+
+        if meta is None and isinstance(sidecar_meta, dict):
+            meta = sidecar_meta
+
+        if isinstance(meta, dict) and "return_scale" in meta:
+            try:
+                rs = float(meta["return_scale"])
+                if rs == rs and abs(rs) >= 1e-12:  # finite + non-zero
+                    self.return_scale = rs
+            except Exception:
+                pass
 
         # detect rotary cos buffers and patch local blocks to match checkpoint shape
         cos_keys = [k for k in state.keys() if k.endswith(".rotary.cos")]

@@ -194,6 +194,36 @@ def train_decision_transformer(
     if best_model_path is None:
         best_model_path = save_path.replace(".pt", "_best.pt")
 
+    def _write_model_meta(model_path: str) -> None:
+        """Write a sidecar JSON with inference-critical metadata (e.g., return_scale).
+
+        We intentionally keep the main `*.pt` files as pure `state_dict`s for
+        backwards compatibility. The sidecar enables a centralized way to recover
+        training-time settings during inference.
+        """
+        try:
+            meta_path = model_path + ".meta.json"
+            meta_dir = os.path.dirname(meta_path)
+            if meta_dir:
+                os.makedirs(meta_dir, exist_ok=True)
+
+            meta = {
+                "schema": "energydecision.dt_model_meta.v1",
+                "saved_at": datetime.datetime.now().isoformat(),
+                "return_scale": float(return_scale),
+                "model": {
+                    "state_dim": int(getattr(model, "state_dim", -1)),
+                    "act_dim": int(getattr(model, "act_dim", -1)),
+                    "context_len": int(getattr(model, "context_len", -1)),
+                    "h_dim": int(getattr(model, "h_dim", -1)),
+                },
+            }
+
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2, sort_keys=True)
+        except Exception as e:
+            print(f"[WARN] Could not write model meta for {model_path}: {e}")
+
     # AMP setup method
     def _resolve_amp_settings(device_str: str, mode: str) -> tuple[bool, Optional[Any]]:
         applicable = device_str.startswith("cuda")
@@ -395,6 +425,7 @@ def train_decision_transformer(
         if best_dir:
             os.makedirs(best_dir, exist_ok=True)
         torch.save(model.state_dict(), best_model_path)
+        _write_model_meta(best_model_path)
         if resolved_best_metrics_path:
             try:
                 meta_dir = os.path.dirname(resolved_best_metrics_path)
@@ -476,6 +507,7 @@ def train_decision_transformer(
             "best_train_loss_est": best_train_loss_est,
             "batch_size": batch_size,
             "lr": lr,
+            "return_scale": float(return_scale),
             "use_amp": use_amp,
             "amp_enabled": amp_enabled,
             "loss_history": loss_history,
@@ -599,6 +631,24 @@ def train_decision_transformer(
     if resume and checkpoint_path and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=device)
+
+        # Ensure return_scale matches the one used when this checkpoint was created.
+        ckpt_return_scale = checkpoint.get("return_scale", None)
+        if ckpt_return_scale is not None:
+            try:
+                ckpt_return_scale_f = float(ckpt_return_scale)
+                if math.isfinite(ckpt_return_scale_f) and abs(ckpt_return_scale_f) >= 1e-12:
+                    if float(return_scale) != ckpt_return_scale_f:
+                        print(
+                            f"[WARN] Overriding provided return_scale={return_scale} with checkpoint return_scale={ckpt_return_scale_f} for consistency"
+                        )
+                    return_scale = ckpt_return_scale_f
+                    model.return_scale = return_scale
+                else:
+                    print(f"[WARN] Ignoring invalid checkpoint return_scale={ckpt_return_scale}")
+            except Exception:
+                print(f"[WARN] Could not parse checkpoint return_scale={ckpt_return_scale}")
+
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
@@ -810,6 +860,17 @@ def train_decision_transformer(
             recovery_attempts += 1
             print(f"Non-finite weights detected. Attempting recovery from {checkpoint_path} (attempt {recovery_attempts}).")
             checkpoint = torch.load(checkpoint_path, map_location=device)
+
+            ckpt_return_scale = checkpoint.get("return_scale", None)
+            if ckpt_return_scale is not None:
+                try:
+                    ckpt_return_scale_f = float(ckpt_return_scale)
+                    if math.isfinite(ckpt_return_scale_f) and abs(ckpt_return_scale_f) >= 1e-12:
+                        return_scale = ckpt_return_scale_f
+                        model.return_scale = return_scale
+                except Exception:
+                    pass
+
             model.load_state_dict(checkpoint["model_state_dict"])
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
@@ -869,6 +930,7 @@ def train_decision_transformer(
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(model.state_dict(), save_path)
+    _write_model_meta(save_path)
     print(f"Model saved to {save_path}")
     if return_history:
         return (
