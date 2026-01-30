@@ -411,7 +411,7 @@ class AEMOBatteryTradingEnv(gym.Env):
         
         # Check termination
         self.current_step += 1
-        terminated = (self.current_step >= self.max_step) or (current_idx + 1 >= len(self.aemo_data))
+        terminated = bool((self.current_step >= self.max_step) or (current_idx + 1 >= len(self.aemo_data)))
         truncated = False
         
         # Track episode
