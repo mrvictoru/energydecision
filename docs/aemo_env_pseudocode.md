@@ -682,16 +682,21 @@ def backtest_agent(agent, aemo_data, start_date, end_date):
 
 ## 8. Implementation Roadmap
 
-### Phase 1: Data Infrastructure (Current PR)
+### Phase 1: Data Infrastructure ✅ COMPLETED
 - ✅ AEMO data fetching module (`src/aemo_data.py`)
 - ✅ Data exploration notebook (`test_aemo_data.ipynb`)
 - ✅ Pseudocode documentation (this file)
+- ✅ Functions: `fetch_aemo_data_bundle()`, `fetch_aemo_data_bundle_with_dispatch()`
+- ✅ NEMOSIS integration for real AEMO data
 
-### Phase 2: Basic Environment
-- Extend `SolarBatteryEnv` to include AEMO price data
-- Simplified action space (energy arbitrage only)
-- Basic reward function (energy revenue - costs)
-- Test with rule-based baselines
+### Phase 2: Basic Environment ✅ COMPLETED
+- ✅ Created `AEMOBatteryTradingEnv` (independent gym environment)
+- ✅ Implemented observation space with AEMO market data (18 features)
+- ✅ Implemented both simple and multi-market action spaces
+- ✅ Basic reward function (energy revenue + FCAS - degradation)
+- ✅ Tested with random and rule-based policies
+- ✅ Location: `src/AEMOBatteryEnv.py`
+- ✅ Test notebook: `test_aemo_env.ipynb`
 
 ### Phase 3: FCAS Integration
 - Add FCAS prices to observation space
