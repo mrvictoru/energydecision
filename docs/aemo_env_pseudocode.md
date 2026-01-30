@@ -279,7 +279,55 @@ def handle_missing_data(df, method='interpolate'):
 
 ### Data Preprocessing Pipeline
 
+**Actual Implementation** (from `src/aemo_data.py`):
+
+The AEMO data module provides ready-to-use functions for fetching market data:
+
 ```python
+from datetime import datetime
+from src.aemo_data import fetch_aemo_data_bundle, fetch_aemo_data_bundle_with_dispatch
+
+# Basic usage: Fetch regional prices, FCAS, and generation
+start_date = datetime(2024, 1, 1)
+end_date = datetime(2024, 1, 7)
+region = "NSW1"
+
+data = fetch_aemo_data_bundle(
+    start_date=start_date,
+    end_date=end_date,
+    region=region,
+    fcas_services=["RAISEREG", "LOWERREG", "RAISE6SEC", "LOWER6SEC"],  # Optional
+    fuel_types=["solar", "wind", "coal_black", "gas_ccgt"],  # Optional
+    cache_dir="data/aemo",
+)
+
+# Returns dictionary with keys: 'prices', 'fcas', 'generation'
+# - prices: DataFrame with SETTLEMENTDATE, REGIONID, RRP, TOTALDEMAND
+# - fcas: DataFrame with SETTLEMENTDATE, REGIONID, SERVICE, PRICE
+# - generation: DataFrame with SETTLEMENTDATE, REGIONID, FUEL_TYPE, GENERATION
+
+# Advanced usage: Include unit-specific dispatch data
+data_with_dispatch = fetch_aemo_data_bundle_with_dispatch(
+    start_date=start_date,
+    end_date=end_date,
+    region=region,
+    duid="LBBG1",  # Optional: specific unit ID for batteries, solar farms, etc.
+    fcas_services=["RAISEREG", "LOWERREG"],
+    fuel_types=["solar", "wind"],
+)
+
+# Returns additional 'unit_dispatch' key with FCAS enablement data
+# - unit_dispatch: DataFrame with SETTLEMENTDATE, DUID, TOTALCLEARED,
+#                  RAISE6SEC, RAISE60SEC, RAISE5MIN, RAISEREG,
+#                  LOWER6SEC, LOWER60SEC, LOWER5MIN, LOWERREG
+```
+
+**Data Preprocessing for RL Environment:**
+
+```python
+import polars as pl
+import numpy as np
+
 class AEMODataPipeline:
     """
     Preprocessing pipeline for AEMO data to be used in RL environment.
@@ -295,7 +343,7 @@ class AEMODataPipeline:
         
         # Normalization statistics (learned from training data)
         self.stats = {
-            'RRP': {'mean': 80.0, 'std': 50.0, 'min': 0.0, 'max': 500.0},
+            'RRP': {'mean': 80.0, 'std': 50.0, 'min': -100.0, 'max': 500.0},
             'FCAS_PRICE': {'mean': 15.0, 'std': 10.0, 'min': 0.0, 'max': 100.0},
             'DEMAND': {'mean': 7000.0, 'std': 2000.0, 'min': 4000.0, 'max': 12000.0},
         }
@@ -304,23 +352,28 @@ class AEMODataPipeline:
         """
         Fetch AEMO data and preprocess for RL environment.
         """
-        # 1. Fetch raw data
+        # 1. Fetch raw data using actual AEMO data module
+        from src.aemo_data import fetch_aemo_data_bundle
+        
         data = fetch_aemo_data_bundle(
             start_date=start_date,
             end_date=end_date,
             region=region,
+            fcas_services=["RAISEREG", "LOWERREG", "RAISE6SEC", "LOWER6SEC", 
+                          "RAISE60SEC", "LOWER60SEC", "RAISE5MIN", "LOWER5MIN"],
+            fuel_types=["solar", "wind"],
             cache_dir=self.cache_dir
         )
         
-        # 2. Align time resolution
-        prices = align_aemo_data(data['prices'], self.step_duration_hours)
-        fcas = align_aemo_data(data['fcas'], self.step_duration_hours)
-        generation = align_aemo_data(data['generation'], self.step_duration_hours)
+        # 2. Align time resolution (AEMO is 5-min, env typically 30-min)
+        prices = self._align_aemo_data(data['prices'], self.step_duration_hours)
+        fcas = self._align_aemo_data(data['fcas'], self.step_duration_hours)
+        generation = self._align_aemo_data(data['generation'], self.step_duration_hours)
         
         # 3. Handle missing data
-        prices = handle_missing_data(prices, method=self.missing_data_method)
-        fcas = handle_missing_data(fcas, method=self.missing_data_method)
-        generation = handle_missing_data(generation, method=self.missing_data_method)
+        prices = self._handle_missing_data(prices, method=self.missing_data_method)
+        fcas = self._handle_missing_data(fcas, method=self.missing_data_method)
+        generation = self._handle_missing_data(generation, method=self.missing_data_method)
         
         # 4. Merge datasets
         merged_df = self._merge_datasets(prices, fcas, generation)
@@ -330,16 +383,81 @@ class AEMODataPipeline:
         
         return normalized_df
     
+    def _align_aemo_data(self, df, step_duration_hours):
+        """Resample 5-min AEMO data to match environment step duration."""
+        resample_freq = f"{int(step_duration_hours * 60)}min"
+        
+        # Convert to pandas for resampling
+        pdf = df.to_pandas()
+        pdf = pdf.set_index('SETTLEMENTDATE')
+        
+        # Aggregate based on column type
+        agg_dict = {}
+        for col in pdf.columns:
+            if 'PRICE' in col or 'RRP' in col:
+                agg_dict[col] = 'mean'  # Average prices
+            elif 'DEMAND' in col or 'GENERATION' in col:
+                agg_dict[col] = 'mean'  # Average demand/generation
+            elif 'REGIONID' in col or 'SERVICE' in col or 'FUEL_TYPE' in col:
+                agg_dict[col] = 'first'  # Keep categorical
+        
+        resampled = pdf.resample(resample_freq).agg(agg_dict).reset_index()
+        return pl.from_pandas(resampled)
+    
+    def _handle_missing_data(self, df, method='interpolate'):
+        """Handle missing values in AEMO data."""
+        pdf = df.to_pandas()
+        
+        if method == 'interpolate':
+            # Linear interpolation for numeric columns
+            numeric_cols = pdf.select_dtypes(include=[np.number]).columns
+            pdf[numeric_cols] = pdf[numeric_cols].interpolate(method='linear', limit_direction='both')
+        elif method == 'forward_fill':
+            pdf = pdf.fillna(method='ffill', limit=12)
+        
+        # Drop any remaining NaN rows
+        pdf = pdf.dropna()
+        return pl.from_pandas(pdf)
+    
     def _merge_datasets(self, prices, fcas, generation):
-        # Join on timestamp
+        """Merge prices, FCAS, and generation into single DataFrame."""
         # Pivot FCAS to wide format (one column per service)
+        fcas_pdf = fcas.to_pandas()
+        fcas_wide = fcas_pdf.pivot_table(
+            index='SETTLEMENTDATE',
+            columns='SERVICE',
+            values='PRICE',
+            aggfunc='mean'
+        ).reset_index()
+        
         # Pivot generation to wide format (one column per fuel type)
-        ...
+        gen_pdf = generation.to_pandas()
+        gen_wide = gen_pdf.pivot_table(
+            index='SETTLEMENTDATE',
+            columns='FUEL_TYPE',
+            values='GENERATION',
+            aggfunc='sum'
+        ).reset_index()
+        
+        # Merge all datasets
+        prices_pdf = prices.to_pandas()
+        merged = prices_pdf.merge(fcas_wide, on='SETTLEMENTDATE', how='left')
+        merged = merged.merge(gen_wide, on='SETTLEMENTDATE', how='left')
+        
+        return pl.from_pandas(merged)
     
     def _normalize_features(self, df):
-        # Apply min-max or z-score normalization
-        # Clip outliers to prevent extreme values
-        ...
+        """Apply min-max normalization to features."""
+        pdf = df.to_pandas()
+        
+        # Normalize each numeric column
+        for col in pdf.select_dtypes(include=[np.number]).columns:
+            if col in self.stats:
+                stats = self.stats[col]
+                pdf[f'{col}_normalized'] = (pdf[col] - stats['min']) / (stats['max'] - stats['min'])
+                pdf[f'{col}_normalized'] = pdf[f'{col}_normalized'].clip(0, 1)
+        
+        return pl.from_pandas(pdf)
 ```
 
 ## 5. Episode Structure
