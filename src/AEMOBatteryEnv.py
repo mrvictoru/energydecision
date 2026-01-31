@@ -12,7 +12,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import polars as pl
-import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
@@ -44,7 +43,7 @@ class AEMODataPreprocessor:
     def preprocess_aemo_data(self, 
                              prices: pl.DataFrame,
                              fcas: pl.DataFrame,
-                             generation: pl.DataFrame) -> pd.DataFrame:
+                             generation: pl.DataFrame) -> pl.DataFrame:
         """
         Preprocess AEMO data for the environment.
         
@@ -54,17 +53,16 @@ class AEMODataPreprocessor:
             generation: Generation DataFrame from fetch_aemo_generation_by_fuel
             
         Returns:
-            Preprocessed pandas DataFrame ready for environment use
+            Preprocessed Polars DataFrame ready for environment use
         """
-        # Convert to pandas for easier manipulation
-        prices_pdf = prices.to_pandas()
-        fcas_pdf = fcas.to_pandas()
-        gen_pdf = generation.to_pandas()
-        
+        prices_pl = prices
+        fcas_pl = fcas
+        gen_pl = generation
+
         # Resample to match environment step duration
-        prices_resampled = self._resample_data(prices_pdf, 'SETTLEMENTDATE')
-        fcas_resampled = self._resample_fcas(fcas_pdf)
-        gen_resampled = self._resample_generation(gen_pdf)
+        prices_resampled = self._resample_data(prices_pl, 'SETTLEMENTDATE')
+        fcas_resampled = self._resample_fcas(fcas_pl)
+        gen_resampled = self._resample_generation(gen_pl)
         
         # Merge all datasets
         merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled)
@@ -80,157 +78,192 @@ class AEMODataPreprocessor:
         
         return merged
     
-    def _resample_data(self, df: pd.DataFrame, time_col: str) -> pd.DataFrame:
+    def _every_str(self) -> str:
+        minutes = int(round(self.step_duration_hours * 60))
+        return f"{minutes}m"
+
+    def _ensure_dt(self, df: pl.DataFrame, time_col: str) -> pl.DataFrame:
+        if time_col not in df.columns:
+            return df
+        if df.schema.get(time_col) == pl.Datetime:
+            return df
+        if df.schema.get(time_col) == pl.Utf8:
+            return df.with_columns(pl.col(time_col).str.strptime(pl.Datetime, strict=False))
+        return df.with_columns(pl.col(time_col).cast(pl.Datetime, strict=False))
+
+    def _resample_data(self, df: pl.DataFrame, time_col: str) -> pl.DataFrame:
         """Resample 5-minute data to environment step duration."""
-        df = df.copy()
-        df[time_col] = pd.to_datetime(df[time_col])
-        df = df.set_index(time_col)
-        
-        resample_freq = f"{int(self.step_duration_hours * 60)}min"
-        
-        # Aggregate numeric columns
-        agg_dict = {}
-        for col in df.columns:
-            if df[col].dtype in [np.float64, np.float32, np.int64, np.int32]:
-                agg_dict[col] = 'mean'
-            else:
-                agg_dict[col] = 'first'
-        
-        resampled = df.resample(resample_freq).agg(agg_dict)
-        return resampled.reset_index()
+        df = self._ensure_dt(df, time_col)
+        if df.height == 0:
+            return df
+
+        df = df.sort(time_col)
+        every = self._every_str()
+
+        numeric_cols = [c for c, t in df.schema.items() if c != time_col and t.is_numeric()]
+        other_cols = [c for c in df.columns if c not in numeric_cols and c != time_col]
+
+        aggs: list[pl.Expr] = []
+        aggs.extend([pl.col(c).mean().alias(c) for c in numeric_cols])
+        aggs.extend([pl.col(c).first().alias(c) for c in other_cols])
+
+        return df.group_by_dynamic(time_col, every=every, label='left', closed='left').agg(aggs)
     
-    def _resample_fcas(self, fcas_df: pd.DataFrame) -> pd.DataFrame:
+    def _resample_fcas(self, fcas_df: pl.DataFrame) -> pl.DataFrame:
         """Resample and pivot FCAS data to wide format."""
-        fcas_df = fcas_df.copy()
-        fcas_df['SETTLEMENTDATE'] = pd.to_datetime(fcas_df['SETTLEMENTDATE'])
-        fcas_df = fcas_df.set_index('SETTLEMENTDATE')
-        
-        resample_freq = f"{int(self.step_duration_hours * 60)}min"
-        
-        # Pivot to wide format
-        fcas_wide = fcas_df.pivot_table(
-            index=fcas_df.index,
-            columns='SERVICE',
-            values='PRICE',
-            aggfunc='mean'
+        if fcas_df.height == 0:
+            return pl.DataFrame({'SETTLEMENTDATE': []})
+
+        fcas_df = self._ensure_dt(fcas_df, 'SETTLEMENTDATE').sort('SETTLEMENTDATE')
+        every = self._every_str()
+
+        needed = {'SETTLEMENTDATE', 'SERVICE', 'PRICE'}
+        if not needed.issubset(set(fcas_df.columns)):
+            return pl.DataFrame({'SETTLEMENTDATE': []})
+
+        grouped = (
+            fcas_df
+            .with_columns(pl.col('PRICE').cast(pl.Float64, strict=False))
+            .group_by_dynamic('SETTLEMENTDATE', every=every, by='SERVICE', label='left', closed='left')
+            .agg(pl.col('PRICE').mean().alias('PRICE'))
         )
-        
-        # Resample
-        fcas_resampled = fcas_wide.resample(resample_freq).mean()
-        
-        # Rename columns to have FCAS_ prefix
-        fcas_resampled.columns = [f'FCAS_{col}' for col in fcas_resampled.columns]
-        
-        return fcas_resampled.reset_index()
+
+        wide = grouped.pivot(index='SETTLEMENTDATE', columns='SERVICE', values='PRICE')
+        rename_map = {c: f"FCAS_{c}" for c in wide.columns if c != 'SETTLEMENTDATE'}
+        return wide.rename(rename_map)
     
-    def _resample_generation(self, gen_df: pd.DataFrame) -> pd.DataFrame:
+    def _resample_generation(self, gen_df: pl.DataFrame) -> pl.DataFrame:
         """Resample and pivot generation data to wide format."""
-        if len(gen_df) == 0:
-            return pd.DataFrame({'SETTLEMENTDATE': []})
-        
-        gen_df = gen_df.copy()
-        gen_df['SETTLEMENTDATE'] = pd.to_datetime(gen_df['SETTLEMENTDATE'])
-        gen_df = gen_df.set_index('SETTLEMENTDATE')
-        
-        resample_freq = f"{int(self.step_duration_hours * 60)}min"
-        
-        # Pivot to wide format
-        gen_wide = gen_df.pivot_table(
-            index=gen_df.index,
-            columns='FUEL_TYPE',
-            values='GENERATION',
-            aggfunc='sum'
+        if gen_df.height == 0:
+            return pl.DataFrame({'SETTLEMENTDATE': []})
+
+        needed = {'SETTLEMENTDATE', 'FUEL_TYPE', 'GENERATION'}
+        if not needed.issubset(set(gen_df.columns)):
+            return pl.DataFrame({'SETTLEMENTDATE': []})
+
+        gen_df = self._ensure_dt(gen_df, 'SETTLEMENTDATE').sort('SETTLEMENTDATE')
+        every = self._every_str()
+
+        # First aggregate per 5-min interval & fuel type (sum across units), then average across the env interval.
+        gen_5 = (
+            gen_df
+            .with_columns(pl.col('GENERATION').cast(pl.Float64, strict=False))
+            .group_by(['SETTLEMENTDATE', 'FUEL_TYPE'])
+            .agg(pl.col('GENERATION').sum().alias('GENERATION'))
         )
-        
-        # Resample
-        gen_resampled = gen_wide.resample(resample_freq).mean()
-        
-        # Rename columns to have GEN_ prefix
-        gen_resampled.columns = [f'GEN_{col}' for col in gen_resampled.columns]
-        
-        return gen_resampled.reset_index()
+
+        gen_res = (
+            gen_5
+            .sort(['FUEL_TYPE', 'SETTLEMENTDATE'])
+            .group_by_dynamic('SETTLEMENTDATE', every=every, by='FUEL_TYPE', label='left', closed='left')
+            .agg(pl.col('GENERATION').mean().alias('GENERATION'))
+        )
+
+        wide = gen_res.pivot(index='SETTLEMENTDATE', columns='FUEL_TYPE', values='GENERATION')
+        rename_map = {c: f"GEN_{c}" for c in wide.columns if c != 'SETTLEMENTDATE'}
+        return wide.rename(rename_map)
     
-    def _merge_datasets(self, prices: pd.DataFrame, fcas: pd.DataFrame, gen: pd.DataFrame) -> pd.DataFrame:
+    def _merge_datasets(self, prices: pl.DataFrame, fcas: pl.DataFrame, gen: pl.DataFrame) -> pl.DataFrame:
         """Merge all datasets on timestamp."""
-        merged = prices.copy()
-        
-        if len(fcas) > 0:
-            merged = merged.merge(fcas, on='SETTLEMENTDATE', how='left')
-        
-        if len(gen) > 0:
-            merged = merged.merge(gen, on='SETTLEMENTDATE', how='left')
-        
+        merged = prices
+
+        if fcas.height > 0 and 'SETTLEMENTDATE' in fcas.columns:
+            merged = merged.join(fcas, on='SETTLEMENTDATE', how='left')
+
+        if gen.height > 0 and 'SETTLEMENTDATE' in gen.columns:
+            merged = merged.join(gen, on='SETTLEMENTDATE', how='left')
+
         return merged
     
-    def _handle_missing_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _handle_missing_data(self, df: pl.DataFrame) -> pl.DataFrame:
         """Handle missing values."""
-        df = df.copy()
-        
-        if self.missing_data_method == 'interpolate':
-            # Interpolate numeric columns
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            df[numeric_cols] = df[numeric_cols].interpolate(method='linear', limit_direction='both')
+        if df.height == 0:
+            return df
+
+        df = df.sort('SETTLEMENTDATE') if 'SETTLEMENTDATE' in df.columns else df
+
+        numeric_cols = [c for c, t in df.schema.items() if t.is_numeric()]
+        if self.missing_data_method == 'interpolate' and numeric_cols:
+            df = df.with_columns([pl.col(c).interpolate() for c in numeric_cols])
+            df = df.fill_null(strategy='forward').fill_null(strategy='backward')
         elif self.missing_data_method == 'forward_fill':
-            df = df.fillna(method='ffill', limit=12)
-        
-        # Fill any remaining NaNs with 0
-        df = df.fillna(0)
-        
+            df = df.fill_null(strategy='forward', limit=12)
+
+        if numeric_cols:
+            df = df.with_columns([pl.col(c).fill_null(0.0) for c in numeric_cols])
+
         return df
     
-    def _add_time_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _add_time_features(self, df: pl.DataFrame) -> pl.DataFrame:
         """Add cyclical time features."""
-        df = df.copy()
-        
-        # Ensure SETTLEMENTDATE is datetime
-        df['SETTLEMENTDATE'] = pd.to_datetime(df['SETTLEMENTDATE'])
-        
-        # Hour of day (0-23)
-        hour = df['SETTLEMENTDATE'].dt.hour + df['SETTLEMENTDATE'].dt.minute / 60
-        df['hour_sin'] = np.sin(2 * np.pi * hour / 24)
-        df['hour_cos'] = np.cos(2 * np.pi * hour / 24)
-        
-        # Day of week (0-6)
-        day = df['SETTLEMENTDATE'].dt.dayofweek
-        df['day_sin'] = np.sin(2 * np.pi * day / 7)
-        df['day_cos'] = np.cos(2 * np.pi * day / 7)
-        
-        # Peak period indicator (6-22)
-        df['is_peak'] = ((hour >= 6) & (hour <= 22)).astype(float)
-        
+        if df.height == 0:
+            return df
+
+        df = self._ensure_dt(df, 'SETTLEMENTDATE')
+
+        hour = (
+            pl.col('SETTLEMENTDATE').dt.hour().cast(pl.Float64) +
+            pl.col('SETTLEMENTDATE').dt.minute().cast(pl.Float64) / 60.0
+        )
+        day = pl.col('SETTLEMENTDATE').dt.weekday().cast(pl.Float64)
+
+        df = df.with_columns([
+            (pl.lit(2 * np.pi) * hour / 24.0).sin().alias('hour_sin'),
+            (pl.lit(2 * np.pi) * hour / 24.0).cos().alias('hour_cos'),
+            (pl.lit(2 * np.pi) * day / 7.0).sin().alias('day_sin'),
+            (pl.lit(2 * np.pi) * day / 7.0).cos().alias('day_cos'),
+            ((hour >= 6.0) & (hour <= 22.0)).cast(pl.Float64).alias('is_peak'),
+        ])
+
         return df
     
-    def _normalize_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _normalize_features(self, df: pl.DataFrame) -> pl.DataFrame:
         """Normalize features to [0, 1] range."""
-        df = df.copy()
-        
+        if df.height == 0:
+            return df
+
+        out = df
+
         # Normalize RRP (can be negative)
-        if 'RRP' in df.columns:
-            df['RRP_normalized'] = (df['RRP'] - self.stats['RRP']['min']) / \
-                                   (self.stats['RRP']['max'] - self.stats['RRP']['min'])
-            df['RRP_normalized'] = df['RRP_normalized'].clip(0, 1)
-        
+        if 'RRP' in out.columns:
+            denom = (self.stats['RRP']['max'] - self.stats['RRP']['min'])
+            out = out.with_columns(
+                ((pl.col('RRP').cast(pl.Float64, strict=False) - self.stats['RRP']['min']) / denom)
+                .clip(0.0, 1.0)
+                .alias('RRP_normalized')
+            )
+
         # Normalize TOTALDEMAND
-        if 'TOTALDEMAND' in df.columns:
-            df['DEMAND_normalized'] = (df['TOTALDEMAND'] - self.stats['TOTALDEMAND']['min']) / \
-                                      (self.stats['TOTALDEMAND']['max'] - self.stats['TOTALDEMAND']['min'])
-            df['DEMAND_normalized'] = df['DEMAND_normalized'].clip(0, 1)
-        
+        if 'TOTALDEMAND' in out.columns:
+            denom = (self.stats['TOTALDEMAND']['max'] - self.stats['TOTALDEMAND']['min'])
+            out = out.with_columns(
+                ((pl.col('TOTALDEMAND').cast(pl.Float64, strict=False) - self.stats['TOTALDEMAND']['min']) / denom)
+                .clip(0.0, 1.0)
+                .alias('DEMAND_normalized')
+            )
+
         # Normalize FCAS prices
-        fcas_cols = [col for col in df.columns if col.startswith('FCAS_')]
-        for col in fcas_cols:
-            df[f'{col}_normalized'] = (df[col] - self.stats['FCAS_PRICE']['min']) / \
-                                      (self.stats['FCAS_PRICE']['max'] - self.stats['FCAS_PRICE']['min'])
-            df[f'{col}_normalized'] = df[f'{col}_normalized'].clip(0, 1)
-        
+        fcas_cols = [col for col in out.columns if col.startswith('FCAS_')]
+        if fcas_cols:
+            denom = (self.stats['FCAS_PRICE']['max'] - self.stats['FCAS_PRICE']['min'])
+            out = out.with_columns([
+                ((pl.col(col).cast(pl.Float64, strict=False) - self.stats['FCAS_PRICE']['min']) / denom)
+                .clip(0.0, 1.0)
+                .alias(f'{col}_normalized')
+                for col in fcas_cols
+            ])
+
         # Normalize generation (as percentage of total)
-        gen_cols = [col for col in df.columns if col.startswith('GEN_')]
+        gen_cols = [col for col in out.columns if col.startswith('GEN_')]
         if gen_cols:
-            total_gen = df[gen_cols].sum(axis=1)
-            for col in gen_cols:
-                df[f'{col}_pct'] = df[col] / (total_gen + 1e-6)  # Avoid division by zero
-        
-        return df
+            total_gen = pl.sum_horizontal([pl.col(c).cast(pl.Float64, strict=False) for c in gen_cols]).alias('_total_gen')
+            out = out.with_columns(total_gen)
+            out = out.with_columns([
+                (pl.col(col).cast(pl.Float64, strict=False) / (pl.col('_total_gen') + 1e-6)).alias(f'{col}_pct')
+                for col in gen_cols
+            ]).drop('_total_gen')
+
+        return out
 
 
 class AEMOBatteryTradingEnv(gym.Env):
@@ -248,7 +281,7 @@ class AEMOBatteryTradingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     
     def __init__(self,
-                 aemo_data: pd.DataFrame,
+                 aemo_data: pl.DataFrame,
                  battery_capacity: float = 10.0,  # MWh (grid-scale)
                  max_battery_flow: float = 5.0,   # MW
                  init_battery_level: float = 5.0,  # MWh
@@ -385,7 +418,7 @@ class AEMOBatteryTradingEnv(gym.Env):
             obs = self._get_observation()
             return obs, 0.0, terminated, False, {}
         
-        market_data = self.aemo_data.iloc[current_idx]
+        market_data = self.aemo_data.row(current_idx, named=True)
         
         # Convert normalized action to actual power (MW)
         power_command = battery_dispatch * self.max_battery_flow
@@ -440,7 +473,7 @@ class AEMOBatteryTradingEnv(gym.Env):
             # Return zero observation if out of bounds
             return np.zeros(self.observation_space.shape[0], dtype=np.float32)
         
-        market_data = self.aemo_data.iloc[current_idx]
+        market_data = self.aemo_data.row(current_idx, named=True)
         
         obs = []
         

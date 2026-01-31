@@ -26,6 +26,10 @@ This project provides a comprehensive framework for benchmarking control algorit
 
 *   **Gymnasium Environment:** [`src/EnergySimEnv.py`](src/EnergySimEnv.py) simulates a household with solar PV, battery storage, and grid connection. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards. The return observation is normalized against the dataset so it is suitable for reinforcement learning methods.
 
+*   **AEMO Market Environment:** [`src/AEMOBatteryEnv.py`](src/AEMOBatteryEnv.py) provides a grid-scale battery trading environment using real AEMO market data (energy + FCAS). It includes a Polars-based preprocessor for resampling, feature engineering, and normalization.
+
+*   **AEMO Data Pipeline:** [`src/aemo_data.py`](src/aemo_data.py) fetches actual AEMO data via NEMOSIS (dispatch prices, FCAS prices, generation mix, and unit dispatch) and returns Polars DataFrames with caching support.
+
 *   **Algorithmic Baselines:** Implements and compares several control strategies within the [`Agent`](src/decision.py) class:
     *   **Rule-Based:** Heuristic controller with safety constraints.
     *   **Optimization:** Stochastic Dynamic Programming (SDP) and Multi-Resolution Dynamic Programming (MRDP) for theoretical optimality.
@@ -94,6 +98,8 @@ energydecision/
 │   └── *.json               # Model configs
 ├── src/                     # Source code
 │   ├── EnergySimEnv.py              # Gymnasium environment for solar-battery-grid simulation
+│   ├── AEMOBatteryEnv.py            # AEMO market trading environment (energy + FCAS)
+│   ├── aemo_data.py                 # AEMO data ingestion (NEMOSIS) + caching
 │   ├── decision.py                  # Agent class: rule-based, RL, DT, and SDP controllers
 │   ├── batterydeg.py                # Battery degradation models (static and dynamic)
 │   ├── helper.py                    # Data transformation, preparation, and evaluation utilities
@@ -118,6 +124,8 @@ energydecision/
 ├── notebooks/               # Useful example notebooks
 │   ├── DemoEnv.ipynb
 │   ├── Demosb3.ipynb
+│   ├── test_aemo_data.ipynb         # AEMO data ingestion and exploration
+│   ├── test_aemo_env.ipynb          # AEMO trading environment smoke tests
 │   ├── test_simrun.ipynb
 │   ├── test_sb3train.ipynb
 │   ├── test_eval.ipynb
@@ -139,6 +147,13 @@ energydecision/
     - `data/2010-2011 Solar home electricity data.csv`
     - `data/2011-2012 Solar home electricity data v2.csv`
     - `data/2012-2013 Solar home electricity data v2.csv`
+
+### AEMO Data (Optional)
+
+The AEMO pipeline downloads data on demand via NEMOSIS and caches files under `data/aemo/` by default. In some environments AEMO blocks static table downloads; if that happens, provide a local generator info file (XLS/XLSX/CSV) via:
+
+- Environment variable: `AEMO_GENERATORS_FILE=/path/to/your/file.xlsx`
+- Or place the file in `src/data/aemo/` or `data/aemo/` (auto-detected)
 
 ---
 
@@ -273,6 +288,11 @@ Load the trained model in `test_simrun.ipynb` to evaluate its performance.
 - Compute aggregate metrics (Profit, ROI, Degradation).
 - Generate comparative plots (Risk-Return, Cost Breakdown).
 - Perform temporal analysis of agent behavior.
+
+### AEMO Market Workflow (AEMO notebooks)
+
+- [`test_aemo_data.ipynb`](test_aemo_data.ipynb): fetch and explore AEMO dispatch prices, FCAS prices, generation mix, and unit dispatch.
+- [`test_aemo_env.ipynb`](test_aemo_env.ipynb): create and run `AEMOBatteryTradingEnv` episodes using the Polars-based preprocessor.
 
 ---
 

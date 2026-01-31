@@ -18,10 +18,9 @@ References:
 """
 
 import polars as pl
-import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, Iterable, Mapping
 import os
 import warnings
 
@@ -56,43 +55,133 @@ FUEL_TYPES = [
 ]
 
 
-def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
+def _as_polars(df: Any) -> pl.DataFrame:
+    """Best-effort conversion of foreign DataFrames (e.g. pandas from NEMOSIS) to Polars."""
+    if df is None:
+        return pl.DataFrame()
+    if isinstance(df, pl.DataFrame):
+        return df
+    try:
+        return pl.from_pandas(df)
+    except Exception as e:
+        raise TypeError(f"Unsupported dataframe type for conversion to Polars: {type(df)!r}") from e
 
 
-def _pick_sheet_with_columns(sheets: Dict[str, pd.DataFrame], required_columns: List[str]) -> Optional[pd.DataFrame]:
-    required_lower = {c.lower() for c in required_columns}
-    for _, sheet in sheets.items():
-        sheet = _normalize_columns(sheet)
-        cols_lower = {c.lower() for c in sheet.columns}
-        if required_lower.issubset(cols_lower):
-            return sheet
-    return None
+def _normalize_columns(df: pl.DataFrame) -> pl.DataFrame:
+    rename_map = {}
+    for c in df.columns:
+        c2 = str(c).strip()
+        if c2 != c:
+            rename_map[c] = c2
+    return df.rename(rename_map) if rename_map else df
 
 
-def _read_generator_info_file(file_path: Path) -> pd.DataFrame:
+def _coerce_datetime(df: pl.DataFrame, col: str) -> pl.DataFrame:
+    if col not in df.columns:
+        return df
+    dtype = df.schema.get(col)
+    if dtype == pl.Datetime:
+        return df
+    if dtype == pl.Utf8:
+        return df.with_columns(pl.col(col).str.strptime(pl.Datetime, strict=False))
+    return df.with_columns(pl.col(col).cast(pl.Datetime, strict=False))
+
+
+def _coerce_f64(df: pl.DataFrame, col: str) -> pl.DataFrame:
+    if col not in df.columns:
+        return df
+    return df.with_columns(pl.col(col).cast(pl.Float64, strict=False))
+
+
+def _rows_to_polars(headers: list[str], rows: Iterable[Iterable[Any]]) -> pl.DataFrame:
+    normalized_headers = [str(h).strip() if h is not None else "" for h in headers]
+    out_rows: list[dict[str, Any]] = []
+    for r in rows:
+        vals = list(r)
+        row_dict = {}
+        for i, h in enumerate(normalized_headers):
+            if not h:
+                continue
+            row_dict[h] = vals[i] if i < len(vals) else None
+        if row_dict:
+            out_rows.append(row_dict)
+    df = pl.DataFrame(out_rows) if out_rows else pl.DataFrame()
+    return _normalize_columns(df)
+
+
+def _read_generator_info_file(file_path: Path) -> pl.DataFrame:
     suffix = file_path.suffix.lower()
     if suffix == ".csv":
-        df = pd.read_csv(file_path)
-        return _normalize_columns(df)
+        return _normalize_columns(pl.read_csv(file_path))
 
-    # Excel: load all sheets, then pick the one that looks like generator info.
-    sheets = pd.read_excel(file_path, sheet_name=None)
-    if isinstance(sheets, dict) and sheets:
-        picked = _pick_sheet_with_columns(sheets, ["DUID", "Region"])
-        if picked is not None:
-            return picked
-        # Fall back to first sheet
-        first_sheet = next(iter(sheets.values()))
-        return _normalize_columns(first_sheet)
+    # Support reading old .xls by converting to .xlsx first (xls2xlsx is in requirements).
+    if suffix == ".xls":
+        try:
+            from xls2xlsx import XLS2XLSX
+        except Exception as e:
+            raise ImportError(
+                "Reading .xls generator info requires the optional package 'xls2xlsx'. "
+                "Install it in your environment or convert the file to .xlsx/.csv."
+            ) from e
 
-    # pandas can return a DataFrame for some excel engines; normalize and return.
-    if isinstance(sheets, pd.DataFrame):
-        return _normalize_columns(sheets)
+        xlsx_path = file_path.with_suffix(".xlsx")
+        if not xlsx_path.exists():
+            x2x = XLS2XLSX(str(file_path))
+            x2x.to_xlsx(str(xlsx_path))
+        file_path = xlsx_path
+        suffix = ".xlsx"
 
-    raise ValueError(f"Could not read generator info file: {file_path}")
+    if suffix in {".xlsx", ".xlsm"}:
+        # Prefer Polars' Excel reader if available; otherwise use openpyxl.
+        if hasattr(pl, "read_excel"):
+            try:
+                sheets = pl.read_excel(file_path, sheet_name=None)  # type: ignore[attr-defined]
+                if isinstance(sheets, dict) and sheets:
+                    required = {"duid", "region"}
+                    for _, sheet in sheets.items():
+                        sheet = _normalize_columns(sheet)
+                        cols_lower = {c.lower() for c in sheet.columns}
+                        if required.issubset(cols_lower):
+                            return sheet
+                    return _normalize_columns(next(iter(sheets.values())))
+            except Exception:
+                pass
+
+        try:
+            from openpyxl import load_workbook
+        except Exception as e:
+            raise ImportError(
+                "Reading .xlsx generator info requires 'openpyxl'. Install it or provide a CSV."
+            ) from e
+
+        wb = load_workbook(filename=str(file_path), read_only=True, data_only=True)
+        required = {"duid", "region"}
+        chosen_headers: list[str] | None = None
+        chosen_rows: Iterable[Iterable[Any]] | None = None
+
+        for ws in wb.worksheets:
+            values = ws.values
+            try:
+                headers = next(values)
+            except StopIteration:
+                continue
+            headers_list = [str(h).strip() if h is not None else "" for h in headers]
+            cols_lower = {h.lower() for h in headers_list if h}
+            if required.issubset(cols_lower):
+                chosen_headers = headers_list
+                chosen_rows = values
+                break
+
+            if chosen_headers is None:
+                chosen_headers = headers_list
+                chosen_rows = values
+
+        if chosen_headers is None or chosen_rows is None:
+            return pl.DataFrame()
+
+        return _rows_to_polars(chosen_headers, chosen_rows)
+
+    raise ValueError(f"Unsupported generator info file type: {file_path}")
 
 
 def _auto_detect_generator_info_file() -> Optional[Path]:
@@ -109,7 +198,7 @@ def _auto_detect_generator_info_file() -> Optional[Path]:
     return None
 
 
-def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = None) -> Optional[pd.DataFrame]:
+def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = None) -> Optional[pl.DataFrame]:
     """
     Retrieve generator static info (DUID -> Region/Fuel descriptor).
 
@@ -124,7 +213,7 @@ def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = N
             update_static_file=False
         )
         if gen_info is not None and len(gen_info) > 0:
-            return _normalize_columns(gen_info)
+            return _normalize_columns(_as_polars(gen_info))
     except Exception:
         pass
 
@@ -230,16 +319,17 @@ def fetch_aemo_dispatch_price(
             table_name='DISPATCHPRICE',
             raw_data_location=str(cache_path)
         )
-        
+
         # Filter to the specified region
-        if price_data is not None and len(price_data) > 0:
-            price_data = price_data[price_data['REGIONID'] == region].copy()
-            
-            # Convert to polars DataFrame with standardized column names
-            # NEMOSIS returns: SETTLEMENTDATE, REGIONID, RRP, and other columns
-            price_data['SETTLEMENTDATE'] = pd.to_datetime(price_data['SETTLEMENTDATE'])
-            price_data['RRP'] = pd.to_numeric(price_data['RRP'], errors='coerce')
-            
+        price_pl = _as_polars(price_data)
+        if price_pl.height > 0:
+            price_pl = _normalize_columns(price_pl)
+            if 'REGIONID' in price_pl.columns:
+                price_pl = price_pl.filter(pl.col('REGIONID') == region)
+
+            price_pl = _coerce_datetime(price_pl, 'SETTLEMENTDATE')
+            price_pl = _coerce_f64(price_pl, 'RRP')
+
             # Also fetch DISPATCHREGIONSUM for demand data
             demand_data = dynamic_data_compiler(
                 start_time=start_time,
@@ -247,31 +337,23 @@ def fetch_aemo_dispatch_price(
                 table_name='DISPATCHREGIONSUM',
                 raw_data_location=str(cache_path)
             )
-            
-            if demand_data is not None and len(demand_data) > 0:
-                demand_data = demand_data[demand_data['REGIONID'] == region].copy()
-                demand_data['SETTLEMENTDATE'] = pd.to_datetime(demand_data['SETTLEMENTDATE'])
-                demand_data['TOTALDEMAND'] = pd.to_numeric(demand_data['TOTALDEMAND'], errors='coerce')
-                
-                # Merge price and demand data
-                result = price_data.merge(
-                    demand_data[['SETTLEMENTDATE', 'TOTALDEMAND']],
-                    on='SETTLEMENTDATE',
-                    how='left'
-                )
+
+            demand_pl = _normalize_columns(_as_polars(demand_data))
+            if demand_pl.height > 0 and 'REGIONID' in demand_pl.columns:
+                demand_pl = demand_pl.filter(pl.col('REGIONID') == region)
+            demand_pl = _coerce_datetime(demand_pl, 'SETTLEMENTDATE')
+            demand_pl = _coerce_f64(demand_pl, 'TOTALDEMAND')
+
+            if demand_pl.height > 0 and 'TOTALDEMAND' in demand_pl.columns:
+                demand_pl = demand_pl.select(['SETTLEMENTDATE', 'TOTALDEMAND']).unique(subset=['SETTLEMENTDATE'])
+                out = price_pl.join(demand_pl, on='SETTLEMENTDATE', how='left')
             else:
-                # If no demand data, add placeholder column
-                result = price_data.copy()
-                result['TOTALDEMAND'] = 0.0
-            
-            # Select and order columns
-            result = result[['SETTLEMENTDATE', 'REGIONID', 'RRP', 'TOTALDEMAND']]
-            
-            # Convert to Polars
-            df = pl.from_pandas(result)
-            
-            print(f"Fetched {len(df)} price records")
-            return df
+                out = price_pl.with_columns(pl.lit(0.0).alias('TOTALDEMAND'))
+
+            out = out.select(['SETTLEMENTDATE', 'REGIONID', 'RRP', 'TOTALDEMAND']).sort('SETTLEMENTDATE')
+            out = out.with_columns(pl.col('TOTALDEMAND').fill_null(0.0))
+            print(f"Fetched {len(out)} price records")
+            return out
         else:
             print("No data returned from NEMOSIS")
             return pl.DataFrame(schema={
@@ -352,10 +434,12 @@ def fetch_aemo_fcas_price(
             table_name='DISPATCHPRICE',
             raw_data_location=str(cache_path)
         )
-        
-        if price_data is not None and len(price_data) > 0:
-            price_data = price_data[price_data['REGIONID'] == region].copy()
-            price_data['SETTLEMENTDATE'] = pd.to_datetime(price_data['SETTLEMENTDATE'])
+
+        price_pl = _normalize_columns(_as_polars(price_data))
+        if price_pl.height > 0:
+            if 'REGIONID' in price_pl.columns:
+                price_pl = price_pl.filter(pl.col('REGIONID') == region)
+            price_pl = _coerce_datetime(price_pl, 'SETTLEMENTDATE')
             
             # Map service name to column name in DISPATCHPRICE table
             service_column_map = {
@@ -370,18 +454,14 @@ def fetch_aemo_fcas_price(
             }
             
             price_col = service_column_map.get(service)
-            if price_col and price_col in price_data.columns:
-                price_data['PRICE'] = pd.to_numeric(price_data[price_col], errors='coerce')
-                
-                result = price_data[['SETTLEMENTDATE', 'REGIONID']].copy()
-                result['SERVICE'] = service
-                result['PRICE'] = price_data['PRICE']
-                
-                # Convert to Polars
-                df = pl.from_pandas(result)
-                
-                print(f"Fetched {len(df)} FCAS price records")
-                return df
+            if price_col and price_col in price_pl.columns:
+                out = price_pl.select(['SETTLEMENTDATE', 'REGIONID', price_col]).with_columns([
+                    pl.lit(service).alias('SERVICE'),
+                    pl.col(price_col).cast(pl.Float64, strict=False).alias('PRICE'),
+                ]).select(['SETTLEMENTDATE', 'REGIONID', 'SERVICE', 'PRICE']).sort('SETTLEMENTDATE')
+
+                print(f"Fetched {len(out)} FCAS price records")
+                return out
             else:
                 print(f"Warning: Price column for service {service} not found in DISPATCHPRICE data")
                 return pl.DataFrame(schema={
@@ -487,8 +567,9 @@ def fetch_aemo_unit_dispatch(
             table_name='DISPATCHLOAD',
             raw_data_location=str(cache_path)
         )
-        
-        if dispatch_data is None or len(dispatch_data) == 0:
+
+        dispatch_pl = _normalize_columns(_as_polars(dispatch_data))
+        if dispatch_pl.height == 0:
             print("No dispatch data returned from NEMOSIS")
             return pl.DataFrame(schema={
                 'SETTLEMENTDATE': pl.Datetime,
@@ -506,12 +587,13 @@ def fetch_aemo_unit_dispatch(
         
         # Filter by DUID if specified
         if duid:
-            initial_count = len(dispatch_data)
-            dispatch_data = dispatch_data[dispatch_data['DUID'] == duid].copy()
-            filtered_count = len(dispatch_data)
+            initial_count = dispatch_pl.height
+            if 'DUID' in dispatch_pl.columns:
+                dispatch_pl = dispatch_pl.filter(pl.col('DUID') == duid)
+            filtered_count = dispatch_pl.height
             print(f"DUID filter: {initial_count} records before filter, {filtered_count} after filtering for '{duid}'")
-            
-            if len(dispatch_data) == 0:
+
+            if dispatch_pl.height == 0:
                 print(f"Warning: No data found for DUID {duid}")
                 # Check if DUID exists in the full dataset with different formatting
                 print(f"Hint: Check if DUID '{duid}' exists in DISPATCHLOAD table for this date range")
@@ -529,17 +611,14 @@ def fetch_aemo_unit_dispatch(
                     'LOWERREG': pl.Float64,
                 })
         
-        # Convert timestamp
-        dispatch_data['SETTLEMENTDATE'] = pd.to_datetime(dispatch_data['SETTLEMENTDATE'])
-        
+        dispatch_pl = _coerce_datetime(dispatch_pl, 'SETTLEMENTDATE')
+
         # Select relevant columns (all FCAS enablement columns and energy dispatch)
-        # ACTUALAVAILABILITY columns represent the enabled capacity for each FCAS service
         columns_to_keep = ['SETTLEMENTDATE', 'DUID']
-        
+
         # Energy dispatch
-        if 'TOTALCLEARED' in dispatch_data.columns:
+        if 'TOTALCLEARED' in dispatch_pl.columns:
             columns_to_keep.append('TOTALCLEARED')
-            dispatch_data['TOTALCLEARED'] = pd.to_numeric(dispatch_data['TOTALCLEARED'], errors='coerce')
         
         # FCAS enablement columns
         # Note: DISPATCHLOAD uses shorter column names without "ACTUALAVAILABILITY" suffix
@@ -555,9 +634,8 @@ def fetch_aemo_unit_dispatch(
         ]
         
         for col in fcas_columns:
-            if col in dispatch_data.columns:
+            if col in dispatch_pl.columns:
                 columns_to_keep.append(col)
-                dispatch_data[col] = pd.to_numeric(dispatch_data[col], errors='coerce')
         
         # Filter by region if specified (requires generator static info)
         # NOTE: Only filter by region if DUID was NOT specified (DUID already implies region)
@@ -570,27 +648,33 @@ def fetch_aemo_unit_dispatch(
                 # Fall back to local file or env var when the static_table path fails
                 gen_info = _get_generator_info(cache_path, generator_info_path=generator_info_path)
 
-            if gen_info is not None and 'Region' in gen_info.columns and 'DUID' in gen_info.columns:
-                region_duids = gen_info[gen_info['Region'] == region]['DUID'].tolist()
-                before_region_filter = len(dispatch_data)
-                dispatch_data = dispatch_data[dispatch_data['DUID'].isin(region_duids)].copy()
-                after_region_filter = len(dispatch_data)
+            gen_info_pl = _normalize_columns(_as_polars(gen_info)) if gen_info is not None else None
+
+            if gen_info_pl is not None and 'Region' in gen_info_pl.columns and 'DUID' in gen_info_pl.columns:
+                region_duids = gen_info_pl.filter(pl.col('Region') == region).select('DUID').unique()
+                before_region_filter = dispatch_pl.height
+                if region_duids.height > 0:
+                    dispatch_pl = dispatch_pl.join(region_duids, on='DUID', how='inner')
+                after_region_filter = dispatch_pl.height
                 print(f"Region filter: {before_region_filter} records before filter, {after_region_filter} after filtering for region '{region}'")
             else:
                 print(
                     "Warning: Could not load generator static info to filter by region. "
                     "Provide `generator_info_path` (or set env var AEMO_GENERATORS_FILE)."
                 )
-        
-        # Select only the columns that exist
-        available_columns = [col for col in columns_to_keep if col in dispatch_data.columns]
-        result = dispatch_data[available_columns].copy()
-        
-        # Convert to Polars
-        df = pl.from_pandas(result)
-        
-        print(f"Fetched {len(df)} dispatch records for {df['DUID'].n_unique()} unique units")
-        return df
+
+        # Select only the columns that exist and cast numerics
+        available_columns = [col for col in columns_to_keep if col in dispatch_pl.columns]
+        select_exprs = []
+        for c in available_columns:
+            if c == 'SETTLEMENTDATE' or c == 'DUID':
+                select_exprs.append(pl.col(c))
+            else:
+                select_exprs.append(pl.col(c).cast(pl.Float64, strict=False))
+
+        out = dispatch_pl.select(select_exprs).sort('SETTLEMENTDATE')
+        print(f"Fetched {len(out)} dispatch records for {out['DUID'].n_unique()} unique units")
+        return out
         
     except Exception as e:
         print(f"Error fetching unit dispatch data from NEMOSIS: {e}")
@@ -841,8 +925,10 @@ def fetch_aemo_generation_by_fuel(
                 'GENERATION': pl.Float64
             })
         
+        gen_info_pl = _normalize_columns(_as_polars(gen_info))
+
         # Filter generators by region
-        if 'Region' not in gen_info.columns or 'DUID' not in gen_info.columns:
+        if 'Region' not in gen_info_pl.columns or 'DUID' not in gen_info_pl.columns:
             print(
                 "Warning: Generator info file is missing required columns (need 'DUID' and 'Region')."
             )
@@ -853,7 +939,7 @@ def fetch_aemo_generation_by_fuel(
                 'GENERATION': pl.Float64
             })
 
-        gen_info = gen_info[gen_info['Region'] == region].copy()
+        gen_info_pl = gen_info_pl.filter(pl.col('Region') == region)
         
         # Map fuel source descriptors to our fuel types
         fuel_mapping = {
@@ -875,8 +961,9 @@ def fetch_aemo_generation_by_fuel(
             table_name='DISPATCH_UNIT_SCADA',
             raw_data_location=str(cache_path)
         )
-        
-        if scada_data is None or len(scada_data) == 0:
+
+        scada_pl = _normalize_columns(_as_polars(scada_data))
+        if scada_pl.height == 0:
             print("Warning: No SCADA data returned")
             return pl.DataFrame(schema={
                 'SETTLEMENTDATE': pl.Datetime,
@@ -884,14 +971,13 @@ def fetch_aemo_generation_by_fuel(
                 'FUEL_TYPE': pl.Utf8,
                 'GENERATION': pl.Float64
             })
-        
-        # Convert timestamp
-        scada_data['SETTLEMENTDATE'] = pd.to_datetime(scada_data['SETTLEMENTDATE'])
-        scada_data['SCADAVALUE'] = pd.to_numeric(scada_data['SCADAVALUE'], errors='coerce')
+
+        scada_pl = _coerce_datetime(scada_pl, 'SETTLEMENTDATE')
+        scada_pl = _coerce_f64(scada_pl, 'SCADAVALUE')
         
         # Merge SCADA data with generator info
         fuel_col = 'Fuel Source - Descriptor'
-        if fuel_col not in gen_info.columns:
+        if fuel_col not in gen_info_pl.columns:
             print(
                 "Warning: Generator info is missing 'Fuel Source - Descriptor' column; "
                 "cannot aggregate by fuel type."
@@ -903,41 +989,24 @@ def fetch_aemo_generation_by_fuel(
                 'GENERATION': pl.Float64
             })
 
-        merged = scada_data.merge(
-            gen_info[['DUID', fuel_col]],
+        merged = scada_pl.join(
+            gen_info_pl.select(['DUID', fuel_col]),
             on='DUID',
             how='left'
         )
-        
-        # Map to our fuel types
-        all_data = []
-        for fuel_type in fuel_types:
-            if fuel_type in fuel_mapping:
-                fuel_sources = fuel_mapping[fuel_type]
-                fuel_data = merged[merged[fuel_col].isin(fuel_sources)].copy()
-                
-                # Aggregate by timestamp
-                if len(fuel_data) > 0:
-                    aggregated = fuel_data.groupby('SETTLEMENTDATE').agg({
-                        'SCADAVALUE': 'sum'
-                    }).reset_index()
-                    
-                    aggregated['REGIONID'] = region
-                    aggregated['FUEL_TYPE'] = fuel_type
-                    aggregated.rename(columns={'SCADAVALUE': 'GENERATION'}, inplace=True)
-                    
-                    all_data.append(aggregated)
-        
-        if all_data:
-            result = pd.concat(all_data, ignore_index=True)
-            result = result[['SETTLEMENTDATE', 'REGIONID', 'FUEL_TYPE', 'GENERATION']]
-            
-            # Convert to Polars
-            df = pl.from_pandas(result)
-            
-            print(f"Fetched {len(df)} generation records")
-            return df
-        else:
+
+        fuel_expr = None
+        for ft in fuel_types:
+            sources = fuel_mapping.get(ft)
+            if not sources:
+                continue
+            cond = pl.col(fuel_col).is_in(sources)
+            if fuel_expr is None:
+                fuel_expr = pl.when(cond).then(pl.lit(ft))
+            else:
+                fuel_expr = fuel_expr.when(cond).then(pl.lit(ft))
+
+        if fuel_expr is None:
             print("No generation data found for specified fuel types")
             return pl.DataFrame(schema={
                 'SETTLEMENTDATE': pl.Datetime,
@@ -945,6 +1014,29 @@ def fetch_aemo_generation_by_fuel(
                 'FUEL_TYPE': pl.Utf8,
                 'GENERATION': pl.Float64
             })
+
+        merged = merged.with_columns(fuel_expr.otherwise(None).alias('FUEL_TYPE'))
+        filtered = merged.filter(pl.col('FUEL_TYPE').is_not_null())
+        if filtered.height == 0:
+            print("No generation data found for specified fuel types")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'REGIONID': pl.Utf8,
+                'FUEL_TYPE': pl.Utf8,
+                'GENERATION': pl.Float64
+            })
+
+        out = (
+            filtered
+            .group_by(['SETTLEMENTDATE', 'FUEL_TYPE'])
+            .agg(pl.col('SCADAVALUE').sum().alias('GENERATION'))
+            .with_columns(pl.lit(region).alias('REGIONID'))
+            .select(['SETTLEMENTDATE', 'REGIONID', 'FUEL_TYPE', 'GENERATION'])
+            .sort(['SETTLEMENTDATE', 'FUEL_TYPE'])
+        )
+
+        print(f"Fetched {len(out)} generation records")
+        return out
             
     except Exception as e:
         print(f"Error fetching generation data from NEMOSIS: {e}")
