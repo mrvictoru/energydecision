@@ -25,7 +25,7 @@ This document provides comprehensive documentation for all key components in the
 
 ### Overview
 
-`SolarBatteryEnv` is a Gymnasium-compatible environment simulating a household with solar PV, battery storage, and grid connection. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.
+`SolarBatteryEnv` is a Gymnasium-compatible environment simulating a household with solar PV, battery storage, and grid connection. For a detailed description of the physics, logic, and reward function, see **[docs/HOUSEHOLD_ENV_README.md](docs/HOUSEHOLD_ENV_README.md)**. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.
 
 ### Key Features
 
@@ -90,7 +90,7 @@ for _ in range(100):
 
 ### Overview
 
-`AEMOBatteryTradingEnv` is a Gymnasium-compatible environment that simulates a grid-scale battery participating in AEMO energy and FCAS markets. It consumes preprocessed AEMO data (Polars) and supports single-market (energy-only) or multi-market (energy + FCAS) action modes.
+`AEMOBatteryTradingEnv` is a Gymnasium-compatible environment that simulates a grid-scale battery participating in AEMO energy and FCAS markets. For a detailed description of the market mechanics and observation space, see **[docs/AEMO_ENV_README.md](docs/AEMO_ENV_README.md)**. It consumes preprocessed AEMO data (Polars) and supports single-market (energy-only) or multi-market (energy + FCAS) action modes.
 
 ### Key Components
 
