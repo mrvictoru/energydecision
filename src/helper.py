@@ -345,18 +345,75 @@ def find_problematic_episodes(
     max_timestep: int | None = None,
     rtg_percentile_for_scale: int = 90,
     target_90th_after_scaling: float = 10.0,
+    # NEW: allow suggesting return_scale even if 'rtg' is not stored
+    discount_factor: float = 0.99,
+    compute_rtgs_if_missing: bool = True,
+    # NEW: choose what RTG distribution to base the return_scale on
+    #  - 'rtg0': abs(RTG at first step) per episode (best match for "desired return" conditioning)
+    #  - 'episode_median': abs(RTG) median per episode (previous behavior)
+    #  - 'all_values': sample abs(RTG) values across steps (capped) for fuller distribution
+    return_scale_method: str = "rtg0",
+    max_rtg_samples: int = 200_000,
+    rtg_sample_seed: int = 123,
 ) -> tuple[List[Dict[str, Any]], float]:
     """
     Scan all_logs (algo -> list of episode DataFrames) and return:
       - reports: list of problem dicts (algorithm, episode_index, rows, issues)
-      - suggested_return_scale: automatic suggestion based on rtg distribution
+      - suggested_return_scale: automatic suggestion based on RTG distribution
 
-    The suggested_return_scale is computed so that the chosen percentile (default 90th)
-    of absolute rtg values divided by the suggested scale is approximately
-    `target_90th_after_scaling` (default 10.0). This brings most RTG into a small range.
+    The suggested_return_scale is computed so that the chosen percentile
+    of absolute RTG values divided by the suggested scale is approximately
+    `target_90th_after_scaling`.
+
+    Notes on return_scale_method:
+      * 'rtg0' is usually the most relevant for DT inference because the RTG token
+        is commonly set from a single desired return (similar to "episode start RTG").
+      * If episodes have very different lengths/noise, 'episode_median' can be more robust.
     """
     reports: List[Dict[str, Any]] = []
-    all_rtgs: List[float] = []
+
+    # Collect RTG stats for scale suggestion
+    rtg0_abs: List[float] = []           # abs(rtg at t=0) per episode
+    rtg_episode_med_abs: List[float] = []  # median abs(rtg) per episode
+    rtg_all_abs_samples: List[float] = []  # sampled abs(rtg) across steps
+
+    rng = np.random.default_rng(seed=int(rtg_sample_seed))
+
+    def _compute_rtgs_from_rewards(rewards: np.ndarray, gamma: float) -> np.ndarray:
+        """Discounted return-to-go computed backward: rtg[t] = r[t] + gamma * rtg[t+1]."""
+        r = np.asarray(rewards, dtype=np.float64)
+        rtg = np.zeros_like(r, dtype=np.float64)
+        running = 0.0
+        # Handle NaNs/Infs conservatively: treat non-finite reward as 0 for RTG computation
+        for t in range(r.size - 1, -1, -1):
+            val = r[t]
+            if not np.isfinite(val):
+                val = 0.0
+            running = float(val) + float(gamma) * running
+            rtg[t] = running
+        return rtg
+
+    def _push_rtg_stats(rtg: np.ndarray) -> None:
+        if rtg.size == 0:
+            return
+        finite = rtg[np.isfinite(rtg)]
+        if finite.size == 0:
+            return
+
+        rtg0_abs.append(float(abs(finite[0])))
+        rtg_episode_med_abs.append(float(np.nanmedian(np.abs(finite))))
+
+        if return_scale_method == "all_values":
+            # sample from per-step RTG abs values, but cap total memory
+            absvals = np.abs(finite)
+            remaining = max(0, int(max_rtg_samples) - len(rtg_all_abs_samples))
+            if remaining <= 0:
+                return
+            if absvals.size <= remaining:
+                rtg_all_abs_samples.extend(absvals.astype(float).tolist())
+            else:
+                idx = rng.choice(absvals.size, size=remaining, replace=False)
+                rtg_all_abs_samples.extend(absvals[idx].astype(float).tolist())
 
     for algo, episodes in all_logs.items():
         for ep_idx, df in enumerate(episodes):
@@ -364,18 +421,27 @@ def find_problematic_episodes(
             if df.is_empty():
                 issues.append("empty_episode")
             else:
-                # Collect rtg values for scale suggestion
+                # --- RTG extraction (from stored 'rtg' OR computed from 'reward') ---
+                rtg_arr: Optional[np.ndarray] = None
                 if "rtg" in df.columns:
                     try:
                         arr = df["rtg"].to_numpy()
                         if arr.size and arr.dtype.kind in "fc":
-                            finite = arr[np.isfinite(arr)]
-                            if finite.size:
-                                all_rtgs.append(float(np.nanmedian(np.abs(finite))))  # median per episode
+                            rtg_arr = arr
                     except Exception:
-                        pass
+                        rtg_arr = None
+                elif compute_rtgs_if_missing and "reward" in df.columns:
+                    try:
+                        r = df["reward"].to_numpy()
+                        if r.size and r.dtype.kind in "fc":
+                            rtg_arr = _compute_rtgs_from_rewards(r, float(discount_factor))
+                    except Exception:
+                        rtg_arr = None
 
-                # NaN/Inf checks
+                if rtg_arr is not None:
+                    _push_rtg_stats(rtg_arr)
+
+                # --- NaN/Inf checks ---
                 for col in df.columns:
                     try:
                         arr = df[col].to_numpy()
@@ -388,7 +454,7 @@ def find_problematic_episodes(
                         if n_nan or n_posinf or n_neginf:
                             issues.append(f"{col}: NaN={n_nan},+Inf={n_posinf},-Inf={n_neginf}")
 
-                # magnitude checks
+                # --- magnitude checks ---
                 if "reward" in df.columns:
                     try:
                         arr = df["reward"].to_numpy()
@@ -398,12 +464,10 @@ def find_problematic_episodes(
                     except Exception:
                         pass
 
-                if "rtg" in df.columns and rtg_thresh is not None:
+                if rtg_thresh is not None and rtg_arr is not None:
                     try:
-                        arr = df["rtg"].to_numpy()
-                        if arr.size and arr.dtype.kind in "fc":
-                            if np.nanmax(np.abs(arr)) > rtg_thresh:
-                                issues.append(f"rtg_mag>{rtg_thresh}")
+                        if np.nanmax(np.abs(rtg_arr)) > rtg_thresh:
+                            issues.append(f"rtg_mag>{rtg_thresh}")
                     except Exception:
                         pass
 
@@ -441,26 +505,37 @@ def find_problematic_episodes(
                                 pass
 
             if issues:
-                reports.append({
-                    "algorithm": algo,
-                    "episode_index": int(ep_idx),
-                    "rows": int(df.height) if not df.is_empty() else 0,
-                    "issues": issues,
-                })
+                reports.append(
+                    {
+                        "algorithm": algo,
+                        "episode_index": int(ep_idx),
+                        "rows": int(df.height) if not df.is_empty() else 0,
+                        "issues": issues,
+                    }
+                )
 
-    # compute suggested return_scale from collected episode medians of |rtg|
+    # --- compute suggested return_scale from collected RTG stats ---
     suggested_return_scale = 1.0
-    if all_rtgs:
-        try:
-            arr = np.array(all_rtgs, dtype=float)
-            p = float(np.nanpercentile(arr, rtg_percentile_for_scale))
-            # choose scale so that p / scale ~= target_90th_after_scaling
+    method = str(return_scale_method).strip().lower()
+    if method not in {"rtg0", "episode_median", "all_values"}:
+        raise ValueError("return_scale_method must be one of: 'rtg0', 'episode_median', 'all_values'")
+
+    if method == "rtg0":
+        src = np.array(rtg0_abs, dtype=float)
+        src_name = "abs(rtg[t=0]) per-episode"
+    elif method == "episode_median":
+        src = np.array(rtg_episode_med_abs, dtype=float)
+        src_name = "median(abs(rtg)) per-episode"
+    else:
+        src = np.array(rtg_all_abs_samples, dtype=float)
+        src_name = f"sampled abs(rtg) values (cap={max_rtg_samples})"
+
+    if src.size:
+        src = src[np.isfinite(src)]
+        if src.size:
+            p = float(np.nanpercentile(src, rtg_percentile_for_scale))
             if p > 0:
                 suggested_return_scale = max(1.0, p / float(target_90th_after_scaling))
-            else:
-                suggested_return_scale = 1.0
-        except Exception:
-            suggested_return_scale = 1.0
 
     # concise summary
     if not reports:
@@ -471,28 +546,33 @@ def find_problematic_episodes(
         for algo, c in cnt.items():
             print(f"  {algo}: {c} episodes")
         import pandas as pd
+
         print("First 20 problem rows:")
         print(pd.DataFrame(reports).head(20).to_string(index=False))
 
-    print(f"\nSuggested return_scale (to bring ~{rtg_percentile_for_scale}th pct episode-median |rtg| to ~{target_90th_after_scaling}): {suggested_return_scale:.4g}")
+    print(
+        f"\nSuggested return_scale using {src_name}, percentile={rtg_percentile_for_scale} -> target~{target_90th_after_scaling}: "
+        f"{suggested_return_scale:.4g}"
+    )
 
     return reports, suggested_return_scale
-
 
 
 import json
 # Helper: evaluate a single experiment's episode logs
 def evaluate_experiment_logs(
     logs: list[pl.DataFrame],
-    target_return: float = 0.0 # for comparison, use the mean reward of a baseline agent's episode
+    target_return: float = 0.0,  # for comparison, use the mean reward of a baseline agent's episode
+    recommended_rtg_percentile: int = 95,
+    return_scale_target: float = 10.0,
+    discount_factor: float = 0.99,
 ) -> dict:
     """
     Compute key performance metrics for a single experiment's episode logs.
-    Returns a dict of:
-      - mean_reward, median_reward, std_reward
-      - pct_5_reward, pct_95_reward
-      - sharpe_ratio, sortino_ratio
-      - avg_grid_cost, avg_grid_revenue, avg_degradation_cost
+        Returns a dict of:
+            - mean/median/std reward + total reward percentiles
+            - sharpe/sortino ratios
+            - grid import/export energy, degradation, battery activity summaries
     """
     # total rewards per episode
     total_rewards = [df['reward'].sum() for df in logs]
@@ -507,6 +587,40 @@ def evaluate_experiment_logs(
     pct95 = float(np.percentile(rewards_list, 95))
     max_r = float(np.max(rewards_arr)) if len(rewards_arr) > 0 else 0.0
 
+    # total rewards per episode are already computed; now compute RTG at t=0 to suggest a return_scale
+    def _compute_start_rtg(rewards: np.ndarray) -> float | None:
+        if rewards.size == 0:
+            return None
+        rtg = np.zeros_like(rewards, dtype=np.float64)
+        running = 0.0
+        for t in range(len(rewards) - 1, -1, -1):
+            val = rewards[t]
+            safe_val = float(val) if np.isfinite(val) else 0.0
+            running = safe_val + discount_factor * running
+            rtg[t] = running
+        finite = rtg[np.isfinite(rtg)]
+        if finite.size == 0:
+            return None
+        return float(abs(finite[0]))
+
+    rtg0_start_vals: List[float] = []
+    for df in logs:
+        if 'reward' not in df.columns:
+            continue
+        rewards = np.array(df['reward'].to_list(), dtype=float)
+        if rewards.size == 0:
+            continue
+        rtg0 = _compute_start_rtg(rewards)
+        if rtg0 is not None and np.isfinite(rtg0):
+            rtg0_start_vals.append(rtg0)
+
+    raw_rtg_percentile = 0.0
+    recommended_return_scale = 1.0
+    if rtg0_start_vals:
+        raw_rtg_percentile = float(np.nanpercentile(rtg0_start_vals, recommended_rtg_percentile))
+        if raw_rtg_percentile > 0:
+            recommended_return_scale = max(1.0, raw_rtg_percentile / float(return_scale_target))
+
     # Recommended RTG: conservative recommendation is 95th percentile, aggressive is max
     # We'll provide the max as the primary recommendation for offline RL stitching
     recommended_rtg = max_r
@@ -518,10 +632,14 @@ def evaluate_experiment_logs(
     sharpe = mean_r / std_r if std_r > 0 else float('nan')
     sortino = (mean_r - target_return) / dd if dd > 0 else float('nan')
 
-    # compute cost components
-    grid_costs = []
-    grid_revenues = []
-    deg_costs = []
+    grid_imports: List[float] = []
+    grid_exports: List[float] = []
+    grid_nets: List[float] = []
+    degradation_totals: List[float] = []
+    degradation_per_step_rates: List[float] = []
+    deg_incident_flags: List[int] = []
+    battery_flow_totals: List[float] = []
+    episode_steps: List[int] = []
     def safe_float(val):
         try:
             return float(val)
@@ -530,7 +648,6 @@ def evaluate_experiment_logs(
 
     for df in logs:
         infos = df['info'].to_list()
-        # Parse info strings to dicts if needed
         parsed_infos = []
         for info in infos:
             if isinstance(info, str):
@@ -538,39 +655,57 @@ def evaluate_experiment_logs(
                     parsed_infos.append(json.loads(info))
                 except Exception:
                     parsed_infos.append({})
-            else:
+            elif isinstance(info, dict):
                 parsed_infos.append(info)
+            else:
+                parsed_infos.append({})
 
-        # Prefer new fields if available: 'grid_cost' (positive=cost, negative=revenue) and 'deg_cost'
-        has_grid_cost_field = any(isinstance(i, dict) and 'grid_cost' in i for i in parsed_infos)
-        has_deg_cost_field = any(isinstance(i, dict) and 'deg_cost' in i for i in parsed_infos)
+        ep_grid_import = 0.0
+        ep_grid_export = 0.0
+        ep_grid_net = 0.0
+        ep_degradation = 0.0
+        ep_steps = 0
+        ep_battery_flow = 0.0
+        ep_deg_incident = False
 
-        if has_grid_cost_field:
-            total_grid_cost = sum(safe_float(i.get('grid_cost', 0.0)) for i in parsed_infos if safe_float(i.get('grid_cost', 0.0)) > 0)
-            total_grid_revenue = -sum(safe_float(i.get('grid_cost', 0.0)) for i in parsed_infos if safe_float(i.get('grid_cost', 0.0)) < 0)
-        else:
-            # Fallback to older fields: compute cost from grid_reward where grid_energy>0 (importing)
-            total_grid_cost = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) > 0)
-            total_grid_cost = float(abs(total_grid_cost))
-            # revenue from exporting (grid_energy < 0)
-            total_grid_revenue = sum(safe_float(i.get('grid_reward', 0.0)) for i in parsed_infos if safe_float(i.get('grid_energy', 0)) < 0)
+        for info in parsed_infos:
+            grid_energy = safe_float(info.get('grid_energy', 0.0))
+            ep_grid_net += grid_energy
+            if grid_energy > 0:
+                ep_grid_import += grid_energy
+            else:
+                ep_grid_export += abs(grid_energy)
 
-        if has_deg_cost_field:
-            total_deg_cost = sum(safe_float(i.get('deg_cost', 0.0)) for i in parsed_infos)
-        else:
-            # Fallback to older fields: battery_deg_penalty * battery_life_cost
-            total_deg_cost = sum(safe_float(i.get('battery_deg_penalty', 0.0)) * safe_float(i.get('battery_life_cost', 1.0)) for i in parsed_infos)
+            step_deg = safe_float(info.get('step_degradation', 0.0))
+            ep_degradation += step_deg
+            if step_deg > 0 and not ep_deg_incident:
+                # any positive degradation counts towards incident rate
+                ep_deg_incident = bool(info.get('deg_incident', False)) or (info.get('deg_error') is not None and info.get('deg_error') != "")
 
-        grid_costs.append(float(total_grid_cost))
-        grid_revenues.append(float(total_grid_revenue))
-        deg_costs.append(float(total_deg_cost))
-    avg_gc = float(np.mean(grid_costs)) if grid_costs else 0.0
-    avg_gr = float(np.mean(grid_revenues)) if grid_revenues else 0.0
-    avg_dc = float(np.mean(deg_costs)) if deg_costs else 0.0
+            battery_flow = safe_float(info.get('battery_flow_energy', 0.0))
+            ep_battery_flow += abs(battery_flow)
 
-    # Average total operational cost per episode = grid_cost - grid_revenue + deg_cost
-    operational_costs = [float(gc) - float(gr) + float(dc) for gc, gr, dc in zip(grid_costs, grid_revenues, deg_costs)]
-    avg_operational_cost = float(np.mean(operational_costs)) if operational_costs else 0.0
+            ep_steps += 1
+
+        grid_imports.append(ep_grid_import)
+        grid_exports.append(ep_grid_export)
+        grid_nets.append(ep_grid_net)
+        degradation_totals.append(ep_degradation)
+        degradation_per_step_rates.append(ep_degradation / ep_steps if ep_steps > 0 else 0.0)
+        deg_incident_flags.append(1 if ep_deg_incident else 0)
+        battery_flow_totals.append(ep_battery_flow)
+        episode_steps.append(ep_steps)
+
+    avg_grid_import = float(np.mean(grid_imports)) if grid_imports else 0.0
+    avg_grid_export = float(np.mean(grid_exports)) if grid_exports else 0.0
+    avg_grid_net = float(np.mean(grid_nets)) if grid_nets else 0.0
+    avg_degradation = float(np.mean(degradation_totals)) if degradation_totals else 0.0
+    avg_degradation_per_step = float(np.mean(degradation_per_step_rates)) if degradation_per_step_rates else 0.0
+    deg_incident_rate = float(np.mean(deg_incident_flags)) if deg_incident_flags else 0.0
+    avg_battery_flow = float(np.mean(battery_flow_totals)) if battery_flow_totals else 0.0
+    avg_battery_flow_per_step = float(np.mean([
+        (bf / steps if steps > 0 else 0.0) for bf, steps in zip(battery_flow_totals, episode_steps)
+    ])) if battery_flow_totals and episode_steps else 0.0
 
     return {
         'mean_reward': mean_r,
@@ -580,12 +715,20 @@ def evaluate_experiment_logs(
         'pct_95_reward': pct95,
         'max_reward': max_r,
         'recommended_rtg': recommended_rtg,
+        'recommended_rtg_total_percentile': float(np.percentile(rewards_list, recommended_rtg_percentile)) if rewards_list else max_r,
+        'recommended_rtg_rtg0_percentile': float(raw_rtg_percentile) if raw_rtg_percentile > 0 else float('nan'),
+        'recommended_return_scale': recommended_return_scale,
+        'recommended_raw_rtg_percentile': raw_rtg_percentile,
         'sharpe_ratio': sharpe,
         'sortino_ratio': sortino,
-        'avg_grid_cost': avg_gc,
-        'avg_grid_revenue': avg_gr,
-        'avg_deg_cost': avg_dc,
-        'avg_operational_cost': avg_operational_cost,
+        'avg_grid_import': avg_grid_import,
+        'avg_grid_export': avg_grid_export,
+        'avg_grid_net': avg_grid_net,
+        'avg_degradation_per_episode': avg_degradation,
+        'avg_degradation_per_step': avg_degradation_per_step,
+        'deg_incident_rate': deg_incident_rate,
+        'avg_battery_flow_energy': avg_battery_flow,
+        'avg_battery_flow_per_step': avg_battery_flow_per_step,
     }
 
 
@@ -600,14 +743,17 @@ def evaluate_experiments(
     save_dir: Optional[str] = None,
     save_format: str = "svg",
     dpi: int = 200,
+    recommended_rtg_percentile: int = 95,
+    return_scale_target: float = 10.0,
+    discount_factor: float = 0.99,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict]:
     """
     Given a dict mapping experiment names to lists of episode logs, compute evaluation metrics.
     Optionally create diagnostic plots:
-      1) Mean reward bar (with std error bars)
-      2) Stacked average cost components (grid vs degradation)
-      3) Risk–return scatter (std vs mean, colour by Sharpe)
-      4) Episode return distribution (box plot)
+        1) Mean reward bar (with std error bars)
+        2) Grid energy bar chart with degradation overlay
+        3) Risk–return scatter (std vs mean, colour by Sharpe)
+        4) Episode return distribution (box plot)
 
     Params:
         all_logs: mapping experiment name -> list of per-episode DataFrames
@@ -617,6 +763,9 @@ def evaluate_experiments(
         save_dir: if provided, save generated figures into this directory (created if needed)
         save_format: image format for saved figures (e.g., 'png', 'pdf', 'svg')
         dpi: dots-per-inch for saved raster images
+        recommended_rtg_percentile: percentile used when suggesting a return_scale
+        return_scale_target: target RTG magnitude after scaling (used to derive return_scale)
+        discount_factor: discount factor assumed when reconstructing RTGs from rewards
 
     Returns:
         metrics_df (pl.DataFrame) OR (metrics_df, figs_dict) if return_figs=True
@@ -624,7 +773,13 @@ def evaluate_experiments(
     rows = []
     episode_rows = []  # for per-episode reward distribution
     for name, logs in all_logs.items():
-        metrics = evaluate_experiment_logs(logs, target_return=target_return)
+        metrics = evaluate_experiment_logs(
+            logs,
+            target_return=target_return,
+            recommended_rtg_percentile=recommended_rtg_percentile,
+            return_scale_target=return_scale_target,
+            discount_factor=discount_factor,
+        )
         metrics['experiment'] = name
         rows.append(metrics)
         # build per-episode total rewards
@@ -656,61 +811,27 @@ def evaluate_experiments(
         ax1.grid(axis='y', alpha=0.3)
         figs['mean_reward'] = fig1
 
-        # 2) Stacked cost components with percentage annotations
+        # 2) Grid energy & degradation comparison
         fig2, ax2 = plt.subplots(figsize=figsize)
-        grid_cost = metrics_df['avg_grid_cost'].to_list()
-        deg_cost = metrics_df['avg_deg_cost'].to_list()
-
-        # Draw stacked bars
-        bars_grid = ax2.bar(x, grid_cost, label='Grid Cost', color='tab:gray')
-        bars_deg = ax2.bar(x, deg_cost, bottom=grid_cost, label='Degradation Cost', color='tab:orange')
-
-        # Compute totals and annotate each segment with percent contribution
-        totals = [g + d for g, d in zip(grid_cost, deg_cost)]
-        # Find a reference height for placing small-label annotations
-        max_total = max(totals) if totals else 1.0
-
-        for i in range(len(x)):
-            total = totals[i] if totals[i] != 0 else 0.0
-
-            # Grid segment
-            g = grid_cost[i]
-            if total > 0:
-                pct_g = 100.0 * (g / total)
-            else:
-                pct_g = 0.0
-            # Position: middle of the grid segment
-            y_g = g / 2.0
-            # Choose text color for contrast
-            color_g = 'white' if (g / max_total) > 0.12 else 'black'
-            if g / max_total >= 0.03:
-                ax2.text(x[i], y_g, f"{pct_g:.1f}%", ha='center', va='center', color=color_g, fontsize=8)
-            else:
-                # place small labels above the bar
-                ax2.text(x[i], total + 0.01 * max_total, f"G:{pct_g:.1f}%", ha='center', va='bottom', color='black', fontsize=7)
-
-            # Degradation segment
-            d = deg_cost[i]
-            if total > 0:
-                pct_d = 100.0 * (d / total)
-            else:
-                pct_d = 0.0
-            # Position: middle of the degradation segment
-            y_d = g + d / 2.0
-            color_d = 'white' if (d / max_total) > 0.12 else 'black'
-            if d / max_total >= 0.03:
-                ax2.text(x[i], y_d, f"{pct_d:.1f}%", ha='center', va='center', color=color_d, fontsize=8)
-            else:
-                # place small labels above the bar (if grid already used the space, offset slightly)
-                ax2.text(x[i], total + 0.015 * max_total, f"D:{pct_d:.1f}%", ha='center', va='bottom', color='black', fontsize=7)
+        grid_import = [float(np.nan_to_num(val, nan=0.0)) for val in metrics_df['avg_grid_import'].to_list()]
+        grid_export = [float(np.nan_to_num(val, nan=0.0)) for val in metrics_df['avg_grid_export'].to_list()]
+        bar_width = 0.35
+        ax2.bar(x - bar_width / 2, grid_import, width=bar_width, label='Avg Grid Import (kWh)', color='tab:gray')
+        ax2.bar(x + bar_width / 2, grid_export, width=bar_width, label='Avg Grid Export (kWh)', color='tab:blue')
 
         ax2.set_xticks(x)
         ax2.set_xticklabels(labels, rotation=45, ha='right')
-        ax2.set_ylabel('Average Cost')
-        ax2.set_title('Average Cost Components (percent annotated)')
-        ax2.legend()
+        ax2.set_ylabel('Grid Energy (kWh)')
+        ax2.set_title('Average Grid Energy & Degradation')
         ax2.grid(axis='y', alpha=0.3)
-        figs['cost_stack'] = fig2
+
+        ax2_right = ax2.twinx()
+        degradation = [float(np.nan_to_num(val, nan=0.0)) for val in metrics_df['avg_degradation_per_episode'].to_list()]
+        ax2_right.plot(x, degradation, marker='o', color='tab:red', linewidth=2, label='Avg Degradation per Episode')
+        ax2_right.set_ylabel('Degradation (unitless)')
+        ax2.legend(loc='upper left')
+        ax2_right.legend(loc='upper right')
+        figs['grid_energy'] = fig2
 
         # 3) Risk–return scatter (std vs mean, colour by Sharpe)
         sharpe = metrics_df['sharpe_ratio'].to_list()
