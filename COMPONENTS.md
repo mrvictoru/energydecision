@@ -281,7 +281,7 @@ policy = mrdp.solve(forecasts, start_index=0)
 
 Agent integration: The `Agent` class creates and calls these solvers based on the `algorithm` parameter (e.g., `'sdp'`, `'mrdp'`, `'oracle'`). This makes it easy to switch solvers without changing calling code.
 
-> For a detailed reading guide (step ordering and helper methods), see `ALGORITHM_GUIDE.md` (kept as a reference document).
+> For a deep dive into the mathematical logic, inner workings, and a guide on how to read/debug these files, see **[docs/DP_ALGORITHM_README.md](docs/DP_ALGORITHM_README.md)**.
 
 ---
 
