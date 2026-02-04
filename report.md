@@ -92,14 +92,25 @@ Statistical testing:
 
 ## 8. Preliminary Results and Evaluation Plan
 
-We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents. This section will be populated with:
+We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents. 
 
-- **Table 1: Comparative Performance:** Mean ± std episode reward and operational cost by algorithm, highlighting the trade-off between optimality (SDP) and computational tractability (RL).
-- **Table 2: Cost Decomposition:** A detailed breakdown of grid cost, export revenue, and degradation cost to understand *how* agents achieve their results (e.g., does RL sacrifice battery health for short-term gain?).
-- **Figure 1: Risk–Return Analysis:** Scatter plots (Return vs. Sharpe Ratio) to visualize the stability of learned policies.
-- **Figure 2: Distributional Robustness:** Box plots of episode returns across diverse customer profiles to assess generalization.
+The first version of the comparative metrics is already stored in [eval_output/evaluation_metrics.csv](eval_output/evaluation_metrics.csv), and the accompanying return graph highlights the mean ± std for each agent.
 
-We will include per-customer breakdowns in the appendix and release all plots in `eval_output/figures/`.
+![Mean episode return and variability by agent](eval_output/mean_reward.svg)
+
+![Risk vs return for each agent](eval_output/risk_return.svg)
+
+![Episode return distribution across customers](eval_output/episode_distribution.svg)
+
+![Net grid energy balance by agent](eval_output/grid_energy.svg)
+
+Preliminary observations from the current runs are:
+
+- Oracle retains the highest mean reward (≈ -2,483), with SDP-related planners (SDP/MRDP) following closely at roughly -2,600 to -2,770 and offline Decision Transformer control around -2,534; this contrasts with the rule heuristic (≈ -3,077) and model-free PPO (-2,828), showing a ~500–800 reward gap between optimal planning and simple baselines.
+- SDP produces the least volatile return profile (Sharpe/Sortino near -0.81), implying more stable decisions even though all agents operate in the regime of negative total reward; the higher-magnitude Sharpe metrics for DDPG/SAC reflect their exploration-heavy swings.
+- Grid-level costs mirror the reward ranking: SDP/MRDP export more energy (≈ 3,900–5,100 kWh net export) while importing similar amounts as other agents, meaning they rely more on solar arbitrage; PPO/DT keep net export closer to 3,600–3,900 kWh but still beat the rule-based controller by ~1,000 kWh of exported surplus.
+- Decision Transformer with rgt of -0.5 (`dt_rtg0`) sits third in mean reward and fifth in Sharpe ratio, placing it squarely among the stronger offline policies; its Sharpe ranking midway through suggests only modestly noisier returns compared to SDP, while still outperforming PPO/rule heuristics.
+- Degradation and battery flow energy remain negligible across agents (deg cost effectively zero per episode), confirming that the degradation-aware reward shaping keeps all policies within the safe operating envelope so far.
 
 ## 9. Proposed Research Roadmap
 
