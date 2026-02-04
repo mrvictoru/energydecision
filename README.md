@@ -109,7 +109,7 @@ Notes:
     - `--loss-csv-path .../dt_model_loss_history.csv` stores **epoch-level** totals + components (train/val).
     - A second file is also written next to it: `dt_model_loss_history_checkpoints.csv`, which stores **per-checkpoint/segment** snapshots (useful for plotting progress during an epoch).
 - **Best model weights** are saved alongside your `--save-path` as `*_best.pt` when validation improves without obvious divergence.
-- **Ensure your `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
+- **Ensure your** `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
 
 #### 3.2 Resume from an existing checkpoint
 
