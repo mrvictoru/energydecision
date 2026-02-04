@@ -71,13 +71,69 @@ Run [test_sb3train.ipynb](notebooks/test_sb3train.ipynb) to:
 ### 3. Offline RL Training
 Train a Decision Transformer using the collected logs.
 
+#### 3.1 Train from scratch
+
+This starts a new model with a context length of 60 and saves checkpoints in `models/`:
+
 ```bash
-python src/pretrain_decision_transformer.py \
-    --data-dir ./data \
-    --patterns train_episodes \
-    --epochs 10 \
-    --context-length 60
+docker exec -it test_energy_container /bin/bash
+
+python3 pretrain_decision_transformer.py \
+    --data-dir ../data \
+    --patterns train test_episodes_01 \
+    --epochs 2 \
+    --batch-size 6 \
+    --checkpoints-per-epoch 4 \
+    --context-length 60 \
+    --lr 5e-6 \
+    --weight-decay 1e-4 \
+    --return-scale 1000.0 \
+    --return-loss-weight 0.0005 \
+    --checkpoint-path ../models/dt_model_checkpoint.pt \
+    --save-path ../models/dt_model_new.pt \
+    --loss-csv-path ../models/dt_model_loss_history.csv \
+    --rope-enabled \
+    --amp-mode "auto" \
+    --num-workers 2 \
+    --prefetch-factor 1 \
+    --no-persistent-workers
 ```
+
+Notes:
+
+- **DataLoader throughput tuning**:
+    - `--num-workers` controls how many worker processes load/pad batches.
+    - `--prefetch-factor` controls how many batches each worker preloads (only applies when `--num-workers > 0`).
+    - Persistent workers are **enabled by default**; pass `--no-persistent-workers` if you want to disable them.
+- **Loss logging files** (values are consistent between what prints and what’s written):
+    - `--loss-csv-path .../dt_model_loss_history.csv` stores **epoch-level** totals + components (train/val).
+    - A second file is also written next to it: `dt_model_loss_history_checkpoints.csv`, which stores **per-checkpoint/segment** snapshots (useful for plotting progress during an epoch).
+- **Best model weights** are saved alongside your `--save-path` as `*_best.pt` when validation improves without obvious divergence.
+- **Ensure your `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
+
+#### 3.2 Resume from an existing checkpoint
+
+If you already have a compatible checkpoint (same model config, especially `context_len`), you can resume:
+
+```bash
+python3 pretrain_decision_transformer.py \
+    --data-dir ../data \
+    --patterns train test_episodes_01 \
+    --epochs 2 \
+    --batch-size 8 \
+    --checkpoints-per-epoch 10 \
+    --context-length 60 \
+    --checkpoint-path ../models/dt_model_checkpoint.pt \
+    --save-path ../models/dt_model.pt \
+    --resume \
+    --num-workers 2 \
+    --prefetch-factor 1
+```
+
+Notes:
+
+- `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
+- `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
 
 ### 4. Evaluation
 Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
@@ -102,58 +158,6 @@ energydecision/
 │   └── ...
 └── tests/                   # Pytest suite
 ```
-
-- `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
-- `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
-
-#### 3.3 Start fresh if the checkpoint is incompatible
-
-If your previous run used a different `context_length` (or other model config) and you just want to restart training:
-
-```bash
-rm -f models/dt_model_checkpoint.pt
-
-python3 pretrain_decision_transformer.py \
-    --data-dir ./data \
-    --patterns train test_episodes_01 \
-    --epochs 2 \
-    --batch-size 6 \
-    --context-length 60 \
-    --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ./models/dt_model.pt
-```
-
-This removes the stale checkpoint so automatic recovery and `--resume` logic do not try to load an incompatible state.
-
-#### 3.4 Stabilizing training when encountering non‑finite weights
-
-If you see `NonFiniteParameterError` in the logs:
-
-- Reduce the learning rate, e.g.:
-
-```bash
-python3 pretrain_decision_transformer.py \
-    --data-dir ./data \
-    --patterns train test_episodes_01 \
-    --epochs 2 \
-    --batch-size 6 \
-    --context-length 60 \
-    --lr 1e-6 \
-    --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ../models/dt_model.pt
-```
-
-- Ensure your `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
-
-**Inference:**  
-Load the trained model in `test_simrun.ipynb` to evaluate its performance.
-
-### 4. Evaluation (`test_eval.ipynb`)
-
-- Load logs from all algorithms.
-- Compute aggregate metrics (Profit, ROI, Degradation).
-- Generate comparative plots (Risk-Return, Cost Breakdown).
-- Perform temporal analysis of agent behavior.
 
 ---
 
