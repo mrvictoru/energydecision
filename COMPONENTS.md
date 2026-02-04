@@ -405,6 +405,8 @@ scenarios_df = generator.generate_scenarios(
 
 Implements semi-empirical battery degradation models (Muenzel et al., 2015). The primary interface is the **class-based** `DegradationModel`, which encapsulates nominal parameters and exposes methods for normalized cycle-life factors, combined cycle-life, and per-cycle degradation. Helper functions and a rainflow-based dynamic counting implementation are also provided for convenience and compatibility.
 
+For a detailed explanation of the math, the factors, and the Rainflow implementation, see **[docs/BATTERY_DEGRADATION_DETAILS.md](docs/BATTERY_DEGRADATION_DETAILS.md)**.
+
 ### Available Models
 
 1. **DegradationModel (class)** — Recommended API. Provides:

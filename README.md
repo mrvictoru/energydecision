@@ -148,7 +148,8 @@ energydecision/
 ├── docs/                    # Deep dive documentation
 │   ├── HOUSEHOLD_ENV_README.md
 │   ├── AEMO_ENV_README.md
-│   └── DP_ALGORITHM_README.md
+│   ├── DP_ALGORITHM_README.md
+│   └── BATTERY_DEGRADATION_DETAILS.md
 ├── notebooks/               # Example notebooks
 ├── src/                     # Source code
 │   ├── EnergySimEnv.py      # Household Gym Environment
