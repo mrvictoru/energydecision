@@ -28,9 +28,13 @@ class AEMODataPreprocessor:
     
     def __init__(self, 
                  step_duration_hours: float = 0.5,
-                 missing_data_method: str = 'interpolate'):
+                 missing_data_method: str = 'interpolate',
+                 add_normalized_features: bool = True,
+                 update_stats_from_data: bool = True):
         self.step_duration_hours = step_duration_hours
         self.missing_data_method = missing_data_method
+        self.add_normalized_features = add_normalized_features
+        self.update_stats_from_data = update_stats_from_data
         
         # Normalization bounds (will be updated from actual data)
         self.stats = {
@@ -73,10 +77,50 @@ class AEMODataPreprocessor:
         # Add time features
         merged = self._add_time_features(merged)
         
-        # Normalize features
-        merged = self._normalize_features(merged)
+        # Update stats from data
+        if self.update_stats_from_data:
+            self._update_stats_from_data(merged)
+
+        # Normalize features (adds normalized columns, keeps raw columns)
+        if self.add_normalized_features:
+            merged = self._normalize_features(merged)
         
         return merged
+
+    def _update_stats_from_data(self, df: pl.DataFrame) -> None:
+        """Update normalization stats based on actual data."""
+        if df.height == 0:
+            return
+
+        if 'RRP' in df.columns:
+            min_val = df.select(pl.col('RRP').min()).item()
+            max_val = df.select(pl.col('RRP').max()).item()
+            if min_val is not None and max_val is not None:
+                self.stats['RRP']['min'] = float(min_val)
+                self.stats['RRP']['max'] = float(max_val)
+
+        if 'TOTALDEMAND' in df.columns:
+            min_val = df.select(pl.col('TOTALDEMAND').min()).item()
+            max_val = df.select(pl.col('TOTALDEMAND').max()).item()
+            if min_val is not None and max_val is not None:
+                self.stats['TOTALDEMAND']['min'] = float(min_val)
+                self.stats['TOTALDEMAND']['max'] = float(max_val)
+
+        fcas_cols = [c for c in df.columns if c.startswith('FCAS_') and not c.endswith('_normalized')]
+        if fcas_cols:
+            min_val = df.select(pl.min_horizontal([pl.col(c) for c in fcas_cols])).item()
+            max_val = df.select(pl.max_horizontal([pl.col(c) for c in fcas_cols])).item()
+            if min_val is not None and max_val is not None:
+                self.stats['FCAS_PRICE']['min'] = float(min_val)
+                self.stats['FCAS_PRICE']['max'] = float(max_val)
+
+        gen_cols = [c for c in df.columns if c.startswith('GEN_') and not c.endswith('_pct')]
+        if gen_cols:
+            min_val = df.select(pl.min_horizontal([pl.col(c) for c in gen_cols])).item()
+            max_val = df.select(pl.max_horizontal([pl.col(c) for c in gen_cols])).item()
+            if min_val is not None and max_val is not None:
+                self.stats['GENERATION']['min'] = float(min_val)
+                self.stats['GENERATION']['max'] = float(max_val)
     
     def _every_str(self) -> str:
         minutes = int(round(self.step_duration_hours * 60))
@@ -289,7 +333,9 @@ class AEMOBatteryTradingEnv(gym.Env):
                  step_duration: float = 0.5,  # hours
                  battery_life_cost: float = 1_000_000.0,  # USD for grid-scale
                  render_mode: Optional[str] = None,
-                 action_mode: str = 'simple'):  # 'simple' or 'multi_market'
+                 action_mode: str = 'simple',  # 'simple' or 'multi_market'
+                 normalize_obs: bool = True,
+                 return_raw_obs: bool = False):
         """
         Initialize AEMO Battery Trading Environment.
         
@@ -315,6 +361,15 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.battery_life_cost = battery_life_cost
         self.render_mode = render_mode
         self.action_mode = action_mode
+        self.normalize_obs = normalize_obs
+        self.return_raw_obs = return_raw_obs
+
+        self._fcas_services = [
+            'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
+            'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN'
+        ]
+        self._gen_fuels = ['solar', 'wind']
+        self._raw_col_bounds = self._compute_raw_col_bounds()
         
         # State variables
         self.current_step = 0
@@ -342,9 +397,19 @@ class AEMOBatteryTradingEnv(gym.Env):
         # Total: ~18 features
         
         obs_dim = 18  # Base dimension
+        if self.normalize_obs:
+            obs_low = np.zeros(obs_dim, dtype=np.float32)
+            obs_high = np.ones(obs_dim, dtype=np.float32)
+            obs_low[0:4] = -1.0
+            obs_high[0:4] = 1.0
+            obs_low[4] = 0.0
+            obs_high[4] = 1.0
+        else:
+            obs_low, obs_high = self._build_raw_obs_bounds()
+
         self.observation_space = spaces.Box(
-            low=0.0,
-            high=1.0,
+            low=obs_low,
+            high=obs_high,
             shape=(obs_dim,),
             dtype=np.float32
         )
@@ -373,6 +438,9 @@ class AEMOBatteryTradingEnv(gym.Env):
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[np.ndarray, dict]:
         """Reset environment to initial state."""
         super().reset(seed=seed)
+
+        if options and 'return_raw_obs' in options:
+            self.return_raw_obs = bool(options.get('return_raw_obs'))
         
         # Randomly sample episode start (leave buffer for data availability)
         max_start_idx = len(self.aemo_data) - self.max_step - 1
@@ -395,6 +463,8 @@ class AEMOBatteryTradingEnv(gym.Env):
         # Get initial observation
         obs = self._get_observation()
         info = {}
+        if self.return_raw_obs:
+            info['raw_obs'] = self.get_raw_obs()
         
         return obs, info
     
@@ -439,8 +509,10 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.battery_soc = new_soc
         
         # Calculate reward
-        reward = self._calculate_reward(market_data, actual_power, actual_energy,
-                                        fcas_raise_bid, fcas_lower_bid, old_soc, new_soc)
+        reward, energy_revenue, fcas_revenue, degradation_cost = self._calculate_reward(
+            market_data, actual_power, actual_energy,
+            fcas_raise_bid, fcas_lower_bid, old_soc, new_soc
+        )
         
         # Check termination
         self.current_step += 1
@@ -455,62 +527,157 @@ class AEMOBatteryTradingEnv(gym.Env):
         # Get next observation
         obs = self._get_observation()
         
-        info = {
-            'battery_soc': self.battery_soc,
-            'battery_dispatch': actual_power,
-            'energy_price': market_data.get('RRP', 0),
-            'total_revenue': self.total_revenue,
-            'total_degradation': self.total_degradation_cost,
-        }
+        info = self._make_reward_info(
+            battery_soc=self.battery_soc,
+            battery_dispatch=actual_power,
+            energy_price=market_data.get('RRP', 0),
+            energy_revenue=energy_revenue,
+            fcas_revenue=fcas_revenue,
+            fcas_raise_bid=fcas_raise_bid,
+            fcas_lower_bid=fcas_lower_bid,
+            actual_energy=actual_energy,
+            degradation_cost=degradation_cost,
+            current_step=self.current_step,
+        )
+
+        if self.return_raw_obs:
+            info['raw_obs'] = self.get_raw_obs()
         
         return obs, reward, terminated, truncated, info
     
+    def _compute_raw_col_bounds(self) -> Dict[str, Tuple[float, float]]:
+        bounds: Dict[str, Tuple[float, float]] = {}
+        if self.aemo_data.height == 0:
+            return bounds
+
+        def _get_min_max(col: str) -> Optional[Tuple[float, float]]:
+            if col not in self.aemo_data.columns:
+                return None
+            min_val = self.aemo_data.select(pl.col(col).min()).item()
+            max_val = self.aemo_data.select(pl.col(col).max()).item()
+            if min_val is None or max_val is None:
+                return None
+            return float(min_val), float(max_val)
+
+        for col in ['RRP', 'TOTALDEMAND']:
+            mm = _get_min_max(col)
+            if mm:
+                bounds[col] = mm
+
+        for service in self._fcas_services:
+            col = f'FCAS_{service}'
+            mm = _get_min_max(col)
+            if mm:
+                bounds[col] = mm
+
+        for fuel in self._gen_fuels:
+            col = f'GEN_{fuel}'
+            mm = _get_min_max(col)
+            if mm:
+                bounds[col] = mm
+
+        return bounds
+
+    def _build_raw_obs_bounds(self) -> Tuple[np.ndarray, np.ndarray]:
+        obs_dim = 18
+        obs_low = np.zeros(obs_dim, dtype=np.float32)
+        obs_high = np.zeros(obs_dim, dtype=np.float32)
+
+        obs_low[0:4] = -1.0
+        obs_high[0:4] = 1.0
+        obs_low[4] = 0.0
+        obs_high[4] = 1.0
+
+        def _set_bounds(idx: int, col: str, default_low: float = 0.0, default_high: float = 1.0):
+            if col in self._raw_col_bounds:
+                lo, hi = self._raw_col_bounds[col]
+            else:
+                lo, hi = default_low, default_high
+            obs_low[idx] = lo
+            obs_high[idx] = hi
+
+        _set_bounds(5, 'RRP', -100.0, 500.0)
+        _set_bounds(6, 'TOTALDEMAND', 0.0, 12000.0)
+
+        base_idx = 7
+        for i, service in enumerate(self._fcas_services):
+            _set_bounds(base_idx + i, f'FCAS_{service}', 0.0, 100.0)
+
+        gen_idx = base_idx + len(self._fcas_services)
+        for j, fuel in enumerate(self._gen_fuels):
+            _set_bounds(gen_idx + j, f'GEN_{fuel}', 0.0, 5000.0)
+
+        obs_low[-1] = 0.0
+        obs_high[-1] = float(self.battery_capacity)
+
+        return obs_low, obs_high
+
     def _get_observation(self) -> np.ndarray:
         """Construct observation from current state."""
+        components = self._get_observation_components()
+        _, normalized_obs = components
+        if self.normalize_obs:
+            return normalized_obs
+        return components[0]
+
+    def _get_observation_components(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Return (raw_obs, normalized_obs) for current state."""
         current_idx = self.episode_start_idx + self.current_step
-        
+
         if current_idx >= len(self.aemo_data):
-            # Return zero observation if out of bounds
-            return np.zeros(self.observation_space.shape[0], dtype=np.float32)
-        
+            zero = np.zeros(self.observation_space.shape[0], dtype=np.float32)
+            return zero, zero
+
         market_data = self.aemo_data.row(current_idx, named=True)
-        
-        obs = []
-        
+
+        raw_obs: list[float] = []
+        norm_obs: list[float] = []
+
         # Time features (5)
-        obs.extend([
+        time_vals = [
             market_data.get('hour_sin', 0),
             market_data.get('hour_cos', 0),
             market_data.get('day_sin', 0),
             market_data.get('day_cos', 0),
             market_data.get('is_peak', 0),
-        ])
-        
+        ]
+        raw_obs.extend(time_vals)
+        norm_obs.extend(time_vals)
+
         # Energy market (2)
-        obs.extend([
+        raw_obs.extend([
+            market_data.get('RRP', 0),
+            market_data.get('TOTALDEMAND', 0),
+        ])
+        norm_obs.extend([
             market_data.get('RRP_normalized', 0),
             market_data.get('DEMAND_normalized', 0),
         ])
-        
+
         # FCAS prices (8)
-        for service in ['RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
-                       'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN']:
-            obs.append(market_data.get(f'FCAS_{service}_normalized', 0))
-        
+        for service in self._fcas_services:
+            raw_obs.append(market_data.get(f'FCAS_{service}', 0))
+            norm_obs.append(market_data.get(f'FCAS_{service}_normalized', 0))
+
         # Generation mix (2)
-        obs.extend([
-            market_data.get('GEN_solar_pct', 0),
-            market_data.get('GEN_wind_pct', 0),
-        ])
-        
+        for fuel in self._gen_fuels:
+            raw_obs.append(market_data.get(f'GEN_{fuel}', 0))
+            norm_obs.append(market_data.get(f'GEN_{fuel}_pct', 0))
+
         # Battery state (1)
-        obs.append(self.battery_soc / self.battery_capacity)
-        
-        return np.array(obs, dtype=np.float32)
+        raw_obs.append(self.battery_soc)
+        norm_obs.append(self.battery_soc / self.battery_capacity if self.battery_capacity > 0 else 0.0)
+
+        return np.array(raw_obs, dtype=np.float32), np.array(norm_obs, dtype=np.float32)
+
+    def get_raw_obs(self) -> np.ndarray:
+        """Return raw observation at current step."""
+        raw_obs, _ = self._get_observation_components()
+        return raw_obs
     
     def _calculate_reward(self, market_data, actual_power: float, actual_energy: float,
                          fcas_raise_bid: float, fcas_lower_bid: float,
-                         old_soc: float, new_soc: float) -> float:
+                         old_soc: float, new_soc: float) -> Tuple[float, float, float, float]:
         """Calculate reward for this step."""
         # Energy market revenue
         energy_price = market_data.get('RRP', 0)  # $/MWh
@@ -554,13 +721,36 @@ class AEMOBatteryTradingEnv(gym.Env):
         # Track totals
         self.total_revenue += energy_revenue + fcas_revenue
         self.total_degradation_cost += degradation_cost
-        
-        # Normalize reward to more manageable scale
-        # Typical revenue per step might be in hundreds of dollars
-        # Normalize to roughly [-1, 1] range
+
         normalized_reward = reward / 1000.0
-        
-        return normalized_reward
+        return normalized_reward, energy_revenue, fcas_revenue, degradation_cost
+
+    def _make_reward_info(self,
+                          battery_soc: float,
+                          battery_dispatch: float,
+                          energy_price: float,
+                          energy_revenue: float,
+                          fcas_revenue: float,
+                          fcas_raise_bid: float,
+                          fcas_lower_bid: float,
+                          actual_energy: float,
+                          degradation_cost: float,
+                          current_step: int) -> Dict[str, float]:
+        """Return a compact reward/info dict for debugging and tracking."""
+        return {
+            'battery_soc': battery_soc,
+            'battery_dispatch': battery_dispatch,
+            'energy_price': energy_price,
+            'energy_revenue': energy_revenue,
+            'fcas_revenue': fcas_revenue,
+            'fcas_raise_bid': fcas_raise_bid,
+            'fcas_lower_bid': fcas_lower_bid,
+            'actual_energy': actual_energy,
+            'step_degradation': degradation_cost,
+            'total_revenue': self.total_revenue,
+            'total_degradation': self.total_degradation_cost,
+            'current_step': current_step,
+        }
     
     def render(self):
         """Render the environment."""
