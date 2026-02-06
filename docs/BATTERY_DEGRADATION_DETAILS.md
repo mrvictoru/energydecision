@@ -66,6 +66,32 @@ deg_fraction = model.degradation_per_cycle(
 step_cost = deg_fraction * battery_replacement_cost
 ```
 
+#### Public Methods (DegradationModel)
+
+- `__init__(CL_nom, T_nom, Id_nom, Ich_nom, SOCav_nom=50.0, DOD_nom=90.0, enforce_feasible_region=True)`
+    - **Args**: nominal parameters for the multi-factor model. `CL_nom` is the baseline cycles-to-EOL, while the other arguments define the “nominal condition” around which normalized multipliers are computed. `enforce_feasible_region` controls whether SOC/DOD pairs are validated when computing the SOC–DOD multiplier.
+    - **Returns**: instance of `DegradationModel` with pre-computed denominator factors for numerical stability.
+
+- `cycle_life(T, Id, Ich, SOCav, DOD)`
+    - **Args**: stresses for a candidate cycle: temperature in °C, charge/discharge C-rates, average SoC (%), and depth-of-discharge (%).
+    - **Returns**: `CL = CL_nom * nCL_T * nCL_Id * nCL_Ich * nCL_SOCav_DOD`, i.e., the expected number of equivalent full cycles under those conditions. Values below or equal to zero are treated as invalid (raises in downstream callers).
+
+- `degradation_per_cycle(T, Id, Ich, SOCav, DOD)`
+    - **Args**: same stress inputs as `cycle_life`. Internally clamps SOC/DOD to the polynomial’s feasible region, caps C-rates to [0, 3], and enforces the inclined safety guard `DOD > 3` to avoid noise at tiny swings.
+    - **Returns**: fractional degradation `1 / CL` computed by the multi-factor equation. The method raises `ValueError` if the computed cycle life is non-finite or non-positive.
+
+- `debug_degradation_per_cycle(T, Id, Ich, SOCav, DOD)`
+    - **Args**: identical to the other methods; intended for diagnostics.
+    - **Returns**: dictionary capturing clipped/normalized inputs, each normalized multiplier (`nCL_T`, `nCL_Id`, `nCL_Ich`, `nCL_SOCav_DOD`), the combined `mult`, and the resulting `CL`/`degradation` value for tracing failure cases.
+
+- `nCL_T`, `nCL_Id`, `nCL_Ich`, `nCL_SOCav_DOD`
+    - **Args**: a single stress variable or SOC/DOD pair.
+    - **Returns**: dimensionless multiplier relative to the nominal condition. Each helper guards against invalid inputs by returning `1.0` when the raw factor is non-finite or negative.
+
+- `static_degradation(Id, Ich, SoC_avg, DoD)`
+    - **Args**: convenience wrapper that instantiates a default `DegradationModel` and calls `degradation_per_cycle` (temperature fixed at 25 °C here).
+    - **Returns**: the degradation fraction and prints the equivalent cycle life to stdout for quick sanity checks.
+
 ### `RainflowCounter` Class
 In real-world operation, batteries don't follow clean cycles. They have partial charges and micro-discharges. The `RainflowCounter` implements the **ASTM E1049-85 standard** to extract cycles from a varying State of Charge (SoC) profile.
 
@@ -79,6 +105,20 @@ soc_profile = [20, 25, 40, 35, 60]
 for soc in soc_profile:
     closed_cycles = counter.update(soc) # Returns list of (SoC_avg, DoD, Id, Ich)
 ```
+
+#### Public Methods (RainflowCounter)
+
+- `__init__(step_duration=1.0, eps=0.1, max_c_rate=1.0)`
+    - **Args**: `step_duration` is the time between SOC samples (hours), `eps` is the plateau tolerance (percent SoC) used in turning-point detection, and `max_c_rate` clamps the inferred C-rate per cycle.
+    - **Returns**: counter that maintains a stack of turning points; `step_duration` is reused when converting SoC deltas to currents.
+
+- `update(soc)`
+    - **Args**: incoming SoC percentage ([0, 100]) at the next timestep.
+    - **Returns**: list of closed cycles detected since the previous update. Each tuple carries `(SoC_avg, DoD, Id_cycle, Ich_cycle)` describing the average SoC, depth-of-discharge, and implied charge/discharge C-rate for that cycle. The method discards tiny cycles below `eps` and ensures `DoD` remains positive before reporting.
+
+- `rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6)`
+    - **Args**: helper function that accepts a full SoC profile (sequence) and optional granularity parameters.
+    - **Returns**: same sequence of closed cycles as repeatedly calling `RainflowCounter.update`; useful when you have a batch SoC trace instead of streaming data.
 
 ---
 

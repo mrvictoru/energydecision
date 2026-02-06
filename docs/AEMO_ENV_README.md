@@ -202,6 +202,40 @@ create_aemo_env_from_data(
     cache_dir="data/aemo",
     battery_capacity=10.0,
     max_battery_flow=5.0,
+
+## API Reference
+
+### `AEMODataPreprocessor`
+- `__init__(step_duration_hours=0.5, missing_data_method='interpolate', add_normalized_features=True, update_stats_from_data=True)`
+    - **Args**: controls how raw AEMO data is resampled (`step_duration_hours`), how gaps are filled (`missing_data_method`), whether normalized columns are appended (`add_normalized_features`), and whether the stats dictionary is updated from the incoming data (`update_stats_from_data`).
+    - **Returns**: preprocessor ready to convert fetched price/fcas/generation tables into environment-ready Polars DataFrames.
+- `preprocess_aemo_data(prices, fcas, generation)`
+    - **Args**: three Polars DataFrames from `fetch_aemo_dispatch_price`, `fetch_aemo_fcas_price`, and `fetch_aemo_generation_by_fuel`.
+    - **Returns**: unified DataFrame containing resampled market features, cyclical time encodings, normalized columns, and generation mix percentages, aligned to the env step scale. Internally uses `_resample_data`, `_resample_fcas`, `_resample_generation`, `_merge_datasets`, `_handle_missing_data`, `_add_time_features`, and `_normalize_features` to produce the final table.
+
+### `AEMOBatteryTradingEnv`
+- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.5, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False)`
+    - **Args**: `aemo_data` is the processed Polars DataFrame; the others configure capacity/flow, episode length, FCAS action mode, normalization toggles, and whether `get_raw_obs()` results should be returned from `reset()`/`step()`.
+    - **Returns**: `AEMOBatteryTradingEnv` instance with observation/action spaces, SOC bookkeeping, revenue tracking, and degradation accounting initialized.
+- `reset(seed=None, options=None)`
+    - **Args**: optional Gym seed and `options` dict (supports `return_raw_obs` override).
+    - **Returns**: `(obs, info)` where `obs` is the normalized observation vector (plus raw if `return_raw_obs`) and `info` is an empty dict (populated later by `step`). Random episode start index is chosen within cached data.
+- `step(action)`
+    - **Args**: normalized action ([-1,1]) or 3-vector depending on `action_mode`. Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
+    - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `degradation_cost`, `total_cost`, `penalties`, and the latest `market_data` row.
+- `render()`
+    - **Returns**: currently a placeholder (prints human-friendly summary when implemented). Use `render_mode='human'` to enable future output.
+
+### Convenience Functions
+- `create_aemo_env_from_data(start_date, end_date, region='NSW1', cache_dir='data/aemo', **env_kwargs)`
+    - **Args**: date range, region, cache path, plus any `AEMOBatteryTradingEnv`-compatible overrides.
+    - **Returns**: initialized env after fetching via `fetch_aemo_data_bundle` and preprocessing through `AEMODataPreprocessor`.
+- `fetch_aemo_data_bundle(start_date, end_date, region='NSW1', fcas_services=None, fuel_types=None, generator_info_path=None, cache_dir='data/aemo', refresh=False)`
+    - **Args**: spans energy prices, FCAS services, and fuel types to fetch; optional generator mapping.
+    - **Returns**: dict with `prices`, `fcas`, and `generation` Polars DataFrames ready for preprocessing.
+- `fetch_aemo_unit_dispatch(start_date, end_date, duid=None, region=None, generator_info_path=None, cache_dir='data/aemo', refresh=False)`
+    - **Args**: yields unit-level dispatch including `TOTALCLEARED` and FCAS enablement for the specified DUID/region.
+    - **Returns**: Polars DataFrame used by `AEMOAgent` for dispatch replay/FCAS revenue accounting.
     action_mode='simple'
 )
 ```
