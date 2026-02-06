@@ -206,6 +206,21 @@ agent_dt = Agent(
     dt_model=trained_model,  # Pre-loaded DecisionTransformer
     dt_context_len=36
 )
+
+# AEMO Agent (grid-scale market agent)
+# Supports: 'rule', 'dispatch' (replay), 'rl', 'dt'
+from src.decision import AEMOAgent
+
+# Create AEMO agent to replay a unit's dispatch as actions
+# (use fetch_aemo_unit_dispatch to obtain unit dispatch data)
+# Example: dispatch_df = fetch_aemo_unit_dispatch(start, end, duid='LBBG1')
+aemo_agent = AEMOAgent(env_aemo, algorithm='dispatch', dispatch_data=dispatch_df, dispatch_duid='LBBG1')
+
+# Rule-based AEMO agent (price arbitrage heuristic)
+aemo_rule = AEMOAgent(env_aemo, algorithm='rule')
+
+# Decision Transformer / RL usage is the same: provide a trained model to the agent
+# aemo_dt = AEMOAgent(env_aemo, algorithm='dt', model=trained_dt_model)
 ```
 
 ### Running Multiple Environments in Parallel

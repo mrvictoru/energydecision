@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import polars as pl
 import warnings
-from typing import Optional
+from typing import Optional, Any, Dict, List, Tuple
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
 from batterydeg import DegradationModel, RainflowCounter
@@ -567,6 +567,379 @@ class Agent:
         return episode_df, incident_df
 
 
+class AEMOAgent:
+    """
+    Agent for AEMOBatteryTradingEnv supporting rule-based, RL, DT, and dispatch replay actions.
+    """
+
+    def __init__(self,
+                 env: Any,
+                 algorithm: str = 'rule',
+                 model: Optional[Any] = None,
+                 dispatch_data: Optional[pl.DataFrame] = None,
+                 dispatch_duid: Optional[str] = None,
+                 dispatch_duid_gen: Optional[str] = None,
+                 dispatch_duid_load: Optional[str] = None,
+                 assume_single_duid_is_generator: bool = True,
+                 dispatch_action_mode: Optional[str] = None,
+                 rtg_value: float = 0.0,
+                 dt_gamma: float = 0.99):
+        self.env = env
+        self.algorithm = algorithm.lower()
+        self.model = model
+        self.rule_presistence = False
+
+        self.rtg_value = rtg_value
+        self.dt_gamma = dt_gamma
+        self.dt_states_buffer = []
+        self.dt_actions_buffer = []
+        self.dt_rtgs_buffer = []
+        self.dt_timesteps_buffer = []
+
+        self.dispatch_action_mode = dispatch_action_mode or getattr(env, 'action_mode', 'simple')
+        self.dispatch_actions = None
+        if dispatch_data is not None:
+            self.set_dispatch_data(
+                dispatch_data,
+                dispatch_duid=dispatch_duid,
+                dispatch_duid_gen=dispatch_duid_gen,
+                dispatch_duid_load=dispatch_duid_load,
+                assume_single_duid_is_generator=assume_single_duid_is_generator
+            )
+
+    @staticmethod
+    def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
+        if not data:
+            return np.zeros(default_shape, dtype=dtype)
+        arr = np.array(data, dtype=np.float64)
+        finite = np.isfinite(arr)
+        if not finite.all():
+            logging.warning(
+                "Found %d non-finite RTG values; replacing with 0 before casting.",
+                int((~finite).sum())
+            )
+            arr = np.where(finite, arr, 0.0)
+        clip_max = np.finfo(np.float32).max
+        arr = np.clip(arr, -clip_max, clip_max)
+        return arr.astype(dtype)
+
+    def set_dispatch_data(self,
+                          dispatch_data: pl.DataFrame,
+                          dispatch_duid: Optional[str] = None,
+                          dispatch_duid_gen: Optional[str] = None,
+                          dispatch_duid_load: Optional[str] = None,
+                          assume_single_duid_is_generator: bool = True) -> None:
+        self.dispatch_actions = self._build_dispatch_actions(
+            dispatch_data,
+            dispatch_duid=dispatch_duid,
+            dispatch_duid_gen=dispatch_duid_gen,
+            dispatch_duid_load=dispatch_duid_load,
+            assume_single_duid_is_generator=assume_single_duid_is_generator
+        )
+
+    def _build_dispatch_actions(self,
+                                dispatch_data: pl.DataFrame,
+                                dispatch_duid: Optional[str] = None,
+                                dispatch_duid_gen: Optional[str] = None,
+                                dispatch_duid_load: Optional[str] = None,
+                                assume_single_duid_is_generator: bool = True) -> Optional[np.ndarray]:
+        if dispatch_data is None or dispatch_data.height == 0:
+            return None
+        if not hasattr(self.env, 'aemo_data') or self.env.aemo_data.height == 0:
+            return None
+        if 'SETTLEMENTDATE' not in dispatch_data.columns:
+            raise ValueError("dispatch_data must include SETTLEMENTDATE")
+
+        every_minutes = int(round(float(self.env.step_duration) * 60))
+        every = f"{every_minutes}m"
+
+        def _prep(df: pl.DataFrame) -> pl.DataFrame:
+            df = df.with_columns(pl.col('SETTLEMENTDATE').cast(pl.Datetime, strict=False))
+            df = df.sort('SETTLEMENTDATE')
+            numeric_cols = [c for c in df.columns if c not in {'SETTLEMENTDATE', 'DUID'}]
+            aggs = [pl.col(c).mean().alias(c) for c in numeric_cols]
+            return df.group_by_dynamic('SETTLEMENTDATE', every=every, label='left', closed='left').agg(aggs)
+
+        df = dispatch_data
+        if 'DUID' in df.columns and (dispatch_duid_gen or dispatch_duid_load or dispatch_duid):
+            if dispatch_duid and not dispatch_duid_gen and not dispatch_duid_load:
+                dispatch_duid_gen = dispatch_duid
+
+            gen_df = None
+            load_df = None
+            if dispatch_duid_gen:
+                gen_df = _prep(df.filter(pl.col('DUID') == dispatch_duid_gen)).rename({
+                    'TOTALCLEARED': 'GEN_MW',
+                    'RAISEREG': 'GEN_RAISEREG',
+                    'LOWERREG': 'GEN_LOWERREG',
+                })
+            if dispatch_duid_load:
+                load_df = _prep(df.filter(pl.col('DUID') == dispatch_duid_load)).rename({
+                    'TOTALCLEARED': 'LOAD_MW',
+                    'RAISEREG': 'LOAD_RAISEREG',
+                    'LOWERREG': 'LOAD_LOWERREG',
+                })
+
+            merged = gen_df if gen_df is not None else load_df
+            if merged is None:
+                return None
+            if gen_df is not None and load_df is not None:
+                merged = gen_df.join(load_df, on='SETTLEMENTDATE', how='outer_coalesce')
+            merged = merged.fill_null(0.0)
+
+            dispatch_res = merged.with_columns([
+                (pl.col('LOAD_MW').fill_null(0.0) - pl.col('GEN_MW').fill_null(0.0)).alias('NET_MW'),
+                (pl.col('GEN_RAISEREG').fill_null(0.0) + pl.col('LOAD_RAISEREG').fill_null(0.0)).alias('RAISEREG_MW'),
+                (pl.col('GEN_LOWERREG').fill_null(0.0) + pl.col('LOAD_LOWERREG').fill_null(0.0)).alias('LOWERREG_MW'),
+            ]).select(['SETTLEMENTDATE', 'NET_MW', 'RAISEREG_MW', 'LOWERREG_MW'])
+        else:
+            dispatch_res = _prep(df)
+            if 'TOTALCLEARED' not in dispatch_res.columns:
+                return None
+            sign = -1.0 if assume_single_duid_is_generator else 1.0
+            dispatch_res = dispatch_res.with_columns([
+                (pl.lit(sign) * pl.col('TOTALCLEARED')).alias('NET_MW'),
+                pl.col('RAISEREG').fill_null(0.0).alias('RAISEREG_MW') if 'RAISEREG' in dispatch_res.columns else pl.lit(0.0).alias('RAISEREG_MW'),
+                pl.col('LOWERREG').fill_null(0.0).alias('LOWERREG_MW') if 'LOWERREG' in dispatch_res.columns else pl.lit(0.0).alias('LOWERREG_MW'),
+            ]).select(['SETTLEMENTDATE', 'NET_MW', 'RAISEREG_MW', 'LOWERREG_MW'])
+
+        grid = self.env.aemo_data.select(['SETTLEMENTDATE']).sort('SETTLEMENTDATE')
+        aligned = grid.join(dispatch_res, on='SETTLEMENTDATE', how='left').fill_null(0.0)
+
+        net = aligned['NET_MW'].to_numpy()
+        a0 = np.clip(net / float(self.env.max_battery_flow), -1.0, 1.0).astype(np.float32)
+
+        if self.dispatch_action_mode == 'simple':
+            return a0.reshape(-1, 1)
+
+        raise_bid = np.clip(aligned['RAISEREG_MW'].to_numpy() / float(self.env.max_battery_flow), 0.0, 1.0).astype(np.float32)
+        lower_bid = np.clip(aligned['LOWERREG_MW'].to_numpy() / float(self.env.max_battery_flow), 0.0, 1.0).astype(np.float32)
+        return np.stack([a0, raise_bid, lower_bid], axis=1).astype(np.float32)
+
+    def _dispatch_action(self) -> np.ndarray:
+        if self.dispatch_actions is None:
+            return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
+        idx = int(self.env.current_step)
+        if idx < 0 or idx >= len(self.dispatch_actions):
+            return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
+        return self.dispatch_actions[idx]
+
+    def choose_action(self, obs):
+        if self.algorithm == 'rule':
+            return self.rule_based_action(obs)
+        if self.algorithm == 'dispatch':
+            return self._dispatch_action()
+        if self.algorithm == 'rl':
+            if self.model is None:
+                raise ValueError("RL algorithm selected but no model provided.")
+            if not isinstance(obs, np.ndarray):
+                warnings.warn("Observation is not a numpy array. RL model expects a numpy array input.")
+                return [0.0]
+            action, _ = self.model.predict(obs, deterministic=True)
+            return action[0] if isinstance(action, np.ndarray) and action.ndim > 1 else action
+        if self.algorithm == 'dt':
+            if self.model is None:
+                raise ValueError("Decision Transformer selected but no model provided.")
+            self.model.eval()
+            device = next(self.model.parameters()).device
+
+            context_len = self.model.context_len
+            state_dim = self.model.state_dim
+            act_dim = self.model.act_dim
+            buffer_len = len(self.dt_states_buffer)
+
+            buffer_states = (
+                np.array(self.dt_states_buffer, dtype=np.float32)
+                if buffer_len > 0 else np.zeros((0, state_dim), dtype=np.float32)
+            )
+            if buffer_states.ndim == 1 and buffer_len > 0:
+                buffer_states = buffer_states.reshape(buffer_len, state_dim)
+
+            buffer_actions = (
+                np.array(self.dt_actions_buffer, dtype=np.float32)
+                if buffer_len > 0 else np.zeros((0, act_dim), dtype=np.float32)
+            )
+            if buffer_actions.ndim == 1 and buffer_len > 0:
+                buffer_actions = buffer_actions.reshape(buffer_len, act_dim)
+
+            buffer_rtgs = self._safe_float32_array(
+                self.dt_rtgs_buffer,
+                default_shape=(0, ),
+                dtype=np.float32
+            ) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
+
+            buffer_timesteps = (
+                np.array(self.dt_timesteps_buffer, dtype=np.int64)
+                if buffer_len > 0 else np.zeros(0, dtype=np.int64)
+            )
+
+            if buffer_len < context_len:
+                pad_len = context_len - buffer_len
+                states = np.vstack([
+                    np.zeros((pad_len, state_dim), dtype=np.float32),
+                    buffer_states
+                ])
+                actions = np.vstack([
+                    np.zeros((pad_len, act_dim), dtype=np.float32),
+                    buffer_actions
+                ])
+                rtgs = np.concatenate([
+                    np.zeros(pad_len, dtype=np.float32),
+                    buffer_rtgs
+                ])
+                timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), buffer_timesteps])
+                mask = np.concatenate([
+                    np.zeros(pad_len, dtype=np.bool_),
+                    np.ones(buffer_len, dtype=np.bool_)
+                ])
+            else:
+                states = buffer_states[-context_len:]
+                actions = buffer_actions[-context_len:]
+                rtgs = buffer_rtgs[-context_len:]
+                timesteps = buffer_timesteps[-context_len:]
+                mask = np.ones(context_len, dtype=np.bool_)
+
+            return_scale_attr = getattr(self.model, 'return_scale', 1.0)
+            return_scale = float(return_scale_attr.detach().cpu().item()) if isinstance(return_scale_attr, torch.Tensor) else float(return_scale_attr)
+            if not np.isfinite(return_scale) or abs(return_scale) < 1e-12:
+                raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
+            if return_scale != 1.0:
+                rtgs = rtgs / return_scale
+
+            states = np.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
+            actions = np.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
+            rtgs = np.nan_to_num(rtgs, nan=0.0, posinf=0.0, neginf=0.0)
+
+            rtg_clip = 1e3
+            rtgs = np.clip(rtgs, -rtg_clip, rtg_clip)
+
+            max_time = getattr(self.model.embed_timestep, 'num_embeddings', None)
+            if max_time is not None and max_time > 0:
+                timesteps = np.clip(timesteps, 0, max_time - 1)
+
+            states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)
+            actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)
+            rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)
+            timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
+            attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
+
+            with torch.no_grad():
+                action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+            action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
+            action = action.detach().cpu().numpy()
+            action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0).tolist()
+            return action
+
+        raise ValueError(f"Unsupported algorithm: {self.algorithm}")
+
+    def rule_based_action(self, obs):
+        # AEMO raw obs layout: [time(5), RRP, TOTALDEMAND, FCAS(8), GEN(2), SOC]
+        if obs is None or len(obs) < 6:
+            return [np.float32(0.0)]
+
+        price = float(obs[5])
+        soc_kwh = float(obs[-1])
+        cap = float(getattr(self.env, 'battery_capacity', 1.0))
+        soc_norm = soc_kwh / cap if cap > 0 else 0.0
+
+        charge_price = 30.0
+        discharge_price = 120.0
+
+        noise = np.random.normal(0.0, 0.01)
+        action = 0.0
+
+        safe_low, safe_high = 0.10, 0.90
+        if soc_norm <= safe_low:
+            action = 0.5
+        elif soc_norm >= safe_high:
+            action = -0.5
+        else:
+            if price <= charge_price:
+                action = 0.6
+            elif price >= discharge_price:
+                action = -0.6
+            else:
+                action = 0.0
+
+        action = float(np.clip(action + noise, -1.0, 1.0))
+        return [np.float32(action)]
+
+    def run_episode(self, render: bool = False, display_progress: bool = False):
+        obs, info = self.env.reset()
+        raw_obs = self.env.get_raw_obs()
+        max_possible_steps = len(self.env.aemo_data) if hasattr(self.env, 'aemo_data') else 0
+
+        if self.algorithm == 'dt':
+            self.dt_states_buffer = [obs.copy()]
+            self.dt_actions_buffer = [np.zeros(self.model.act_dim)]
+            self.dt_rtgs_buffer = [self.rtg_value]
+            self.dt_timesteps_buffer = [self.env.current_step]
+
+        logs = []
+        terminated, truncated = False, False
+        step = 0
+
+        if self.algorithm in ['rule', 'dispatch']:
+            current_obs = raw_obs
+        else:
+            current_obs = obs
+
+        try:
+            while not (terminated or truncated):
+                action = self.choose_action(current_obs)
+                next_obs, reward, terminated, truncated, info = self.env.step(action)
+
+                logs.append({
+                    'step': step,
+                    'norm_observation': obs.tolist() if isinstance(obs, np.ndarray) else obs,
+                    'raw_observation': raw_obs.tolist() if isinstance(raw_obs, np.ndarray) else raw_obs,
+                    'action': action,
+                    'reward': reward,
+                    'info': info
+                })
+
+                if self.algorithm == 'dt':
+                    context_len = self.model.context_len
+                    if isinstance(action, list):
+                        action_array = np.array(action, dtype=np.float32)
+                    else:
+                        action_array = np.array([action], dtype=np.float32) if np.isscalar(action) else action
+                    self.dt_actions_buffer[-1] = action_array
+
+                    if self.dt_gamma == 1.0:
+                        next_rtg = self.dt_rtgs_buffer[-1] - reward
+                    else:
+                        next_rtg = (self.dt_rtgs_buffer[-1] - reward) / self.dt_gamma
+
+                    self.dt_states_buffer.append(next_obs.copy())
+                    self.dt_actions_buffer.append(np.zeros(self.model.act_dim))
+                    self.dt_rtgs_buffer.append(next_rtg)
+                    self.dt_timesteps_buffer.append(self.env.current_step)
+
+                    if len(self.dt_states_buffer) > context_len:
+                        self.dt_states_buffer = self.dt_states_buffer[-context_len:]
+                        self.dt_actions_buffer = self.dt_actions_buffer[-context_len:]
+                        self.dt_rtgs_buffer = self.dt_rtgs_buffer[-context_len:]
+                        self.dt_timesteps_buffer = self.dt_timesteps_buffer[-context_len:]
+
+                raw_obs = self.env.get_raw_obs()
+                obs = next_obs
+                current_obs = raw_obs if self.algorithm in ['rule', 'dispatch'] else obs
+
+                if render:
+                    self.env.render()
+
+                step += 1
+                if display_progress:
+                    print(f"Step {step}/{max_possible_steps}", end='\r')
+        finally:
+            print("Sim Complete")
+
+        episode_df = pl.DataFrame(logs)
+        incident_df = pl.DataFrame()
+        return episode_df, incident_df
+
+
 
 def run_single(agent_class, env, agent_kwargs, render, display_progress=False):
     agent = agent_class(env, **agent_kwargs)
@@ -597,8 +970,8 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     Returns: List of DataFrames (one per environment).
     """
     agent_kwargs = agent_kwargs or {}
-    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp','dt', 'oracle']:
-        raise ValueError("Parallel execution is only supported for 'rule', 'sdp', 'mrdp', 'dt', and 'oracle' algorithms. ")
+    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp', 'dt', 'oracle', 'dispatch']:
+        raise ValueError("Parallel execution is only supported for 'rule', 'sdp', 'mrdp', 'dt', 'oracle', and 'dispatch' algorithms. ")
 
     if use_notebook_tqdm:
         from tqdm.notebook import tqdm as tqdm_bar

@@ -16,6 +16,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 (via Stable-Baselines3).
     *   **Offline RL:** Decision Transformers (DT).
     *   **Baselines:** Rule-based heuristics & Oracle (perfect foresight).
+    *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
 [![Tests](https://img.shields.io/badge/tests-46%20passing-brightgreen)]()
@@ -62,6 +63,29 @@ The typical workflow moves from simulation to training and finally evaluation.
 Run [test_simrun.ipynb](notebooks/test_simrun.ipynb) to:
 - Execute Rule-based and SDP agents.
 - Generate interaction logs (`.parquet`) for offline training.
+
+AEMO-specific data collection: the repository includes an `AEMOAgent` that can replay real unit dispatch (from `fetch_aemo_unit_dispatch`) into `AEMOBatteryTradingEnv` to generate realistic offline trajectories. Example:
+
+```python
+from datetime import datetime
+from src.aemo_data import fetch_aemo_data_bundle, fetch_aemo_unit_dispatch
+from src.AEMOBatteryEnv import AEMODataPreprocessor, AEMOBatteryTradingEnv
+from src.decision import AEMOAgent
+
+# Fetch market & dispatch data for a period
+start, end = datetime(2023, 6, 1), datetime(2023, 6, 2)
+bundle = fetch_aemo_data_bundle(start, end, region='NSW1')
+dispatch = fetch_aemo_unit_dispatch(start, end, duid='YOUR_DUID')
+
+# Preprocess and create env
+pre = AEMODataPreprocessor(step_duration_hours=0.5, add_normalized_features=True, update_stats_from_data=True)
+processed = pre.preprocess_aemo_data(bundle['prices'], bundle['fcas'], bundle['generation'])
+env = AEMOBatteryTradingEnv(aemo_data=processed, action_mode='simple', normalize_obs=True, return_raw_obs=True)
+
+# Create AEMO agent that will replay dispatch as actions
+agent = AEMOAgent(env, algorithm='dispatch', dispatch_data=dispatch, dispatch_duid='YOUR_DUID')
+episode_df, incident_df = agent.run_episode()
+```
 
 ### 2. Online RL Training
 Run [test_sb3train.ipynb](notebooks/test_sb3train.ipynb) to:
