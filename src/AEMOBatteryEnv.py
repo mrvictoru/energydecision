@@ -108,19 +108,23 @@ class AEMODataPreprocessor:
 
         fcas_cols = [c for c in df.columns if c.startswith('FCAS_') and not c.endswith('_normalized')]
         if fcas_cols:
-            min_val = df.select(pl.min_horizontal([pl.col(c) for c in fcas_cols])).item()
-            max_val = df.select(pl.max_horizontal([pl.col(c) for c in fcas_cols])).item()
-            if min_val is not None and max_val is not None:
-                self.stats['FCAS_PRICE']['min'] = float(min_val)
-                self.stats['FCAS_PRICE']['max'] = float(max_val)
+            fcas_min_row = df.select([pl.col(c).min() for c in fcas_cols]).row(0)
+            fcas_max_row = df.select([pl.col(c).max() for c in fcas_cols]).row(0)
+            valid_fcas_mins = [v for v in fcas_min_row if v is not None]
+            valid_fcas_maxs = [v for v in fcas_max_row if v is not None]
+            if valid_fcas_mins and valid_fcas_maxs:
+                self.stats['FCAS_PRICE']['min'] = float(min(valid_fcas_mins))
+                self.stats['FCAS_PRICE']['max'] = float(max(valid_fcas_maxs))
 
         gen_cols = [c for c in df.columns if c.startswith('GEN_') and not c.endswith('_pct')]
         if gen_cols:
-            min_val = df.select(pl.min_horizontal([pl.col(c) for c in gen_cols])).item()
-            max_val = df.select(pl.max_horizontal([pl.col(c) for c in gen_cols])).item()
-            if min_val is not None and max_val is not None:
-                self.stats['GENERATION']['min'] = float(min_val)
-                self.stats['GENERATION']['max'] = float(max_val)
+            gen_min_row = df.select([pl.col(c).min() for c in gen_cols]).row(0)
+            gen_max_row = df.select([pl.col(c).max() for c in gen_cols]).row(0)
+            valid_gen_mins = [v for v in gen_min_row if v is not None]
+            valid_gen_maxs = [v for v in gen_max_row if v is not None]
+            if valid_gen_mins and valid_gen_maxs:
+                self.stats['GENERATION']['min'] = float(min(valid_gen_mins))
+                self.stats['GENERATION']['max'] = float(max(valid_gen_maxs))
     
     def _every_str(self) -> str:
         minutes = int(round(self.step_duration_hours * 60))

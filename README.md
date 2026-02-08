@@ -449,7 +449,6 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 
 ---
 
->>>>>>> main
 ## Documentation
 *   **[COMPONENTS.md](COMPONENTS.md)**: Detailed usage guide for key scripts (`decision.py`, `batterydeg.py`, etc.).
 *   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.

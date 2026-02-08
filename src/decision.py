@@ -861,8 +861,12 @@ class AEMOAgent:
             else:
                 action = 0.0
 
-        action = float(np.clip(action + noise, -1.0, 1.0))
-        return [np.float32(action)]
+        action_val = float(np.clip(action + noise, -1.0, 1.0))
+        if getattr(self.env, 'action_mode', 'simple') == 'multi_market':
+            fcas_raise = np.float32(0.0)
+            fcas_lower = np.float32(0.0)
+            return np.array([np.float32(action_val), fcas_raise, fcas_lower], dtype=np.float32)
+        return np.array([np.float32(action_val)], dtype=np.float32)
 
     def run_episode(self, render: bool = False, display_progress: bool = False):
         obs, info = self.env.reset()
