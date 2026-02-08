@@ -7,15 +7,17 @@ This document provides comprehensive documentation for all key components in the
 ## Table of Contents
 
 1. [Environment (`EnergySimEnv.py`)](#1-environment-energysimenvpy)
-2. [Decision Agent (`decision.py`)](#2-decision-agent-decisionpy)
-3. [Multi-Resolution Dynamic Programming (`mrdp_algorithm.py`)](#3-multi-resolution-dynamic-programming-mrdp_algorithmpy)
-4. [Scenario Generation (`quantile_scenarios.py`)](#4-scenario-generation-quantile_scenariospy)
-5. [Battery Degradation (`batterydeg.py`)](#5-battery-degradation-batterydegpy)
-6. [Data Transformation (`helper.py`)](#6-data-transformation-helperpy)
-7. [Decision Transformer (`decision_transformer.py`)](#7-decision-transformer-decision_transformerpy)
-8. [Transformer Training (`transformer_training.py`)](#8-transformer-training-transformer_trainingpy)
-9. [Stable-Baselines3 Training (`sb3train.py`)](#9-stable-baselines3-training-sb3trainpy)
-10. [Performance Optimizations](#10-performance-optimizations)
+2. [AEMO Market Environment (`AEMOBatteryEnv.py`)](#2-aemo-market-environment-aemobatteryenvpy)
+3. [AEMO Data Pipeline (`aemo_data.py`)](#3-aemo-data-pipeline-aemo_datapy)
+4. [Decision Agent (`decision.py`)](#4-decision-agent-decisionpy)
+5. [Multi-Resolution Dynamic Programming (`mrdp_algorithm.py`)](#5-multi-resolution-dynamic-programming-mrdp_algorithmpy)
+6. [Scenario Generation (`quantile_scenarios.py`)](#6-scenario-generation-quantile_scenariospy)
+7. [Battery Degradation (`batterydeg.py`)](#7-battery-degradation-batterydegpy)
+8. [Data Transformation (`helper.py`)](#8-data-transformation-helperpy)
+9. [Decision Transformer (`decision_transformer.py`)](#9-decision-transformer-decision_transformerpy)
+10. [Transformer Training (`transformer_training.py`)](#10-transformer-training-transformer_trainingpy)
+11. [Stable-Baselines3 Training (`sb3train.py`)](#11-stable-baselines3-training-sb3trainpy)
+12. [Performance Optimizations](#12-performance-optimizations)
 
 ---
 
@@ -23,7 +25,7 @@ This document provides comprehensive documentation for all key components in the
 
 ### Overview
 
-`SolarBatteryEnv` is a Gymnasium-compatible environment simulating a household with solar PV, battery storage, and grid connection. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.
+`SolarBatteryEnv` is a Gymnasium-compatible environment simulating a household with solar PV, battery storage, and grid connection. For a detailed description of the physics, logic, and reward function, see **[docs/HOUSEHOLD_ENV_README.md](docs/HOUSEHOLD_ENV_README.md)**. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.
 
 ### Key Features
 
@@ -84,7 +86,73 @@ for _ in range(100):
 
 ---
 
-## 2. Decision Agent (`decision.py`)
+## 2. AEMO Market Environment (`AEMOBatteryEnv.py`)
+
+### Overview
+
+`AEMOBatteryTradingEnv` is a Gymnasium-compatible environment that simulates a grid-scale battery participating in AEMO energy and FCAS markets. For a detailed description of the market mechanics and observation space, see **[docs/AEMO_ENV_README.md](docs/AEMO_ENV_README.md)**. It consumes preprocessed AEMO data (Polars) and supports single-market (energy-only) or multi-market (energy + FCAS) action modes.
+
+### Key Components
+
+- **`AEMODataPreprocessor`**: Resamples AEMO datasets to the environment step duration, adds cyclical time features, handles missing data, and normalizes inputs.
+- **`AEMOBatteryTradingEnv`**: Uses normalized market features and battery SOC to compute rewards based on energy arbitrage and optional FCAS revenue.
+
+### Basic Usage
+
+```python
+from datetime import datetime
+from src.AEMOBatteryEnv import create_aemo_env_from_data
+
+env = create_aemo_env_from_data(
+    start_date=datetime(2024, 6, 1),
+    end_date=datetime(2024, 6, 7),
+    region="NSW1",
+    battery_capacity=10.0,
+    max_battery_flow=5.0,
+    init_battery_level=5.0,
+    max_step=288,
+    step_duration=0.5,
+    action_mode="multi_market",
+)
+
+obs, info = env.reset()
+```
+
+---
+
+## 3. AEMO Data Pipeline (`aemo_data.py`)
+
+### Overview
+
+Provides Polars-based data ingestion from NEMOSIS, with caching and fallbacks for AEMO static table downloads. The main entry points are `fetch_aemo_dispatch_price`, `fetch_aemo_fcas_price`, `fetch_aemo_generation_by_fuel`, and the convenience wrappers `fetch_aemo_data_bundle` / `fetch_aemo_data_bundle_with_dispatch`.
+
+### Basic Usage
+
+```python
+from datetime import datetime
+from src.aemo_data import fetch_aemo_data_bundle
+
+data = fetch_aemo_data_bundle(
+    start_date=datetime(2023, 6, 1),
+    end_date=datetime(2023, 6, 2),
+    region="NSW1",
+    fcas_services=["RAISEREG", "LOWERREG"],
+    fuel_types=["solar", "wind"],
+)
+
+prices = data["prices"]
+fcas = data["fcas"]
+generation = data["generation"]
+```
+
+### Notes
+
+- Data is cached under `data/aemo/` by default.
+- If AEMO static tables are blocked, set `AEMO_GENERATORS_FILE` to a local XLS/XLSX/CSV file.
+
+---
+
+## 4. Decision Agent (`decision.py`)
 
 ### Overview
 
@@ -138,6 +206,21 @@ agent_dt = Agent(
     dt_model=trained_model,  # Pre-loaded DecisionTransformer
     dt_context_len=36
 )
+
+# AEMO Agent (grid-scale market agent)
+# Supports: 'rule', 'dispatch' (replay), 'rl', 'dt'
+from src.decision import AEMOAgent
+
+# Create AEMO agent to replay a unit's dispatch as actions
+# (use fetch_aemo_unit_dispatch to obtain unit dispatch data)
+# Example: dispatch_df = fetch_aemo_unit_dispatch(start, end, duid='LBBG1')
+aemo_agent = AEMOAgent(env_aemo, algorithm='dispatch', dispatch_data=dispatch_df, dispatch_duid='LBBG1')
+
+# Rule-based AEMO agent (price arbitrage heuristic)
+aemo_rule = AEMOAgent(env_aemo, algorithm='rule')
+
+# Decision Transformer / RL usage is the same: provide a trained model to the agent
+# aemo_dt = AEMOAgent(env_aemo, algorithm='dt', model=trained_dt_model)
 ```
 
 ### Running Multiple Environments in Parallel
@@ -189,7 +272,7 @@ print(f"Completed {len(episode_logs)} episodes")
 
 ---
 
-## 3. Algorithm Implementations (SDP, MRDP, Oracle)
+## 5. Algorithm Implementations (SDP, MRDP, Oracle)
 
 The project implements three primary optimization solvers as self-contained classes to make the algorithm flow easy to read and test:
 
@@ -213,11 +296,11 @@ policy = mrdp.solve(forecasts, start_index=0)
 
 Agent integration: The `Agent` class creates and calls these solvers based on the `algorithm` parameter (e.g., `'sdp'`, `'mrdp'`, `'oracle'`). This makes it easy to switch solvers without changing calling code.
 
-> For a detailed reading guide (step ordering and helper methods), see `ALGORITHM_GUIDE.md` (kept as a reference document).
+> For a deep dive into the mathematical logic, inner workings, and a guide on how to read/debug these files, see **[docs/DP_ALGORITHM_README.md](docs/DP_ALGORITHM_README.md)**.
 
 ---
 
-## 4. Scenario Generation (`quantile_scenarios.py`)
+## 6. Scenario Generation (`quantile_scenarios.py`)
 
 ### Overview
 
@@ -331,11 +414,13 @@ scenarios_df = generator.generate_scenarios(
 
 ---
 
-## 5. Battery Degradation (`batterydeg.py`)
+## 7. Battery Degradation (`batterydeg.py`)
 
 ### Overview
 
 Implements semi-empirical battery degradation models (Muenzel et al., 2015). The primary interface is the **class-based** `DegradationModel`, which encapsulates nominal parameters and exposes methods for normalized cycle-life factors, combined cycle-life, and per-cycle degradation. Helper functions and a rainflow-based dynamic counting implementation are also provided for convenience and compatibility.
+
+For a detailed explanation of the math, the factors, and the Rainflow implementation, see **[docs/BATTERY_DEGRADATION_DETAILS.md](docs/BATTERY_DEGRADATION_DETAILS.md)**.
 
 ### Available Models
 
@@ -386,7 +471,7 @@ total_deg, n_cycles = dynamic_degradation(soc_profile, step_duration=0.5)
 
 ---
 
-## 6. Data Transformation (`helper.py`)
+## 8. Data Transformation (`helper.py`)
 
 ### Overview
 
@@ -444,7 +529,7 @@ comparison = evaluate_experiments(
 
 ---
 
-## 7. Decision Transformer (`decision_transformer.py`)
+## 9. Decision Transformer (`decision_transformer.py`)
 
 ### Overview
 
@@ -490,7 +575,7 @@ episode_log = agent.run_episode()
 
 ---
 
-## 8. Transformer Training (`transformer_training.py`)
+## 10. Transformer Training (`transformer_training.py`)
 
 ### Overview
 
@@ -569,7 +654,7 @@ Notes:
 
 ---
 
-## 9. Stable-Baselines3 Training (`sb3train.py`)
+## 11. Stable-Baselines3 Training (`sb3train.py`)
 
 ### Overview
 
@@ -619,7 +704,7 @@ trajectories.write_parquet("data/ppo_test_episode_logs.parquet")
 
 ---
 
-## 10. Performance Optimizations
+## 12. Performance Optimizations
 
 ### Summary of Implemented Optimizations
 

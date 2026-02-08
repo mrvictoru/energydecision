@@ -732,7 +732,7 @@ def evaluate_experiment_logs(
     }
 
 
-# Helper: evaluate multiple experiments and return a pandas DataFrame
+# Helper: evaluate multiple experiments and return a polars DataFrame
 
 def evaluate_experiments(
     all_logs: dict[str, list[pl.DataFrame]],

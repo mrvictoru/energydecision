@@ -1,168 +1,99 @@
 # Energy Decision: Solar-Battery Control Benchmark
 
-This project provides a comprehensive framework for benchmarking control algorithms in residential solar-battery systems. It integrates a high-fidelity Gymnasium environment, diverse baselines (Rule-based, SDP etc), Online Reinforcement Learning (SB3), and Offline Reinforcement Learning (Decision Transformer). The goal is to minimize energy costs while considering battery degradation.
+## Overview
+This project establishes a comprehensive, reproducible benchmark for residential and grid-scale energy storage control. It integrates high-fidelity Gymnasium environments, diverse baselines (Rule-based, SDP, Online RL, Offline RL), and a standardized evaluation suite.
+
+**Goal:** To minimize energy costs and maximize revenue while rigorously accounting for battery degradation under realistic uncertainty.
+
+## Key Components
+
+1.  **Simulation Environments:**
+    *   **Household:** [SolarBatteryEnv](docs/HOUSEHOLD_ENV_README.md) - Residential PV + Battery with ToU tariffs.
+    *   **Grid:** [AEMOBatteryTradingEnv](docs/AEMO_ENV_README.md) - Arbitrage & FCAS in the Australian National Electricity Market.
+
+2.  **Algorithms ([COMPONENTS.md](COMPONENTS.md)):**
+    *   **Optimization:** Stochastic Dynamic Programming (SDP) & Multi-Resolution DP (MRDP).
+    *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 (via Stable-Baselines3).
+    *   **Offline RL:** Decision Transformers (DT).
+    *   **Baselines:** Rule-based heuristics & Oracle (perfect foresight).
+    *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
-
 [![Tests](https://img.shields.io/badge/tests-46%20passing-brightgreen)]()
 
-## ToDo
-*   ~~**Improve SDP algo:** Improve computation speed and run algo in different envs in parallel~~
-*   ~~**Online learning loop:** Training loop using stablebaselines3~~
-*   ~~**Examine the effectiveness of sb3 trained RL model:** Check and find out if the RL model actually output valid actions~~
-*   ~~**Offline learning loop:** Collecting interaction dataset with various algorithms and use it to train a Decision Transformer based control algorithm~~
-*   ~~**Plot the simulation:** modify render function from env to plot key metrics~~
-*   ~~**Optimize training loop:** Added mixed precision training, gradient clipping and LR scheduler to the training loop for Decision Transformer~~
-*   ~~**Performance optimizations:** Batch queries, vectorize hot paths, precompute constants~~
-*   ~~**Test suite reorganization:** Consolidated tests into organized `tests/` directory~~
-*   ~~**Documentation consolidation:** Unified component documentation in COMPONENTS.md~~
-*   ~~**Refactor Agent class:** Refactor Agent class to be less spaghetti~~
-*   ~~**Conduct evaluation:** To build framework that can evaluate the effectiveness of different algorithm/parameter~~
-*   **Implement Grid like environment:** To build data pipeline and environment that can also simulate Grid market operation
-*   **Hyperparameter tuning for DT:** Use Optuna or other hyperparameter tuning library to find the best hyperparameters for Decision Transformer model
-*   **RL fine-tuning with DT:** Use the Decision Transformer model to initialize an online RL agent and fine-tune it in the environment, with GRPO or other RL algorithms
-
-## Features
-
-*   **Gymnasium Environment:** [`src/EnergySimEnv.py`](src/EnergySimEnv.py) simulates a household with solar PV, battery storage, and grid connection. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards. The return observation is normalized against the dataset so it is suitable for reinforcement learning methods.
-
-*   **Algorithmic Baselines:** Implements and compares several control strategies within the [`Agent`](src/decision.py) class:
-    *   **Rule-Based:** Heuristic controller with safety constraints.
-    *   **Optimization:** Stochastic Dynamic Programming (SDP) and Multi-Resolution Dynamic Programming (MRDP) for theoretical optimality.
-    *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 via Stable-Baselines3.
-    *   **Offline RL:** Decision Transformer (DT) trained on mixed behavioral logs.
-
-    Brief implementation notes: the optimization solvers are implemented as self-contained classes to make the algorithm flow easy to follow—`SDPSolver` (`src/sdp_algorithm.py`), `MRDPSolver` (`src/mrdp_algorithm.py`), and `OracleSolver` (`src/oracle_algorithm.py`). Use `Agent(env, algorithm='sdp'|'mrdp'|'oracle')` to run the solver of your choice. See `COMPONENTS.md` for short examples and `ALGORITHM_GUIDE.md` for a step-by-step reading guide (kept as internal reference).
-
-*   **Battery Degradation:** Detailed semi-empirical models (Rainflow counting, throughput, C-rate) in [`src/batterydeg.py`](src/batterydeg.py).
-
-*   **Quantile Scenarios:** Scenario generation for uncertainty modeling in [`src/quantile_scenarios.py`](src/quantile_scenarios.py).
-
-*   **Evaluation Suite:** Unified metrics for cost, revenue, degradation, and risk (Sharpe/Sortino ratios).
-
-*   **Decision Transformer Training:** Implements a training loop for the Decision Transformer model using offline interaction data ([`src/transformer_training.py`](src/transformer_training.py)).
+### Roadmap
+*   [x] **Core:** Gymnasium environment & Rule-based agents.
+*   [x] **Optimization:** SDP & MRDP solvers.
+*   [x] **Online RL:** Training loop with SB3.
+*   [x] **Offline RL:** Decision Transformer training loop.
+*   [x] **Evaluation:** Metrics for cost, risk, and degradation.
+*   [x] **Grid Market:** AEMO Environment Implementation.
+*   [ ] **Hyperparameter Tuning:** Optuna for DT.
+*   [ ] **RL Fine-tuning:** Initialize Online RL with DT weights.
 
 ## Installation
 
-### Option 1: Docker (Recommended)*
-
-The easiest way to run the project is via Docker, which sets up a JupyterLab environment with all dependencies.*
+### Option 1: Docker (Recommended)
+Sets up a JupyterLab environment with all dependencies.
 
 ```bash
-sudo docker compose up
+docker compose up
 ```
-
-Access JupyterLab at `http://localhost:8888`.*
-
+Access JupyterLab at `http://localhost:8888`.
 
 ### Option 2: Local Installation
-
-Requires Python 3.10+.
-
-## Installation
-
-### 1. Clone the repository
 
 ```bash
 git clone <repository-url>
 cd energydecision
-```
-
-### 2. Install dependencies
-
-```bash
 pip install -r requirements.txt
 pip install -r torch_req.txt
 ```
 
-
-## Project Structure
-
-```
-energydecision/
-├── ALGORITHM_GUIDE.md       # Algorithm guide and internal references
-├── COMPONENTS.md            # Comprehensive component documentation
-├── report.md                # Project report / notes
-├── data/                    # Datasets and generated parquet logs
-│   ├── *.csv                # Solar home electricity data, household data, customer splits
-│   ├── *.parquet            # Episode logs for different algorithms
-│   └── *.pdf                # Reference papers
-├── eval_output/             # Evaluation results and figures
-├── models/                  # Trained models and checkpoints
-│   ├── *.zip                # RL agent models
-│   ├── *.pt                 # Decision Transformer checkpoints
-│   └── *.json               # Model configs
-├── src/                     # Source code
-│   ├── EnergySimEnv.py              # Gymnasium environment for solar-battery-grid simulation
-│   ├── decision.py                  # Agent class: rule-based, RL, DT, and SDP controllers
-│   ├── batterydeg.py                # Battery degradation models (static and dynamic)
-│   ├── helper.py                    # Data transformation, preparation, and evaluation utilities
-│   ├── decision_transformer.py      # Core Decision Transformer model class
-│   ├── transformer_training.py      # TrajectoryDataset and training helpers for DT
-│   ├── pretrain_decision_transformer.py  # CLI to pretrain Decision Transformer
-│   ├── sb3train.py                  # RL training utilities (Stable-Baselines3)
-│   ├── quantile_scenarios.py        # Quantile scenario generation for uncertainty modeling
-│   ├── mrdp_algorithm.py            # Multi-resolution dynamic programming (MRDP) implementation
-│   ├── sdp_algorithm.py             # Stochastic Dynamic Programming implementation
-│   ├── oracle_algorithm.py          # Oracle solver for benchmarking
-│   └── algorithm_helpers.py         # Helper utilities for algorithm implementations
-├── tests/                   # Test suite
-│   ├── __init__.py
-│   ├── conftest.py              # Shared pytest fixtures
-│   ├── test_environment.py      # SolarBatteryEnv tests
-│   ├── test_decision_agent.py   # Agent/SDP/Oracle tests
-│   ├── test_performance.py      # Performance benchmarks
-│   ├── test_quantile_scenarios.py   # Quantile scenario tests
-│   ├── test_algorithm_classes.py
-│   └── test_refactoring.py
-├── notebooks/               # Useful example notebooks
-│   ├── DemoEnv.ipynb
-│   ├── Demosb3.ipynb
-│   ├── test_simrun.ipynb
-│   ├── test_sb3train.ipynb
-│   ├── test_eval.ipynb
-│   ├── test_grid_sim.ipynb
-│   └── testrun.ipynb
-├── requirements.txt         # Python package requirements
-├── torch_req.txt            # PyTorch-specific requirements
-├── docker-compose.yml       # Docker Compose configuration
-├── Dockerfile               # Dockerfile for building the environment
-└── README.md                # Project documentation (this file)
-```
-
----
-
 ## Data Setup
 
-1. Download the **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013).
-2. Place the CSV files in the `data/` directory:
-    - `data/2010-2011 Solar home electricity data.csv`
-    - `data/2011-2012 Solar home electricity data v2.csv`
-    - `data/2012-2013 Solar home electricity data v2.csv`
-
----
+1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place in `data/`.
+2.  **AEMO Data:** Automatically fetched via `src/aemo_data.py` (cached in `data/aemo/`).
 
 ## Usage Workflow
 
-The project workflow is divided into four main stages: Simulation/Baselines, Training, Offline RL, and Evaluation.
+The typical workflow moves from simulation to training and finally evaluation.
 
-### 1. Simulation & Baselines (`test_simrun.ipynb`)
+### 1. Simulation & Data Collection
+Run [test_simrun.ipynb](notebooks/test_simrun.ipynb) to:
+- Execute Rule-based and SDP agents.
+- Generate interaction logs (`.parquet`) for offline training.
 
-- Load and preprocess customer data.
-- Run **Rule-based**, **SDP**, and **MRDP** agents.
-- Generate interaction logs (`.parquet` files) for offline training.
-- Test trained Decision Transformer models.
+AEMO-specific data collection: the repository includes an `AEMOAgent` that can replay real unit dispatch (from `fetch_aemo_unit_dispatch`) into `AEMOBatteryTradingEnv` to generate realistic offline trajectories. Example:
 
-### 2. Online RL Training (`test_sb3train.ipynb`)
+```python
+from datetime import datetime
+from src.aemo_data import fetch_aemo_data_bundle, fetch_aemo_unit_dispatch
+from src.AEMOBatteryEnv import AEMODataPreprocessor, AEMOBatteryTradingEnv
+from src.decision import AEMOAgent
 
-- Train Online RL agents (PPO, SAC, A2C, DDPG, TD3) using Stable-Baselines3.
-- Save trained models to `models/`.
-- Generate interaction logs from these agents to diversify the offline training dataset.
+# Fetch market & dispatch data for a period
+start, end = datetime(2023, 6, 1), datetime(2023, 6, 2)
+bundle = fetch_aemo_data_bundle(start, end, region='NSW1')
+dispatch = fetch_aemo_unit_dispatch(start, end, duid='YOUR_DUID')
 
-### 3. Offline RL: Decision Transformer
+# Preprocess and create env
+pre = AEMODataPreprocessor(step_duration_hours=0.5, add_normalized_features=True, update_stats_from_data=True)
+processed = pre.preprocess_aemo_data(bundle['prices'], bundle['fcas'], bundle['generation'])
+env = AEMOBatteryTradingEnv(aemo_data=processed, action_mode='simple', normalize_obs=True, return_raw_obs=True)
 
-**Training:**  
-Train the Decision Transformer using the logs generated in steps 1 & 2.
+# Create AEMO agent that will replay dispatch as actions
+agent = AEMOAgent(env, algorithm='dispatch', dispatch_data=dispatch, dispatch_duid='YOUR_DUID')
+episode_df, incident_df = agent.run_episode()
+```
+
+### 2. Online RL Training
+Run [test_sb3train.ipynb](notebooks/test_sb3train.ipynb) to:
+- Train PPO/SAC agents.
+- Save models and log additional trajectories.
+
+### 3. Offline RL Training
+Train a Decision Transformer using the collected logs.
 
 #### 3.1 Train from scratch
 
@@ -202,6 +133,7 @@ Notes:
     - `--loss-csv-path .../dt_model_loss_history.csv` stores **epoch-level** totals + components (train/val).
     - A second file is also written next to it: `dt_model_loss_history_checkpoints.csv`, which stores **per-checkpoint/segment** snapshots (useful for plotting progress during an epoch).
 - **Best model weights** are saved alongside your `--save-path` as `*_best.pt` when validation improves without obvious divergence.
+- **Ensure your** `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
 
 #### 3.2 Resume from an existing checkpoint
 
@@ -227,54 +159,30 @@ Notes:
 - `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
 - `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
 
-#### 3.3 Start fresh if the checkpoint is incompatible
+### 4. Evaluation
+Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
+- Compare all agents (Cost, ROI, Degradation).
+- Generate Risk-Return plots.
 
-If your previous run used a different `context_length` (or other model config) and you just want to restart training:
+## Project Structure
 
-```bash
-rm -f models/dt_model_checkpoint.pt
-
-python3 pretrain_decision_transformer.py \
-    --data-dir ./data \
-    --patterns train test_episodes_01 \
-    --epochs 2 \
-    --batch-size 6 \
-    --context-length 60 \
-    --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ./models/dt_model.pt
 ```
-
-This removes the stale checkpoint so automatic recovery and `--resume` logic do not try to load an incompatible state.
-
-#### 3.4 Stabilizing training when encountering non‑finite weights
-
-If you see `NonFiniteParameterError` in the logs:
-
-- Reduce the learning rate, e.g.:
-
-```bash
-python3 pretrain_decision_transformer.py \
-    --data-dir ./data \
-    --patterns train test_episodes_01 \
-    --epochs 2 \
-    --batch-size 6 \
-    --context-length 60 \
-    --lr 1e-6 \
-    --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ../models/dt_model.pt
+energydecision/
+├── COMPONENTS.md            # Usage guide for scripts
+├── docs/                    # Deep dive documentation
+│   ├── HOUSEHOLD_ENV_README.md
+│   ├── AEMO_ENV_README.md
+│   ├── DP_ALGORITHM_README.md
+│   └── BATTERY_DEGRADATION_DETAILS.md
+├── notebooks/               # Example notebooks
+├── src/                     # Source code
+│   ├── EnergySimEnv.py      # Household Gym Environment
+│   ├── AEMOBatteryEnv.py    # AEMO Market Environment
+│   ├── decision.py          # Agent Classes (Rule, RL, SDP)
+│   ├── batterydeg.py        # Degradation Models
+│   └── ...
+└── tests/                   # Pytest suite
 ```
-
-- Ensure your `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
-
-**Inference:**  
-Load the trained model in `test_simrun.ipynb` to evaluate its performance.
-
-### 4. Evaluation (`test_eval.ipynb`)
-
-- Load logs from all algorithms.
-- Compute aggregate metrics (Profit, ROI, Degradation).
-- Generate comparative plots (Risk-Return, Cost Breakdown).
-- Perform temporal analysis of agent behavior.
 
 ---
 
@@ -542,15 +450,6 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 ---
 
 ## Documentation
-
-For detailed documentation on all source components, see **[COMPONENTS.md](COMPONENTS.md)**, which includes:
-
-- Environment setup and usage (`EnergySimEnv.py`)
-- Decision agent algorithms (`decision.py`)
-- Multi-Resolution Dynamic Programming (`mrdp_algorithm.py`) (legacy `sdp_multires.py` removed) 
-- Scenario generation (`quantile_scenarios.py`)
-- Battery degradation models (`batterydeg.py`)
-- Data transformation utilities (`helper.py`)
-- Decision Transformer training (`transformer_training.py`)
-- Stable-Baselines3 training (`sb3train.py`)
-- Performance optimization details
+*   **[COMPONENTS.md](COMPONENTS.md)**: Detailed usage guide for key scripts (`decision.py`, `batterydeg.py`, etc.).
+*   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
+*   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.

@@ -32,7 +32,7 @@ DEG_INCIDENT_FIELDS = [
 
 class SolarBatteryEnv(gym.Env):
     """
-    A gym environment for solar-battery-grid energy management.
+    A gym environment for home solar-battery-grid energy management.
     Action space: (battery_flow)
         battery_flow > 0 -> battery charge, < 0 -> battery discharge; normalized to [-1, 1]
 
