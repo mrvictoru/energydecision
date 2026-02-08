@@ -66,12 +66,12 @@ episode_df, incident_df = agent.run_episode()
 
 - `choose_action(obs)`
   - **Args**: `obs` is the current observation shipped from `SolarBatteryEnv.reset()`/`step()` (raw + cyclical features). The method is tolerant of `list` inputs for rule-based modes but prefers `numpy.ndarray` when passing into SB3 or Decision Transformer models.
-  - **Returns**: a normalized action or list of actions in `[-1, 1]`. Rule/DP/oracle modes wrap the result in a 1-element list, RL returns the SB3 `model.predict` output (scalar or vector) and DT returns the action produced by `model.get_action` after padding its context.
+  - **Returns**: a normalized action or list of actions in `[-1, 1]`. Rule/DP/oracle modes wrap the result in a 1-element list; when interacting with AEMO multi-market environments rule-based policies may instead return a 3-element action vector `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0). RL returns the SB3 `model.predict` output (scalar or vector) and DT returns the action produced by `model.get_action` after padding its context.
   - **Behaviour**: routes to the heuristic, solver, RL, or DT helper according to `algorithm`. DT requires buffering of `(state, action, RTG, timestep)` and applies return-scale clipping before inference.
 
 - `rule_based_action(obs)`
   - **Args**: raw observation containing cyclical time features, the `SolarBatteryEnv.df` columns (SolarGen, HouseLoad…), `battery_level_kwh`, and `battery_deg_cost`.
-  - **Returns**: `[np.float32]` list with the normalized charger/discharger command. It compares solar vs. load to derive surplus/deficit, applies noise, respects SOC safety windows, and biases toward charge/discharge when SoC strays outside the degradation-safe band.
+  - **Returns**: `[np.float32]` list with the normalized charger/discharger command when used with household environments. When used with AEMO multi-market environments, the rule returns a `np.ndarray` shaped `(3,)` representing `[dispatch, fcas_raise_bid, fcas_lower_bid]` where FCAS bids default to `0.0`. The policy compares solar vs. load to derive surplus/deficit, applies noise, enforces SOC safety windows, and biases toward charge/discharge when SoC strays outside the degradation-safe band.
 
 - `_get_forecasts(current_step, horizon)`
   - **Args**: `current_step` (int) and `horizon` (int) used by the SDP/MRDP solvers to fetch future observations from `self.env.df`.
@@ -98,11 +98,11 @@ episode_df, incident_df = agent.run_episode()
 
 - `choose_action(obs)`
   - **Args**: `obs` is either raw AEMO observation (rule/dispatch) or normalized vector (RL/DT).
-  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for rule, a `[np.float32]` list derived from price/SOC thresholds; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
+  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0); for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
 
 - `rule_based_action(obs)`
   - **Args**: expects raw AEMO observation `[time⁵, RRP, TOTALDEMAND, FCAS×8, GEN×2, SOC]`; returns zero action when inputs are missing.
-  - **Returns**: `[np.float32]` scaled action chosen by comparing the energy price to `charge_price`/`discharge_price` thresholds, enforcing SOC limits, and adding Gaussian noise for smoothing.
+  - **Returns**: `[np.float32]` scaled action for energy-only environments, or a `np.ndarray` shaped `(3,)` `[dispatch, fcas_raise_bid, fcas_lower_bid]` when the environment is in multi-market mode (FCAS bids default to 0.0). The value is chosen by comparing the energy price to `charge_price`/`discharge_price` thresholds, enforcing SOC limits, and adding Gaussian noise for smoothing.
 
 - `run_episode(render=False, display_progress=False)`
   - **Args**: same knobs as `Agent.run_episode` but also interprets `algorithm in ['rule','dispatch']` as using `raw_obs` for logs.
