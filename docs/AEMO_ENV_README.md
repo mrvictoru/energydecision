@@ -34,7 +34,9 @@ env = create_aemo_env_from_data(
     region="NSW1",
     battery_capacity=10.0,   # MWh
     max_battery_flow=5.0,    # MW
-    action_mode='simple'     # 'simple' or 'multi_market'
+    action_mode='simple',    # 'simple' or 'multi_market'
+    degradation_mode='rainflow',  # 'rainflow' (physics-based) or 'simple'
+    degradation_temperature=25.0, # °C for the degradation model
 )
 
 # Standard Gym interface
@@ -114,7 +116,7 @@ Data is automatically resampled to match environment step duration (default 30 m
 - **Capacity limits**: SOC ∈ [0, battery_capacity]
 - **Power limits**: |P| ≤ max_battery_flow
 - **Energy conservation**: SOC(t+1) = SOC(t) + P·Δt
-- **Degradation tracking**: Cumulative wear and tear
+- **Degradation tracking**: Muenzel et al. rainflow counting with capacity fade and detailed info tracking (step_degradation, rainflow cycles, capacity_mwh, total_degradation)
 
 ### Data Preprocessing
 
@@ -175,6 +177,32 @@ for _ in range(1000):
 print(f"Annual revenue: ${total_revenue:,.2f}")
 ```
 
+### 4. Degradation-aware Backtest
+
+```python
+env = create_aemo_env_from_data(
+    start_date=datetime(2024, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    region="NSW1",
+    degradation_mode='rainflow',
+    degradation_temperature=25.0,
+)
+
+obs, info = env.reset()
+total_revenue = 0
+
+while True:
+    action = policy(obs)
+    obs, reward, done, _, info = env.step(action)
+    total_revenue += info['total_revenue']
+    print(f"Cycle degradation {info['step_degradation']:.6f}, capacity {info['capacity_mwh']:.2f} MWh")
+    if done:
+        break
+
+print(f"Total degradation: {info['total_degradation']:.4f}")
+print(f"Degradation-aware annual revenue: ${total_revenue:,.2f}")
+```
+
 ## Configuration Options
 
 ### Environment Parameters
@@ -188,8 +216,15 @@ AEMOBatteryTradingEnv(
     max_step=1000,                  # Steps per episode
     step_duration=0.5,              # Hours (30 min)
     battery_life_cost=1_000_000.0,  # USD
-    action_mode='simple'            # or 'multi_market'
+    action_mode='simple',           # or 'multi_market'
+    degradation_mode='rainflow',    # 'rainflow' (physics-based) or 'simple'
+    degradation_temperature=25.0,   # °C ambient temperature for degradation
 )
+
+`degradation_temperature` feeds the Muenzel et al. cycle-life model and should
+match the ambient operating temperature of the grid asset (default 25 °C); higher
+temperatures accelerate the reported degradation per cycle, so adjust it if your
+asset runs significantly hotter or colder than room temperature.
 ```
 
 ### Data Fetching Parameters
@@ -202,6 +237,10 @@ create_aemo_env_from_data(
     cache_dir="data/aemo",
     battery_capacity=10.0,
     max_battery_flow=5.0,
+    degradation_mode='rainflow',    # ensure rainflow degradation tracking
+    degradation_temperature=25.0,
+)
+```
 
 ## API Reference
 
@@ -214,15 +253,15 @@ create_aemo_env_from_data(
     - **Returns**: unified DataFrame containing resampled market features, cyclical time encodings, normalized columns, and generation mix percentages, aligned to the env step scale. Internally uses `_resample_data`, `_resample_fcas`, `_resample_generation`, `_merge_datasets`, `_handle_missing_data`, `_add_time_features`, and `_normalize_features` to produce the final table.
 
 ### `AEMOBatteryTradingEnv`
-- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.5, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False)`
-    - **Args**: `aemo_data` is the processed Polars DataFrame; the others configure capacity/flow, episode length, FCAS action mode, normalization toggles, and whether `get_raw_obs()` results should be returned from `reset()`/`step()`.
+- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.5, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False, degradation_mode='rainflow', degradation_temperature=25.0)`
+    - **Args**: `aemo_data` is the processed Polars DataFrame; the others configure capacity/flow, episode length, FCAS action mode, normalization toggles, and whether `get_raw_obs()` results should be returned from `reset()`/`step()`. `degradation_mode` selects either the physics-based rainflow tracking (`'rainflow'`) or the legacy linear model (`'simple'`), and `degradation_temperature` feeds the Muenzel et al. model.
     - **Returns**: `AEMOBatteryTradingEnv` instance with observation/action spaces, SOC bookkeeping, revenue tracking, and degradation accounting initialized.
 - `reset(seed=None, options=None)`
     - **Args**: optional Gym seed and `options` dict (supports `return_raw_obs` override).
     - **Returns**: `(obs, info)` where `obs` is the normalized observation vector (plus raw if `return_raw_obs`) and `info` is an empty dict (populated later by `step`). Random episode start index is chosen within cached data.
 - `step(action)`
     - **Args**: normalized action ([-1,1]) or 3-vector depending on `action_mode`. Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
-    - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `degradation_cost`, `total_cost`, `penalties`, and the latest `market_data` row.
+    - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `step_degradation`, `total_degradation`, `capacity_mwh`, `rainflow_cumulative_deg`, `rainflow_num_cycles`, `total_revenue`, `total_degradation_cost`, and the latest `market_data` row.
 - `render()`
     - **Returns**: currently a placeholder (prints human-friendly summary when implemented). Use `render_mode='human'` to enable future output.
 
@@ -236,8 +275,6 @@ create_aemo_env_from_data(
 - `fetch_aemo_unit_dispatch(start_date, end_date, duid=None, region=None, generator_info_path=None, cache_dir='data/aemo', refresh=False)`
     - **Args**: yields unit-level dispatch including `TOTALCLEARED` and FCAS enablement for the specified DUID/region.
     - **Returns**: Polars DataFrame used by `AEMOAgent` for dispatch replay/FCAS revenue accounting.
-    action_mode='simple'
-)
 ```
 
 ## Testing
