@@ -28,9 +28,10 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Offline RL:** Decision Transformer training loop.
 *   [x] **Evaluation:** Metrics for cost, risk, and degradation.
 *   [x] **Grid Market:** AEMO Environment Implementation.
-*   [ ] **Grid battery degradation modelling:** Utility scale battery degradation modelling (since it is pretty different to Household scale)
-*   [ ] **Hyperparameter Tuning:** Optuna for DT.
+*   [ ] **Grid battery degradation modelling:** Intergrate proper degradation modelling to the AEMO battery trading environment.
 *   [ ] **RL Fine-tuning:** Initialize Online RL with DT weights.
+*   [ ] **Hyperparameter Tuning:** Optuna for DT.
+
 
 ## Installation
 
