@@ -166,6 +166,10 @@ Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
 - Compare all agents (Cost, ROI, Degradation).
 - Generate Risk-Return plots.
 
+Helper evaluations are environment-agnostic and also compute AEMO trading metrics
+(revenue, degradation cost, dispatch energy) when those keys exist in `info`.
+See [docs/HELPER_README.md](docs/HELPER_README.md) for details.
+
 ## Project Structure
 
 ```
@@ -175,7 +179,8 @@ energydecision/
 │   ├── HOUSEHOLD_ENV_README.md
 │   ├── AEMO_ENV_README.md
 │   ├── DP_ALGORITHM_README.md
-│   └── BATTERY_DEGRADATION_DETAILS.md
+│   ├── BATTERY_DEGRADATION_DETAILS.md
+│   └── HELPER_README.md
 ├── notebooks/               # Example notebooks
 ├── src/                     # Source code
 │   ├── EnergySimEnv.py      # Household Gym Environment

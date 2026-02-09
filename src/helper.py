@@ -3,7 +3,7 @@ import numpy as np
 import re
 from datetime import datetime
 import matplotlib.pyplot as plt
-from typing import Optional, Any, List, Tuple, Union, Dict
+from typing import Optional, Any, List, Tuple, Union, Dict, Callable
 from collections import Counter
 from dataclasses import dataclass, field
 from EnergySimEnv import SolarBatteryEnv
@@ -559,6 +559,188 @@ def find_problematic_episodes(
 
 
 import json
+
+def _coerce_info_dict(val: Any) -> dict[str, Any]:
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _extract_info_value(info: dict[str, Any], keys: List[str], default: float = 0.0) -> float:
+    for key in keys:
+        if key in info and info[key] is not None:
+            try:
+                return float(info[key])
+            except Exception:
+                return default
+    return default
+
+
+def _last_finite_value(infos: List[dict[str, Any]], key: str) -> Optional[float]:
+    for info in reversed(infos):
+        if key in info and info[key] is not None:
+            try:
+                val = float(info[key])
+                if np.isfinite(val):
+                    return val
+            except Exception:
+                continue
+    return None
+
+
+def _summarize_episode_info(df: pl.DataFrame) -> dict[str, Any]:
+    if "info" not in df.columns:
+        return {
+            "steps": int(df.height),
+            "has_grid_energy": False,
+            "has_actual_energy": False,
+            "has_degradation": False,
+            "has_degradation_cost": False,
+            "has_battery_flow": False,
+            "has_energy_revenue": False,
+            "has_fcas_revenue": False,
+            "has_battery_dispatch": False,
+            "has_total_revenue": False,
+            "has_total_degradation_cost": False,
+            "has_total_degradation": False,
+            "grid_import": 0.0,
+            "grid_export": 0.0,
+            "grid_net": 0.0,
+            "actual_energy_net": 0.0,
+            "degradation_sum": 0.0,
+            "degradation_cost_sum": 0.0,
+            "battery_flow_sum": 0.0,
+            "energy_revenue_sum": 0.0,
+            "fcas_revenue_sum": 0.0,
+            "battery_dispatch_abs_sum": 0.0,
+            "deg_incident": False,
+            "total_revenue_end": None,
+            "total_degradation_cost_end": None,
+            "total_degradation_end": None,
+        }
+
+    infos = [_coerce_info_dict(val) for val in df["info"].to_list()]
+
+    grid_import = 0.0
+    grid_export = 0.0
+    grid_net = 0.0
+    actual_energy_net = 0.0
+    degradation_sum = 0.0
+    degradation_cost_sum = 0.0
+    battery_flow_sum = 0.0
+    energy_revenue_sum = 0.0
+    fcas_revenue_sum = 0.0
+    battery_dispatch_abs_sum = 0.0
+    deg_incident = False
+
+    has_grid_energy = False
+    has_actual_energy = False
+    has_degradation = False
+    has_degradation_cost = False
+    has_battery_flow = False
+    has_energy_revenue = False
+    has_fcas_revenue = False
+    has_battery_dispatch = False
+    has_total_revenue = False
+    has_total_degradation_cost = False
+    has_total_degradation = False
+
+    for info in infos:
+        if "grid_energy" in info:
+            has_grid_energy = True
+            grid_energy = _extract_info_value(info, ["grid_energy"], 0.0)
+            grid_net += grid_energy
+            if grid_energy > 0:
+                grid_import += grid_energy
+            else:
+                grid_export += abs(grid_energy)
+
+        if "actual_energy" in info:
+            has_actual_energy = True
+            actual_energy_net += _extract_info_value(info, ["actual_energy"], 0.0)
+
+        if "step_degradation" in info:
+            has_degradation = True
+            degradation_sum += _extract_info_value(info, ["step_degradation"], 0.0)
+
+        if "degradation_cost" in info:
+            has_degradation_cost = True
+            degradation_cost_sum += _extract_info_value(info, ["degradation_cost"], 0.0)
+
+        if "battery_flow_energy" in info:
+            has_battery_flow = True
+            battery_flow_sum += abs(_extract_info_value(info, ["battery_flow_energy"], 0.0))
+
+        if "energy_revenue" in info:
+            has_energy_revenue = True
+            energy_revenue_sum += _extract_info_value(info, ["energy_revenue"], 0.0)
+
+        if "fcas_revenue" in info:
+            has_fcas_revenue = True
+            fcas_revenue_sum += _extract_info_value(info, ["fcas_revenue"], 0.0)
+
+        if "battery_dispatch" in info:
+            has_battery_dispatch = True
+            battery_dispatch_abs_sum += abs(_extract_info_value(info, ["battery_dispatch"], 0.0))
+
+        if "deg_incident" in info or "deg_error" in info:
+            if bool(info.get("deg_incident", False)) or bool(info.get("deg_error")):
+                deg_incident = True
+
+        if "total_revenue" in info:
+            has_total_revenue = True
+        if "total_degradation_cost" in info:
+            has_total_degradation_cost = True
+        if "total_degradation" in info:
+            has_total_degradation = True
+
+    return {
+        "steps": int(df.height),
+        "has_grid_energy": has_grid_energy,
+        "has_actual_energy": has_actual_energy,
+        "has_degradation": has_degradation,
+        "has_degradation_cost": has_degradation_cost,
+        "has_battery_flow": has_battery_flow,
+        "has_energy_revenue": has_energy_revenue,
+        "has_fcas_revenue": has_fcas_revenue,
+        "has_battery_dispatch": has_battery_dispatch,
+        "has_total_revenue": has_total_revenue,
+        "has_total_degradation_cost": has_total_degradation_cost,
+        "has_total_degradation": has_total_degradation,
+        "grid_import": grid_import,
+        "grid_export": grid_export,
+        "grid_net": grid_net,
+        "actual_energy_net": actual_energy_net,
+        "degradation_sum": degradation_sum,
+        "degradation_cost_sum": degradation_cost_sum,
+        "battery_flow_sum": battery_flow_sum,
+        "energy_revenue_sum": energy_revenue_sum,
+        "fcas_revenue_sum": fcas_revenue_sum,
+        "battery_dispatch_abs_sum": battery_dispatch_abs_sum,
+        "deg_incident": deg_incident,
+        "total_revenue_end": _last_finite_value(infos, "total_revenue"),
+        "total_degradation_cost_end": _last_finite_value(infos, "total_degradation_cost"),
+        "total_degradation_end": _last_finite_value(infos, "total_degradation"),
+    }
+
+
+def _mean_or_zero(values: List[float]) -> float:
+    return float(np.mean(values)) if values else 0.0
+
+
+def _mean_per_step(values: List[float], steps: List[int]) -> float:
+    if not values or not steps or len(values) != len(steps):
+        return 0.0
+    per_step = [(val / step if step > 0 else 0.0) for val, step in zip(values, steps)]
+    return float(np.mean(per_step)) if per_step else 0.0
+
+
 # Helper: evaluate a single experiment's episode logs
 def evaluate_experiment_logs(
     logs: list[pl.DataFrame],
@@ -569,23 +751,77 @@ def evaluate_experiment_logs(
 ) -> dict:
     """
     Compute key performance metrics for a single experiment's episode logs.
-        Returns a dict of:
-            - mean/median/std reward + total reward percentiles
-            - sharpe/sortino ratios
-            - grid import/export energy, degradation, battery activity summaries
+
+    This function is environment-agnostic. It evaluates SolarBatteryEnv logs and
+    AEMOBatteryTradingEnv logs by auto-detecting info keys such as:
+    - SolarBatteryEnv: grid_energy, step_degradation, battery_flow_energy
+    - AEMO: energy_revenue, fcas_revenue, total_revenue, degradation_cost,
+      battery_dispatch, actual_energy
+
+    Returns a dict with reward statistics plus operational and market metrics
+    (grid flows, degradation, revenue, dispatch). If a metric is not present in
+    the logs, its average is returned as 0.0.
     """
+    if not logs:
+        return {
+            "mean_reward": 0.0,
+            "median_reward": 0.0,
+            "std_reward": 0.0,
+            "pct_5_reward": 0.0,
+            "pct_95_reward": 0.0,
+            "max_reward": 0.0,
+            "recommended_rtg": 0.0,
+            "recommended_rtg_total_percentile": 0.0,
+            "recommended_rtg_rtg0_percentile": float("nan"),
+            "recommended_return_scale": 1.0,
+            "recommended_raw_rtg_percentile": 0.0,
+            "sharpe_ratio": float("nan"),
+            "sortino_ratio": float("nan"),
+            "avg_grid_import": 0.0,
+            "avg_grid_export": 0.0,
+            "avg_grid_net": 0.0,
+            "avg_degradation_per_episode": 0.0,
+            "avg_degradation_per_step": 0.0,
+            "deg_incident_rate": 0.0,
+            "avg_battery_flow_energy": 0.0,
+            "avg_battery_flow_per_step": 0.0,
+            "avg_total_revenue_per_episode": 0.0,
+            "avg_total_degradation_cost_per_episode": 0.0,
+            "avg_profit_per_episode": 0.0,
+            "avg_energy_revenue_per_episode": 0.0,
+            "avg_fcas_revenue_per_episode": 0.0,
+            "avg_actual_energy_per_episode": 0.0,
+            "avg_actual_energy_per_step": 0.0,
+            "avg_battery_dispatch_abs_per_episode": 0.0,
+            "avg_battery_dispatch_abs_per_step": 0.0,
+            "avg_total_revenue_end": 0.0,
+            "avg_total_degradation_cost_end": 0.0,
+            "avg_total_degradation_end": 0.0,
+            "episodes_evaluated": 0,
+            "episodes_with_reward": 0,
+            "avg_episode_steps": 0.0,
+        }
+
     # total rewards per episode
-    total_rewards = [df['reward'].sum() for df in logs]
-    rewards_arr = np.array(total_rewards, dtype=float)
-    mean_r = rewards_arr.mean()
-    std_r = rewards_arr.std(ddof=0)
+    total_rewards: List[float] = []
+    for df in logs:
+        if "reward" not in df.columns:
+            continue
+        try:
+            total_rewards.append(float(df["reward"].sum()))
+        except Exception:
+            total_rewards.append(0.0)
+
+    rewards_arr = np.array(total_rewards, dtype=float) if total_rewards else np.array([], dtype=float)
+    mean_r = float(rewards_arr.mean()) if rewards_arr.size else 0.0
+    std_r = float(rewards_arr.std(ddof=0)) if rewards_arr.size else 0.0
     # compute 5th, 50th (median), and 95th percentiles of episode rewards
     # Use Python list to satisfy numpy percentile type annotations
-    rewards_list = rewards_arr.tolist()
-    pct5 = float(np.percentile(rewards_list, 5))
-    median_r = float(np.percentile(rewards_list, 50))
-    pct95 = float(np.percentile(rewards_list, 95))
-    max_r = float(np.max(rewards_arr)) if len(rewards_arr) > 0 else 0.0
+    rewards_list = rewards_arr.tolist() if rewards_arr.size else []
+    pct5 = float(np.percentile(rewards_list, 5)) if rewards_list else 0.0
+    median_r = float(np.percentile(rewards_list, 50)) if rewards_list else 0.0
+    pct95 = float(np.percentile(rewards_list, 95)) if rewards_list else 0.0
+    max_r = float(np.max(rewards_arr)) if rewards_arr.size else 0.0
 
     # total rewards per episode are already computed; now compute RTG at t=0 to suggest a return_scale
     def _compute_start_rtg(rewards: np.ndarray) -> float | None:
@@ -605,9 +841,9 @@ def evaluate_experiment_logs(
 
     rtg0_start_vals: List[float] = []
     for df in logs:
-        if 'reward' not in df.columns:
+        if "reward" not in df.columns:
             continue
-        rewards = np.array(df['reward'].to_list(), dtype=float)
+        rewards = np.array(df["reward"].to_list(), dtype=float)
         if rewards.size == 0:
             continue
         rtg0 = _compute_start_rtg(rewards)
@@ -629,106 +865,145 @@ def evaluate_experiment_logs(
     # downside deviation for Sortino: only rewards below target_return
     downs = [r for r in rewards_arr if r < target_return]
     dd = float(np.std(downs, ddof=0)) if downs else 0.0
-    sharpe = mean_r / std_r if std_r > 0 else float('nan')
-    sortino = (mean_r - target_return) / dd if dd > 0 else float('nan')
+    sharpe = mean_r / std_r if std_r > 0 else float("nan")
+    sortino = (mean_r - target_return) / dd if dd > 0 else float("nan")
 
     grid_imports: List[float] = []
     grid_exports: List[float] = []
     grid_nets: List[float] = []
+    grid_steps: List[int] = []
     degradation_totals: List[float] = []
-    degradation_per_step_rates: List[float] = []
+    degradation_steps: List[int] = []
+    degradation_cost_totals: List[float] = []
+    degradation_cost_steps: List[int] = []
     deg_incident_flags: List[int] = []
     battery_flow_totals: List[float] = []
+    battery_flow_steps: List[int] = []
+    actual_energy_totals: List[float] = []
+    actual_energy_steps: List[int] = []
+    battery_dispatch_abs_totals: List[float] = []
+    battery_dispatch_steps: List[int] = []
+    energy_revenue_totals: List[float] = []
+    fcas_revenue_totals: List[float] = []
+    total_revenue_ends: List[float] = []
+    total_degradation_cost_ends: List[float] = []
+    total_degradation_ends: List[float] = []
+    profit_per_episode: List[float] = []
     episode_steps: List[int] = []
-    def safe_float(val):
-        try:
-            return float(val)
-        except (TypeError, ValueError):
-            return 0.0
 
     for df in logs:
-        infos = df['info'].to_list()
-        parsed_infos = []
-        for info in infos:
-            if isinstance(info, str):
-                try:
-                    parsed_infos.append(json.loads(info))
-                except Exception:
-                    parsed_infos.append({})
-            elif isinstance(info, dict):
-                parsed_infos.append(info)
-            else:
-                parsed_infos.append({})
+        summary = _summarize_episode_info(df)
+        episode_steps.append(int(summary["steps"]))
 
-        ep_grid_import = 0.0
-        ep_grid_export = 0.0
-        ep_grid_net = 0.0
-        ep_degradation = 0.0
-        ep_steps = 0
-        ep_battery_flow = 0.0
-        ep_deg_incident = False
+        if summary["has_grid_energy"]:
+            grid_imports.append(float(summary["grid_import"]))
+            grid_exports.append(float(summary["grid_export"]))
+            grid_nets.append(float(summary["grid_net"]))
+            grid_steps.append(int(summary["steps"]))
 
-        for info in parsed_infos:
-            grid_energy = safe_float(info.get('grid_energy', 0.0))
-            ep_grid_net += grid_energy
-            if grid_energy > 0:
-                ep_grid_import += grid_energy
-            else:
-                ep_grid_export += abs(grid_energy)
+        if summary["has_degradation"]:
+            degradation_totals.append(float(summary["degradation_sum"]))
+            degradation_steps.append(int(summary["steps"]))
 
-            step_deg = safe_float(info.get('step_degradation', 0.0))
-            ep_degradation += step_deg
-            if step_deg > 0 and not ep_deg_incident:
-                # any positive degradation counts towards incident rate
-                ep_deg_incident = bool(info.get('deg_incident', False)) or (info.get('deg_error') is not None and info.get('deg_error') != "")
+        if summary["has_degradation_cost"]:
+            degradation_cost_totals.append(float(summary["degradation_cost_sum"]))
+            degradation_cost_steps.append(int(summary["steps"]))
 
-            battery_flow = safe_float(info.get('battery_flow_energy', 0.0))
-            ep_battery_flow += abs(battery_flow)
+        if summary["has_battery_flow"]:
+            battery_flow_totals.append(float(summary["battery_flow_sum"]))
+            battery_flow_steps.append(int(summary["steps"]))
 
-            ep_steps += 1
+        if summary["has_actual_energy"]:
+            actual_energy_totals.append(float(summary["actual_energy_net"]))
+            actual_energy_steps.append(int(summary["steps"]))
 
-        grid_imports.append(ep_grid_import)
-        grid_exports.append(ep_grid_export)
-        grid_nets.append(ep_grid_net)
-        degradation_totals.append(ep_degradation)
-        degradation_per_step_rates.append(ep_degradation / ep_steps if ep_steps > 0 else 0.0)
-        deg_incident_flags.append(1 if ep_deg_incident else 0)
-        battery_flow_totals.append(ep_battery_flow)
-        episode_steps.append(ep_steps)
+        if summary["has_battery_dispatch"]:
+            battery_dispatch_abs_totals.append(float(summary["battery_dispatch_abs_sum"]))
+            battery_dispatch_steps.append(int(summary["steps"]))
 
-    avg_grid_import = float(np.mean(grid_imports)) if grid_imports else 0.0
-    avg_grid_export = float(np.mean(grid_exports)) if grid_exports else 0.0
-    avg_grid_net = float(np.mean(grid_nets)) if grid_nets else 0.0
-    avg_degradation = float(np.mean(degradation_totals)) if degradation_totals else 0.0
-    avg_degradation_per_step = float(np.mean(degradation_per_step_rates)) if degradation_per_step_rates else 0.0
-    deg_incident_rate = float(np.mean(deg_incident_flags)) if deg_incident_flags else 0.0
-    avg_battery_flow = float(np.mean(battery_flow_totals)) if battery_flow_totals else 0.0
-    avg_battery_flow_per_step = float(np.mean([
-        (bf / steps if steps > 0 else 0.0) for bf, steps in zip(battery_flow_totals, episode_steps)
-    ])) if battery_flow_totals and episode_steps else 0.0
+        if summary["has_energy_revenue"]:
+            energy_revenue_totals.append(float(summary["energy_revenue_sum"]))
+
+        if summary["has_fcas_revenue"]:
+            fcas_revenue_totals.append(float(summary["fcas_revenue_sum"]))
+
+        if summary["has_total_revenue"] and summary["total_revenue_end"] is not None:
+            total_revenue_ends.append(float(summary["total_revenue_end"]))
+
+        if summary["has_total_degradation_cost"] and summary["total_degradation_cost_end"] is not None:
+            total_degradation_cost_ends.append(float(summary["total_degradation_cost_end"]))
+
+        if summary["has_total_degradation"] and summary["total_degradation_end"] is not None:
+            total_degradation_ends.append(float(summary["total_degradation_end"]))
+
+        if summary["total_revenue_end"] is not None and summary["total_degradation_cost_end"] is not None:
+            profit_per_episode.append(float(summary["total_revenue_end"] - summary["total_degradation_cost_end"]))
+        elif summary["has_energy_revenue"] or summary["has_fcas_revenue"] or summary["has_degradation_cost"]:
+            profit_per_episode.append(
+                float(summary["energy_revenue_sum"] + summary["fcas_revenue_sum"] - summary["degradation_cost_sum"])
+            )
+
+        deg_incident_flags.append(1 if summary["deg_incident"] else 0)
+
+    avg_grid_import = _mean_or_zero(grid_imports)
+    avg_grid_export = _mean_or_zero(grid_exports)
+    avg_grid_net = _mean_or_zero(grid_nets)
+    avg_degradation = _mean_or_zero(degradation_totals)
+    avg_degradation_per_step = _mean_per_step(degradation_totals, degradation_steps)
+    deg_incident_rate = _mean_or_zero(deg_incident_flags)
+    avg_battery_flow = _mean_or_zero(battery_flow_totals)
+    avg_battery_flow_per_step = _mean_per_step(battery_flow_totals, battery_flow_steps)
+
+    avg_actual_energy = _mean_or_zero(actual_energy_totals)
+    avg_actual_energy_per_step = _mean_per_step(actual_energy_totals, actual_energy_steps)
+    avg_battery_dispatch_abs = _mean_or_zero(battery_dispatch_abs_totals)
+    avg_battery_dispatch_abs_per_step = _mean_per_step(battery_dispatch_abs_totals, battery_dispatch_steps)
+
+    avg_energy_revenue = _mean_or_zero(energy_revenue_totals)
+    avg_fcas_revenue = _mean_or_zero(fcas_revenue_totals)
+    avg_total_revenue = _mean_or_zero(total_revenue_ends)
+    avg_total_degradation_cost = _mean_or_zero(total_degradation_cost_ends)
+    avg_total_degradation_end = _mean_or_zero(total_degradation_ends)
+
+    avg_profit = _mean_or_zero(profit_per_episode)
 
     return {
-        'mean_reward': mean_r,
-        'median_reward': median_r,
-        'std_reward': std_r,
-        'pct_5_reward': pct5,
-        'pct_95_reward': pct95,
-        'max_reward': max_r,
-        'recommended_rtg': recommended_rtg,
-        'recommended_rtg_total_percentile': float(np.percentile(rewards_list, recommended_rtg_percentile)) if rewards_list else max_r,
-        'recommended_rtg_rtg0_percentile': float(raw_rtg_percentile) if raw_rtg_percentile > 0 else float('nan'),
-        'recommended_return_scale': recommended_return_scale,
-        'recommended_raw_rtg_percentile': raw_rtg_percentile,
-        'sharpe_ratio': sharpe,
-        'sortino_ratio': sortino,
-        'avg_grid_import': avg_grid_import,
-        'avg_grid_export': avg_grid_export,
-        'avg_grid_net': avg_grid_net,
-        'avg_degradation_per_episode': avg_degradation,
-        'avg_degradation_per_step': avg_degradation_per_step,
-        'deg_incident_rate': deg_incident_rate,
-        'avg_battery_flow_energy': avg_battery_flow,
-        'avg_battery_flow_per_step': avg_battery_flow_per_step,
+        "mean_reward": mean_r,
+        "median_reward": median_r,
+        "std_reward": std_r,
+        "pct_5_reward": pct5,
+        "pct_95_reward": pct95,
+        "max_reward": max_r,
+        "recommended_rtg": recommended_rtg,
+        "recommended_rtg_total_percentile": float(np.percentile(rewards_list, recommended_rtg_percentile)) if rewards_list else max_r,
+        "recommended_rtg_rtg0_percentile": float(raw_rtg_percentile) if raw_rtg_percentile > 0 else float("nan"),
+        "recommended_return_scale": recommended_return_scale,
+        "recommended_raw_rtg_percentile": raw_rtg_percentile,
+        "sharpe_ratio": sharpe,
+        "sortino_ratio": sortino,
+        "avg_grid_import": avg_grid_import,
+        "avg_grid_export": avg_grid_export,
+        "avg_grid_net": avg_grid_net,
+        "avg_degradation_per_episode": avg_degradation,
+        "avg_degradation_per_step": avg_degradation_per_step,
+        "deg_incident_rate": deg_incident_rate,
+        "avg_battery_flow_energy": avg_battery_flow,
+        "avg_battery_flow_per_step": avg_battery_flow_per_step,
+        "avg_total_revenue_per_episode": avg_total_revenue,
+        "avg_total_degradation_cost_per_episode": avg_total_degradation_cost,
+        "avg_profit_per_episode": avg_profit,
+        "avg_energy_revenue_per_episode": avg_energy_revenue,
+        "avg_fcas_revenue_per_episode": avg_fcas_revenue,
+        "avg_actual_energy_per_episode": avg_actual_energy,
+        "avg_actual_energy_per_step": avg_actual_energy_per_step,
+        "avg_battery_dispatch_abs_per_episode": avg_battery_dispatch_abs,
+        "avg_battery_dispatch_abs_per_step": avg_battery_dispatch_abs_per_step,
+        "avg_total_revenue_end": avg_total_revenue,
+        "avg_total_degradation_cost_end": avg_total_degradation_cost,
+        "avg_total_degradation_end": avg_total_degradation_end,
+        "episodes_evaluated": int(len(logs)),
+        "episodes_with_reward": int(len(total_rewards)),
+        "avg_episode_steps": _mean_or_zero([float(s) for s in episode_steps]),
     }
 
 
@@ -784,10 +1059,17 @@ def evaluate_experiments(
         rows.append(metrics)
         # build per-episode total rewards
         for idx, ep_df in enumerate(logs):
+            if "reward" not in ep_df.columns:
+                total_reward = 0.0
+            else:
+                try:
+                    total_reward = float(ep_df["reward"].sum())
+                except Exception:
+                    total_reward = 0.0
             episode_rows.append({
                 'experiment': name,
                 'episode': idx,
-                'total_reward': float(ep_df['reward'].sum())
+                'total_reward': total_reward,
             })
     metrics_df = pl.DataFrame(rows).sort('experiment')
     # If neither showing nor saving nor returning figs, skip figure generation entirely
@@ -882,28 +1164,60 @@ def evaluate_experiments(
 
 def evaluate_by_conditions(
     logs: list[pl.DataFrame],
-    conditions: dict[str, callable]  # e.g., {"high_solar": lambda obs: obs[5] > threshold}
+    conditions: dict[str, Callable[..., bool]]  # e.g., {"high_solar": lambda obs: obs[5] > threshold}
 ) -> dict:
     """
     Evaluate algorithm performance under different conditions.
-    
+
+    The condition callable can accept one or more arguments. Supported signatures:
+        - (obs)
+        - (obs, info)
+        - (obs, info, action)
+        - (obs, info, action, reward)
+        - (obs, info, action, reward, step_idx)
+
     conditions example:
         {
             "high_solar": lambda obs: obs[5] > 2.0,
-            "peak_price": lambda obs: obs[7] > 0.2,
+            "peak_price": lambda obs, info: info.get("energy_price", 0.0) > 0.2,
             "low_battery": lambda obs: obs[-2] < 0.3
         }
     """
     results = {}
+
+    def _eval_condition(cond: Callable[..., bool], obs: Any, info: dict[str, Any], action: Any, reward: float, step_idx: int) -> bool:
+        for args in (
+            (obs, info, action, reward, step_idx),
+            (obs, info, action, reward),
+            (obs, info, action),
+            (obs, info),
+            (obs,),
+        ):
+            try:
+                return bool(cond(*args))
+            except TypeError:
+                continue
+        return False
+
     for condition_name, condition_fn in conditions.items():
-        filtered_rewards = []
+        filtered_rewards: List[float] = []
         for ep_df in logs:
-            mask = [condition_fn(obs) for obs in ep_df['raw_observation']]
-            filtered_rewards.extend(ep_df['reward'][mask].to_list())
-        
+            steps = int(ep_df.height)
+            obs_list = ep_df["raw_observation"].to_list() if "raw_observation" in ep_df.columns else [None] * steps
+            action_list = ep_df["action"].to_list() if "action" in ep_df.columns else [None] * steps
+            reward_list = ep_df["reward"].to_list() if "reward" in ep_df.columns else [0.0] * steps
+            if "info" in ep_df.columns:
+                info_list = [_coerce_info_dict(val) for val in ep_df["info"].to_list()]
+            else:
+                info_list = [{} for _ in range(steps)]
+
+            for idx in range(steps):
+                if _eval_condition(condition_fn, obs_list[idx], info_list[idx], action_list[idx], float(reward_list[idx]), idx):
+                    filtered_rewards.append(float(reward_list[idx]))
+
         results[condition_name] = {
-            'mean_reward': np.mean(filtered_rewards) if filtered_rewards else 0.0,
-            'count': len(filtered_rewards)
+            "mean_reward": float(np.mean(filtered_rewards)) if filtered_rewards else 0.0,
+            "count": len(filtered_rewards),
         }
     return results
 
@@ -915,17 +1229,41 @@ def compute_decision_divergence(
     """
     Measure how often two algorithms take different actions in same states.
     """
-    actions1 = np.array([a[0] if isinstance(a, list) else a for a in logs1['action']])
-    actions2 = np.array([a[0] if isinstance(a, list) else a for a in logs2['action']])
+    def _extract_action(val: Any) -> float:
+        if isinstance(val, (list, tuple, np.ndarray)):
+            return float(val[0]) if len(val) > 0 else 0.0
+        try:
+            return float(val)
+        except Exception:
+            return 0.0
+
+    actions1 = np.array([_extract_action(a) for a in logs1["action"].to_list()], dtype=float)
+    actions2 = np.array([_extract_action(a) for a in logs2["action"].to_list()], dtype=float)
+
+    min_len = min(actions1.size, actions2.size)
+    if min_len == 0:
+        return {
+            "mean_absolute_diff": float("nan"),
+            "max_diff": float("nan"),
+            "divergence_rate": float("nan"),
+            "correlation": float("nan"),
+        }
+    actions1 = actions1[:min_len]
+    actions2 = actions2[:min_len]
     
     # Action difference metrics
     action_diff = np.abs(actions1 - actions2)
     
+    try:
+        corr = float(np.corrcoef(actions1, actions2)[0, 1]) if min_len > 1 else float("nan")
+    except Exception:
+        corr = float("nan")
+
     return {
-        'mean_absolute_diff': np.mean(action_diff),
-        'max_diff': np.max(action_diff),
-        'divergence_rate': np.mean(action_diff > action_tolerance),
-        'correlation': np.corrcoef(actions1, actions2)[0, 1]
+        "mean_absolute_diff": float(np.mean(action_diff)),
+        "max_diff": float(np.max(action_diff)),
+        "divergence_rate": float(np.mean(action_diff > action_tolerance)),
+        "correlation": corr,
     }
 
 # Helper: compare actions taken by different algorithms
@@ -1063,6 +1401,64 @@ class AlgorithmActionComparator:
             except Exception:
                 return {}
         return {}
+
+    @staticmethod
+    def _extract_soc(obs: Any, info: dict[str, Any]) -> float:
+        if "battery_soc" in info:
+            try:
+                return float(info["battery_soc"])
+            except Exception:
+                return float("nan")
+        if isinstance(obs, (list, tuple, np.ndarray)) and len(obs) >= 2:
+            try:
+                return float(obs[-2])
+            except Exception:
+                return float("nan")
+        return float("nan")
+
+    @staticmethod
+    def _extract_solar(obs: Any, info: dict[str, Any]) -> float:
+        for key in ["solar_gen", "solar", "solar_generation", "pv_gen"]:
+            if key in info:
+                try:
+                    return float(info[key])
+                except Exception:
+                    return float("nan")
+        if isinstance(obs, (list, tuple, np.ndarray)) and len(obs) > 5:
+            try:
+                return float(obs[5])
+            except Exception:
+                return float("nan")
+        return float("nan")
+
+    @staticmethod
+    def _extract_load(obs: Any, info: dict[str, Any]) -> float:
+        for key in ["house_load", "load", "demand"]:
+            if key in info:
+                try:
+                    return float(info[key])
+                except Exception:
+                    return float("nan")
+        if isinstance(obs, (list, tuple, np.ndarray)) and len(obs) > 6:
+            try:
+                return float(obs[6])
+            except Exception:
+                return float("nan")
+        return float("nan")
+
+    @staticmethod
+    def _extract_grid_energy(info: dict[str, Any]) -> float:
+        if "grid_energy" in info:
+            try:
+                return float(info["grid_energy"])
+            except Exception:
+                return float("nan")
+        if "actual_energy" in info:
+            try:
+                return float(info["actual_energy"])
+            except Exception:
+                return float("nan")
+        return float("nan")
 
     @staticmethod
     def _safe_corr(x: np.ndarray, y: np.ndarray) -> float:
@@ -1266,41 +1662,26 @@ class AlgorithmActionComparator:
                         ep_actions = [self._extract_action(a) for a in ep_df['action'].to_list()[s:e]]
                         all_actions.extend(ep_actions)
 
-                        if 'raw_observation' in ep_df.columns:
-                            ro_list = ep_df['raw_observation'].to_list()[s:e]
-                            for obs in ro_list:
-                                if isinstance(obs, (list, tuple, np.ndarray)):
-                                    soc_vals.append(self._safe_float(obs[-2]) if len(obs) >= 2 else float('nan'))
-                                    solar_vals.append(self._safe_float(obs[5]) if len(obs) > 5 else float('nan'))
-                                    load_vals.append(self._safe_float(obs[6]) if len(obs) > 6 else float('nan'))
-                                else:
-                                    soc_vals.append(float('nan'))
-                                    solar_vals.append(float('nan'))
-                                    load_vals.append(float('nan'))
-                        else:
-                            soc_vals.extend([float('nan')] * (e - s))
-                            solar_vals.extend([float('nan')] * (e - s))
-                            load_vals.extend([float('nan')] * (e - s))
+                        info_list = []
+                        if "info" in ep_df.columns:
+                            info_list = [self._parse_info(x) for x in ep_df["info"].to_list()[s:e]]
+                        ro_list = ep_df["raw_observation"].to_list()[s:e] if "raw_observation" in ep_df.columns else [None] * (e - s)
+                        for obs, info in zip(ro_list, info_list or [{}] * (e - s)):
+                            soc_vals.append(self._extract_soc(obs, info))
+                            solar_vals.append(self._extract_solar(obs, info))
+                            load_vals.append(self._extract_load(obs, info))
                 else:
                     # Whole-episode behavior
                     ep_actions = [self._extract_action(a) for a in ep_df["action"].to_list()]
                     all_actions.extend(ep_actions)
-
-                    if "raw_observation" in ep_df.columns:
-                        ro_list = ep_df["raw_observation"].to_list()
-                        for obs in ro_list:
-                            if isinstance(obs, (list, tuple, np.ndarray)):
-                                soc_vals.append(self._safe_float(obs[-2]) if len(obs) >= 2 else float("nan"))
-                                solar_vals.append(self._safe_float(obs[5]) if len(obs) > 5 else float("nan"))
-                                load_vals.append(self._safe_float(obs[6]) if len(obs) > 6 else float("nan"))
-                            else:
-                                soc_vals.append(float("nan"))
-                                solar_vals.append(float("nan"))
-                                load_vals.append(float("nan"))
-                    else:
-                        soc_vals.extend([float("nan")] * ep_df.height)
-                        solar_vals.extend([float("nan")] * ep_df.height)
-                        load_vals.extend([float("nan")] * ep_df.height)
+                    info_list = []
+                    if "info" in ep_df.columns:
+                        info_list = [self._parse_info(x) for x in ep_df["info"].to_list()]
+                    ro_list = ep_df["raw_observation"].to_list() if "raw_observation" in ep_df.columns else [None] * ep_df.height
+                    for obs, info in zip(ro_list, info_list or [{}] * ep_df.height):
+                        soc_vals.append(self._extract_soc(obs, info))
+                        solar_vals.append(self._extract_solar(obs, info))
+                        load_vals.append(self._extract_load(obs, info))
 
             per_algo_actions[algo] = np.array(all_actions, dtype=float)
             per_algo_soc[algo] = np.array(soc_vals, dtype=float)
@@ -1419,7 +1800,7 @@ class AlgorithmActionComparator:
                     arr_win = np.array(collected, dtype=float) if collected else np.array([], dtype=float)
                     per_window_lists.append(arr_win)
                     # compute histogram for this window using same global bin edges
-                    probs_win, counts_win = histogram(arr_win) if arr_win.size > 0 else (np.zeros(cfg.bins, dtype=float), np.zeros(cfg.bins, dtype=int))
+                    probs_win, counts_win = histogram(arr_win) if arr_win.size > 0 else (np.zeros(bins_count, dtype=float), np.zeros(bins_count, dtype=int))
                     per_window_hist.append({
                         'window': (int(ws), int(we)),
                         'hist_values': probs_win.tolist(),
@@ -1961,25 +2342,12 @@ class AlgorithmActionComparator:
                         continue
                     df_slice = df.slice(s_loc, e_loc - s_loc)
                     parts_actions.extend([self._extract_action(a) for a in df_slice["action"].to_list()])
-                    if "raw_observation" in df_slice.columns:
-                        ro = df_slice["raw_observation"].to_list()
-                        parts_socs.extend([obs[-2] if isinstance(obs, (list, np.ndarray)) and len(obs) >= 2 else float("nan") for obs in ro])
-                    else:
-                        parts_socs.extend([float("nan")] * (e_loc - s_loc))
-
-                    if "info" in df_slice.columns:
-                        info_col = df_slice["info"].to_list()
-                        parsed = [self._parse_info(x) for x in info_col]
-                        for info in parsed:
-                            if isinstance(info, dict) and "grid_energy" in info:
-                                try:
-                                    parts_grids.append(float(info["grid_energy"]))
-                                except Exception:
-                                    parts_grids.append(float("nan"))
-                            else:
-                                parts_grids.append(float("nan"))
-                    else:
-                        parts_grids.extend([float("nan")] * (e_loc - s_loc))
+                    info_col = df_slice["info"].to_list() if "info" in df_slice.columns else [{} for _ in range(df_slice.height)]
+                    parsed = [self._parse_info(x) for x in info_col]
+                    ro = df_slice["raw_observation"].to_list() if "raw_observation" in df_slice.columns else [None] * df_slice.height
+                    for obs, info in zip(ro, parsed or [{}] * df_slice.height):
+                        parts_socs.append(self._extract_soc(obs, info))
+                        parts_grids.append(self._extract_grid_energy(info))
 
                 actions[name] = np.array(parts_actions, dtype=float)
                 socs[name] = np.array(parts_socs, dtype=float) if parts_socs else None
@@ -2024,30 +2392,15 @@ class AlgorithmActionComparator:
                 df_slice = df.slice(start, end - start)
                 actions[name] = np.array([self._extract_action(a) for a in df_slice["action"].to_list()])
 
-                if "raw_observation" in df_slice.columns:
-                    socs_raw = df_slice["raw_observation"].to_list()
-                    socs[name] = np.array([
-                        obs[-2] if isinstance(obs, (list, np.ndarray)) and len(obs) >= 2 else float("nan")
-                        for obs in socs_raw
-                    ])
-                else:
-                    socs[name] = None
-
-                if "info" in df_slice.columns:
-                    info_col = df_slice["info"].to_list()
-                    parsed = [self._parse_info(x) for x in info_col]
-                    grid_vals = []
-                    for info in parsed:
-                        if isinstance(info, dict) and "grid_energy" in info:
-                            try:
-                                grid_vals.append(float(info["grid_energy"]))
-                            except Exception:
-                                grid_vals.append(float("nan"))
-                        else:
-                            grid_vals.append(float("nan"))
-                    grids[name] = np.array(grid_vals)
-                else:
-                    grids[name] = None
+                info_col = df_slice["info"].to_list() if "info" in df_slice.columns else [{} for _ in range(df_slice.height)]
+                parsed = [self._parse_info(x) for x in info_col]
+                ro = df_slice["raw_observation"].to_list() if "raw_observation" in df_slice.columns else [None] * df_slice.height
+                socs[name] = np.array([
+                    self._extract_soc(obs, info) for obs, info in zip(ro, parsed or [{}] * df_slice.height)
+                ])
+                grids[name] = np.array([
+                    self._extract_grid_energy(info) for info in parsed or [{}] * df_slice.height
+                ])
 
         def _contiguous_segments(mask: np.ndarray) -> list[tuple[int, int]]:
             segments: list[tuple[int, int]] = []
