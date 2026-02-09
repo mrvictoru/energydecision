@@ -486,7 +486,7 @@ class AEMOBatteryTradingEnv(gym.Env):
         self._rainflow_num_cycles = 0
 
         # Reset degradation tracking
-        init_soc_pct = float((self.battery_soc / self.battery_capacity) * 100.0)
+        init_soc_pct = float((self.battery_soc / self.initial_battery_capacity) * 100.0)
         self.soc_history = [init_soc_pct]
         if self.degradation_mode == 'rainflow':
             max_c_rate = self.max_battery_flow / self.initial_battery_capacity

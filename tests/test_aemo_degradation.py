@@ -122,10 +122,11 @@ class TestAEMORainflowDegradation:
 
     def test_soc_history_tracked(self, rainflow_env):
         """SOC history should be tracked for rainflow counting."""
-        for _ in range(10):
+        num_steps = 10
+        for _ in range(num_steps):
             rainflow_env.step(np.array([0.5]))
 
-        assert len(rainflow_env.soc_history) == 11, \
+        assert len(rainflow_env.soc_history) == 1 + num_steps, \
             "SOC history should have initial + one per step"
 
     def test_info_contains_degradation_fields(self, rainflow_env):
