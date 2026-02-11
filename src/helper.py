@@ -317,6 +317,426 @@ def plot_48h_from_logs(
     plt.tight_layout()
     plt.show()
 
+
+# ---------------------------------------------------------------------------
+# EpisodeVisualizer – unified agent-in-action viewer for both environments
+# ---------------------------------------------------------------------------
+
+class EpisodeVisualizer:
+    """Visualise an agent's behaviour during an episode in a human-friendly way.
+
+    Works with episode log DataFrames produced by both
+    ``Agent.run_episode()`` (SolarBatteryEnv) and
+    ``AEMOAgent.run_episode()`` (AEMOBatteryTradingEnv).
+
+    The environment type is **auto-detected** from the ``info`` column:
+
+    * *Household* – ``info`` contains ``battery_level`` and ``grid_energy``
+    * *AEMO*      – ``info`` contains ``battery_soc`` and ``energy_price``
+
+    Parameters
+    ----------
+    logs_df : polars.DataFrame or pandas.DataFrame
+        Single-episode log with columns ``raw_observation``, ``action``,
+        ``reward``, and ``info``.
+    step_duration : float, optional
+        Duration of each environment step in hours (default ``0.5``).
+    env_type : str or None, optional
+        Force the environment type: ``'household'`` or ``'aemo'``.
+        If ``None`` (default), it is auto-detected from the first row of
+        ``info``.
+    """
+
+    # Recognised environment types
+    _HOUSEHOLD = "household"
+    _AEMO = "aemo"
+
+    def __init__(
+        self,
+        logs_df,
+        step_duration: float = 0.5,
+        env_type: Optional[str] = None,
+    ):
+        # Convert to pandas for uniform .iloc / column access
+        if hasattr(logs_df, "to_pandas"):
+            self._df = logs_df.to_pandas()
+        else:
+            self._df = logs_df
+
+        self.step_duration = step_duration
+        self.steps_per_hour = int(round(1.0 / step_duration))
+        self.env_type = env_type or self._detect_env_type()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _detect_env_type(self) -> str:
+        """Determine env type from the first ``info`` dict."""
+        if len(self._df) == 0:
+            return self._HOUSEHOLD
+        first_info = self._get_info(0)
+        if "battery_soc" in first_info:
+            return self._AEMO
+        return self._HOUSEHOLD
+
+    def _get_info(self, idx: int) -> dict:
+        """Return the info dict at row *idx*, handling JSON strings."""
+        val = self._df.iloc[idx]["info"]
+        if isinstance(val, dict):
+            return val
+        if isinstance(val, str):
+            import json
+            try:
+                return json.loads(val)
+            except Exception:
+                import ast
+                try:
+                    return ast.literal_eval(val)
+                except Exception:
+                    return {}
+        return {}
+
+    def _extract_info_series(self, field: str) -> list:
+        """Extract a list of values for *field* from every row's info dict."""
+        import json as _json, ast as _ast
+        vals = []
+        for info_raw in self._df["info"]:
+            if isinstance(info_raw, dict):
+                info = info_raw
+            elif isinstance(info_raw, str):
+                try:
+                    info = _json.loads(info_raw)
+                except Exception:
+                    try:
+                        info = _ast.literal_eval(info_raw)
+                    except Exception:
+                        info = {}
+            else:
+                info = {}
+            vals.append(info.get(field))
+        return vals
+
+    def _time_axis(self, n: int, start_step: int = 0) -> np.ndarray:
+        """Return a time axis in hours starting from *start_step*."""
+        return np.arange(n) * self.step_duration + start_step * self.step_duration
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def plot(
+        self,
+        start_step: int = 0,
+        num_hours: float = 48.0,
+        title: Optional[str] = None,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        figsize: Optional[Tuple[float, float]] = None,
+        show: bool = True,
+    ) -> plt.Figure:
+        """Produce a multi-panel figure showing the agent in action.
+
+        Parameters
+        ----------
+        start_step : int
+            First step index to include (default ``0``).
+        num_hours : float
+            Length of the window in hours (default ``48``).
+        title : str, optional
+            Figure title.  A sensible default is generated when ``None``.
+        save_path : str, optional
+            If provided the figure is saved to this path.
+        dpi : int
+            Resolution for saved figures (default ``150``).
+        figsize : tuple of float, optional
+            ``(width, height)`` in inches.  A sensible default is computed
+            when ``None``.
+        show : bool
+            Whether to call ``plt.show()`` (default ``True``).  Set to
+            ``False`` for non-interactive / test usage.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            The generated figure object.
+        """
+        if self.env_type == self._AEMO:
+            return self._plot_aemo(start_step, num_hours, title, save_path, dpi, figsize, show)
+        return self._plot_household(start_step, num_hours, title, save_path, dpi, figsize, show)
+
+    # ------------------------------------------------------------------
+    # Household (SolarBatteryEnv) plotting
+    # ------------------------------------------------------------------
+
+    def _plot_household(self, start_step, num_hours, title, save_path, dpi, figsize, show):
+        window = int(num_hours * self.steps_per_hour)
+        end_step = min(start_step + window, len(self._df))
+        sl = self._df.iloc[start_step:end_step]
+        n = len(sl)
+        if n == 0:
+            raise ValueError("Window is empty – check start_step and num_hours.")
+
+        t = self._time_axis(n, start_step)
+
+        # --- extract data ---
+        raw_obs = list(sl["raw_observation"])
+        actions_raw = list(sl["action"])
+        rewards = list(sl["reward"])
+
+        battery = [obs[-2] if hasattr(obs, "__len__") else 0.0 for obs in raw_obs]
+        solar = [obs[5] if hasattr(obs, "__len__") and len(obs) > 5 else 0.0 for obs in raw_obs]
+        load = [obs[6] if hasattr(obs, "__len__") and len(obs) > 6 else 0.0 for obs in raw_obs]
+        actions = [a[0] if hasattr(a, "__len__") else float(a) for a in actions_raw]
+
+        grid = self._extract_info_series("grid_energy")[start_step:end_step]
+        price_import = [obs[7] if hasattr(obs, "__len__") and len(obs) > 7 else 0.0 for obs in raw_obs]
+        price_export = [obs[8] if hasattr(obs, "__len__") and len(obs) > 8 else 0.0 for obs in raw_obs]
+
+        if figsize is None:
+            figsize = (14, 12)
+        fig, axes = plt.subplots(4, 1, figsize=figsize, sharex=True)
+        fig.suptitle(title or f"Household Episode — {num_hours:.0f}h window", fontsize=13, y=0.98)
+
+        # Panel 1: SOC
+        axes[0].plot(t, battery, color="tab:blue", linewidth=1.2)
+        axes[0].set_ylabel("Battery Level (kWh)")
+        axes[0].grid(alpha=0.3)
+        axes[0].set_title("State of Charge")
+
+        # Panel 2: Actions as bar chart (green=charge, red=discharge)
+        colors = ["tab:green" if a >= 0 else "tab:red" for a in actions]
+        axes[1].bar(t, actions, width=self.step_duration * 0.85, color=colors, edgecolor="none")
+        axes[1].axhline(0, color="black", linewidth=0.5)
+        axes[1].set_ylabel("Action (charge / discharge)")
+        axes[1].set_title("Agent Actions  (green = charge, red = discharge)")
+        axes[1].grid(alpha=0.3)
+
+        # Panel 3: Solar / Load / Grid
+        axes[2].plot(t, solar, color="tab:orange", linewidth=1, label="Solar")
+        axes[2].plot(t, load, color="tab:red", linewidth=1, label="Load")
+        if any(g is not None for g in grid):
+            axes[2].plot(t, [g if g is not None else 0 for g in grid],
+                         color="tab:purple", linewidth=1, label="Grid")
+        axes[2].set_ylabel("Energy (kWh)")
+        axes[2].legend(fontsize=8, loc="upper right")
+        axes[2].set_title("Solar Generation, Load & Grid")
+        axes[2].grid(alpha=0.3)
+
+        # Panel 4: Price
+        axes[3].plot(t, price_import, color="tab:green", linewidth=1, label="Import Price")
+        axes[3].plot(t, price_export, color="tab:red", linewidth=1, alpha=0.7, label="Export Price")
+        axes[3].set_ylabel("Price ($/kWh)")
+        axes[3].set_xlabel(f"Time (hours from step {start_step})")
+        axes[3].legend(fontsize=8, loc="upper right")
+        axes[3].set_title("Energy Prices")
+        axes[3].grid(alpha=0.3)
+
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        if show:
+            plt.show()
+        return fig
+
+    # ------------------------------------------------------------------
+    # AEMO (AEMOBatteryTradingEnv) plotting
+    # ------------------------------------------------------------------
+
+    def _plot_aemo(self, start_step, num_hours, title, save_path, dpi, figsize, show):
+        window = int(num_hours * self.steps_per_hour)
+        end_step = min(start_step + window, len(self._df))
+        sl = self._df.iloc[start_step:end_step]
+        n = len(sl)
+        if n == 0:
+            raise ValueError("Window is empty – check start_step and num_hours.")
+
+        t = self._time_axis(n, start_step)
+
+        # --- extract data ---
+        actions_raw = list(sl["action"])
+        has_fcas = (
+            len(actions_raw) > 0
+            and hasattr(actions_raw[0], "__len__")
+            and len(actions_raw[0]) >= 3
+        )
+
+        energy_dispatch = [
+            a[0] if hasattr(a, "__len__") else float(a) for a in actions_raw
+        ]
+        if has_fcas:
+            fcas_raise = [a[1] for a in actions_raw]
+            fcas_lower = [a[2] for a in actions_raw]
+        else:
+            fcas_raise = None
+            fcas_lower = None
+
+        soc = self._extract_info_series("battery_soc")[start_step:end_step]
+        price = self._extract_info_series("energy_price")[start_step:end_step]
+        e_rev = self._extract_info_series("energy_revenue")[start_step:end_step]
+        f_rev = self._extract_info_series("fcas_revenue")[start_step:end_step]
+
+        num_panels = 4 if has_fcas else 3
+        if figsize is None:
+            figsize = (14, 3.5 * num_panels)
+        fig, axes = plt.subplots(num_panels, 1, figsize=figsize, sharex=True)
+        fig.suptitle(title or f"AEMO Episode — {num_hours:.0f}h window", fontsize=13, y=0.98)
+
+        # Panel 1: SOC
+        soc_vals = [s if s is not None else 0.0 for s in soc]
+        axes[0].plot(t, soc_vals, color="tab:blue", linewidth=1.2)
+        axes[0].set_ylabel("Battery SOC (MWh)")
+        axes[0].set_title("State of Charge")
+        axes[0].grid(alpha=0.3)
+
+        # Panel 2: Energy dispatch as bar chart (green=charge, red=discharge)
+        colors = ["tab:green" if a >= 0 else "tab:red" for a in energy_dispatch]
+        axes[1].bar(t, energy_dispatch, width=self.step_duration * 0.85,
+                     color=colors, edgecolor="none")
+        axes[1].axhline(0, color="black", linewidth=0.5)
+        axes[1].set_ylabel("Dispatch (charge / discharge)")
+        axes[1].set_title("Energy Dispatch  (green = charge, red = discharge)")
+        axes[1].grid(alpha=0.3)
+
+        # Panel 3 (or last): Energy price
+        price_vals = [p if p is not None else 0.0 for p in price]
+        price_panel = axes[3] if has_fcas else axes[2]
+        price_panel.plot(t, price_vals, color="tab:orange", linewidth=1)
+        price_panel.set_ylabel("RRP ($/MWh)")
+        price_panel.set_xlabel(f"Time (hours from step {start_step})")
+        price_panel.set_title("Energy Spot Price (RRP)")
+        price_panel.grid(alpha=0.3)
+
+        # Panel 3 (only when FCAS present): FCAS bids
+        if has_fcas:
+            axes[2].bar(t - self.step_duration * 0.2, fcas_raise,
+                         width=self.step_duration * 0.4, color="tab:cyan",
+                         label="Raise bid", edgecolor="none")
+            axes[2].bar(t + self.step_duration * 0.2, fcas_lower,
+                         width=self.step_duration * 0.4, color="tab:pink",
+                         label="Lower bid", edgecolor="none")
+            axes[2].set_ylabel("FCAS Bid")
+            axes[2].set_title("FCAS Bids  (raise / lower)")
+            axes[2].legend(fontsize=8, loc="upper right")
+            axes[2].grid(alpha=0.3)
+
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        if show:
+            plt.show()
+        return fig
+
+    @staticmethod
+    def compare(
+        logs_df1,
+        logs_df2,
+        label1: str = "Agent 1",
+        label2: str = "Agent 2",
+        start_step: int = 0,
+        num_hours: float = 48.0,
+        step_duration: float = 0.5,
+        env_type: Optional[str] = None,
+        title: Optional[str] = None,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        figsize: Optional[Tuple[float, float]] = None,
+        show: bool = True,
+    ) -> plt.Figure:
+        """Compare two agents side-by-side over the same time window.
+
+        Both logs are expected to come from the **same** environment type.
+        The comparison overlays SOC traces and action bars.
+
+        Parameters
+        ----------
+        logs_df1, logs_df2 : DataFrame
+            Episode log DataFrames.
+        label1, label2 : str
+            Legend labels for the two agents.
+        start_step, num_hours, step_duration, env_type, title, save_path,
+        dpi, figsize, show
+            Same semantics as :meth:`plot`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        vis1 = EpisodeVisualizer(logs_df1, step_duration=step_duration, env_type=env_type)
+        vis2 = EpisodeVisualizer(logs_df2, step_duration=step_duration, env_type=env_type)
+        etype = vis1.env_type
+
+        steps_per_hour = int(round(1.0 / step_duration))
+        window = int(num_hours * steps_per_hour)
+
+        # Convert to pandas
+        df1 = vis1._df
+        df2 = vis2._df
+        end1 = min(start_step + window, len(df1))
+        end2 = min(start_step + window, len(df2))
+        sl1 = df1.iloc[start_step:end1]
+        sl2 = df2.iloc[start_step:end2]
+        n = max(len(sl1), len(sl2))
+        if n == 0:
+            raise ValueError("Both windows are empty.")
+
+        t1 = np.arange(len(sl1)) * step_duration + start_step * step_duration
+        t2 = np.arange(len(sl2)) * step_duration + start_step * step_duration
+
+        if etype == EpisodeVisualizer._AEMO:
+            soc1 = vis1._extract_info_series("battery_soc")[start_step:end1]
+            soc2 = vis2._extract_info_series("battery_soc")[start_step:end2]
+            soc1 = [s if s is not None else 0.0 for s in soc1]
+            soc2 = [s if s is not None else 0.0 for s in soc2]
+            soc_label = "Battery SOC (MWh)"
+        else:
+            raw1 = list(sl1["raw_observation"])
+            raw2 = list(sl2["raw_observation"])
+            soc1 = [obs[-2] if hasattr(obs, "__len__") else 0.0 for obs in raw1]
+            soc2 = [obs[-2] if hasattr(obs, "__len__") else 0.0 for obs in raw2]
+            soc_label = "Battery Level (kWh)"
+
+        act_raw1 = list(sl1["action"])
+        act_raw2 = list(sl2["action"])
+        act1 = [a[0] if hasattr(a, "__len__") else float(a) for a in act_raw1]
+        act2 = [a[0] if hasattr(a, "__len__") else float(a) for a in act_raw2]
+
+        if figsize is None:
+            figsize = (14, 8)
+        fig, axes = plt.subplots(2, 1, figsize=figsize, sharex=True)
+        fig.suptitle(title or f"Agent Comparison — {num_hours:.0f}h window", fontsize=13, y=0.98)
+
+        # SOC
+        axes[0].plot(t1, soc1, color="tab:blue", linewidth=1.2, label=label1)
+        axes[0].plot(t2, soc2, color="tab:orange", linewidth=1.2, linestyle="--", label=label2)
+        axes[0].set_ylabel(soc_label)
+        axes[0].set_title("State of Charge")
+        axes[0].legend(fontsize=9)
+        axes[0].grid(alpha=0.3)
+
+        # Actions
+        w = step_duration * 0.4
+        axes[1].bar(t1 - w / 2, act1, width=w,
+                     color=["tab:green" if a >= 0 else "tab:red" for a in act1],
+                     alpha=0.7, label=label1)
+        axes[1].bar(t2 + w / 2, act2, width=w,
+                     color=["tab:cyan" if a >= 0 else "tab:pink" for a in act2],
+                     alpha=0.7, label=label2)
+        axes[1].axhline(0, color="black", linewidth=0.5)
+        axes[1].set_ylabel("Action")
+        axes[1].set_xlabel(f"Time (hours from step {start_step})")
+        axes[1].set_title("Actions  (green/cyan = charge, red/pink = discharge)")
+        axes[1].legend(fontsize=9)
+        axes[1].grid(alpha=0.3)
+
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        if show:
+            plt.show()
+        return fig
+
+
 # Helper: flatten episode data created from run_sb3_model_on_vec_env() from decision.py into a Polars DataFrame
 def flatten_episode_data(episode_data):
     dfs = []

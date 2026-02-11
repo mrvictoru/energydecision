@@ -60,6 +60,88 @@ Flattens a list of SB3 trajectories into a single Polars DataFrame.
 
 ### plot_48h_from_logs
 Plots a 48-hour window of battery, solar, load, grid energy, and actions.
+(Household/SolarBatteryEnv only — for a unified visualiser that works with
+both environments, see `EpisodeVisualizer` below.)
+
+### EpisodeVisualizer
+
+Unified class for inspecting agent behaviour during an episode.  Works with
+logs from **both** `SolarBatteryEnv` (household) and `AEMOBatteryTradingEnv`
+(AEMO).  The environment type is auto-detected from `info` keys
+(`battery_level` → household, `battery_soc` → AEMO) or can be forced via
+the `env_type` parameter.
+
+#### How it works
+
+`EpisodeVisualizer` takes a single-episode Polars (or pandas) DataFrame —
+the same format returned by `Agent.run_episode()` / `AEMOAgent.run_episode()`
+— and renders a multi-panel matplotlib figure over a configurable time window:
+
+| Panel              | Household                          | AEMO (simple)          | AEMO (multi-market)         |
+|--------------------|------------------------------------|------------------------|-----------------------------|
+| **1 – SOC**        | Battery level (kWh) as line        | Battery SOC (MWh)      | Battery SOC (MWh)           |
+| **2 – Actions**    | Bar chart (green=charge, red=discharge) | Same                   | Same (energy dispatch)      |
+| **3 – Context**    | Solar generation, load & grid      | Energy price (RRP)     | FCAS raise / lower bids     |
+| **4 – Price**      | Import / export prices             | *(not shown)*          | Energy price (RRP)          |
+
+#### Constructor
+
+```python
+EpisodeVisualizer(
+    logs_df,                    # single-episode DataFrame
+    step_duration: float = 0.5, # hours per step (default 30 min)
+    env_type: str | None = None # 'household', 'aemo', or None (auto-detect)
+)
+```
+
+#### `.plot()` — single-episode view
+
+```python
+fig = vis.plot(
+    start_step=0,       # first step to include
+    num_hours=48.0,     # length of the time window in hours
+    title=None,         # custom figure title
+    save_path=None,     # save figure to file
+    dpi=150,            # saved image resolution
+    figsize=None,       # (width, height) in inches
+    show=True,          # call plt.show()
+)
+```
+
+Returns a `matplotlib.figure.Figure` for programmatic use.
+
+#### `.compare()` — two-agent overlay (static method)
+
+```python
+fig = EpisodeVisualizer.compare(
+    logs_df1, logs_df2,
+    label1="Agent 1", label2="Agent 2",
+    start_step=0, num_hours=48.0,
+    step_duration=0.5,
+    env_type=None,      # auto-detected from logs_df1
+    title=None, save_path=None, dpi=150, figsize=None, show=True,
+)
+```
+
+Overlays SOC traces (line) and action bars (side-by-side colour coding) for
+two agents over the same time window.
+
+#### Quick examples
+
+```python
+from helper import EpisodeVisualizer
+
+# --- Single agent, 24-hour window starting at step 96 ---
+vis = EpisodeVisualizer(episode_df, step_duration=0.5)
+vis.plot(start_step=96, num_hours=24, save_path="day2.png")
+
+# --- Compare two agents ---
+EpisodeVisualizer.compare(
+    rule_episode, rl_episode,
+    label1="Rule", label2="SAC",
+    num_hours=48, save_path="rule_vs_sac.png",
+)
+```
 
 ## Evaluation Functions
 
@@ -144,4 +226,26 @@ conditions = {
 }
 conditional = evaluate_by_conditions(ppo_logs, conditions)
 print(conditional)
+```
+
+### Visualising an agent in action
+
+```python
+from src.helper import EpisodeVisualizer
+
+# Works with both SolarBatteryEnv and AEMO episode logs
+episode_df = ppo_logs[0]  # single episode DataFrame
+
+# View a 24-hour window starting at the beginning
+vis = EpisodeVisualizer(episode_df, step_duration=0.5)
+vis.plot(start_step=0, num_hours=24)
+
+# Compare two agents over 48 hours
+rule_df = rule_logs[0]
+EpisodeVisualizer.compare(
+    rule_df, episode_df,
+    label1="Rule", label2="PPO",
+    num_hours=48,
+    save_path="eval_output/rule_vs_ppo.png",
+)
 ```
