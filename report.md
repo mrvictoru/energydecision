@@ -94,23 +94,29 @@ Statistical testing:
 
 We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents. 
 
-The first version of the comparative metrics is already stored in [eval_output/evaluation_metrics.csv](eval_output/evaluation_metrics.csv), and the accompanying return graph highlights the mean ± std for each agent.
+The first version of the comparative metrics is already stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv), and the accompanying return graph highlights the mean ± std for each agent.
 
-![Mean episode return and variability by agent](eval_output/mean_reward.svg)
+![Mean episode return and variability by agent](eval_output/base/mean_reward.svg)
 
-![Risk vs return for each agent](eval_output/risk_return.svg)
+![Risk vs return for each agent](eval_output/base/risk_return.svg)
 
-![Episode return distribution across customers](eval_output/episode_distribution.svg)
+![Episode return distribution across customers](eval_output/base/episode_distribution.svg)
 
-![Net grid energy balance by agent](eval_output/grid_energy.svg)
+![Net grid energy balance by agent](eval_output/base/grid_energy.svg)
 
 Preliminary observations from the current runs are:
 
 - Oracle retains the highest mean reward (≈ -2,483), with SDP-related planners (SDP/MRDP) following closely at roughly -2,600 to -2,770 and offline Decision Transformer control around -2,534; this contrasts with the rule heuristic (≈ -3,077) and model-free PPO (-2,828), showing a ~500–800 reward gap between optimal planning and simple baselines.
 - SDP produces the least volatile return profile (Sharpe/Sortino near -0.81), implying more stable decisions even though all agents operate in the regime of negative total reward; the higher-magnitude Sharpe metrics for DDPG/SAC reflect their exploration-heavy swings.
 - Grid-level costs mirror the reward ranking: SDP/MRDP export more energy (≈ 3,900–5,100 kWh net export) while importing similar amounts as other agents, meaning they rely more on solar arbitrage; PPO/DT keep net export closer to 3,600–3,900 kWh but still beat the rule-based controller by ~1,000 kWh of exported surplus.
-- Decision Transformer with rgt of -0.5 (`dt_rtg0`) sits third in mean reward and fifth in Sharpe ratio, placing it squarely among the stronger offline policies; its Sharpe ranking midway through suggests only modestly noisier returns compared to SDP, while still outperforming PPO/rule heuristics.
-- Degradation and battery flow energy remain negligible across agents (deg cost effectively zero per episode), confirming that the degradation-aware reward shaping keeps all policies within the safe operating envelope so far.
+- **Decision Transformer Sensitivity:** Recent experiments with varying Rewards-to-Go (RTG) prompts reveal a clear "risk vs. reward" trade-off. The `dt_rtg_neg1500` configuration (prompting for -1500 raw return) achieves the **highest mean reward** (~-2400) among DT variants, effectively finding a "sweet spot" of performance. Conversely, aggressive prompts like `dt_rtg_neg400` (prompting for -400) fail to improve performance, likely because such high returns are "out-of-distribution" relative to the training data.
+- **Degradation Dynamics:** The analysis uncovers a non-trivial relationship between control strategy and battery health. The optimal `dt_rtg_neg1500` agent achieves the **lowest degradation** (~0.002), suggesting it learned smooth, efficient cycling. In contrast, the passive `dt_rtg_neg1` baseline paradoxically yields the **highest degradation** (~0.055), likely due to inefficient micro-cycling or maintaining detrimental low states of charge. Aggressive prompting (`neg400`) also spikes degradation (~0.012) without financial gain, indicating futile cycling behavior.
+
+![DT sensitivity: Risk vs Return](eval_output/dt_compare/risk_return.svg)
+
+![DT sensitivity: Episode Return Distribution](eval_output/dt_compare/episode_distribution.svg)
+
+![DT sensitivity: Grid Energy and Degradation](eval_output/dt_compare/grid_energy.svg)
 
 ## 9. Proposed Research Roadmap
 
