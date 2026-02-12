@@ -175,7 +175,7 @@ cython_debug/
 
 # data
 /data
-**/data/aemo
+**/data
 
 # models
 /models

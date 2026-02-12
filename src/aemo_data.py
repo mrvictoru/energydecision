@@ -845,6 +845,247 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
         raise
 
 
+def _find_column_by_candidates(
+    columns: List[str],
+    exact_candidates: List[str],
+    keyword_groups: Optional[List[List[str]]] = None,
+) -> Optional[str]:
+    """Find a best-effort matching column name using exact names first, then keyword groups."""
+    cols_map = {c.lower(): c for c in columns}
+
+    for cand in exact_candidates:
+        if cand in cols_map:
+            return cols_map[cand]
+
+    if keyword_groups:
+        for group in keyword_groups:
+            for c in columns:
+                lc = c.lower()
+                if all(k in lc for k in group):
+                    return c
+
+    return None
+
+
+def _numeric_from_mixed_text_expr(col_name: str) -> pl.Expr:
+    """Parse floats from mixed text columns (e.g. '100 MW', '1,200.5')."""
+    return (
+        pl.col(col_name)
+        .cast(pl.Utf8, strict=False)
+        .str.replace_all(',', '')
+        .str.extract(r'(-?\d+(?:\.\d+)?)', 1)
+        .cast(pl.Float64, strict=False)
+    )
+
+
+def get_available_battery_units(
+    cache_dir: str = "data/aemo",
+    generator_info_path: Optional[str] = None,
+    region: Optional[str] = None,
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """
+    Return available battery units from the static table with enriched metadata.
+
+    Output columns (when available in the source static table):
+      - DUID
+      - Region
+      - TechnologyType
+      - FuelType
+      - StorageCapacityMWh
+      - RegisteredCapacityMW
+
+    Args:
+        cache_dir: path to cache directory used by NEMOSIS (default: data/aemo)
+        generator_info_path: optional local XLS/XLSX/CSV file to use instead of downloading
+        region: optional region filter (NSW1/QLD1/SA1/TAS1/VIC1)
+        refresh: force re-download of static table when True
+
+    Returns:
+        Polars DataFrame (possibly empty) containing battery units and metadata.
+    """
+    if region and region not in AEMO_REGIONS:
+        raise ValueError(f"Region must be one of {AEMO_REGIONS}")
+
+    cache_path = get_cache_dir(cache_dir)
+
+    try:
+        gen_info = _get_generators_static_table(cache_path, refresh)
+    except Exception:
+        gen_info = _get_generator_info(cache_path, generator_info_path=generator_info_path)
+
+    if gen_info is None:
+        return pl.DataFrame()
+
+    gen_info_pl = _normalize_columns(_as_polars(gen_info))
+    if gen_info_pl.height == 0:
+        return pl.DataFrame()
+
+    columns = gen_info_pl.columns
+    duid_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=["duid"],
+        keyword_groups=[["duid"]],
+    )
+    if duid_col is None:
+        return pl.DataFrame()
+
+    region_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=["region", "regionid"],
+        keyword_groups=[["region"]],
+    )
+    tech_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=[
+            "technology type - descriptor",
+            "technology type - primary",
+            "technology type",
+            "technology",
+            "tech type",
+        ],
+        keyword_groups=[["technology"], ["tech", "type"]],
+    )
+    fuel_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=[
+            "fuel source - descriptor",
+            "fuel source - primary",
+            "fuel source",
+            "fuel",
+        ],
+        keyword_groups=[["fuel"]],
+    )
+
+    storage_mwh_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=[
+            "storage capacity (mwh)",
+            "storage capacity mwh",
+            "storage_mwh",
+            "energy capacity (mwh)",
+            "energy capacity mwh",
+            "max storage (mwh)",
+            "battery storage (mwh)",
+        ],
+        keyword_groups=[["storage", "mwh"], ["energy", "mwh"], ["capacity", "mwh"]],
+    )
+    reg_cap_mw_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=[
+            "reg cap (mw)",
+            "registered capacity (mw)",
+            "registered capacity mw",
+            "nameplate capacity (mw)",
+            "max capacity (mw)",
+            "capacity (mw)",
+            "maxcap mw",
+        ],
+        keyword_groups=[["reg", "cap", "mw"], ["registered", "capacity"], ["capacity", "mw"]],
+    )
+
+    # Battery identification mask from technology/fuel columns
+    battery_mask = None
+    for col in [tech_col, fuel_col]:
+        if col is None:
+            continue
+        cond = (
+            pl.col(col)
+            .cast(pl.Utf8, strict=False)
+            .str.to_lowercase()
+            .str.contains("battery")
+        )
+        battery_mask = cond if battery_mask is None else (battery_mask | cond)
+
+    # Final fallback: scan all text-like columns for "battery"
+    if battery_mask is None:
+        for c in columns:
+            cond = (
+                pl.col(c)
+                .cast(pl.Utf8, strict=False)
+                .str.to_lowercase()
+                .str.contains("battery")
+            )
+            battery_mask = cond if battery_mask is None else (battery_mask | cond)
+
+    if battery_mask is None:
+        return pl.DataFrame()
+
+    batteries = gen_info_pl.filter(battery_mask)
+    if batteries.height == 0:
+        return pl.DataFrame()
+
+    select_exprs = [pl.col(duid_col).alias("DUID")]
+    if region_col:
+        select_exprs.append(pl.col(region_col).alias("Region"))
+    else:
+        select_exprs.append(pl.lit(None, dtype=pl.Utf8).alias("Region"))
+
+    if tech_col:
+        select_exprs.append(pl.col(tech_col).cast(pl.Utf8, strict=False).alias("TechnologyType"))
+    else:
+        select_exprs.append(pl.lit(None, dtype=pl.Utf8).alias("TechnologyType"))
+
+    if fuel_col:
+        select_exprs.append(pl.col(fuel_col).cast(pl.Utf8, strict=False).alias("FuelType"))
+    else:
+        select_exprs.append(pl.lit(None, dtype=pl.Utf8).alias("FuelType"))
+
+    if storage_mwh_col:
+        select_exprs.append(_numeric_from_mixed_text_expr(storage_mwh_col).alias("StorageCapacityMWh"))
+    else:
+        select_exprs.append(pl.lit(None, dtype=pl.Float64).alias("StorageCapacityMWh"))
+
+    if reg_cap_mw_col:
+        select_exprs.append(_numeric_from_mixed_text_expr(reg_cap_mw_col).alias("RegisteredCapacityMW"))
+    else:
+        select_exprs.append(pl.lit(None, dtype=pl.Float64).alias("RegisteredCapacityMW"))
+
+    out = (
+        batteries
+        .select(select_exprs)
+        .with_columns(pl.col("DUID").cast(pl.Utf8, strict=False).str.strip_chars())
+        .filter(pl.col("DUID").is_not_null() & (pl.col("DUID") != ""))
+        .unique(subset=["DUID"], keep="first")
+    )
+
+    if region:
+        out = out.filter(pl.col("Region") == region)
+
+    return out.sort(["Region", "DUID"])
+
+def get_available_battery_duids(
+    cache_dir: str = "data/aemo",
+    generator_info_path: Optional[str] = None,
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """
+    Return available battery DUIDs (and their Region if available).
+
+    This helper loads the 'Generators and Scheduled Loads' static table (via the
+    robust loader `_get_generators_static_table` with fallbacks) and returns a
+    Polars DataFrame with columns:
+      - DUID
+      - Region (if present in the static table)
+
+    Args:
+        cache_dir: path to cache directory used by NEMOSIS (default: data/aemo)
+        generator_info_path: optional local XLS/XLSX/CSV file to use instead of downloading
+        refresh: force re-download of the static table when True
+
+    Returns:
+        Polars DataFrame (possibly empty) with unique battery DUIDs.
+    """
+    out = get_available_battery_units(
+        cache_dir=cache_dir,
+        generator_info_path=generator_info_path,
+        region=None,
+        refresh=refresh,
+    )
+    if out.height == 0:
+        return out
+    return out.select(["DUID", "Region"])
+
 def fetch_aemo_generation_by_fuel(
     start_date: datetime,
     end_date: datetime,
