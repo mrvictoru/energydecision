@@ -3,6 +3,7 @@ import numpy as np
 import re
 from datetime import datetime
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from typing import Optional, Any, List, Tuple, Union, Dict, Callable
 from collections import Counter
 from dataclasses import dataclass, field
@@ -273,8 +274,13 @@ def plot_48h_from_logs(
     df_48h = df.iloc[start_step:end_step]
 
     battery = [obs[-2] for obs in df_48h['raw_observation']]
-    solar = [obs[5] for obs in df_48h['raw_observation']]
-    load = [obs[6] for obs in df_48h['raw_observation']]
+    # Raw observation layout in EnergySimEnv:
+    # [hour_sin, hour_cos, day_sin, day_cos,
+    #  SolarGen, HouseLoad, FutureSolar, FutureLoad,
+    #  ImportEnergyPrice, ExportEnergyPrice,
+    #  BatteryLevel, BatteryDegCost]
+    solar = [obs[4] for obs in df_48h['raw_observation']]
+    load = [obs[5] for obs in df_48h['raw_observation']]
     action = [a[0] for a in df_48h['action']]
     grid = [info.get('grid_energy', None) for info in df_48h['info']]
 
@@ -421,6 +427,49 @@ class EpisodeVisualizer:
         """Return a time axis in hours starting from *start_step*."""
         return np.arange(n) * self.step_duration + start_step * self.step_duration
 
+    @staticmethod
+    def _format_hhmm(hours: float) -> str:
+        """Format an hour value as HH:MM, wrapping around 24h."""
+        h24 = float(hours) % 24.0
+        hh = int(h24)
+        mm = int(round((h24 - hh) * 60.0))
+        if mm == 60:
+            hh = (hh + 1) % 24
+            mm = 0
+        return f"{hh:02d}:{mm:02d}"
+
+    @staticmethod
+    def _apply_xaxis_mode(
+        axes,
+        *,
+        start_step: int,
+        step_duration: float,
+        x_axis_mode: str,
+    ) -> None:
+        """Apply x-axis formatting: 'timeofday' (default), 'elapsed', or 'step'."""
+        mode = str(x_axis_mode).strip().lower()
+        if mode not in {"timeofday", "elapsed", "step"}:
+            raise ValueError("x_axis_mode must be one of: 'timeofday', 'elapsed', 'step'")
+
+        axes_arr = np.atleast_1d(axes)
+        if mode == "timeofday":
+            formatter = FuncFormatter(lambda x, _pos: EpisodeVisualizer._format_hhmm(float(x)))
+            for ax in axes_arr:
+                ax.xaxis.set_major_formatter(formatter)
+            axes_arr[-1].set_xlabel("Time of day (HH:MM)")
+            return
+
+        if mode == "elapsed":
+            axes_arr[-1].set_xlabel(f"Time (hours from step {start_step})")
+            return
+
+        # mode == 'step'
+        inv = 1.0 / float(step_duration)
+        formatter = FuncFormatter(lambda x, _pos: str(int(round(float(x) * inv))))
+        for ax in axes_arr:
+            ax.xaxis.set_major_formatter(formatter)
+        axes_arr[-1].set_xlabel("Step")
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -433,6 +482,7 @@ class EpisodeVisualizer:
         save_path: Optional[str] = None,
         dpi: int = 150,
         figsize: Optional[Tuple[float, float]] = None,
+        x_axis_mode: str = "timeofday",
         show: bool = True,
     ) -> plt.Figure:
         """Produce a multi-panel figure showing the agent in action.
@@ -452,6 +502,8 @@ class EpisodeVisualizer:
         figsize : tuple of float, optional
             ``(width, height)`` in inches.  A sensible default is computed
             when ``None``.
+        x_axis_mode : str
+            X-axis mode: ``'timeofday'`` (default), ``'elapsed'``, or ``'step'``.
         show : bool
             Whether to call ``plt.show()`` (default ``True``).  Set to
             ``False`` for non-interactive / test usage.
@@ -462,14 +514,14 @@ class EpisodeVisualizer:
             The generated figure object.
         """
         if self.env_type == self._AEMO:
-            return self._plot_aemo(start_step, num_hours, title, save_path, dpi, figsize, show)
-        return self._plot_household(start_step, num_hours, title, save_path, dpi, figsize, show)
+            return self._plot_aemo(start_step, num_hours, title, save_path, dpi, figsize, x_axis_mode, show)
+        return self._plot_household(start_step, num_hours, title, save_path, dpi, figsize, x_axis_mode, show)
 
     # ------------------------------------------------------------------
     # Household (SolarBatteryEnv) plotting
     # ------------------------------------------------------------------
 
-    def _plot_household(self, start_step, num_hours, title, save_path, dpi, figsize, show):
+    def _plot_household(self, start_step, num_hours, title, save_path, dpi, figsize, x_axis_mode, show):
         window = int(num_hours * self.steps_per_hour)
         end_step = min(start_step + window, len(self._df))
         sl = self._df.iloc[start_step:end_step]
@@ -485,13 +537,16 @@ class EpisodeVisualizer:
         rewards = list(sl["reward"])
 
         battery = [obs[-2] if hasattr(obs, "__len__") else 0.0 for obs in raw_obs]
-        solar = [obs[5] if hasattr(obs, "__len__") and len(obs) > 5 else 0.0 for obs in raw_obs]
-        load = [obs[6] if hasattr(obs, "__len__") and len(obs) > 6 else 0.0 for obs in raw_obs]
+        # Raw observation layout from EnergySimEnv.get_raw_obs():
+        # [time(4), SolarGen, HouseLoad, FutureSolar, FutureLoad,
+        #  ImportEnergyPrice, ExportEnergyPrice, BatteryLevel, BatteryDegCost]
+        solar = [obs[4] if hasattr(obs, "__len__") and len(obs) > 4 else 0.0 for obs in raw_obs]
+        load = [obs[5] if hasattr(obs, "__len__") and len(obs) > 5 else 0.0 for obs in raw_obs]
         actions = [a[0] if hasattr(a, "__len__") else float(a) for a in actions_raw]
 
         grid = self._extract_info_series("grid_energy")[start_step:end_step]
-        price_import = [obs[7] if hasattr(obs, "__len__") and len(obs) > 7 else 0.0 for obs in raw_obs]
-        price_export = [obs[8] if hasattr(obs, "__len__") and len(obs) > 8 else 0.0 for obs in raw_obs]
+        price_import = [obs[8] if hasattr(obs, "__len__") and len(obs) > 8 else 0.0 for obs in raw_obs]
+        price_export = [obs[9] if hasattr(obs, "__len__") and len(obs) > 9 else 0.0 for obs in raw_obs]
 
         if figsize is None:
             figsize = (14, 12)
@@ -527,10 +582,16 @@ class EpisodeVisualizer:
         axes[3].plot(t, price_import, color="tab:green", linewidth=1, label="Import Price")
         axes[3].plot(t, price_export, color="tab:red", linewidth=1, alpha=0.7, label="Export Price")
         axes[3].set_ylabel("Price ($/kWh)")
-        axes[3].set_xlabel(f"Time (hours from step {start_step})")
         axes[3].legend(fontsize=8, loc="upper right")
         axes[3].set_title("Energy Prices")
         axes[3].grid(alpha=0.3)
+
+        self._apply_xaxis_mode(
+            axes,
+            start_step=start_step,
+            step_duration=self.step_duration,
+            x_axis_mode=x_axis_mode,
+        )
 
         fig.tight_layout(rect=[0, 0, 1, 0.96])
         if save_path:
@@ -543,7 +604,7 @@ class EpisodeVisualizer:
     # AEMO (AEMOBatteryTradingEnv) plotting
     # ------------------------------------------------------------------
 
-    def _plot_aemo(self, start_step, num_hours, title, save_path, dpi, figsize, show):
+    def _plot_aemo(self, start_step, num_hours, title, save_path, dpi, figsize, x_axis_mode, show):
         window = int(num_hours * self.steps_per_hour)
         end_step = min(start_step + window, len(self._df))
         sl = self._df.iloc[start_step:end_step]
@@ -603,7 +664,6 @@ class EpisodeVisualizer:
         price_panel = axes[3] if has_fcas else axes[2]
         price_panel.plot(t, price_vals, color="tab:orange", linewidth=1)
         price_panel.set_ylabel("RRP ($/MWh)")
-        price_panel.set_xlabel(f"Time (hours from step {start_step})")
         price_panel.set_title("Energy Spot Price (RRP)")
         price_panel.grid(alpha=0.3)
 
@@ -619,6 +679,13 @@ class EpisodeVisualizer:
             axes[2].set_title("FCAS Bids  (raise / lower)")
             axes[2].legend(fontsize=8, loc="upper right")
             axes[2].grid(alpha=0.3)
+
+        self._apply_xaxis_mode(
+            axes,
+            start_step=start_step,
+            step_duration=self.step_duration,
+            x_axis_mode=x_axis_mode,
+        )
 
         fig.tight_layout(rect=[0, 0, 1, 0.96])
         if save_path:
@@ -636,6 +703,7 @@ class EpisodeVisualizer:
         start_step: int = 0,
         num_hours: float = 48.0,
         step_duration: float = 0.5,
+        x_axis_mode: str = "timeofday",
         env_type: Optional[str] = None,
         title: Optional[str] = None,
         save_path: Optional[str] = None,
@@ -724,10 +792,16 @@ class EpisodeVisualizer:
                      alpha=0.7, label=label2)
         axes[1].axhline(0, color="black", linewidth=0.5)
         axes[1].set_ylabel("Action")
-        axes[1].set_xlabel(f"Time (hours from step {start_step})")
         axes[1].set_title("Actions  (green/cyan = charge, red/pink = discharge)")
         axes[1].legend(fontsize=9)
         axes[1].grid(alpha=0.3)
+
+        EpisodeVisualizer._apply_xaxis_mode(
+            axes,
+            start_step=start_step,
+            step_duration=step_duration,
+            x_axis_mode=x_axis_mode,
+        )
 
         fig.tight_layout(rect=[0, 0, 1, 0.96])
         if save_path:
