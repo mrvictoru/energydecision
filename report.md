@@ -1,14 +1,14 @@
-# Benchmarking and Advancing Control Strategies for Residential Energy Storage: A Unified Framework for Reinforcement Learning and Optimization
+# Benchmarking and Advancing Control Strategies for Energy Storage: A Unified Framework Across Household Solar-Battery Control and Utility-Scale AEMO Battery Operation
 
 ## Abstract
 
-The effective integration of residential solar and battery storage is critical for the transition to a decentralized, renewable energy grid. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic load/generation, time-varying tariffs, and battery degradation. This report documents a research codebase that provides a Gymnasium-compatible environment and an evaluation workflow for residential solar+battery control.
+The effective integration of battery energy storage is critical for a reliable, renewable-dominant grid, spanning both behind-the-meter residential operation and utility-scale market participation. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic demand/generation, time-varying tariffs or market prices, and battery degradation. This report documents a research codebase that provides two Gymnasium-compatible environments—(i) a household solar+battery controller and (ii) a utility battery trading environment for AEMO/NEM—and a shared evaluation workflow.
 
-The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). Rule-based heuristics, dynamic-programming planners (SDP/MRDP), and online RL baselines (Stable-Baselines3) are included primarily as comparators and data-generators for DT training.
+The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). Rule-based heuristics, dynamic-programming planners (SDP/MRDP), online RL baselines (Stable-Baselines3), and dispatch-replay baselines for the AEMO environment are included primarily as comparators and data-generators for DT training.
 
 ## 1. Introduction
 
-The proliferation of distributed energy resources (DERs), specifically residential solar PV and battery storage, presents both a challenge and an opportunity for modern power grids. While these assets can significantly reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by high stochasticity in demand and generation, complex time-of-use (ToU) tariffs, non-linear battery degradation dynamics, and strict physical constraints.
+The proliferation of energy storage across the grid—from distributed, behind-the-meter household batteries to grid-scale battery energy storage systems (BESS) participating in wholesale markets—presents both a challenge and an opportunity for modern power systems. While these assets can reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by stochastic demand/generation, time-varying tariffs or market prices, non-linear battery degradation dynamics, and strict physical constraints.
 
 > **NOTE (literature support):** Electricity market/tariff structures considered in RL-for-battery work include time-of-use pricing, real-time pricing, and day-ahead markets, among others [6].
 
@@ -21,9 +21,9 @@ Recent review work supports this motivation: Subramanya et al. [6] note that com
 
 ### 1.2 Contributions and Research Goals
 This work establishes a consolidated, reproducible benchmark to address these limitations. We provide:
-1.  **A High-Fidelity Simulation Environment:** A Gymnasium-compatible environment incorporating explicit constraints and degradation-aware reward shaping.
+1.  **Two High-Fidelity Simulation Environments:** Gymnasium-compatible environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS).
 2.  **Decision Transformer as the Primary Model:** A modernized Decision Transformer implementation plus an offline training pipeline built around trajectory logging, RTG construction, return scaling, and robust checkpoint loading.
-3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, and online RL (PPO, SAC, etc.) against DT, and for generating trajectory data for offline learning.
+3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, online RL (PPO, SAC, etc.), and (for AEMO) dispatch replay against DT, and for generating trajectory data for offline learning.
 4.  **Comprehensive Evaluation Suite:** Standardized metrics for return, grid energy flows, degradation, and simple risk proxies (Sharpe/Sortino ratios).
 
 The goal of this platform is to serve as the foundational infrastructure for a PhD thesis investigating **robust, generalization-capable control policies for decentralized energy systems**.
@@ -48,8 +48,11 @@ This repository’s design choices (Gymnasium API, explicit constraint handling,
 2.  **Expanding the Algorithmic Suite:** Introducing Online Deep RL (PPO, SAC) and Offline RL (Decision Transformers) to compare learning-based approaches against the theoretical optimality of SDP.
 3.  **Open Reproducibility:** Providing a fully open-source, containerized benchmark, addressing the lack of public code in prior studies.
 
-## 3. System Model and Environment
+## 3. System Model and Environments
 
+This repository provides two primary environments.
+
+### 3.1 Household Solar-Battery Environment (SolarBatteryEnv)
 Environment: `src/EnergySimEnv.py` defines `SolarBatteryEnv` with:
 - Action: 1D normalized battery power in [-1, 1]. In `step()`, this is scaled to kW via `max_battery_flow`, converted to step energy (kWh) via `step_duration`, and clipped by SoC and capacity.
 - Observation: always normalized in the current implementation (`normalize_obs = True`). It includes cyclical time features (sin/cos of hour/day-of-year), min–max normalized dataframe features, and two extra features: battery level and current-step degradation cost (both normalized).
@@ -64,6 +67,18 @@ Dataset contract (from `src/helper.py::transform_polars_df`):
 
 > **NOTE (repo-backed):** `transform_polars_df` also drops the final row after shifting `FutureSolar/FutureLoad` to avoid null future values.
 
+### 3.2 Utility-Scale AEMO Battery Trading Environment (AEMOBatteryTradingEnv)
+Environment: `src/AEMOBatteryEnv.py` defines `AEMOBatteryTradingEnv`, a Gymnasium environment for a grid-scale BESS participating in Australia's National Electricity Market (NEM). Key design points implemented in the repository include:
+- **Market signals:** the environment consumes preprocessed AEMO data with energy spot price (`RRP`), regional demand (`TOTALDEMAND`), optional FCAS service prices (wide columns prefixed `FCAS_`), and optional generation mix features (wide columns prefixed `GEN_`).
+- **Observation space:** a fixed 18-dimensional vector (time features, normalized energy price and demand, normalized FCAS service prices, generation mix, and normalized SOC). `AEMODataPreprocessor` adds normalization columns (e.g., `RRP_normalized`, `DEMAND_normalized`, `FCAS_*_normalized`).
+- **Action space:**
+	- `action_mode='simple'`: 1D action in [-1, 1] for energy-only charge/discharge.
+	- `action_mode='multi_market'`: 3D action `[battery_dispatch, fcas_raise_bid, fcas_lower_bid]` with dispatch in [-1,1] and FCAS bids in [0,1].
+- **Units and scale:** default capacity/flow are specified in MWh/MW (grid-scale), distinct from the household environment (kWh/kW).
+- **Degradation:** supports `degradation_mode='rainflow'` using the same `DegradationModel` + `RainflowCounter` primitives as the household environment, tracking `step_degradation`, `total_degradation`, and capacity fade.
+
+> **NOTE (repo-backed):** The AEMO environment interface and feature definitions are documented in docs/AEMO_ENV_README.md and implemented in src/AEMOBatteryEnv.py.
+
 ## 4. Methods
 
 Baselines and planners are implemented in `src/decision.py` (Agent abstraction):
@@ -72,6 +87,8 @@ Baselines and planners are implemented in `src/decision.py` (Agent abstraction):
 - SDP: a self-contained dynamic programming baseline implemented in `src/sdp_algorithm.py`. It discretizes SoC and actions and performs backward induction. Uncertainty can be handled via scenario sampling (Monte Carlo) when enabled.
 - MRDP: `algorithm='mrdp'` with `subhorizon_specs` for coarse-to-fine planning, addressing the "curse of dimensionality" inherent in standard SDP.
 - Decision Transformer (DT): Offline sequence model proposed by Chen et al. [4] (`src/decision_transformer.py`) trained on `TrajectoryDataset` from logged trajectories (`src/transformer_training.py`). Inference uses `model.get_action` with rolling context.
+
+For the AEMO environment, `src/decision.py` also provides `AEMOAgent`, which supports rule-based control, RL/DT inference, and a **dispatch-replay** mode that converts AEMO unit dispatch data into environment actions aligned to the environment timestep.
 
 ### 4.1 Decision Transformer (Primary Model, Repo-Backed)
 This repository’s DT stack is designed to make **offline RL** the main research vehicle while keeping the rest of the system (environment + baselines) stable.
@@ -115,6 +132,11 @@ During episode rollouts, the DT agent maintains rolling buffers of past $(s,a,\t
 
 This makes DT evaluation explicitly a **prompting** problem: different `rtg_value` settings correspond to different desired-return conditions and can change the policy behavior.
 
+> **NOTE (multi-env DT, repo-backed):** DT input/output dimensions must match the environment.
+> - Household: default config uses `state_dim=12` and `act_dim=1`.
+> - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
+> To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
+
 Risk-aware extensions (proposed): add CVaR-style evaluation and multi-objective scalarization for reward vs degradation.
 
 > **TODO (repo check):** CVaR is not currently implemented in `src/helper.py` evaluation. If you keep CVaR in the report, label it explicitly as future work (as above) or add an implementation + citation.
@@ -134,6 +156,17 @@ The customers in these datasets have been de-identified and typically represent 
 ### 5.2 Preprocessing
 Preprocessing via `transform_polars_df` converts per-customer CSVs into the environment schema, with configurable tariffs (`price_periods`) and default vs peak prices (`ImportEnergyPrice`, `ExportEnergyPrice`). `make_env(dataset)` returns callables for vectorized execution.
 
+### 5.3 AEMO Data (Utility-Scale)
+For the AEMO/NEM environment, the repository includes `src/aemo_data.py`, which fetches historical AEMO datasets via the NEMOSIS client and caches them under `data/aemo/`. The typical bundle used by the environment consists of:
+- regional dispatch prices (`DISPATCHPRICE` → `RRP`),
+- regional demand (`DISPATCHREGIONSUM` → `TOTALDEMAND`),
+- optional FCAS prices (service columns mapped from `DISPATCHPRICE`),
+- optional generation mix by fuel type (requires generator static information).
+
+`AEMODataPreprocessor` (`src/AEMOBatteryEnv.py`) aligns these series to the environment step duration (default 30 minutes), interpolates missing numeric values, adds cyclical time features, and writes normalized columns.
+
+> **NOTE (repo-backed):** Actual AEMO data fetching requires the optional dependency `nemosis` to be installed; otherwise fetch functions raise `ImportError`.
+
 ## 6. Experimental Setup
 
 Splits and seeds:
@@ -143,7 +176,7 @@ Splits and seeds:
 
 Workflows:
 - DT (primary):
-	- Create trajectory logs (Parquet) from rule-based, SDP/MRDP, SB3 policies, or even oracle policies.
+	- Create trajectory logs (Parquet) from rule-based, SDP/MRDP, SB3 policies, oracle policies, and (for AEMO) dispatch replay episodes.
 	- Train DT with `src/pretrain_decision_transformer.py` (wraps `TrajectoryDataset` + `train_decision_transformer`).
 	- Evaluate DT using `Agent(algorithm='dt', rtg_value=...)` to study RTG-conditioning sensitivity.
 - RL: `DummyVecEnv` for training, `SubprocVecEnv` for evaluation; train with `train_model(..., default_model=True)` or enable Optuna tuning.
@@ -152,6 +185,8 @@ Workflows:
 DT hyperparameters:
 - Default DT model kwargs are stored in `models/decision_transformer_model_kwargs.json` (e.g., `state_dim=12`, `act_dim=1`, `context_len=60`, `h_dim=128`, `n_block=2`, `n_heads=8`).
 - Training-time `return_scale` is stored in checkpoints and also written to `*.meta.json` sidecars for consistent inference.
+
+> **TODO (multi-env configs):** Add a second DT config JSON for AEMO (e.g., `state_dim=18`, `act_dim=1` or `3`) if you want the report to claim DT is trained on AEMO logs in the current experiments.
 
 Compute and reproducibility:
 - Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for running a consistent environment.
@@ -164,6 +199,8 @@ Primary metrics (from `src/helper.py`):
 - Grid energy flows: average per-episode grid import (kWh), grid export (kWh), and net grid energy (kWh) derived from `info['grid_energy']`.
 - Degradation: average per-episode and per-step degradation derived from `info['step_degradation']`.
 - Risk proxies: Sharpe and Sortino are computed directly from the distribution of episode returns (not annualized; Sharpe is `mean/std`).
+
+For AEMO logs, the same evaluation functions also summarize market-specific metrics when those keys appear in `info` (e.g., `energy_revenue`, `fcas_revenue`, `total_revenue`, `degradation_cost`, `battery_dispatch`, `actual_energy`).
 
 > **NOTE:** A separate “cost decomposition” into grid import cost vs export revenue is not currently reported as explicit metrics for `SolarBatteryEnv` runs; the environment’s `reward` already combines grid economics and degradation cost.
 
@@ -178,6 +215,8 @@ Statistical testing (proposed):
 ## 8. Preliminary Results and Evaluation Plan
 
 We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents, with **DT as the primary research model** and the other approaches serving as (i) competitive baselines and (ii) data generators for offline learning.
+
+In parallel, the repository now supports utility-scale evaluation in the AEMO/NEM setting via `AEMOBatteryTradingEnv` and `AEMOAgent`. Results for AEMO experiments will be added once a consistent set of AEMO episode logs and evaluation outputs are generated.
 
 The first version of the comparative metrics is already stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv), and the accompanying return graph highlights the mean ± std for each agent.
 
@@ -250,7 +289,7 @@ DT-centric near-term extensions (repo-aligned):
 
 ## 11. Conclusion
 
-We introduce a unified, open framework for learning and planning in solar–battery–grid control with degradation- and risk-aware evaluation. It supports rule-based control, RL, SDP/MRDP, and Decision Transformers, with standardized preprocessing and metrics. This report documents the system and experimental protocol; results will follow in an updated version and accompanying repository tags.
+We introduce a unified, open framework for learning and planning in battery control with degradation- and risk-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. This report documents the system and experimental protocol; results will follow in an updated version and accompanying repository tags.
 
 ## References
 
