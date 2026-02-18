@@ -2,22 +2,29 @@
 
 ## Abstract
 
-The effective integration of residential solar and battery storage is critical for the transition to a decentralized, renewable energy grid. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic load/generation, time-varying tariffs, and battery degradation. This report documents a research codebase that provides a Gymnasium-compatible environment, a suite of baselines (rule-based heuristics, dynamic programming planners, online RL via Stable-Baselines3, and offline sequence modeling via a Decision Transformer), and an evaluation workflow focused on return, grid energy flows, and degradation.
+The effective integration of residential solar and battery storage is critical for the transition to a decentralized, renewable energy grid. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic load/generation, time-varying tariffs, and battery degradation. This report documents a research codebase that provides a Gymnasium-compatible environment and an evaluation workflow for residential solar+battery control.
+
+The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). Rule-based heuristics, dynamic-programming planners (SDP/MRDP), and online RL baselines (Stable-Baselines3) are included primarily as comparators and data-generators for DT training.
 
 ## 1. Introduction
 
 The proliferation of distributed energy resources (DERs), specifically residential solar PV and battery storage, presents both a challenge and an opportunity for modern power grids. While these assets can significantly reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by high stochasticity in demand and generation, complex time-of-use (ToU) tariffs, non-linear battery degradation dynamics, and strict physical constraints.
 
+> **NOTE (literature support):** Electricity market/tariff structures considered in RL-for-battery work include time-of-use pricing, real-time pricing, and day-ahead markets, among others [6].
+
+Recent literature also helps structure the space of RL-based battery control problems. Subramanya et al. [6] review RL applications for battery storages through multiple lenses (optimization objective, user impact/comfort where applicable, battery losses & degradation, and application context). This benchmark is designed to make these dimensions explicit in a single codebase so that planning and learning approaches can be compared under consistent dynamics and evaluation.
+
 ### 1.1 The Research Gap
 Despite substantial literature on energy management systems (EMS), reproducibility and cross-paper comparability can be difficult when studies rely on custom environments, private data, and differing assumptions (e.g., constraint handling, tariff structure, or whether degradation is modeled). There is also a practical gap between model-based planning approaches (e.g., dynamic programming / MPC-style methods) and learning-based approaches (e.g., RL and sequence models), which motivates a unified benchmark.
 
-> **TODO (needs source):** If you want to keep stronger statements like “the field suffers from a lack of reproducibility” or “there is a disconnect between communities”, add citations to survey/benchmarking papers; otherwise keep the phrasing general as above.
+Recent review work supports this motivation: Subramanya et al. [6] note that comparisons across RL-for-battery studies are hindered by unique formulations (environments, state/action spaces, and rewards), and argue that benchmark environments with a standard interface would improve comparability.
 
 ### 1.2 Contributions and Research Goals
 This work establishes a consolidated, reproducible benchmark to address these limitations. We provide:
 1.  **A High-Fidelity Simulation Environment:** A Gymnasium-compatible environment incorporating explicit constraints and degradation-aware reward shaping.
-2.  **Diverse Algorithmic Baselines:** A unified interface for comparing Rule-based heuristics, Stochastic Dynamic Programming (SDP), Online RL (PPO, SAC, etc.), and Offline RL (Decision Transformers).
-3.  **Comprehensive Evaluation Suite:** Standardized metrics for economic performance, battery health, and financial risk (Sharpe/Sortino ratios).
+2.  **Decision Transformer as the Primary Model:** A modernized Decision Transformer implementation plus an offline training pipeline built around trajectory logging, RTG construction, return scaling, and robust checkpoint loading.
+3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, and online RL (PPO, SAC, etc.) against DT, and for generating trajectory data for offline learning.
+4.  **Comprehensive Evaluation Suite:** Standardized metrics for return, grid energy flows, degradation, and simple risk proxies (Sharpe/Sortino ratios).
 
 The goal of this platform is to serve as the foundational infrastructure for a PhD thesis investigating **robust, generalization-capable control policies for decentralized energy systems**.
 
@@ -26,6 +33,17 @@ The goal of this platform is to serve as the foundational infrastructure for a P
 This work is inspired by Abdulla et al. [1], which formulates optimal operation of energy storage using Stochastic Dynamic Programming (SDP) and emphasizes the importance of uncertainty and degradation for realistic assessment.
 
 We adopt an SDP-style planning baseline (implemented in this repository) and a multi-factor degradation model based on Muenzel et al. [2] (implemented in `src/batterydeg.py`). We extend the planning baseline with additional learning-based baselines and a Gymnasium environment wrapper.
+
+> **NOTE (literature support):** Modeling or limiting battery degradation is a recurring theme in RL-for-battery applications, and the diversity of degradation modeling approaches complicates direct comparisons across studies [6].
+
+### 2.1 RL-for-Battery Benchmarks (Review Context)
+Subramanya et al. [6] highlight several recurring themes that directly motivate a unified, Gym-style benchmark:
+- **Heterogeneous formulations hinder comparison:** across studies, environments, state/action spaces, and reward definitions vary substantially, making it hard to compare reported performance and to transfer insights between applications.
+- **Benchmark environments are valuable:** the review argues that standardized benchmark environments with a common agent–environment interface would improve comparative assessment; it notes that Gym-style benchmarks are common in other domains but comparatively scarce in energy/battery domains.
+- **Degradation modeling is inconsistent:** long-term degradation is captured in only a minority of works, and when included, degradation is incorporated in diverse ways (constraints, reward penalties, or auxiliary objectives), further complicating comparisons.
+- **Sim-to-real validation is underexplored:** the review identifies the need to deploy trained agents and compare performance on physical systems versus model-based/simulated performance.
+
+This repository’s design choices (Gymnasium API, explicit constraint handling, and logging of grid energy and degradation signals) align with these needs.
 1.  **Modernizing the Interface:** Wrapping the simulation in a standard Gymnasium API to bridge the gap between the optimization and Deep RL communities.
 2.  **Expanding the Algorithmic Suite:** Introducing Online Deep RL (PPO, SAC) and Offline RL (Decision Transformers) to compare learning-based approaches against the theoretical optimality of SDP.
 3.  **Open Reproducibility:** Providing a fully open-source, containerized benchmark, addressing the lack of public code in prior studies.
@@ -55,6 +73,48 @@ Baselines and planners are implemented in `src/decision.py` (Agent abstraction):
 - MRDP: `algorithm='mrdp'` with `subhorizon_specs` for coarse-to-fine planning, addressing the "curse of dimensionality" inherent in standard SDP.
 - Decision Transformer (DT): Offline sequence model proposed by Chen et al. [4] (`src/decision_transformer.py`) trained on `TrajectoryDataset` from logged trajectories (`src/transformer_training.py`). Inference uses `model.get_action` with rolling context.
 
+### 4.1 Decision Transformer (Primary Model, Repo-Backed)
+This repository’s DT stack is designed to make **offline RL** the main research vehicle while keeping the rest of the system (environment + baselines) stable.
+
+**Model architecture (`src/decision_transformer.py`).**
+- **Tokenization:** the input sequence interleaves tokens as $(\text{rtg}_t, \text{state}_t, \text{action}_t)$ and flattens to length $3T$ for a context length $T=\text{context\_len}$. The model predicts:
+	- next RTG and next state from the $(\text{rtg},\text{state},\text{action})$ stream,
+	- the action from the $(\text{rtg},\text{state})$ stream.
+- **Continuous actions:** actions are predicted with a `tanh` head to match the environment’s normalized action range in $[-1,1]$.
+- **Modernized transformer block:** pre-norm with `RMSNorm`, attention via PyTorch `scaled_dot_product_attention`, and a `SwiGLU` feed-forward. Rotary position embeddings (RoPE) are supported as an option.
+- **Robust inference hooks:** the model sanitizes NaNs/Infs, clamps timestep indices to embedding range, and supports loading `return_scale` from either a training checkpoint or a sidecar `*.meta.json`.
+
+**Training data format (trajectory logs).**
+DT training is based on trajectory logs stored as Parquet and consumed by `TrajectoryDataset` (`src/transformer_training.py`), which expects the following columns:
+`episode_id`, `step`, `norm_observation`, `action`, `reward`.
+
+Repo-backed ways of producing these logs include:
+- `Agent.run_episode()` in `src/decision.py` (per-episode dict logs with `norm_observation`, `action`, `reward`, `info`).
+- `flatten_episode_data(...)` in `src/helper.py`, which converts lists of episode trajectories (e.g., from SB3 vectorized rollouts) into a single Polars DataFrame with the DT-required columns and can be saved to Parquet.
+
+**RTG construction and scaling.**
+- `TrajectoryDataset` computes discounted returns-to-go by backward accumulation with a configurable discount factor (`discount_factor`, default `0.99`).
+- Training supports a `return_scale` hyperparameter: when non-1.0, RTGs are divided by `return_scale` before entering the model, and the same scaling is applied during inference.
+- For practical prompting, `evaluate_experiment_logs` (in `src/helper.py`) computes `recommended_rtg` and a `recommended_return_scale` derived from the distribution of episode-start RTG magnitudes.
+
+**Training loop (repo-backed).**
+`train_decision_transformer` (`src/transformer_training.py`) uses:
+- AdamW optimizer + StepLR scheduler,
+- gradient clipping (`GRAD_CLIP_NORM = 0.05`),
+- optional AMP (enabled on CUDA after the first checkpoint is saved),
+- multi-loss objective with weighted MSE terms for action/state/return predictions.
+
+The CLI entrypoint `src/pretrain_decision_transformer.py` assembles datasets from a directory of Parquet logs (matching filename patterns), splits validation data, and trains/checkpoints the model.
+
+**Online DT inference with RTG conditioning (`src/decision.py`).**
+During episode rollouts, the DT agent maintains rolling buffers of past $(s,a,\text{rtg},t)$.
+- At reset: buffers are initialized with the first observation, a placeholder action, and a user-chosen initial RTG (`rtg_value`).
+- After each step: the buffers are updated and RTG is updated via the discounted recurrence
+	$$\text{rtg}_{t+1} = \frac{\text{rtg}_t - r_t}{\gamma}$$
+	(or $\text{rtg}_{t+1}=\text{rtg}_t-r_t$ when $\gamma=1$), matching the training-time definition of discounted RTG.
+
+This makes DT evaluation explicitly a **prompting** problem: different `rtg_value` settings correspond to different desired-return conditions and can change the policy behavior.
+
 Risk-aware extensions (proposed): add CVaR-style evaluation and multi-objective scalarization for reward vs degradation.
 
 > **TODO (repo check):** CVaR is not currently implemented in `src/helper.py` evaluation. If you keep CVaR in the report, label it explicitly as future work (as above) or add an implementation + citation.
@@ -82,9 +142,16 @@ Splits and seeds:
 > **TODO (needs source or repo pointer):** If you want to claim a specific split protocol is used in current experiments, cite the exact notebook/script where the split and seeding are performed.
 
 Workflows:
+- DT (primary):
+	- Create trajectory logs (Parquet) from rule-based, SDP/MRDP, SB3 policies, or even oracle policies.
+	- Train DT with `src/pretrain_decision_transformer.py` (wraps `TrajectoryDataset` + `train_decision_transformer`).
+	- Evaluate DT using `Agent(algorithm='dt', rtg_value=...)` to study RTG-conditioning sensitivity.
 - RL: `DummyVecEnv` for training, `SubprocVecEnv` for evaluation; train with `train_model(..., default_model=True)` or enable Optuna tuning.
 - SDP/MRDP: configure horizons/resolutions; evaluate single or parallel episodes via `run_episodes_parallel`.
-- DT: build `TrajectoryDataset` from logs; train with `train_decision_transformer` (AMP, gradient clipping, scheduler, checkpoints).
+
+DT hyperparameters:
+- Default DT model kwargs are stored in `models/decision_transformer_model_kwargs.json` (e.g., `state_dim=12`, `act_dim=1`, `context_len=60`, `h_dim=128`, `n_block=2`, `n_heads=8`).
+- Training-time `return_scale` is stored in checkpoints and also written to `*.meta.json` sidecars for consistent inference.
 
 Compute and reproducibility:
 - Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for running a consistent environment.
@@ -110,7 +177,7 @@ Statistical testing (proposed):
 
 ## 8. Preliminary Results and Evaluation Plan
 
-We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents. 
+We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents, with **DT as the primary research model** and the other approaches serving as (i) competitive baselines and (ii) data generators for offline learning.
 
 The first version of the comparative metrics is already stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv), and the accompanying return graph highlights the mean ± std for each agent.
 
@@ -127,8 +194,10 @@ Preliminary observations from the current runs (from `eval_output/base/evaluatio
 - Mean episode return ranking in this run: Oracle (-2483.38) > DT (`dt_rtg0`, -2534.05) > SDP (-2598.35) > MRDP (-2766.60) > PPO (-2828.28) > Rule (-3077.26).
 - Variability: in this run, Oracle has the smallest return standard deviation (std_reward ≈ 1774). Among the listed planners/learners, the Sharpe proxy values are similar (e.g., SDP ≈ -0.812, MRDP ≈ -0.822, DT ≈ -0.871), and all are negative because mean returns are negative.
 - Grid energy: the metrics report average per-episode grid import/export (kWh) and net grid energy (kWh). Here, `avg_grid_net` is net import (import − export), so values around 3800–5100 indicate net import, not net export.
-- **Decision Transformer sensitivity (repo-backed):** In `eval_output/dt_compare/evaluation_metrics.csv`, conditioning RTG affects outcomes: `dt_rtg_neg1500` has the best mean return among the shown DT variants (-2390.79), while more aggressive conditioning (`dt_rtg_neg400`, -2448.29) is worse.
+- **Decision Transformer sensitivity (repo-backed):** In `eval_output/dt_compare/evaluation_metrics.csv`, conditioning RTG affects outcomes. In this run, `dt_rtg_neg1500` has the best mean return among the shown DT variants (-2390.79).
 - **Degradation dynamics (repo-backed):** The same DT comparison shows large differences in average degradation per episode: `dt_rtg_neg1500` ≈ 0.00166 vs `dt_rtg_neg1` ≈ 0.05666.
+
+> **NOTE (DT-specific, repo-backed):** These `dt_rtg_*` experiment names correspond to different choices of the DT agent’s initial RTG prompt (`rtg_value` in `Agent(..., algorithm='dt')`). The agent then updates RTG online each step using the discounted recurrence described in Section 4.1.
 
 > **NOTE (interpretation):** Explanations such as “out-of-distribution RTG prompts” are plausible hypotheses for DT sensitivity, but they are not directly established by these metrics alone. Keep such statements labeled as hypotheses unless you add an analysis of the training RTG distribution and prompt distances.
 
@@ -146,11 +215,20 @@ This framework provides the necessary tooling to pursue several high-impact rese
 - Establish the performance hierarchy between model-based (SDP) and model-free (RL) approaches.
 - Quantify gaps between decentralized baselines and planning-based baselines.
 
+In line with review-identified gaps, an additional near-term objective is to make evaluation more comparable across algorithm families by using consistent environment dynamics, observation/action conventions, and standardized logging [6].
+
 > **TODO (needs source/definition):** “Price of Anarchy” has a specific game-theoretic meaning. If you intend to use it formally, define the game + equilibrium concept and add citations; otherwise keep it as a general “performance gap” statement.
 
 ### Phase 2: Robustness and Generalization (Year 1-2)
 - **Distributional Shift:** Investigate how Offline RL (Decision Transformers) generalizes to unseen weather patterns or customer load profiles compared to Online RL.
 - **Risk-Sensitive Control:** Integrate CVaR constraints into the RL objective to develop agents that avoid catastrophic costs during extreme weather events.
+
+DT-centric near-term extensions (repo-aligned):
+- **Prompt calibration:** use the repo’s `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
+- **Training data mixture studies:** systematically vary which behavior policies generate the offline dataset (rule-based vs SDP vs SB3) and evaluate how DT performance changes.
+- **Long-context modeling:** increase `context_len` and/or enable RoPE to better represent weekly/seasonal structure, and evaluate sensitivity to context truncation.
+
+> **NOTE (literature alignment):** Because studies often vary in objective definitions (financial vs energy-efficiency) and in constraint/user-impact handling, robustness studies should explicitly document which objective family and constraint set is being targeted [6].
 
 ### Phase 3: Advanced Architectures and Multi-Agent Systems (Year 2-3)
 - **Transformer Architectures:** Explore modifications to the Decision Transformer architecture (e.g., long-context attention) to better capture seasonal periodicities in energy data.
@@ -159,6 +237,8 @@ This framework provides the necessary tooling to pursue several high-impact rese
 ### Phase 4: Sim-to-Real Transfer (Year 3-4)
 - Develop "safe RL" wrappers to ensure constraints are met during deployment.
 - Validate policies on hardware-in-the-loop setups or pilot deployments.
+
+> **NOTE (literature alignment):** The review explicitly calls out the need to compare simulated/model-based performance to real battery deployments [6].
 
 ## 10. Reproducibility and Artifacts
 
@@ -179,6 +259,7 @@ We introduce a unified, open framework for learning and planning in solar–batt
 [3] Sutton & Barto. Reinforcement Learning: An Introduction.
 [4] Chen et al. Decision Transformer: Reinforcement Learning via Sequence Modeling.
 [5] Ausgrid. Solar home electricity data. https://github.com/pierre-haessig/ausgrid-solar-data?tab=readme-ov-file. Accessed April 2017.
+[6] R. Subramanya, S. A. Sierla, and V. Vyatkin, "Exploiting Battery Storages With Reinforcement Learning: A Review for Energy Professionals," *IEEE Access*, vol. 10, 2022, doi: 10.1109/ACCESS.2022.3176446.
 
 ---
 
@@ -189,5 +270,6 @@ RL
 - Rollout and save: `flatten_episode_data(run_sb3_model_on_vec_env(ppo_model, SubprocVecEnv(test_env_fns))).write_parquet("data/ppo_test_episode_logs.parquet")`.
 
 DT
-- Dataset: `TrajectoryDataset(data_path=..., context_length=36, state_dim, act_dim)` → train with `train_decision_transformer` and evaluate via `Agent(algorithm='dt')`.
+- Train (CLI): `python -m src.pretrain_decision_transformer --data-dir data --model-config models/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
+- Dataset (Python): `TrajectoryDataset(data_path=..., context_length=..., state_dim=..., act_dim=..., discount_factor=0.99)` → train with `train_decision_transformer` and evaluate via `Agent(algorithm='dt', rtg_value=...)`.
 
