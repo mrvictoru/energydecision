@@ -94,7 +94,7 @@ For the AEMO environment, `src/decision.py` also provides `AEMOAgent`, which sup
 This repository’s DT stack is designed to make **offline RL** the main research vehicle while keeping the rest of the system (environment + baselines) stable.
 
 **Model architecture (`src/decision_transformer.py`).**
-- **Tokenization:** the input sequence interleaves tokens as $(\text{rtg}_t, \text{state}_t, \text{action}_t)$ and flattens to length $3T$ for a context length $T=\text{context\_len}$. The model predicts:
+- **Tokenization:** the input sequence interleaves tokens as $(\text{rtg}_t, \text{state}_t, \text{action}_t)$ and flattens to length $3T$ for a context length $T=\texttt{context\_len}$. The model predicts:
 	- next RTG and next state from the $(\text{rtg},\text{state},\text{action})$ stream,
 	- the action from the $(\text{rtg},\text{state})$ stream.
 - **Continuous actions:** actions are predicted with a `tanh` head to match the environment’s normalized action range in $[-1,1]$.
