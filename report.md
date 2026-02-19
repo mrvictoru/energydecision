@@ -14,7 +14,7 @@ The proliferation of energy storage across the grid—from distributed, behind-t
 
 Recent literature also helps structure the space of RL-based battery control problems. Subramanya et al. [6] review RL applications for battery storages through multiple lenses (optimization objective, user impact/comfort where applicable, battery losses & degradation, and application context). This benchmark is designed to make these dimensions explicit in a single codebase so that planning and learning approaches can be compared under consistent dynamics and evaluation.
 
-In addition, this work is motivated by the opportunity to apply **state-of-the-art transformer architectures** (via Decision Transformers) to energy storage control, treating battery dispatch as a sequential decision-making problem that can benefit from the representation power and flexible conditioning of modern sequence models.
+In addition, this work is motivated by the opportunity to apply **modern transformer-based sequence models** (via Decision Transformers) to energy storage control, treating battery dispatch as a sequential decision-making problem that can benefit from transformer representations and return-conditioning.
 
 ### 1.1 The Research Gap
 Despite substantial literature on energy management systems (EMS), reproducibility and cross-paper comparability can be difficult when studies rely on custom environments, private data, and differing assumptions (e.g., constraint handling, tariff structure, or whether degradation is modeled). There is also a practical gap between model-based planning approaches (e.g., dynamic programming / MPC-style methods) and learning-based approaches (e.g., RL and sequence models), which motivates a unified benchmark.
@@ -23,12 +23,12 @@ Recent review work supports this benchmark direction: Subramanya et al. [6] note
 
 ### 1.2 Contributions and Research Goals
 This work establishes a consolidated, reproducible benchmark to address these limitations. We provide:
-1.  **Two High-Fidelity Simulation Environments:** Gymnasium-compatible environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS).
+1.  **Two Gymnasium-Compatible Simulation Environments:** Environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS).
 2.  **Decision Transformer as the Primary Model:** A modernized Decision Transformer implementation plus an offline training pipeline built around trajectory logging, RTG construction, return scaling, and robust checkpoint loading.
 3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, online RL (PPO, SAC, etc.), and (for AEMO) dispatch replay against DT, and for generating trajectory data for offline learning.
-4.  **Comprehensive Evaluation Suite:** Standardized metrics for return, grid energy flows, degradation, and simple risk proxies (Sharpe/Sortino ratios).
+4.  **Standardized Evaluation Workflow:** Metrics for return, grid energy flows, degradation, and simple risk proxies (Sharpe/Sortino ratios), plus plotting utilities.
 
-The goal of this platform is to serve as the foundational infrastructure for a PhD thesis investigating **robust, generalization-capable control policies for decentralized energy systems**.
+The goal of this platform is to provide a reusable baseline for studying generalization and robustness in control policies for decentralized energy systems.
 
 ## 2. Related Work
 
@@ -48,7 +48,7 @@ Subramanya et al. [6] highlight several recurring themes that directly motivate 
 This repository’s design choices (Gymnasium API, explicit constraint handling, and logging of grid energy and degradation signals) align with these needs.
 1.  **Modernizing the Interface:** Wrapping the simulation in a standard Gymnasium API to bridge the gap between the optimization and Deep RL communities.
 2.  **Expanding the Algorithmic Suite:** Introducing Online Deep RL (PPO, SAC) and Offline RL (Decision Transformers) to compare learning-based approaches against the theoretical optimality of SDP.
-3.  **Open Reproducibility:** Providing a fully open-source, containerized benchmark, addressing the lack of public code in prior studies.
+3.  **Reproducible Setup:** Providing a containerized setup and a consistent evaluation workflow to support repeatable experiments.
 
 ## 3. System Model and Environments
 
@@ -93,7 +93,7 @@ Baselines and planners are implemented in `src/decision.py` (Agent abstraction):
 For the AEMO environment, `src/decision.py` also provides `AEMOAgent`, which supports rule-based control, RL/DT inference, and a **dispatch-replay** mode that converts AEMO unit dispatch data into environment actions aligned to the environment timestep.
 
 ### 4.1 Decision Transformer (Primary Model, Repo-Backed)
-This repository’s DT stack is designed to make **offline RL** the main research vehicle while keeping the rest of the system (environment + baselines) stable.
+This repository’s DT stack is designed to make **offline RL** the primary learning baseline while keeping the rest of the system (environment + baselines) stable.
 
 **Model architecture (`src/decision_transformer.py`).**
 - **Tokenization:** the input sequence interleaves tokens as (`rtg_t`, `state_t`, `action_t`) and flattens to length `3T` for a context length `T` (hyperparameter `context_len`). The model predicts:
@@ -139,9 +139,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 > - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
 > To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
 
-Risk-aware extensions (proposed): add CVaR-style evaluation and multi-objective scalarization for reward vs degradation.
-
-> **TODO (repo check):** CVaR is not currently implemented in `src/helper.py` evaluation. If you keep CVaR in the report, label it explicitly as future work (as above) or add an implementation + citation.
+Risk-aware extensions (future work): add CVaR-style evaluation and multi-objective scalarization for reward vs degradation. As of this report, CVaR is not computed by the default evaluation utilities in `src/helper.py`.
 
 > **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
 
@@ -174,8 +172,6 @@ For the AEMO/NEM environment, the repository includes `src/aemo_data.py`, which 
 Splits and seeds:
 - Train/test split by customer ID (e.g., 80/20), fixed seeds, and config logging are recommended for reproducibility.
 
-> **TODO (needs source or repo pointer):** If you want to claim a specific split protocol is used in current experiments, cite the exact notebook/script where the split and seeding are performed.
-
 Workflows:
 - DT (primary):
 	- Create trajectory logs (Parquet) from rule-based, SDP/MRDP, SB3 policies, oracle policies, and (for AEMO) dispatch replay episodes.
@@ -187,8 +183,6 @@ Workflows:
 DT hyperparameters:
 - Default DT model kwargs are stored in `models/decision_transformer_model_kwargs.json` (e.g., `state_dim=12`, `act_dim=1`, `context_len=60`, `h_dim=128`, `n_block=2`, `n_heads=8`).
 - Training-time `return_scale` is stored in checkpoints and also written to `*.meta.json` sidecars for consistent inference.
-
-> **TODO (multi-env configs):** Add a second DT config JSON for AEMO (e.g., `state_dim=18`, `act_dim=1` or `3`) if you want the report to claim DT is trained on AEMO logs in the current experiments.
 
 Compute and reproducibility:
 - Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for running a consistent environment.
@@ -212,11 +206,11 @@ Visualization:
 Statistical testing (proposed):
 - Bootstrap confidence intervals for mean differences; paired tests on per-customer aggregates.
 
-> **TODO (needs source or implementation):** These statistical tests are not implemented in `src/helper.py` as of this report; either implement them, cite where they are done (e.g., a notebook), or keep this section labeled as proposed.
+> **NOTE:** These statistical tests are not implemented in `src/helper.py` as of this report; they would need to be implemented (or performed in a notebook) to be included as part of the automated evaluation pipeline.
 
 ## 8. Preliminary Results and Evaluation Plan
 
-We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents, with **DT as the primary research model** and the other approaches serving as (i) competitive baselines and (ii) data generators for offline learning.
+We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents, with **DT as the primary learning model** and the other approaches serving as (i) competitive baselines and (ii) data generators for offline learning.
 
 In parallel, the repository now supports utility-scale evaluation in the AEMO/NEM setting via `AEMOBatteryTradingEnv` and `AEMOAgent`. Results for AEMO experiments will be added once a consistent set of AEMO episode logs and evaluation outputs are generated.
 
@@ -250,19 +244,21 @@ Preliminary observations from the current runs (from `eval_output/base/evaluatio
 
 ## 9. Proposed Research Roadmap
 
-This framework provides the necessary tooling to pursue several high-impact research directions suitable for a doctoral thesis:
+This framework provides the necessary tooling to pursue several practical extensions and evaluation directions:
 
 ### Phase 1: Benchmarking and Algorithmic Analysis (Current Status)
 - Establish the performance hierarchy between model-based (SDP) and model-free (RL) approaches.
-- Quantify gaps between decentralized baselines and planning-based baselines.
+- Quantify the performance gap of reactive/model-free baselines (rule-based, SB3 RL, DT) relative to planning baselines (SDP/MRDP, Oracle) under identical environment dynamics.
 
 In line with review-identified gaps, an additional near-term objective is to make evaluation more comparable across algorithm families by using consistent environment dynamics, observation/action conventions, and standardized logging [6].
 
-> **TODO (needs source/definition):** “Price of Anarchy” has a specific game-theoretic meaning. If you intend to use it formally, define the game + equilibrium concept and add citations; otherwise keep it as a general “performance gap” statement.
+Concretely, in this single-agent benchmark we report this as a **planner gap / regret-style metric** based on episode returns. For any agent $\pi$ and a planning baseline $\pi^\star$ (e.g., SDP, MRDP, or an oracle with privileged information), define
+$$\Delta J(\pi;\pi^\star)=\mathbb{E}[G(\pi^\star)]-\mathbb{E}[G(\pi)],$$
+where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally report a relative gap $\Delta J/|\mathbb{E}[G(\pi^\star)]|$ for comparability across datasets.
 
 ### Phase 2: Robustness and Generalization (Year 1-2)
 - **Distributional Shift:** Investigate how Offline RL (Decision Transformers) generalizes to unseen weather patterns or customer load profiles compared to Online RL.
-- **Risk-Sensitive Control:** Integrate CVaR constraints into the RL objective to develop agents that avoid catastrophic costs during extreme weather events.
+- **Risk-Sensitive Control:** Integrate CVaR-style objectives/constraints to reduce tail-risk outcomes (e.g., high-cost periods) relative to mean-return optimized policies.
 
 DT-centric near-term extensions (repo-aligned):
 - **Prompt calibration:** use the repo’s `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
@@ -287,11 +283,11 @@ DT-centric near-term extensions (repo-aligned):
 - Determinism: use fixed seeds, log configs, and prefer containers for repeatability (recommended practice).
 - Artifacts: this repository stores models under `models/` and evaluation outputs under `eval_output/`.
 
-> **TODO (needs source or commit):** If you want to claim checksums are recorded, add the mechanism (e.g., a script that hashes datasets/models) or cite the exact output file where checksums are stored.
+> **NOTE:** If stronger artifact provenance is required (e.g., exact dataset/model versioning), a lightweight checksum/logging step can be added to the workflow.
 
 ## 11. Conclusion
 
-We introduce a unified, open framework for learning and planning in battery control with degradation- and risk-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. This report documents the system and experimental protocol; results will follow in an updated version and accompanying repository tags.
+This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
 ## References
 

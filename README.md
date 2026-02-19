@@ -26,11 +26,19 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Optimization:** SDP & MRDP solvers.
 *   [x] **Online RL:** Training loop with SB3.
 *   [x] **Offline RL:** Decision Transformer training loop.
-*   [x] **Evaluation:** Metrics for cost, risk, and degradation.
+*   [x] **Evaluation:** Metrics for return, risk proxies (Sharpe/Sortino), and degradation.
 *   [x] **Grid Market:** AEMO Environment Implementation.
-*   [ ] **Grid battery degradation modelling:** Intergrate proper degradation modelling to the AEMO battery trading environment.
+*   [x] **Grid battery degradation modelling:** Rainflow-based degradation and capacity fade in `AEMOBatteryTradingEnv`.
+*   [ ] **Risk-sensitive evaluation:** Add CVaR-style metrics and/or objectives for tail-risk analysis.
+*   [ ] **Statistical comparisons:** Bootstrap confidence intervals and paired comparisons across customers/seeds.
+*   [ ] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts.
 *   [ ] **RL Fine-tuning:** Initialize Online RL with DT weights.
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
+*   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
+*   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
+*   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.
+*   [ ] **Sim-to-real readiness:** Add safety wrappers and evaluate policies with hardware-in-the-loop (where available).
+*   [ ] **Artifact provenance:** Add lightweight checksums/config logging for datasets, models, and evaluation outputs.
 
 
 ## Installation
