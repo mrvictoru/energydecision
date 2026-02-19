@@ -18,6 +18,7 @@ from pathlib import Path
 
 from EnergySimEnv import SolarBatteryEnv
 from aemo_data import fetch_aemo_data_bundle
+from batterydeg import DegradationModel, RainflowCounter
 
 
 class AEMODataPreprocessor:
@@ -339,7 +340,9 @@ class AEMOBatteryTradingEnv(gym.Env):
                  render_mode: Optional[str] = None,
                  action_mode: str = 'simple',  # 'simple' or 'multi_market'
                  normalize_obs: bool = True,
-                 return_raw_obs: bool = False):
+                 return_raw_obs: bool = False,
+                 degradation_mode: str = 'rainflow',  # 'rainflow' or 'simple'
+                 degradation_temperature: float = 25.0):
         """
         Initialize AEMO Battery Trading Environment.
         
@@ -353,11 +356,16 @@ class AEMOBatteryTradingEnv(gym.Env):
             battery_life_cost: Total battery replacement cost in USD
             render_mode: Rendering mode ('human' or None)
             action_mode: 'simple' for energy-only or 'multi_market' for energy+FCAS
+            degradation_mode: 'rainflow' for physics-based Muenzel et al. model
+                with rainflow cycle counting (recommended), or 'simple' for the
+                original linear DoD-based approximation
+            degradation_temperature: Ambient temperature in °C for degradation model
         """
         super().__init__()
         
         self.aemo_data = aemo_data
-        self.battery_capacity = battery_capacity
+        self.initial_battery_capacity = float(battery_capacity)
+        self.battery_capacity = float(battery_capacity)
         self.max_battery_flow = max_battery_flow
         self.init_battery_level = init_battery_level
         self.max_step = max_step
@@ -367,6 +375,8 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.action_mode = action_mode
         self.normalize_obs = normalize_obs
         self.return_raw_obs = return_raw_obs
+        self.degradation_mode = degradation_mode
+        self.degradation_temperature = float(degradation_temperature)
 
         self._fcas_services = [
             'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
@@ -374,6 +384,14 @@ class AEMOBatteryTradingEnv(gym.Env):
         ]
         self._gen_fuels = ['solar', 'wind']
         self._raw_col_bounds = self._compute_raw_col_bounds()
+
+        # Degradation model setup
+        if self.degradation_mode == 'rainflow':
+            self.degradation_model = DegradationModel()
+            max_c_rate = self.max_battery_flow / self.initial_battery_capacity
+            self._rainflow_counter = RainflowCounter(
+                step_duration=self.step_duration, max_c_rate=max_c_rate
+            )
         
         # State variables
         self.current_step = 0
@@ -381,6 +399,10 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.battery_soc = init_battery_level  # State of charge (MWh)
         self.total_revenue = 0.0
         self.total_degradation_cost = 0.0
+        self.total_degradation = 0.0
+        self._rainflow_deg_cumulative = 0.0
+        self._rainflow_num_cycles = 0
+        self.soc_history: List[float] = []
         
         # Define observation and action spaces
         self._setup_spaces()
@@ -455,9 +477,22 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.current_step = 0
         
         # Reset battery state
+        self.battery_capacity = self.initial_battery_capacity
         self.battery_soc = self.init_battery_level
         self.total_revenue = 0.0
         self.total_degradation_cost = 0.0
+        self.total_degradation = 0.0
+        self._rainflow_deg_cumulative = 0.0
+        self._rainflow_num_cycles = 0
+
+        # Reset degradation tracking
+        init_soc_pct = float((self.battery_soc / self.initial_battery_capacity) * 100.0)
+        self.soc_history = [init_soc_pct]
+        if self.degradation_mode == 'rainflow':
+            max_c_rate = self.max_battery_flow / self.initial_battery_capacity
+            self._rainflow_counter = RainflowCounter(
+                step_duration=self.step_duration, max_c_rate=max_c_rate
+            )
         
         # Reset episode tracking
         self.episode_rewards = []
@@ -511,16 +546,50 @@ class AEMOBatteryTradingEnv(gym.Env):
         
         # Update battery SOC
         self.battery_soc = new_soc
+
+        # --- Degradation calculation ---
+        soc_pct = float((self.battery_soc / self.initial_battery_capacity) * 100.0)
+        self.soc_history.append(soc_pct)
+
+        step_degradation = 0.0
+        if self.degradation_mode == 'rainflow':
+            new_cycles = self._rainflow_counter.update(soc_pct)
+            for SoC_avg, DoD, Id_cycle, Ich_cycle in new_cycles:
+                inc, _ = self._safe_degradation_per_cycle(
+                    Id_cycle, Ich_cycle, SoC_avg, DoD
+                )
+                step_degradation += inc
+            self._rainflow_num_cycles += len(new_cycles)
+            self._rainflow_deg_cumulative += step_degradation
+        else:
+            # Simplified degradation (original model)
+            dod = abs(actual_energy) / self.initial_battery_capacity
+            step_degradation = dod * 0.0001
+
+        self.total_degradation = min(1.0, self.total_degradation + step_degradation)
+
+        # Capacity fade
+        self.battery_capacity = max(
+            self.initial_battery_capacity * (1.0 - self.total_degradation), 1e-9
+        )
+        self.battery_soc = min(self.battery_soc, self.battery_capacity)
+
+        degradation_cost = step_degradation * self.battery_life_cost
         
         # Calculate reward
-        reward, energy_revenue, fcas_revenue, degradation_cost = self._calculate_reward(
+        reward, energy_revenue, fcas_revenue = self._calculate_reward(
             market_data, actual_power, actual_energy,
-            fcas_raise_bid, fcas_lower_bid, old_soc, new_soc
+            fcas_raise_bid, fcas_lower_bid, old_soc, new_soc,
+            degradation_cost
         )
         
         # Check termination
         self.current_step += 1
-        terminated = bool((self.current_step >= self.max_step) or (current_idx + 1 >= len(self.aemo_data)))
+        terminated = bool(
+            (self.current_step >= self.max_step)
+            or (current_idx + 1 >= len(self.aemo_data))
+            or (self.total_degradation >= 1.0)
+        )
         truncated = False
         
         # Track episode
@@ -542,6 +611,11 @@ class AEMOBatteryTradingEnv(gym.Env):
             actual_energy=actual_energy,
             degradation_cost=degradation_cost,
             current_step=self.current_step,
+            step_degradation=step_degradation,
+            total_degradation=self.total_degradation,
+            capacity_mwh=self.battery_capacity,
+            rainflow_cumulative_deg=self._rainflow_deg_cumulative,
+            rainflow_num_cycles=self._rainflow_num_cycles,
         )
 
         if self.return_raw_obs:
@@ -679,9 +753,24 @@ class AEMOBatteryTradingEnv(gym.Env):
         raw_obs, _ = self._get_observation_components()
         return raw_obs
     
+    def _safe_degradation_per_cycle(self, Id: float, Ich: float, soc: float, DoD: float) -> Tuple[float, Optional[str]]:
+        """Compute degradation per cycle; return (value, error_message)."""
+        try:
+            value = self.degradation_model.degradation_per_cycle(
+                T=self.degradation_temperature,
+                Id=Id,
+                Ich=Ich,
+                SOCav=soc,
+                DOD=DoD,
+            )
+            return float(value), None
+        except ValueError as exc:
+            return 0.0, str(exc)
+
     def _calculate_reward(self, market_data, actual_power: float, actual_energy: float,
                          fcas_raise_bid: float, fcas_lower_bid: float,
-                         old_soc: float, new_soc: float) -> Tuple[float, float, float, float]:
+                         old_soc: float, new_soc: float,
+                         degradation_cost: float = 0.0) -> Tuple[float, float, float]:
         """Calculate reward for this step."""
         # Energy market revenue
         energy_price = market_data.get('RRP', 0)  # $/MWh
@@ -709,11 +798,6 @@ class AEMOBatteryTradingEnv(gym.Env):
             fcas_revenue = (fcas_raise_capacity * raisereg_price * self.step_duration +
                            fcas_lower_capacity * lowerreg_price * self.step_duration)
         
-        # Battery degradation cost (simplified)
-        # Use depth of discharge and cycle count
-        dod = abs(new_soc - old_soc) / self.battery_capacity
-        degradation_cost = dod * self.battery_life_cost * 0.0001  # Simplified model
-        
         # SOC violation penalty
         soc_penalty = 0.0
         if self.battery_soc < 0.1 * self.battery_capacity or self.battery_soc > 0.9 * self.battery_capacity:
@@ -727,7 +811,7 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.total_degradation_cost += degradation_cost
 
         normalized_reward = reward / 1000.0
-        return normalized_reward, energy_revenue, fcas_revenue, degradation_cost
+        return normalized_reward, energy_revenue, fcas_revenue
 
     def _make_reward_info(self,
                           battery_soc: float,
@@ -739,7 +823,12 @@ class AEMOBatteryTradingEnv(gym.Env):
                           fcas_lower_bid: float,
                           actual_energy: float,
                           degradation_cost: float,
-                          current_step: int) -> Dict[str, float]:
+                          current_step: int,
+                          step_degradation: float = 0.0,
+                          total_degradation: float = 0.0,
+                          capacity_mwh: float = 0.0,
+                          rainflow_cumulative_deg: float = 0.0,
+                          rainflow_num_cycles: int = 0) -> Dict[str, float]:
         """Return a compact reward/info dict for debugging and tracking."""
         return {
             'battery_soc': battery_soc,
@@ -750,9 +839,14 @@ class AEMOBatteryTradingEnv(gym.Env):
             'fcas_raise_bid': fcas_raise_bid,
             'fcas_lower_bid': fcas_lower_bid,
             'actual_energy': actual_energy,
-            'step_degradation': degradation_cost,
+            'degradation_cost': degradation_cost,
+            'step_degradation': step_degradation,
+            'total_degradation': total_degradation,
+            'capacity_mwh': capacity_mwh,
+            'rainflow_cumulative_deg': rainflow_cumulative_deg,
+            'rainflow_num_cycles': rainflow_num_cycles,
             'total_revenue': self.total_revenue,
-            'total_degradation': self.total_degradation_cost,
+            'total_degradation_cost': self.total_degradation_cost,
             'current_step': current_step,
         }
     

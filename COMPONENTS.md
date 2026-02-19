@@ -475,7 +475,7 @@ total_deg, n_cycles = dynamic_degradation(soc_profile, step_duration=0.5)
 
 ### Overview
 
-Provides utilities for transforming raw energy data into the format required by `SolarBatteryEnv`, plus evaluation and plotting functions.
+Provides utilities for transforming raw energy data into the format required by `SolarBatteryEnv`, plus evaluation and plotting functions. The evaluation helpers are environment-agnostic and also support AEMO trading logs by auto-detecting info keys such as revenue, degradation cost, dispatch energy, and SOC. See [docs/HELPER_README.md](docs/HELPER_README.md) for full details.
 
 ### Key Functions
 
@@ -504,7 +504,7 @@ flattened.write_parquet("data/episode_logs.parquet")
 ### Evaluation Functions
 
 ```python
-from src.helper import evaluate_experiment_logs, evaluate_experiments
+from src.helper import evaluate_experiment_logs, evaluate_experiments, evaluate_by_conditions
 
 # Evaluate single experiment
 ppo_logs = [
@@ -525,6 +525,14 @@ comparison = evaluate_experiments(
     save_dir="eval_output/figures",
     save_format="png",
 )
+
+# Optional: evaluate reward under specific conditions
+conditions = {
+    "high_price": lambda obs, info: info.get("energy_price", 0.0) > 200.0,
+    "low_soc": lambda obs: obs[-2] < 0.2,
+}
+conditional = evaluate_by_conditions(ppo_logs, conditions)
+print(conditional)
 ```
 
 ---
