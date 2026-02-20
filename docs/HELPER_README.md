@@ -151,6 +151,8 @@ Computes metrics for a single experiment (list of episode DataFrames).
 Reward metrics:
 - mean, median, std, percentiles, max
 - sharpe_ratio, sortino_ratio
+- var_5 (Value-at-Risk at 5% — the 5th percentile of episode returns)
+- cvar_5 (Conditional VaR / Expected Shortfall at 5% — mean of returns at or below var_5)
 - recommended_rtg and recommended_return_scale
 
 Operational metrics (if present in info):
@@ -181,6 +183,49 @@ Computes mean reward under custom conditions. Conditions can accept:
 - (obs, info, action)
 - (obs, info, action, reward)
 - (obs, info, action, reward, step_idx)
+
+### bootstrap_confidence_intervals
+Computes bootstrap confidence intervals for a metric across experiments.
+Episode logs are resampled with replacement `n_bootstrap` times and the
+metric is evaluated on each resample. The default metric is mean total
+episode reward.
+
+Parameters:
+- `all_logs`: dict mapping experiment name → list of episode DataFrames
+- `metric_fn`: callable(logs) → float (default: mean episode reward)
+- `n_bootstrap`: number of bootstrap iterations (default 1000)
+- `confidence_level`: e.g. 0.95 for a 95% CI
+- `seed`: random seed for reproducibility
+
+Returns dict mapping experiment name → `{"mean", "ci_lower", "ci_upper", "std"}`.
+
+```python
+from helper import bootstrap_confidence_intervals
+
+cis = bootstrap_confidence_intervals(all_logs, n_bootstrap=1000, confidence_level=0.95, seed=42)
+for algo, ci in cis.items():
+    print(f"{algo}: mean={ci['mean']:.2f}  95% CI=[{ci['ci_lower']:.2f}, {ci['ci_upper']:.2f}]")
+```
+
+### paired_comparison
+Paired statistical comparison of two experiments on matched episodes
+(same seed / customer index). Uses the Wilcoxon signed-rank test when
+scipy is available and there are at least 10 paired episodes.
+
+Parameters:
+- `logs_a`, `logs_b`: lists of per-episode DataFrames (should be same length)
+- `metric_fn`: callable(episode_df) → float (default: total episode reward)
+
+Returns dict with keys: `mean_diff`, `median_diff`, `std_diff`,
+`wilcoxon_stat`, `wilcoxon_p` (NaN when scipy is unavailable or the test
+cannot be computed).
+
+```python
+from helper import paired_comparison
+
+result = paired_comparison(ppo_logs, sac_logs)
+print(f"mean diff = {result['mean_diff']:.4f}, p = {result['wilcoxon_p']:.4f}")
+```
 
 ### compute_decision_divergence
 Compares two episode logs and returns action divergence statistics.
