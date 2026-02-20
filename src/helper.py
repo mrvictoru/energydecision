@@ -1692,7 +1692,7 @@ def bootstrap_confidence_intervals(
     all_logs : dict mapping experiment name -> list of episode DataFrames
     metric_fn : callable(logs) -> float, default mean total episode reward
     n_bootstrap : number of bootstrap iterations
-    confidence_level : e.g. 0.95 for a 95 % CI
+    confidence_level : e.g. 0.95 for a 95% CI
     seed : random seed for reproducibility
 
     Returns

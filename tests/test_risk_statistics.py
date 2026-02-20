@@ -74,12 +74,12 @@ class TestCVaR:
         assert "cvar_5" in metrics
 
     def test_cvar_leq_var(self, simple_logs):
-        """CVaR (expected shortfall) should be <= VaR (the quantile threshold)."""
+        """CVaR (expected shortfall) should be <= VaR (the quantile threshold) at 5%."""
         metrics = evaluate_experiment_logs(simple_logs)
         assert metrics["cvar_5"] <= metrics["var_5"]
 
     def test_cvar_leq_mean(self, simple_logs):
-        """CVaR at 5 % should always be <= the mean reward."""
+        """CVaR at 5% should always be <= the mean reward."""
         metrics = evaluate_experiment_logs(simple_logs)
         assert metrics["cvar_5"] <= metrics["mean_reward"]
 
@@ -148,7 +148,7 @@ class TestBootstrapCI:
         assert ci["std"] == pytest.approx(0.0, abs=1e-12)
 
     def test_higher_confidence_wider(self, simple_logs):
-        """A 99 % CI should be at least as wide as a 90 % CI."""
+        """A 99% CI should be at least as wide as a 90% CI."""
         ci90 = bootstrap_confidence_intervals(
             {"a": simple_logs}, n_bootstrap=2000, confidence_level=0.90, seed=1,
         )["a"]
