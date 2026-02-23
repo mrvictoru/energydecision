@@ -16,3 +16,4 @@ optuna
 nemosis
 openpyxl
 xls2xlsx
+scipy
