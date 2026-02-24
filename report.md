@@ -8,9 +8,7 @@ The **primary learning model** in this codebase is an **offline Decision Transfo
 
 ## 1. Introduction
 
-The proliferation of energy storage across the grid—from distributed, behind-the-meter household batteries to grid-scale battery energy storage systems (BESS) participating in wholesale markets—presents both a challenge and an opportunity for modern power systems. While these assets can reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by stochastic demand/generation, time-varying tariffs or market prices, non-linear battery degradation dynamics, and strict physical constraints.
-
-> **NOTE (literature support):** Electricity market/tariff structures considered in RL-for-battery work include time-of-use pricing, real-time pricing, and day-ahead markets, among others [6].
+The proliferation of energy storage across the grid—from distributed, behind-the-meter household batteries to grid-scale battery energy storage systems (BESS) participating in wholesale markets—presents both a challenge and an opportunity for modern power systems. While these assets can reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by stochastic demand/generation, time-varying tariffs or market prices, non-linear battery degradation dynamics, and strict physical constraints [6].
 
 Recent literature also helps structure the space of RL-based battery control problems. Subramanya et al. [6] review RL applications for battery storages through multiple lenses (optimization objective, user impact/comfort where applicable, battery losses & degradation, and application context). This benchmark is designed to make these dimensions explicit in a single codebase so that planning and learning approaches can be compared under consistent dynamics and evaluation.
 
@@ -34,21 +32,7 @@ The goal of this platform is to provide a reusable baseline for studying general
 
 This work is inspired by Abdulla et al. [1], which formulates optimal operation of energy storage using Stochastic Dynamic Programming (SDP) and emphasizes the importance of uncertainty and degradation for realistic assessment.
 
-We adopt an SDP-style planning baseline (implemented in this repository) and a multi-factor degradation model based on Muenzel et al. [2] (implemented in `src/batterydeg.py`). We extend the planning baseline with additional learning-based baselines and a Gymnasium environment wrapper.
-
-> **NOTE (literature support):** Modeling or limiting battery degradation is a recurring theme in RL-for-battery applications, and the diversity of degradation modeling approaches complicates direct comparisons across studies [6].
-
-### 2.1 RL-for-Battery Benchmarks (Review Context)
-Subramanya et al. [6] highlight several recurring themes that directly motivate a unified, Gym-style benchmark:
-- **Heterogeneous formulations hinder comparison:** across studies, environments, state/action spaces, and reward definitions vary substantially, making it hard to compare reported performance and to transfer insights between applications.
-- **Benchmark environments are valuable:** the review argues that standardized benchmark environments with a common agent–environment interface would improve comparative assessment; it notes that Gym-style benchmarks are common in other domains but comparatively scarce in energy/battery domains.
-- **Degradation modeling is inconsistent:** long-term degradation is captured in only a minority of works, and when included, degradation is incorporated in diverse ways (constraints, reward penalties, or auxiliary objectives), further complicating comparisons.
-- **Sim-to-real validation is underexplored:** the review identifies the need to deploy trained agents and compare performance on physical systems versus model-based/simulated performance.
-
-This repository’s design choices (Gymnasium API, explicit constraint handling, and logging of grid energy and degradation signals) align with these needs.
-1.  **Modernizing the Interface:** Wrapping the simulation in a standard Gymnasium API to bridge the gap between the optimization and Deep RL communities.
-2.  **Expanding the Algorithmic Suite:** Introducing Online Deep RL (PPO, SAC) and Offline RL (Decision Transformers) to compare learning-based approaches against the theoretical optimality of SDP.
-3.  **Reproducible Setup:** Providing a containerized setup and a consistent evaluation workflow to support repeatable experiments.
+We adopt an SDP-style planning baseline (implemented in this repository) and a multi-factor degradation model based on Muenzel et al. [2] (implemented in `src/batterydeg.py`).  Alongside these planning components, the Decision Transformer framework [4] motivated our implementation of a transformer‑based sequence model trained with offline RL; this becomes the primary learning baseline in the codebase.  We extend the planning baseline with additional learning‑based baselines and a Gymnasium environment wrapper.
 
 ## 3. System Model and Environments
 
@@ -62,12 +46,8 @@ Environment: `src/EnergySimEnv.py` defines `SolarBatteryEnv` with:
 - Reward/cost: per-step reward is `grid_reward - current_step_deg_cost`, where `grid_reward` is `-(grid_energy × price)` (import vs export prices selected by sign), and degradation cost is derived from per-cycle wear × `battery_life_cost`.
 - Degradation: the environment uses rainflow counting over the SoC trajectory to extract cycles, then applies a multi-factor cycle-life model based on Muenzel et al. [2] (temperature, C-rates, SOCav, DoD) to compute per-cycle degradation.
 
-> **NOTE (repo-backed):** These details are implemented in `src/EnergySimEnv.py` and `src/batterydeg.py`.
-
 Dataset contract (from `src/helper.py::transform_polars_df`):
 `Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, Time` (sorted by `Time`).
-
-> **NOTE (repo-backed):** `transform_polars_df` also drops the final row after shifting `FutureSolar/FutureLoad` to avoid null future values.
 
 ### 3.2 Utility-Scale AEMO Battery Trading Environment (AEMOBatteryTradingEnv)
 Environment: `src/AEMOBatteryEnv.py` defines `AEMOBatteryTradingEnv`, a Gymnasium environment for a grid-scale BESS participating in Australia's National Electricity Market (NEM). Key design points implemented in the repository include:
@@ -79,7 +59,6 @@ Environment: `src/AEMOBatteryEnv.py` defines `AEMOBatteryTradingEnv`, a Gymnasiu
 - **Units and scale:** default capacity/flow are specified in MWh/MW (grid-scale), distinct from the household environment (kWh/kW).
 - **Degradation:** supports `degradation_mode='rainflow'` using the same `DegradationModel` + `RainflowCounter` primitives as the household environment, tracking `step_degradation`, `total_degradation`, and capacity fade.
 
-> **NOTE (repo-backed):** The AEMO environment interface and feature definitions are documented in docs/AEMO_ENV_README.md and implemented in src/AEMOBatteryEnv.py.
 
 ## 4. Methods
 
@@ -240,6 +219,8 @@ Preliminary observations from the current runs (from `eval_output/base/evaluatio
 > **NOTE (DT-specific, repo-backed):** These `dt_rtg_*` experiment names correspond to different choices of the DT agent’s initial RTG prompt (`rtg_value` in `Agent(..., algorithm='dt')`). The agent then updates RTG online each step using the discounted recurrence described in Section 4.1.
 
 > **NOTE (interpretation):** Explanations such as “out-of-distribution RTG prompts” are plausible hypotheses for DT sensitivity, but they are not directly established by these metrics alone. Keep such statements labeled as hypotheses unless you add an analysis of the training RTG distribution and prompt distances.
+
+![DT episode return and variability by agent](eval_output/dt_compare/mean_reward.svg)
 
 ![DT sensitivity: Risk vs Return](eval_output/dt_compare/risk_return.svg)
 
