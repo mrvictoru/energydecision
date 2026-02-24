@@ -139,7 +139,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 > - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
 > To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
 
-Risk-aware extensions (future work): add CVaR-style evaluation and multi-objective scalarization for reward vs degradation. As of this report, CVaR is not computed by the default evaluation utilities in `src/helper.py`.
+Risk-aware extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation. **Evaluation-side** tail-risk metrics (VaR@5% and CVaR@5%) are already computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables (and in `eval_output/risk_metrics.csv` as an exported artifact).
 
 > **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
 
@@ -196,17 +196,22 @@ Primary metrics (from `src/helper.py`):
 - Degradation: average per-episode and per-step degradation derived from `info['step_degradation']`.
 - Risk proxies: Sharpe and Sortino are computed directly from the distribution of episode returns (not annualized; Sharpe is `mean/std`).
 
+Additional risk/tail metrics (artifact-backed):
+- `eval_output/risk_metrics.csv` contains derived risk metrics including Value-at-Risk and Conditional Value-at-Risk at 5% (`var_5`, `cvar_5`) for each experiment label (these values are computed from the episode-return distribution).
+- `eval_output/pairwise_summary.csv` contains Wilcoxon signed-rank test summaries for pairwise comparisons between algorithms (per the data used to produce the table).
+
 For AEMO logs, the same evaluation functions also summarize market-specific metrics when those keys appear in `info` (e.g., `energy_revenue`, `fcas_revenue`, `total_revenue`, `degradation_cost`, `battery_dispatch`, `actual_energy`).
 
-> **NOTE:** A separate “cost decomposition” into grid import cost vs export revenue is not currently reported as explicit metrics for `SolarBatteryEnv` runs; the environment’s `reward` already combines grid economics and degradation cost.
+> **NOTE (clarification):** `SolarBatteryEnv` logs `info['grid_energy']` and `info['step_degradation']` (see `SolarBatteryEnv._make_reward_info`), and `evaluate_experiments()` reports and plots **average grid import/export energy (kWh)** alongside **average degradation** (e.g., `grid_energy.svg`). What is *not* provided as a default metric is a **monetary decomposition** (import *cost* vs export *revenue* vs degradation *cost*) as separate time-series/aggregates; the per-step `reward` already mixes grid economics and degradation.
 
 Visualization:
 - Mean reward bar with std; stacked costs with percent annotations; risk–return scatter; episode return distribution (box plot). All figures can be saved via `save_dir`.
 
-Statistical testing (proposed):
-- Bootstrap confidence intervals for mean differences; paired tests on per-customer aggregates.
+Statistical testing (implemented, optional):
+- Bootstrap confidence intervals are implemented in `src/helper.py::bootstrap_confidence_intervals`.
+- Paired comparisons (including Wilcoxon signed-rank, when SciPy is installed) are implemented in `src/helper.py::paired_comparison` and also surface in higher-level comparison utilities.
 
-> **NOTE:** These statistical tests are not implemented in `src/helper.py` as of this report; they would need to be implemented (or performed in a notebook) to be included as part of the automated evaluation pipeline.
+> **NOTE:** These statistical analyses are available in `src/helper.py` but are not currently plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts (e.g., `eval_output/pairwise_summary.csv`).
 
 ## 8. Preliminary Results and Evaluation Plan
 
@@ -241,6 +246,21 @@ Preliminary observations from the current runs (from `eval_output/base/evaluatio
 ![DT sensitivity: Episode Return Distribution](eval_output/dt_compare/episode_distribution.svg)
 
 ![DT sensitivity: Grid Energy and Degradation](eval_output/dt_compare/grid_energy.svg)
+
+### 8.1 Risk and Statistical Comparisons (CSV Artifacts)
+Two additional CSV artifacts summarize risk/tail metrics and pairwise statistical comparisons:
+
+- **Risk and tail-risk summary** (from `eval_output/risk_metrics.csv`):
+	- **Best mean reward in this table:** `dt_rtg_neg1500` has the highest (least-negative) mean reward (-2390.79) among the listed experiments.
+	- **Tail risk differs substantially by algorithm:** `oracle` has a much less severe 5% Value-at-Risk (`var_5` = -4214.28) than the other listed methods (many are around -9000 to -11000), indicating materially better worst-case outcomes under this specific evaluation set.
+	- **Expected tail loss:** `oracle` also has the least-negative 5% CVaR (`cvar_5` = -9419.74) among the rows in this file, while DT variants cluster around `cvar_5` ≈ -9659 to -9703.
+
+- **Pairwise comparisons** (from `eval_output/pairwise_summary.csv`, Wilcoxon signed-rank test on paired samples):
+	- **DT prompt variants are measurably different:** `dt_rtg_neg1500` outperforms `dt_rtg_neg1000` by a mean of 37.15 reward (algo_a − algo_b = -37.15 for `dt_rtg_neg1000` vs `dt_rtg_neg1500`), with p = 0.00117.
+	- **DT vs oracle in this table:** `dt_rtg_neg1500` exceeds `oracle` by a mean of 92.59 reward (p = 0.00355).
+	- **A2C vs PPO:** `a2c` exceeds `ppo` by a mean of 299.66 reward (p ≈ 1.7e-11).
+
+> **NOTE (interpretation constraint):** These statistical results depend on the pairing and sample definition used to build the CSVs (e.g., per-customer paired episode returns). The CSVs provide p-values for the included comparisons, but causal claims ("algorithm X is universally better") should be avoided without confirming the evaluation protocol and multiple-testing handling.
 
 ## 9. Proposed Research Roadmap
 
