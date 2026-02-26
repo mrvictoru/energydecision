@@ -240,6 +240,17 @@ Two additional CSV artifacts summarize risk/tail metrics and pairwise statistica
 	- **DT prompt variants are measurably different:** `dt_rtg_neg1500` outperforms `dt_rtg_neg1000` by a mean of 37.15 reward (algo_a − algo_b = -37.15 for `dt_rtg_neg1000` vs `dt_rtg_neg1500`), with p = 0.00117.
 	- **DT vs oracle in this table:** `dt_rtg_neg1500` exceeds `oracle` by a mean of 92.59 reward (p = 0.00355).
 	- **A2C vs PPO:** `a2c` exceeds `ppo` by a mean of 299.66 reward (p ≈ 1.7e-11).
+	- **Overall DT prompt takeaway from pairwise table:** `dt_rtg_neg1500` has positive mean differences against all listed non-DT baselines in this run, but evidence is strong against `oracle`/`ppo`/`sac`/`td3`/`rule` and inconclusive versus `sdp` (p = 0.342) and `mrdp` (p = 0.385).
+	- **Heatmap interpretation aid:** the artifact `eval_output/pairwise_significance_heatmap.svg` visualizes all head-to-head comparisons using a signed significance score, $\mathrm{sign}(\text{mean\_diff})\times(-\log_{10}(p))$.
+
+![Pairwise signed significance heatmap (Wilcoxon)](eval_output/pairwise_significance_heatmap.svg)
+
+Heatmap reading guide (row algorithm vs column algorithm):
+
+- **Color direction:** warm/red cells indicate the row algorithm tends to outperform the column algorithm (`mean_diff > 0`); cool/blue indicates underperformance (`mean_diff < 0`).
+- **Color intensity:** stronger color magnitude corresponds to smaller p-values (higher statistical confidence under the Wilcoxon signed-rank test).
+- **Symmetry check:** the matrix is anti-symmetric by construction (if A vs B is strongly positive, B vs A is strongly negative).
+- **Practical interpretation:** prioritize cells with both strong color magnitude and practically meaningful `mean_diff`; treat weak-color cells as inconclusive.
 
 > **NOTE (interpretation constraint):** These statistical results depend on the pairing and sample definition used to build the CSVs (e.g., per-customer paired episode returns). The CSVs provide p-values for the included comparisons, but causal claims ("algorithm X is universally better") should be avoided without confirming the evaluation protocol and multiple-testing handling.
 
@@ -293,10 +304,15 @@ This repository introduces a unified framework for learning and planning in batt
 ## References
 
 [1] K. Abdulla, J. De Hoog, et al., "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation," *IEEE Transactions on Smart Grid*, 2016.
+
 [2] V. Muenzel, J. De Hoog, et al., "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management," *IEEE Transactions on Industrial Electronics*, 2015.
+
 [3] Sutton & Barto. Reinforcement Learning: An Introduction.
+
 [4] Chen et al. Decision Transformer: Reinforcement Learning via Sequence Modeling.
+
 [5] Ausgrid. Solar home electricity data. https://github.com/pierre-haessig/ausgrid-solar-data?tab=readme-ov-file. Accessed April 2017.
+
 [6] R. Subramanya, S. A. Sierla, and V. Vyatkin, "Exploiting Battery Storages With Reinforcement Learning: A Review for Energy Professionals," *IEEE Access*, vol. 10, 2022, doi: 10.1109/ACCESS.2022.3176446.
 
 ---
