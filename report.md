@@ -24,7 +24,7 @@ This work establishes a consolidated, reproducible benchmark to address these li
 1.  **Two Gymnasium-Compatible Simulation Environments:** Environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS).
 2.  **Decision Transformer as the Primary Model:** A modernized Decision Transformer implementation plus an offline training pipeline built around trajectory logging, RTG construction, return scaling, and robust checkpoint loading.
 3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, online RL (PPO, SAC, etc.), and (for AEMO) dispatch replay against DT, and for generating trajectory data for offline learning.
-4.  **Standardized Evaluation Workflow:** Metrics for return, grid energy flows, degradation, and simple risk proxies (Sharpe/Sortino ratios), plus plotting utilities.
+4.  **Standardized Evaluation Workflow:** Metrics for return, grid energy flows, degradation, risk proxies (Sharpe/Sortino ratios), tail-risk analysis (VaR/CVaR at 5%), bootstrap confidence intervals, and paired statistical comparisons (Wilcoxon signed-rank), plus plotting utilities.
 
 The goal of this platform is to provide a reusable baseline for studying generalization and robustness in control policies for decentralized energy systems.
 
@@ -118,7 +118,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 > - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
 > To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
 
-Risk-aware extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation. **Evaluation-side** tail-risk metrics (VaR@5% and CVaR@5%) are already computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables (and in `eval_output/risk_metrics.csv` as an exported artifact).
+**Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
 > **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
 
@@ -169,36 +169,70 @@ Compute and reproducibility:
 
 ## 7. Metrics and Analysis
 
-Primary metrics (from `src/helper.py`):
-- Episode return statistics: mean/median/std and 5th/95th percentiles (computed from per-episode sums of the logged `reward`).
-- Grid energy flows: average per-episode grid import (kWh), grid export (kWh), and net grid energy (kWh) derived from `info['grid_energy']`.
-- Degradation: average per-episode and per-step degradation derived from `info['step_degradation']`.
-- Risk proxies: Sharpe and Sortino are computed directly from the distribution of episode returns (not annualized; Sharpe is `mean/std`).
+### 7.1 Core Metrics
 
-Additional risk/tail metrics (artifact-backed):
-- `eval_output/risk_metrics.csv` contains derived risk metrics including Value-at-Risk and Conditional Value-at-Risk at 5% (`var_5`, `cvar_5`) for each experiment label (these values are computed from the episode-return distribution).
-- `eval_output/pairwise_summary.csv` contains Wilcoxon signed-rank test summaries for pairwise comparisons between algorithms (per the data used to produce the table).
+Primary metrics (from `src/helper.py::evaluate_experiment_logs`):
+- **Episode return statistics:** mean, median, std, 5th/95th percentiles, and max (computed from per-episode sums of the logged `reward`).
+- **Grid energy flows:** average per-episode grid import (kWh), grid export (kWh), and net grid energy (kWh) derived from `info['grid_energy']`.
+- **Degradation:** average per-episode and per-step degradation derived from `info['step_degradation']`, plus degradation incident rate.
+- **Risk proxies:** Sharpe and Sortino ratios are computed directly from the distribution of episode returns (not annualized; Sharpe = `mean/std`, Sortino uses downside deviation below `target_return`).
 
 For AEMO logs, the same evaluation functions also summarize market-specific metrics when those keys appear in `info` (e.g., `energy_revenue`, `fcas_revenue`, `total_revenue`, `degradation_cost`, `battery_dispatch`, `actual_energy`).
 
-> **NOTE (clarification):** `SolarBatteryEnv` logs `info['grid_energy']` and `info['step_degradation']` (see `SolarBatteryEnv._make_reward_info`), and `evaluate_experiments()` reports and plots **average grid import/export energy (kWh)** alongside **average degradation** (e.g., `grid_energy.svg`). What is *not* provided as a default metric is a **monetary decomposition** (import *cost* vs export *revenue* vs degradation *cost*) as separate time-series/aggregates; the per-step `reward` already mixes grid economics and degradation.
+> **NOTE:** `SolarBatteryEnv` logs `info['grid_energy']` and `info['step_degradation']`, and `evaluate_experiments()` reports **average grid import/export energy (kWh)** alongside **average degradation**. A per-step monetary decomposition (import cost vs export revenue vs degradation cost) is not separately provided; the per-step `reward` already combines grid economics and degradation.
 
-Visualization:
-- Mean reward bar with std; stacked costs with percent annotations; risk–return scatter; episode return distribution (box plot). All figures can be saved via `save_dir`.
+### 7.2 Tail-Risk Metrics
 
-Statistical testing (implemented, optional):
-- Bootstrap confidence intervals are implemented in `src/helper.py::bootstrap_confidence_intervals`.
-- Paired comparisons (including Wilcoxon signed-rank, when SciPy is installed) are implemented in `src/helper.py::paired_comparison` and also surface in higher-level comparison utilities.
+The following tail-risk metrics are computed by `evaluate_experiment_logs` and included in the evaluation DataFrame:
 
-> **NOTE:** These statistical analyses are available in `src/helper.py` but are not currently plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts (e.g., `eval_output/pairwise_summary.csv`).
+| Metric | Definition |
+|--------|-----------|
+| `var_5` | Value-at-Risk at 5%: the 5th percentile of episode returns, representing the worst-case threshold below which only 5% of outcomes fall. |
+| `cvar_5` | Conditional VaR (Expected Shortfall) at 5%: the mean of all episode returns at or below `var_5`, quantifying the expected loss in the tail. |
 
-## 8. Preliminary Results and Evaluation Plan
+These metrics appear in evaluation tables (e.g., `eval_output/risk_metrics.csv`) and are also available in the DataFrame returned by `evaluate_experiments()`.
 
-We are currently conducting the initial comparative evaluation across Rule-based, SDP/MRDP, PPO, and Decision Transformer agents, with **DT as the primary learning model** and the other approaches serving as (i) competitive baselines and (ii) data generators for offline learning.
+### 7.3 Statistical Comparisons
 
-In parallel, the repository now supports utility-scale evaluation in the AEMO/NEM setting via `AEMOBatteryTradingEnv` and `AEMOAgent`. Results for AEMO experiments will be added once a consistent set of AEMO episode logs and evaluation outputs are generated.
+Two statistical comparison tools are implemented in `src/helper.py`:
 
-The first version of the comparative metrics is already stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv), and the accompanying return graph highlights the mean ± std for each agent.
+- **Bootstrap confidence intervals** (`bootstrap_confidence_intervals`): resamples episode logs with replacement `n_bootstrap` times (default 1000) to estimate the sampling distribution of any metric (default: mean episode reward). Returns per-experiment `{mean, ci_lower, ci_upper, std}` at a configurable confidence level (default 95%).
+
+- **Paired comparisons** (`paired_comparison`): given two experiments with matched episodes (same customer/seed index), computes per-episode metric differences and applies the Wilcoxon signed-rank test (requires SciPy, ≥10 paired episodes). Returns `{mean_diff, median_diff, std_diff, wilcoxon_stat, wilcoxon_p}`.
+
+Exported artifacts:
+- `eval_output/risk_metrics.csv` — tail-risk summary (VaR, CVaR) for all experiments.
+- `eval_output/pairwise_summary.csv` — Wilcoxon signed-rank test results for all algorithm pairs.
+- `eval_output/pairwise_significance_heatmap.svg` — visual summary of head-to-head significance.
+
+> **NOTE:** These statistical analyses are available in `src/helper.py` and demonstrated in `test_eval.ipynb`, but are not plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts.
+
+### 7.4 Visualization
+
+Standard diagnostic plots produced by `evaluate_experiments(..., save_dir=...)`:
+- Mean reward bar chart with std error bars.
+- Grid energy comparison with degradation overlay.
+- Risk–return scatter (std vs mean, colour by Sharpe ratio).
+- Episode return distribution (box plot).
+
+## 8. Results
+
+### 8.1 Baseline Comparison
+
+The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C, DDPG, TD3), Oracle (perfect foresight), and Decision Transformer agents on the household environment. The full metrics are stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv).
+
+| Algorithm | Mean Reward | Std Reward | Sharpe | Avg Degradation/Ep | Avg Grid Net (kWh) |
+|-----------|----------:|----------:|------:|-------------------:|-------------------:|
+| oracle | -2483.38 | 1773.97 | -1.400 | 0.2351 | 5112.91 |
+| dt_rtg0 | -2534.05 | 2908.69 | -0.871 | 0.0569 | 3875.66 |
+| a2c | -2528.62 | 3234.82 | -0.782 | 0.0000 | 3827.81 |
+| sdp | -2598.35 | 3200.02 | -0.812 | 0.0115 | 3855.85 |
+| mrdp | -2766.60 | 3363.72 | -0.822 | 0.0156 | 3891.17 |
+| ppo | -2828.28 | 3275.89 | -0.863 | 0.0349 | 3624.70 |
+| rule | -3077.26 | 3454.07 | -0.891 | 0.0541 | 3909.03 |
+| td3 | -3213.16 | 2928.14 | -1.097 | 0.1740 | 4088.34 |
+| sac | -3686.60 | 2169.83 | -1.699 | 0.3428 | 4432.64 |
+| ddpg | -4398.31 | 2564.92 | -1.715 | 0.3499 | 4546.06 |
 
 ![Mean episode return and variability by agent](eval_output/base/mean_reward.svg)
 
@@ -208,17 +242,26 @@ The first version of the comparative metrics is already stored in [eval_output/b
 
 ![Net grid energy balance by agent](eval_output/base/grid_energy.svg)
 
-Preliminary observations from the current runs (from `eval_output/base/evaluation_metrics.csv`) are:
+**Key observations:**
+- **Mean episode return ranking:** Oracle (-2483) \u2248 A2C (-2529) \u2248 DT (`dt_rtg0`, -2534) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398).
+- **Variability:** Oracle achieves the smallest return std (1774), making it both the best on average and most consistent. Among learners, DT (std \u2248 2909) shows lower variability than many RL agents.
+- **Sharpe ratios** are uniformly negative (cost-minimization setting with negative returns). A2C (-0.78) and DT (-0.87) have the least-negative Sharpe among learners, indicating better risk-adjusted performance.
+- **Degradation trade-offs:** DDPG and SAC exhibit the highest degradation per episode (\u22480.35), while A2C reports zero, suggesting it avoids aggressive cycling. DT (`dt_rtg0`, 0.057) achieves low degradation.
+- **Grid energy:** `avg_grid_net` values (3600\u20135100 kWh) represent net import. Oracle's high net import (5113) but low total cost suggests efficient price-timing.
 
-- Mean episode return ranking in this run: Oracle (-2483.38) > DT (`dt_rtg0`, -2534.05) > SDP (-2598.35) > MRDP (-2766.60) > PPO (-2828.28) > Rule (-3077.26).
-- Variability: in this run, Oracle has the smallest return standard deviation (std_reward ≈ 1774). Among the listed planners/learners, the Sharpe proxy values are similar (e.g., SDP ≈ -0.812, MRDP ≈ -0.822, DT ≈ -0.871), and all are negative because mean returns are negative.
-- Grid energy: the metrics report average per-episode grid import/export (kWh) and net grid energy (kWh). Here, `avg_grid_net` is net import (import − export), so values around 3800–5100 indicate net import, not net export.
-- **Decision Transformer sensitivity (repo-backed):** In `eval_output/dt_compare/evaluation_metrics.csv`, conditioning RTG affects outcomes. In this run, `dt_rtg_neg1500` has the best mean return among the shown DT variants (-2390.79).
-- **Degradation dynamics (repo-backed):** The same DT comparison shows large differences in average degradation per episode: `dt_rtg_neg1500` ≈ 0.00166 vs `dt_rtg_neg1` ≈ 0.05666.
+### 8.2 Decision Transformer RTG Sensitivity
 
-> **NOTE (DT-specific, repo-backed):** These `dt_rtg_*` experiment names correspond to different choices of the DT agent’s initial RTG prompt (`rtg_value` in `Agent(..., algorithm='dt')`). The agent then updates RTG online each step using the discounted recurrence described in Section 4.1.
+The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/dt_compare/evaluation_metrics.csv)) shows how the initial RTG prompt affects policy behavior:
 
-> **NOTE (interpretation):** Explanations such as “out-of-distribution RTG prompts” are plausible hypotheses for DT sensitivity, but they are not directly established by these metrics alone. Keep such statements labeled as hypotheses unless you add an analysis of the training RTG distribution and prompt distances.
+| DT Variant | Mean Reward | Std Reward | Avg Degradation/Ep | Avg Grid Net (kWh) |
+|-----------|----------:|----------:|-------------------:|-------------------:|
+| dt_rtg_neg1500 | -2390.79 | 3090.40 | 0.0017 | 3858.34 |
+| dt_rtg_neg1000 | -2427.94 | 3081.61 | 0.0087 | 3858.41 |
+| dt_rtg_neg400 | -2448.29 | 3077.41 | 0.0127 | 3858.40 |
+| dt_rtg_neg600 | -2448.39 | 3077.44 | 0.0127 | 3858.40 |
+| dt_rtg_neg1 | -2532.72 | 2908.46 | 0.0567 | 3875.66 |
+| sdp | -2598.35 | 3200.02 | 0.0115 | 3855.85 |
+| rule | -3077.26 | 3454.07 | 0.0541 | 3909.03 |
 
 ![DT episode return and variability by agent](eval_output/dt_compare/mean_reward.svg)
 
@@ -228,39 +271,83 @@ Preliminary observations from the current runs (from `eval_output/base/evaluatio
 
 ![DT sensitivity: Grid Energy and Degradation](eval_output/dt_compare/grid_energy.svg)
 
-### 8.1 Risk and Statistical Comparisons (CSV Artifacts)
-Two additional CSV artifacts summarize risk/tail metrics and pairwise statistical comparisons:
+**Key observations:**
+- **RTG prompt matters:** `dt_rtg_neg1500` achieves the best mean return (-2391), outperforming all baselines including Oracle (-2483) in mean return. The `dt_rtg_neg1` variant performs closest to the baselines.
+- **Degradation varies dramatically with RTG:** `dt_rtg_neg1500` achieves extremely low degradation (0.0017/ep) vs `dt_rtg_neg1` (0.0567/ep), a 33\u00d7 difference. The more negative RTG prompt appears to encourage gentler battery operation.
+- **Grid energy is stable across DT variants:** all prompts produce similar net grid import (\u22483858 kWh), suggesting the RTG primarily affects cycling intensity rather than energy trading strategy.
 
-- **Risk and tail-risk summary** (from `eval_output/risk_metrics.csv`):
-	- **Best mean reward in this table:** `dt_rtg_neg1500` has the highest (least-negative) mean reward (-2390.79) among the listed experiments.
-	- **Tail risk differs substantially by algorithm:** `oracle` has a much less severe 5% Value-at-Risk (`var_5` = -4214.28) than the other listed methods (many are around -9000 to -11000), indicating materially better worst-case outcomes under this specific evaluation set.
-	- **Expected tail loss:** `oracle` also has the least-negative 5% CVaR (`cvar_5` = -9419.74) among the rows in this file, while DT variants cluster around `cvar_5` ≈ -9659 to -9703.
+> **NOTE:** The `dt_rtg_*` labels correspond to different `rtg_value` choices in `Agent(..., algorithm='dt')`. The RTG is updated each step via the discounted recurrence $\text{rtg}_{t+1} = (\text{rtg}_t - r_t)/\gamma$. Sensitivity to the initial prompt is an expected feature of return-conditioned policies.
 
-- **Pairwise comparisons** (from `eval_output/pairwise_summary.csv`, Wilcoxon signed-rank test on paired samples):
-	- **DT prompt variants are measurably different:** `dt_rtg_neg1500` outperforms `dt_rtg_neg1000` by a mean of 37.15 reward (algo_a − algo_b = -37.15 for `dt_rtg_neg1000` vs `dt_rtg_neg1500`), with p = 0.00117.
-	- **DT vs oracle in this table:** `dt_rtg_neg1500` exceeds `oracle` by a mean of 92.59 reward (p = 0.00355).
-	- **A2C vs PPO:** `a2c` exceeds `ppo` by a mean of 299.66 reward (p ≈ 1.7e-11).
-	- **Overall DT prompt takeaway from pairwise table:** `dt_rtg_neg1500` has positive mean differences against all listed non-DT baselines in this run, but evidence is strong against `oracle`/`ppo`/`sac`/`td3`/`rule` and inconclusive versus `sdp` (p = 0.342) and `mrdp` (p = 0.385).
-	- **Heatmap interpretation aid:** the artifact `eval_output/pairwise_significance_heatmap.svg` visualizes all head-to-head comparisons using a signed significance score, $\mathrm{sign}(\text{mean\_diff})\times(-\log_{10}(p))$.
+> **NOTE:** Hypotheses about out-of-distribution RTG prompts are plausible but not directly established by these metrics. Confirming this would require analysis of the training RTG distribution and prompt distances.
+
+### 8.3 Tail-Risk Analysis
+
+The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case performance:
+
+| Algorithm | Mean Reward | VaR 5% | CVaR 5% | Sharpe | Sortino |
+|-----------|----------:|-------:|--------:|------:|-------:|
+| dt_rtg_neg1500 | -2390.79 | -9054.73 | -9703.27 | -0.774 | -0.774 |
+| dt_rtg_neg1000 | -2427.94 | -9054.76 | -9703.33 | -0.788 | -0.788 |
+| oracle | -2483.38 | -4214.28 | -9419.74 | -1.400 | -1.400 |
+| a2c | -2528.62 | -9143.06 | -9966.43 | -0.782 | -0.782 |
+| sdp | -2598.35 | -9168.90 | -9965.13 | -0.812 | -0.812 |
+| mrdp | -2766.60 | -9765.58 | -10170.22 | -0.822 | -0.822 |
+| ppo | -2828.28 | -9298.39 | -10088.50 | -0.863 | -0.863 |
+| rule | -3077.26 | -10191.23 | -10588.42 | -0.891 | -0.891 |
+| td3 | -3213.16 | -9272.43 | -11699.19 | -1.097 | -1.097 |
+| sac | -3686.60 | -9108.64 | -10368.48 | -1.699 | -1.699 |
+| ddpg | -4398.31 | -10897.52 | -11734.46 | -1.715 | -1.715 |
+
+**Key observations:**
+- **Oracle has materially better VaR:** `var_5` = -4214 vs most others at -9000 to -11000, meaning Oracle's worst 5% of episodes are substantially less costly.
+- **DT tail risk is competitive:** DT variants cluster around CVaR \u2248 -9700, comparable to or better than SDP (-9965), A2C (-9966), and PPO (-10089).
+- **Worst tail outcomes:** DDPG (-11734), TD3 (-11699), and Rule (-10588) show the most severe expected tail losses.
+
+### 8.4 Pairwise Statistical Comparisons
+
+The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` quantify algorithm-pair differences. Selected key comparisons:
+
+| Comparison (A vs B) | Mean Diff (A\u2212B) | p-value | Interpretation |
+|---------------------|---------------:|--------:|----------------|
+| dt_rtg_neg1500 vs oracle | +92.59 | 0.0036 | DT significantly better |
+| dt_rtg_neg1500 vs sdp | +207.56 | 0.342 | Not significant |
+| dt_rtg_neg1500 vs mrdp | +375.81 | 0.385 | Not significant |
+| dt_rtg_neg1500 vs ppo | +437.49 | 0.0015 | DT significantly better |
+| dt_rtg_neg1500 vs rule | +686.47 | 0.029 | DT significantly better |
+| dt_rtg_neg1500 vs dt_rtg_neg1000 | +37.15 | 0.0012 | Prompt difference significant |
+| a2c vs ppo | +299.66 | 1.7e-11 | A2C significantly better |
+| oracle vs sac | +1203.21 | 2.2e-6 | Oracle significantly better |
+| sdp vs td3 | +614.81 | 0.0014 | SDP significantly better |
 
 ![Pairwise signed significance heatmap (Wilcoxon)](eval_output/pairwise_significance_heatmap.svg)
 
-Heatmap reading guide (row algorithm vs column algorithm):
+**Heatmap reading guide** (row algorithm vs column algorithm):
+- **Colour direction:** warm/red = row outperforms column (`mean_diff > 0`); cool/blue = underperformance.
+- **Colour intensity:** stronger magnitude = smaller p-value (higher statistical confidence).
+- **Symmetry:** anti-symmetric by construction (A vs B positive implies B vs A negative).
+- **Practical guidance:** prioritize cells with both strong colour and practically meaningful `mean_diff`; treat weak-colour cells as inconclusive.
 
-- **Color direction:** warm/red cells indicate the row algorithm tends to outperform the column algorithm (`mean_diff > 0`); cool/blue indicates underperformance (`mean_diff < 0`).
-- **Color intensity:** stronger color magnitude corresponds to smaller p-values (higher statistical confidence under the Wilcoxon signed-rank test).
-- **Symmetry check:** the matrix is anti-symmetric by construction (if A vs B is strongly positive, B vs A is strongly negative).
-- **Practical interpretation:** prioritize cells with both strong color magnitude and practically meaningful `mean_diff`; treat weak-color cells as inconclusive.
+**Key takeaways from pairwise analysis:**
+- `dt_rtg_neg1500` significantly outperforms Oracle, PPO, SAC, TD3, and Rule, but differences vs SDP and MRDP are inconclusive (p > 0.3).
+- RTG prompt choice within DT is statistically significant: `dt_rtg_neg1500` vs `dt_rtg_neg1000` yields p = 0.0012.
+- Among RL baselines, A2C significantly outperforms PPO (p \u2248 1.7e-11), and both outperform SAC, TD3, and DDPG.
 
-> **NOTE (interpretation constraint):** These statistical results depend on the pairing and sample definition used to build the CSVs (e.g., per-customer paired episode returns). The CSVs provide p-values for the included comparisons, but causal claims ("algorithm X is universally better") should be avoided without confirming the evaluation protocol and multiple-testing handling.
+> **NOTE:** These statistical results depend on the pairing and sample definition (per-customer paired episode returns). Causal claims ("algorithm X is universally better") require confirmation of the evaluation protocol and multiple-testing handling.
+
+### 8.5 AEMO Environment
+
+The repository supports utility-scale evaluation via `AEMOBatteryTradingEnv` and `AEMOAgent`. Results for AEMO experiments will be added once a consistent set of episode logs and evaluation outputs are generated.
 
 ## 9. Proposed Research Roadmap
 
 This framework provides the necessary tooling to pursue several practical extensions and evaluation directions:
 
-### Phase 1: Benchmarking and Algorithmic Analysis (Current Status)
-- Establish the performance hierarchy between model-based (SDP) and model-free (RL) approaches.
-- Quantify the performance gap of reactive/model-free baselines (rule-based, SB3 RL, DT) relative to planning baselines (SDP/MRDP, Oracle) under identical environment dynamics.
+### Phase 1: Benchmarking and Algorithmic Analysis (Completed)
+- ✅ Establish the performance hierarchy between model-based (SDP) and model-free (RL) approaches.
+- ✅ Quantify the performance gap of reactive/model-free baselines (rule-based, SB3 RL, DT) relative to planning baselines (SDP/MRDP, Oracle) under identical environment dynamics.
+- ✅ Tail-risk metrics (VaR, CVaR at 5%) computed for all algorithms.
+- ✅ Pairwise statistical comparisons (Wilcoxon signed-rank) across all algorithm pairs.
+- ✅ Bootstrap confidence intervals for metric uncertainty quantification.
 
 In line with review-identified gaps, an additional near-term objective is to make evaluation more comparable across algorithm families by using consistent environment dynamics, observation/action conventions, and standardized logging [6].
 
@@ -270,7 +357,7 @@ where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally 
 
 ### Phase 2: Robustness and Generalization (Year 1-2)
 - **Distributional Shift:** Investigate how Offline RL (Decision Transformers) generalizes to unseen weather patterns or customer load profiles compared to Online RL.
-- **Risk-Sensitive Control:** Integrate CVaR-style objectives/constraints to reduce tail-risk outcomes (e.g., high-cost periods) relative to mean-return optimized policies.
+- **Risk-Sensitive Control:** Integrate CVaR-style objectives/constraints into the training loop (evaluation-side tail-risk metrics are already implemented; the next step is CVaR-constrained or multi-objective training).
 
 DT-centric near-term extensions (repo-aligned):
 - **Prompt calibration:** use the repo’s `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.

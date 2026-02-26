@@ -19,7 +19,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
-[![Tests](https://img.shields.io/badge/tests-46%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-104%20passing-brightgreen)]()
 
 ### Roadmap
 *   [x] **Core:** Gymnasium environment & Rule-based agents.
@@ -29,8 +29,8 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Evaluation:** Metrics for return, risk proxies (Sharpe/Sortino), and degradation.
 *   [x] **Grid Market:** AEMO Environment Implementation.
 *   [x] **Grid battery degradation modelling:** Rainflow-based degradation and capacity fade in `AEMOBatteryTradingEnv`.
-*   [ ] **Risk-sensitive evaluation:** Add CVaR-style metrics and/or objectives for tail-risk analysis.
-*   [ ] **Statistical comparisons:** Bootstrap confidence intervals and paired comparisons across customers/seeds.
+*   [x] **Risk-sensitive evaluation:** CVaR/VaR tail-risk metrics (`var_5`, `cvar_5`) computed by `evaluate_experiment_logs`.
+*   [x] **Statistical comparisons:** Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired Wilcoxon signed-rank tests (`paired_comparison`) across customers/seeds.
 *   [ ] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts.
 *   [ ] **RL Fine-tuning:** Initialize Online RL with DT weights.
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
@@ -173,6 +173,8 @@ Notes:
 Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
 - Compare all agents (Cost, ROI, Degradation).
 - Generate Risk-Return plots.
+- Inspect tail-risk metrics (VaR, CVaR at 5%).
+- Compute bootstrap confidence intervals and paired statistical comparisons.
 
 Helper evaluations are environment-agnostic and also compute AEMO trading metrics
 (revenue, degradation cost, dispatch energy) when those keys exist in `info`.
@@ -441,12 +443,17 @@ pytest tests/ -v --durations=10
 
 | Test File | Purpose | Test Count |
 |-----------|---------|------------|
-| `test_environment.py` | SolarBatteryEnv functionality, observation handling | 9 |
+| `test_environment.py` | SolarBatteryEnv functionality, observation handling | 8 |
 | `test_decision_agent.py` | SDP solver, Oracle agent, policy computation | 8 |
-| `test_performance.py` | Performance benchmarks and optimization validation | 8 |
-| `test_quantile_scenarios.py` | Quantile scenario generation | 21 |
+| `test_performance.py` | Performance benchmarks and optimization validation | 6 |
+| `test_quantile_scenarios.py` | Quantile scenario generation | 22 |
+| `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking | 12 |
+| `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases | 16 |
+| `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init | 5 |
+| `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space | 5 |
+| `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons | 22 |
 
-**Total: 46 tests**
+**Total: 104 tests**
 
 ---
 

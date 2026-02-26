@@ -513,6 +513,8 @@ ppo_logs = [
 ]
 metrics = evaluate_experiment_logs(ppo_logs, target_return=0.0)
 print(metrics)
+# Includes: mean_reward, std_reward, sharpe_ratio, sortino_ratio,
+#           var_5, cvar_5, recommended_rtg, avg_grid_import, etc.
 
 # Compare multiple experiments
 comparison = evaluate_experiments(
@@ -533,6 +535,24 @@ conditions = {
 }
 conditional = evaluate_by_conditions(ppo_logs, conditions)
 print(conditional)
+```
+
+### Risk Metrics and Statistical Comparisons
+
+```python
+from src.helper import bootstrap_confidence_intervals, paired_comparison
+
+# Bootstrap 95% confidence intervals on mean reward
+cis = bootstrap_confidence_intervals(
+    {"rule": rule_logs, "ppo": ppo_logs},
+    n_bootstrap=1000, confidence_level=0.95, seed=42,
+)
+for algo, ci in cis.items():
+    print(f"{algo}: mean={ci['mean']:.2f}  95% CI=[{ci['ci_lower']:.2f}, {ci['ci_upper']:.2f}]")
+
+# Paired Wilcoxon signed-rank test between two algorithms
+result = paired_comparison(ppo_logs, rule_logs)
+print(f"mean diff = {result['mean_diff']:.4f}, p = {result['wilcoxon_p']:.4f}")
 ```
 
 ---
@@ -774,12 +794,17 @@ pytest tests/ -v --durations=10
 
 | Test File | Purpose | Test Count |
 |-----------|---------|------------|
-| `test_environment.py` | SolarBatteryEnv functionality | 9 |
+| `test_environment.py` | SolarBatteryEnv functionality | 8 |
 | `test_decision_agent.py` | Agent/SDP/Oracle tests | 8 |
-| `test_performance.py` | Performance benchmarks | 8 |
-| `test_quantile_scenarios.py` | Scenario generation | 21 |
+| `test_performance.py` | Performance benchmarks | 6 |
+| `test_quantile_scenarios.py` | Scenario generation | 22 |
+| `test_aemo_degradation.py` | Rainflow counter, capacity fade | 12 |
+| `test_episode_visualizer.py` | Env detection, plotting, edge cases | 16 |
+| `test_algorithm_classes.py` | SDP/MRDP/Oracle class init | 5 |
+| `test_aemo_env_compatibility.py` | Gymnasium/SB3 compatibility | 5 |
+| `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired tests | 22 |
 
-**Total: 46 tests**
+**Total: 104 tests**
 
 ---
 
