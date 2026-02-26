@@ -11,11 +11,12 @@ from EnergySimEnv import SolarBatteryEnv
 from pathlib import Path
 
 try:
-    from scipy.stats import wasserstein_distance  # type: ignore
+    from scipy.stats import wasserstein_distance, wilcoxon  # type: ignore
     _HAS_SCIPY = True
 except Exception:  # pragma: no cover - optional dependency
     _HAS_SCIPY = False
     wasserstein_distance = None  # type: ignore
+    wilcoxon = None  # type: ignore
 
 
 # Helper: parse a time string like "7am" or "7:30am" into minutes since midnight.
@@ -1271,6 +1272,8 @@ def evaluate_experiment_logs(
             "recommended_raw_rtg_percentile": 0.0,
             "sharpe_ratio": float("nan"),
             "sortino_ratio": float("nan"),
+            "var_5": 0.0,
+            "cvar_5": 0.0,
             "avg_grid_import": 0.0,
             "avg_grid_export": 0.0,
             "avg_grid_net": 0.0,
@@ -1361,6 +1364,18 @@ def evaluate_experiment_logs(
     dd = float(np.std(downs, ddof=0)) if downs else 0.0
     sharpe = mean_r / std_r if std_r > 0 else float("nan")
     sortino = (mean_r - target_return) / dd if dd > 0 else float("nan")
+
+    # CVaR (Conditional Value at Risk) / Expected Shortfall at alpha=5%
+    # VaR_alpha is the alpha-quantile of returns (worst alpha% threshold)
+    # CVaR_alpha is the mean of returns that fall at or below VaR_alpha
+    cvar_alpha = 0.05
+    if rewards_arr.size >= 2:
+        var_5 = float(np.percentile(rewards_list, cvar_alpha * 100))
+        tail = rewards_arr[rewards_arr <= var_5]
+        cvar_5 = float(tail.mean()) if tail.size > 0 else var_5
+    else:
+        var_5 = float(rewards_arr[0]) if rewards_arr.size == 1 else 0.0
+        cvar_5 = var_5
 
     grid_imports: List[float] = []
     grid_exports: List[float] = []
@@ -1475,6 +1490,8 @@ def evaluate_experiment_logs(
         "recommended_raw_rtg_percentile": raw_rtg_percentile,
         "sharpe_ratio": sharpe,
         "sortino_ratio": sortino,
+        "var_5": var_5,
+        "cvar_5": cvar_5,
         "avg_grid_import": avg_grid_import,
         "avg_grid_export": avg_grid_export,
         "avg_grid_net": avg_grid_net,
@@ -1655,6 +1672,132 @@ def evaluate_experiments(
         print(f"Plot generation failed: {e}")
 
     return metrics_df
+
+def bootstrap_confidence_intervals(
+    all_logs: dict[str, list[pl.DataFrame]],
+    metric_fn: Optional[Callable[[list[pl.DataFrame]], float]] = None,
+    n_bootstrap: int = 1000,
+    confidence_level: float = 0.95,
+    seed: Optional[int] = None,
+) -> dict[str, dict[str, float]]:
+    """
+    Compute bootstrap confidence intervals for a metric across experiments.
+
+    For each experiment the episode logs are resampled with replacement
+    ``n_bootstrap`` times and the metric is computed on each resample. The
+    default metric is mean total reward per episode.
+
+    Parameters
+    ----------
+    all_logs : dict mapping experiment name -> list of episode DataFrames
+    metric_fn : callable(logs) -> float, default mean total episode reward
+    n_bootstrap : number of bootstrap iterations
+    confidence_level : e.g. 0.95 for a 95% CI
+    seed : random seed for reproducibility
+
+    Returns
+    -------
+    dict mapping experiment name -> {"mean", "ci_lower", "ci_upper", "std"}
+    """
+    def _default_metric(logs: list[pl.DataFrame]) -> float:
+        rewards = []
+        for df in logs:
+            if "reward" in df.columns:
+                try:
+                    rewards.append(float(df["reward"].sum()))
+                except Exception:
+                    rewards.append(0.0)
+        return float(np.mean(rewards)) if rewards else 0.0
+
+    fn = metric_fn if metric_fn is not None else _default_metric
+    rng = np.random.default_rng(seed)
+    alpha = 1.0 - confidence_level
+    results: dict[str, dict[str, float]] = {}
+
+    for name, logs in all_logs.items():
+        n = len(logs)
+        if n == 0:
+            results[name] = {"mean": 0.0, "ci_lower": 0.0, "ci_upper": 0.0, "std": 0.0}
+            continue
+        boot_values = np.empty(n_bootstrap, dtype=float)
+        for b in range(n_bootstrap):
+            indices = rng.integers(0, n, size=n)
+            sample = [logs[i] for i in indices]
+            boot_values[b] = fn(sample)
+        results[name] = {
+            "mean": float(np.mean(boot_values)),
+            "ci_lower": float(np.percentile(boot_values, 100 * alpha / 2)),
+            "ci_upper": float(np.percentile(boot_values, 100 * (1 - alpha / 2))),
+            "std": float(np.std(boot_values, ddof=1)),
+        }
+    return results
+
+
+def paired_comparison(
+    logs_a: list[pl.DataFrame],
+    logs_b: list[pl.DataFrame],
+    metric_fn: Optional[Callable[[pl.DataFrame], float]] = None,
+) -> dict[str, float]:
+    """
+    Paired statistical comparison of two experiments on matched episodes.
+
+    Each entry in *logs_a* and *logs_b* is assumed to correspond to the same
+    episode seed / customer.  The Wilcoxon signed-rank test is used when scipy
+    is available; otherwise only the mean difference is returned.
+
+    Parameters
+    ----------
+    logs_a, logs_b : lists of per-episode DataFrames (must be same length)
+    metric_fn : callable(episode_df) -> float, default total episode reward
+
+    Returns
+    -------
+    dict with keys: "mean_diff", "median_diff", "std_diff",
+                    "wilcoxon_stat", "wilcoxon_p" (NaN when scipy unavailable
+                    or when the test cannot be computed)
+    """
+    def _default_ep_metric(df: pl.DataFrame) -> float:
+        if "reward" in df.columns:
+            try:
+                return float(df["reward"].sum())
+            except Exception:
+                return 0.0
+        return 0.0
+
+    fn = metric_fn if metric_fn is not None else _default_ep_metric
+
+    n = min(len(logs_a), len(logs_b))
+    if n == 0:
+        return {
+            "mean_diff": 0.0,
+            "median_diff": 0.0,
+            "std_diff": 0.0,
+            "wilcoxon_stat": float("nan"),
+            "wilcoxon_p": float("nan"),
+        }
+
+    diffs = np.array([fn(logs_a[i]) - fn(logs_b[i]) for i in range(n)], dtype=float)
+    mean_d = float(diffs.mean())
+    median_d = float(np.median(diffs))
+    std_d = float(diffs.std(ddof=1)) if n > 1 else 0.0
+
+    w_stat = float("nan")
+    w_p = float("nan")
+    if _HAS_SCIPY and wilcoxon is not None and n >= 10:
+        try:
+            stat, p = wilcoxon(diffs)
+            w_stat = float(stat)
+            w_p = float(p)
+        except Exception:
+            pass
+
+    return {
+        "mean_diff": mean_d,
+        "median_diff": median_d,
+        "std_diff": std_d,
+        "wilcoxon_stat": w_stat,
+        "wilcoxon_p": w_p,
+    }
 
 def evaluate_by_conditions(
     logs: list[pl.DataFrame],
