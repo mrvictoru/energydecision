@@ -212,7 +212,7 @@ Exported artifacts:
 Standard diagnostic plots produced by `evaluate_experiments(..., save_dir=...)`:
 - Mean reward bar chart with std error bars.
 - Grid energy comparison with degradation overlay.
-- Risk–return scatter (std vs mean, colour by Sharpe ratio).
+- Risk-return scatter (std vs mean, color by Sharpe ratio).
 - Episode return distribution (box plot).
 
 ## 8. Results
@@ -276,7 +276,7 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 - **Degradation varies dramatically with RTG:** `dt_rtg_neg1500` achieves extremely low degradation (0.0017/ep) vs `dt_rtg_neg1` (0.0567/ep), a 33\u00d7 difference. The more negative RTG prompt appears to encourage gentler battery operation.
 - **Grid energy is stable across DT variants:** all prompts produce similar net grid import (\u22483858 kWh), suggesting the RTG primarily affects cycling intensity rather than energy trading strategy.
 
-> **NOTE:** The `dt_rtg_*` labels correspond to different `rtg_value` choices in `Agent(..., algorithm='dt')`. The RTG is updated each step via the discounted recurrence $\text{rtg}_{t+1} = (\text{rtg}_t - r_t)/\gamma$. Sensitivity to the initial prompt is an expected feature of return-conditioned policies.
+> **NOTE:** The `dt_rtg_*` labels correspond to different `rtg_value` choices in `Agent(..., algorithm='dt')`. The RTG is updated each step via the discounted recurrence $\text{rtg}_{t+1} = (\text{rtg}_t - r_t)/\gamma$ (where $\gamma$ is the discount factor). Sensitivity to the initial prompt is an expected feature of return-conditioned policies.
 
 > **NOTE:** Hypotheses about out-of-distribution RTG prompts are plausible but not directly established by these metrics. Confirming this would require analysis of the training RTG distribution and prompt distances.
 
@@ -322,13 +322,13 @@ The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` qu
 ![Pairwise signed significance heatmap (Wilcoxon)](eval_output/pairwise_significance_heatmap.svg)
 
 **Heatmap reading guide** (row algorithm vs column algorithm):
-- **Colour direction:** warm/red = row outperforms column (`mean_diff > 0`); cool/blue = underperformance.
-- **Colour intensity:** stronger magnitude = smaller p-value (higher statistical confidence).
+- **Color direction:** warm/red = row outperforms column (`mean_diff > 0`); cool/blue = underperformance.
+- **Color intensity:** stronger magnitude = smaller p-value (higher statistical confidence).
 - **Symmetry:** anti-symmetric by construction (A vs B positive implies B vs A negative).
-- **Practical guidance:** prioritize cells with both strong colour and practically meaningful `mean_diff`; treat weak-colour cells as inconclusive.
+- **Practical guidance:** prioritize cells with both strong color and practically meaningful `mean_diff`; treat weak-color cells as inconclusive.
 
 **Key takeaways from pairwise analysis:**
-- `dt_rtg_neg1500` significantly outperforms Oracle, PPO, SAC, TD3, and Rule, but differences vs SDP and MRDP are inconclusive (p > 0.3).
+- `dt_rtg_neg1500` shows statistically significant higher (less negative) mean returns than Oracle, PPO, SAC, TD3, and Rule, but differences vs SDP and MRDP are inconclusive (p > 0.3).
 - RTG prompt choice within DT is statistically significant: `dt_rtg_neg1500` vs `dt_rtg_neg1000` yields p = 0.0012.
 - Among RL baselines, A2C significantly outperforms PPO (p \u2248 1.7e-11), and both outperform SAC, TD3, and DDPG.
 
