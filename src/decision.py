@@ -1,4 +1,5 @@
 import logging
+import inspect
 import numpy as np
 import torch
 import polars as pl
@@ -35,11 +36,23 @@ DEG_INCIDENT_FIELDS = [
 ]
 
 
+def _reset_env(env, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None):
+    """Reset an environment while supporting both Gymnasium-style and legacy reset signatures."""
+    if options is None:
+        return env.reset(seed=seed)
+
+    reset_sig = inspect.signature(env.reset)
+    if 'options' in reset_sig.parameters:
+        return env.reset(seed=seed, options=options)
+    return env.reset(seed=seed, **options)
+
+
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
                  horizon=72, soc_resolution=20, action_resolution=41,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
-                 subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99):
+                 subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99,
+                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp', 'sdp', or 'oracle'.
@@ -53,6 +66,8 @@ class Agent:
         self.algorithm = algorithm.lower()
         self.model = model
         self.rule_presistence = False  # Preset for rule-based action persistence
+        self.reset_seed = reset_seed
+        self.reset_options = reset_options
 
         if self.algorithm in ('sdp', 'mrdp', 'oracle'):
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
@@ -455,7 +470,7 @@ class Agent:
         return [np.float32(result)]  # Return as a list to match expected action format
     
     def run_episode(self, render=False, display_progress=False):
-        obs, info = self.env.reset()
+        obs, info = _reset_env(self.env, seed=self.reset_seed, options=self.reset_options)
         raw_obs = self.env.get_raw_obs()  # Get raw observation if available
         max_possible_steps = len(self.env.df)
 
@@ -583,11 +598,15 @@ class AEMOAgent:
                  assume_single_duid_is_generator: bool = True,
                  dispatch_action_mode: Optional[str] = None,
                  rtg_value: float = 0.0,
-                 dt_gamma: float = 0.99):
+                 dt_gamma: float = 0.99,
+                 reset_seed: Optional[int] = None,
+                 reset_options: Optional[Dict[str, Any]] = None):
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
         self.rule_presistence = False
+        self.reset_seed = reset_seed
+        self.reset_options = reset_options
 
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
@@ -869,7 +888,7 @@ class AEMOAgent:
         return np.array([np.float32(action_val)], dtype=np.float32)
 
     def run_episode(self, render: bool = False, display_progress: bool = False):
-        obs, info = self.env.reset()
+        obs, info = _reset_env(self.env, seed=self.reset_seed, options=self.reset_options)
         raw_obs = self.env.get_raw_obs()
         max_possible_steps = len(self.env.aemo_data) if hasattr(self.env, 'aemo_data') else 0
 
@@ -969,13 +988,26 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     Runs one episode per environment in parallel.
     agent_class: The Agent class to instantiate. 
     envs: List of SolarBatteryEnv instances.
-    agent_kwargs: Dict of kwargs for Agent constructor. (only suitable for rule, sdp algorithms)
+    agent_kwargs: Dict of kwargs for Agent constructor, or a list of per-environment
+        kwargs dicts with the same length as envs.
     use_notebook_tqdm: If True, use tqdm.notebook.tqdm; else use tqdm.tqdm (for scripts)
     Returns: List of DataFrames (one per environment).
     """
-    agent_kwargs = agent_kwargs or {}
-    if agent_kwargs.get('algorithm', 'rule').lower() not in ['rule', 'sdp', 'mrdp', 'dt', 'oracle', 'dispatch']:
-        raise ValueError("Parallel execution is only supported for 'rule', 'sdp', 'mrdp', 'dt', 'oracle', and 'dispatch' algorithms. ")
+    if agent_kwargs is None:
+        agent_kwargs_list = [{} for _ in envs]
+    elif isinstance(agent_kwargs, list):
+        if len(agent_kwargs) != len(envs):
+            raise ValueError("When agent_kwargs is a list, it must have the same length as envs.")
+        agent_kwargs_list = [kwargs or {} for kwargs in agent_kwargs]
+    else:
+        shared_kwargs = agent_kwargs or {}
+        agent_kwargs_list = [shared_kwargs for _ in envs]
+
+    allowed_algorithms = {'rule', 'sdp', 'mrdp', 'dt', 'oracle', 'dispatch'}
+    for kwargs in agent_kwargs_list:
+        algorithm = kwargs.get('algorithm', 'rule').lower()
+        if algorithm not in allowed_algorithms:
+            raise ValueError("Parallel execution is only supported for 'rule', 'sdp', 'mrdp', 'dt', 'oracle', and 'dispatch' algorithms. ")
 
     if use_notebook_tqdm:
         from tqdm.notebook import tqdm as tqdm_bar
@@ -988,7 +1020,10 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     print(f"[INFO] Starting {len(envs)} episodes with max_workers={max_workers}")
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(run_single_with_logging, agent_class, env, agent_kwargs, render, idx, display_indi_prog) for idx, env in enumerate(envs)]
+        futures = [
+            executor.submit(run_single_with_logging, agent_class, env, kwargs, render, idx, display_indi_prog)
+            for idx, (env, kwargs) in enumerate(zip(envs, agent_kwargs_list))
+        ]
         for f in tqdm_bar(concurrent.futures.as_completed(futures), total=len(futures), desc="Episodes"):
             ep_df, inc_df = f.result()
             episode_logs.append(ep_df)
