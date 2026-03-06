@@ -341,6 +341,7 @@ class AEMOBatteryTradingEnv(gym.Env):
                  action_mode: str = 'simple',  # 'simple' or 'multi_market'
                  normalize_obs: bool = True,
                  return_raw_obs: bool = False,
+                 random_episode_start: bool = False,
                  degradation_mode: str = 'rainflow',  # 'rainflow' or 'simple'
                  degradation_temperature: float = 25.0):
         """
@@ -356,6 +357,8 @@ class AEMOBatteryTradingEnv(gym.Env):
             battery_life_cost: Total battery replacement cost in USD
             render_mode: Rendering mode ('human' or None)
             action_mode: 'simple' for energy-only or 'multi_market' for energy+FCAS
+            random_episode_start: If True, sample a random valid episode start on
+                reset; otherwise default to starting at index 0
             degradation_mode: 'rainflow' for physics-based Muenzel et al. model
                 with rainflow cycle counting (recommended), or 'simple' for the
                 original linear DoD-based approximation
@@ -375,6 +378,7 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.action_mode = action_mode
         self.normalize_obs = normalize_obs
         self.return_raw_obs = return_raw_obs
+        self.random_episode_start = random_episode_start
         self.degradation_mode = degradation_mode
         self.degradation_temperature = float(degradation_temperature)
 
@@ -467,13 +471,22 @@ class AEMOBatteryTradingEnv(gym.Env):
 
         if options and 'return_raw_obs' in options:
             self.return_raw_obs = bool(options.get('return_raw_obs'))
-        
-        # Randomly sample episode start (leave buffer for data availability)
+
+        # Determine valid episode start range.
         max_start_idx = len(self.aemo_data) - self.max_step - 1
         if max_start_idx < 1:
             max_start_idx = 0
-        
-        self.episode_start_idx = self.np_random.integers(0, max(1, max_start_idx))
+
+        requested_start_idx = options.get('episode_start_idx') if options else None
+        use_random_start = bool(options.get('random_episode_start')) if options and 'random_episode_start' in options else self.random_episode_start
+
+        if requested_start_idx is not None:
+            self.episode_start_idx = int(np.clip(requested_start_idx, 0, max_start_idx))
+        elif use_random_start:
+            self.episode_start_idx = int(self.np_random.integers(0, max_start_idx + 1))
+        else:
+            self.episode_start_idx = 0
+
         self.current_step = 0
         
         # Reset battery state
