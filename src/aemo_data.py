@@ -93,6 +93,27 @@ def _coerce_f64(df: pl.DataFrame, col: str) -> pl.DataFrame:
     return df.with_columns(pl.col(col).cast(pl.Float64, strict=False))
 
 
+def _iter_month_windows(start_date: datetime, end_date: datetime) -> list[tuple[datetime, datetime]]:
+    """Split a date range into month-bounded windows to keep NEMOSIS fetches smaller."""
+    if end_date <= start_date:
+        return [(start_date, end_date)]
+
+    windows: list[tuple[datetime, datetime]] = []
+    window_start = start_date
+    while window_start < end_date:
+        if window_start.month == 12:
+            next_month = datetime(window_start.year + 1, 1, 1)
+        else:
+            next_month = datetime(window_start.year, window_start.month + 1, 1)
+        window_end = min(end_date, next_month)
+        if window_end <= window_start:
+            break
+        windows.append((window_start, window_end))
+        window_start = window_end
+
+    return windows or [(start_date, end_date)]
+
+
 def _rows_to_polars(headers: list[str], rows: Iterable[Iterable[Any]]) -> pl.DataFrame:
     normalized_headers = [str(h).strip() if h is not None else "" for h in headers]
     out_rows: list[dict[str, Any]] = []
@@ -560,16 +581,58 @@ def fetch_aemo_unit_dispatch(
     print(f"Fetching unit dispatch data{duid_str}{region_str} from {start_date.date()} to {end_date.date()}...")
     
     try:
-        # Fetch DISPATCHLOAD which contains unit-specific dispatch and FCAS enablement
-        dispatch_data = dynamic_data_compiler(
-            start_time=start_time,
-            end_time=end_time,
-            table_name='DISPATCHLOAD',
-            raw_data_location=str(cache_path)
-        )
+        columns_to_keep = ['SETTLEMENTDATE', 'DUID', 'TOTALCLEARED']
 
-        dispatch_pl = _normalize_columns(_as_polars(dispatch_data))
-        if dispatch_pl.height == 0:
+        fcas_columns = [
+            'RAISE6SEC',
+            'RAISE60SEC',
+            'RAISE5MIN',
+            'RAISEREG',
+            'LOWER6SEC',
+            'LOWER60SEC',
+            'LOWER5MIN',
+            'LOWERREG',
+        ]
+        columns_to_keep.extend(fcas_columns)
+
+        dispatch_frames: list[pl.DataFrame] = []
+        windows = _iter_month_windows(start_date, end_date)
+        for idx, (window_start, window_end) in enumerate(windows, start=1):
+            window_start_time = window_start.strftime('%Y/%m/%d %H:%M:%S')
+            window_end_time = window_end.strftime('%Y/%m/%d %H:%M:%S')
+            if len(windows) > 1:
+                print(
+                    f"  DISPATCHLOAD chunk {idx}/{len(windows)}: "
+                    f"{window_start.date()} to {window_end.date()}"
+                )
+
+            chunk = dynamic_data_compiler(
+                start_time=window_start_time,
+                end_time=window_end_time,
+                table_name='DISPATCHLOAD',
+                raw_data_location=str(cache_path)
+            )
+            chunk_pl = _normalize_columns(_as_polars(chunk))
+            if chunk_pl.height == 0:
+                continue
+
+            if duid and 'DUID' in chunk_pl.columns:
+                before_filter = chunk_pl.height
+                chunk_pl = chunk_pl.filter(pl.col('DUID') == duid)
+                print(
+                    f"    DUID filter: {before_filter} records before filter, "
+                    f"{chunk_pl.height} after filtering for '{duid}'"
+                )
+                if chunk_pl.height == 0:
+                    continue
+
+            chunk_pl = _coerce_datetime(chunk_pl, 'SETTLEMENTDATE')
+            available_columns = list(dict.fromkeys(col for col in columns_to_keep if col in chunk_pl.columns))
+            if not available_columns:
+                continue
+            dispatch_frames.append(chunk_pl.select(available_columns))
+
+        if not dispatch_frames:
             print("No dispatch data returned from NEMOSIS")
             return pl.DataFrame(schema={
                 'SETTLEMENTDATE': pl.Datetime,
@@ -584,58 +647,26 @@ def fetch_aemo_unit_dispatch(
                 'LOWER5MIN': pl.Float64,
                 'LOWERREG': pl.Float64,
             })
-        
-        # Filter by DUID if specified
-        if duid:
-            initial_count = dispatch_pl.height
-            if 'DUID' in dispatch_pl.columns:
-                dispatch_pl = dispatch_pl.filter(pl.col('DUID') == duid)
-            filtered_count = dispatch_pl.height
-            print(f"DUID filter: {initial_count} records before filter, {filtered_count} after filtering for '{duid}'")
+        dispatch_pl = pl.concat(dispatch_frames, how='vertical_relaxed')
 
-            if dispatch_pl.height == 0:
-                print(f"Warning: No data found for DUID {duid}")
-                # Check if DUID exists in the full dataset with different formatting
-                print(f"Hint: Check if DUID '{duid}' exists in DISPATCHLOAD table for this date range")
-                return pl.DataFrame(schema={
-                    'SETTLEMENTDATE': pl.Datetime,
-                    'DUID': pl.Utf8,
-                    'TOTALCLEARED': pl.Float64,
-                    'RAISE6SEC': pl.Float64,
-                    'RAISE60SEC': pl.Float64,
-                    'RAISE5MIN': pl.Float64,
-                    'RAISEREG': pl.Float64,
-                    'LOWER6SEC': pl.Float64,
-                    'LOWER60SEC': pl.Float64,
-                    'LOWER5MIN': pl.Float64,
-                    'LOWERREG': pl.Float64,
-                })
-        
-        dispatch_pl = _coerce_datetime(dispatch_pl, 'SETTLEMENTDATE')
+        if duid and dispatch_pl.height == 0:
+            print(f"Warning: No data found for DUID {duid}")
+            print(f"Hint: Check if DUID '{duid}' exists in DISPATCHLOAD table for this date range")
+            return pl.DataFrame(schema={
+                'SETTLEMENTDATE': pl.Datetime,
+                'DUID': pl.Utf8,
+                'TOTALCLEARED': pl.Float64,
+                'RAISE6SEC': pl.Float64,
+                'RAISE60SEC': pl.Float64,
+                'RAISE5MIN': pl.Float64,
+                'RAISEREG': pl.Float64,
+                'LOWER6SEC': pl.Float64,
+                'LOWER60SEC': pl.Float64,
+                'LOWER5MIN': pl.Float64,
+                'LOWERREG': pl.Float64,
+            })
 
-        # Select relevant columns (all FCAS enablement columns and energy dispatch)
-        columns_to_keep = ['SETTLEMENTDATE', 'DUID']
-
-        # Energy dispatch
-        if 'TOTALCLEARED' in dispatch_pl.columns:
-            columns_to_keep.append('TOTALCLEARED')
-        
-        # FCAS enablement columns
-        # Note: DISPATCHLOAD uses shorter column names without "ACTUALAVAILABILITY" suffix
-        fcas_columns = [
-            'RAISE6SEC',
-            'RAISE60SEC',
-            'RAISE5MIN',
-            'RAISEREG',
-            'LOWER6SEC',
-            'LOWER60SEC',
-            'LOWER5MIN',
-            'LOWERREG',
-        ]
-        
-        for col in fcas_columns:
-            if col in dispatch_pl.columns:
-                columns_to_keep.append(col)
+        dispatch_pl = dispatch_pl.unique(subset=['SETTLEMENTDATE', 'DUID'], keep='last').sort('SETTLEMENTDATE')
         
         # Filter by region if specified (requires generator static info)
         # NOTE: Only filter by region if DUID was NOT specified (DUID already implies region)
@@ -664,7 +695,7 @@ def fetch_aemo_unit_dispatch(
                 )
 
         # Select only the columns that exist and cast numerics
-        available_columns = [col for col in columns_to_keep if col in dispatch_pl.columns]
+        available_columns = list(dict.fromkeys(col for col in columns_to_keep if col in dispatch_pl.columns))
         select_exprs = []
         for c in available_columns:
             if c == 'SETTLEMENTDATE' or c == 'DUID':
@@ -680,6 +711,91 @@ def fetch_aemo_unit_dispatch(
         print(f"Error fetching unit dispatch data from NEMOSIS: {e}")
         print("Note: NEMOSIS requires internet connection to download data from AEMO")
         raise
+
+
+def check_aemo_dispatch_availability(
+    start_date: datetime,
+    end_date: datetime,
+    duid: str,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+) -> Dict[str, Any]:
+    """Return a lightweight availability summary for a DUID over a date range."""
+    if not duid:
+        raise ValueError("duid must be provided")
+
+    if not HAS_NEMOSIS:
+        raise ImportError(
+            "NEMOSIS is required to fetch actual AEMO data. "
+            "Install with: pip install nemosis"
+        )
+
+    cache_path = get_cache_dir(cache_dir)
+    windows = _iter_month_windows(start_date, end_date)
+    total_rows = 0
+    unique_intervals = 0
+    months_with_data = 0
+    first_settlement = None
+    last_settlement = None
+
+    expected_intervals = max(
+        0,
+        int((end_date - start_date).total_seconds() // (5 * 60))
+    )
+
+    for window_start, window_end in windows:
+        chunk = dynamic_data_compiler(
+            start_time=window_start.strftime('%Y/%m/%d %H:%M:%S'),
+            end_time=window_end.strftime('%Y/%m/%d %H:%M:%S'),
+            table_name='DISPATCHLOAD',
+            raw_data_location=str(cache_path),
+            fformat='feather',
+            keep_csv=refresh,
+        )
+        chunk_pl = _normalize_columns(_as_polars(chunk))
+        if chunk_pl.height == 0 or 'DUID' not in chunk_pl.columns:
+            continue
+
+        filtered = chunk_pl.filter(pl.col('DUID') == duid)
+        if filtered.height == 0:
+            continue
+
+        filtered = _coerce_datetime(filtered, 'SETTLEMENTDATE')
+        if 'SETTLEMENTDATE' not in filtered.columns:
+            continue
+
+        months_with_data += 1
+        total_rows += filtered.height
+        settlement_dates = filtered['SETTLEMENTDATE']
+        unique_intervals += settlement_dates.n_unique()
+
+        chunk_first = settlement_dates.min()
+        chunk_last = settlement_dates.max()
+        if first_settlement is None or (chunk_first is not None and chunk_first < first_settlement):
+            first_settlement = chunk_first
+        if last_settlement is None or (chunk_last is not None and chunk_last > last_settlement):
+            last_settlement = chunk_last
+
+    has_data = total_rows > 0
+    coverage_ratio = (
+        float(unique_intervals) / float(expected_intervals)
+        if expected_intervals > 0 else (1.0 if has_data else 0.0)
+    )
+
+    return {
+        'duid': duid,
+        'start_date': start_date,
+        'end_date': end_date,
+        'has_data': has_data,
+        'row_count': int(total_rows),
+        'unique_intervals': int(unique_intervals),
+        'expected_intervals': int(expected_intervals),
+        'coverage_ratio': float(coverage_ratio),
+        'months_checked': len(windows),
+        'months_with_data': int(months_with_data),
+        'first_settlement': first_settlement,
+        'last_settlement': last_settlement,
+    }
 
 
 def _get_generators_static_table(cache_path: Path, refresh: bool):
