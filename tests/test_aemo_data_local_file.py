@@ -208,3 +208,142 @@ def test_get_available_battery_units_capacity_not_all_null():
     assert non_null_mw.height > 0, (
         "Expected at least some RegisteredCapacityMW values to be non-null after fix"
     )
+
+
+@skip_without_bundled
+def test_get_available_battery_units_has_dispatch_type():
+    """get_available_battery_units now includes a DispatchType column."""
+    result = get_available_battery_units(cache_dir="data/aemo")
+    assert "DispatchType" in result.columns, (
+        "Expected DispatchType column – got: " + str(result.columns)
+    )
+    # There should be at least some non-null DispatchType values
+    non_null = result.filter(pl.col("DispatchType").is_not_null())
+    assert non_null.height > 0, "Expected at least some non-null DispatchType values"
+
+
+@skip_without_bundled
+def test_get_available_battery_units_kep_dispatch_types():
+    """KEPBG1 and KEPBL1 should have Generating Unit and Load dispatch types."""
+    result = get_available_battery_units(cache_dir="data/aemo", region="QLD1")
+    kepbg = result.filter(pl.col("DUID") == "KEPBG1")
+    kepbl = result.filter(pl.col("DUID") == "KEPBL1")
+
+    if kepbg.height > 0:
+        dt = str(kepbg["DispatchType"][0]).lower()
+        assert "generating" in dt, f"KEPBG1 should be 'Generating Unit', got {dt!r}"
+    if kepbl.height > 0:
+        dt = str(kepbl["DispatchType"][0]).lower()
+        assert "load" in dt, f"KEPBL1 should be 'Load', got {dt!r}"
+
+
+# ---------------------------------------------------------------------------
+# dispatch_type sign correction in set_dispatch_data
+# ---------------------------------------------------------------------------
+
+def test_set_dispatch_data_load_duid_sign():
+    """When dispatch_type='Load', actions should be positive (charging direction)."""
+    from types import SimpleNamespace
+    from datetime import datetime as _dt
+    import numpy as _np
+    from decision import AEMOAgent
+
+    mock_aemo_data = pl.DataFrame({
+        'SETTLEMENTDATE': [_dt(2024, 1, 1, 0, 0), _dt(2024, 1, 1, 0, 30)],
+    })
+    mock_env = SimpleNamespace(
+        aemo_data=mock_aemo_data,
+        step_duration=0.5,
+        max_battery_flow=5.0,
+        action_mode='simple',
+        current_step=0,
+        episode_start_idx=0,
+    )
+    dispatch_data = pl.DataFrame({
+        'SETTLEMENTDATE': [_dt(2024, 1, 1, 0, 0), _dt(2024, 1, 1, 0, 30)],
+        'DUID': ['LOADUNIT1', 'LOADUNIT1'],
+        'TOTALCLEARED': [3.0, 5.0],
+        'RAISEREG': [0.0, 0.0],
+        'LOWERREG': [0.0, 0.0],
+    })
+    agent = AEMOAgent(mock_env, algorithm='dispatch')
+
+    # Default (assume_generator=True) → negative actions
+    agent.set_dispatch_data(dispatch_data, dispatch_duid='LOADUNIT1')
+    actions_gen = agent.dispatch_actions.flatten()
+    assert _np.all(actions_gen < 0), f"Generator sign expected negative, got {actions_gen}"
+
+    # With dispatch_type='Load' → positive actions
+    agent.set_dispatch_data(dispatch_data, dispatch_duid='LOADUNIT1', dispatch_type='Load')
+    actions_load = agent.dispatch_actions.flatten()
+    assert _np.all(actions_load > 0), f"Load sign expected positive, got {actions_load}"
+
+
+def test_set_dispatch_data_bidirectional_duid_unaffected():
+    """dispatch_type='Bidirectional Unit' should not change the default sign convention."""
+    from types import SimpleNamespace
+    from datetime import datetime as _dt
+    import numpy as _np
+    from decision import AEMOAgent
+
+    mock_aemo_data = pl.DataFrame({
+        'SETTLEMENTDATE': [_dt(2024, 1, 1, 0, 0), _dt(2024, 1, 1, 0, 30)],
+    })
+    mock_env = SimpleNamespace(
+        aemo_data=mock_aemo_data,
+        step_duration=0.5,
+        max_battery_flow=5.0,
+        action_mode='simple',
+        current_step=0,
+        episode_start_idx=0,
+    )
+    dispatch_data = pl.DataFrame({
+        'SETTLEMENTDATE': [_dt(2024, 1, 1, 0, 0), _dt(2024, 1, 1, 0, 30)],
+        'DUID': ['BIDIBAT1', 'BIDIBAT1'],
+        'TOTALCLEARED': [4.0, 2.0],
+        'RAISEREG': [0.0, 0.0],
+        'LOWERREG': [0.0, 0.0],
+    })
+    agent = AEMOAgent(mock_env, algorithm='dispatch')
+    agent.set_dispatch_data(dispatch_data, dispatch_duid='BIDIBAT1', dispatch_type='Bidirectional Unit')
+    actions = agent.dispatch_actions.flatten()
+    # 'Bidirectional Unit' is neither "load"-only nor "generating"-only → treated as generator
+    assert _np.all(actions < 0), f"Bidirectional should default to generator sign, got {actions}"
+
+
+# ---------------------------------------------------------------------------
+# NonZeroIntervalCount logic (unit test, no network needed)
+# ---------------------------------------------------------------------------
+
+def test_nonzero_interval_count_logic():
+    """NonZeroIntervalCount correctly identifies all-zero vs active dispatch data."""
+    from datetime import datetime as _dt
+
+    # Simulate the expression used in get_dispatch_active_battery_units
+    dispatch_zero = pl.DataFrame({
+        'SETTLEMENTDATE': [_dt(2024, 1, 1, 0, 5), _dt(2024, 1, 1, 0, 10)],
+        'DUID': ['KEPBL1', 'KEPBL1'],
+        'TOTALCLEARED': [0.0, 0.0],
+        'RAISEREG': [0.0, 0.0],
+        'LOWERREG': [0.0, 0.0],
+    })
+    dispatch_active = pl.DataFrame({
+        'SETTLEMENTDATE': [_dt(2024, 1, 1, 0, 5), _dt(2024, 1, 1, 0, 10)],
+        'DUID': ['TARBESS1', 'TARBESS1'],
+        'TOTALCLEARED': [100.0, -50.0],
+        'RAISEREG': [10.0, 0.0],
+        'LOWERREG': [0.0, 5.0],
+    })
+
+    def compute_nonzero_count(df: pl.DataFrame) -> int:
+        numeric_cols = [c for c in df.columns if c not in {'SETTLEMENTDATE', 'DUID'}]
+        cond = None
+        for col in numeric_cols:
+            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > 0.001
+            cond = expr if cond is None else (cond | expr)
+        flagged = df.with_columns(pl.when(cond).then(1).otherwise(0).alias('_active'))
+        return int(flagged['_active'].sum())
+
+    assert compute_nonzero_count(dispatch_zero) == 0, "All-zero data should have NonZeroIntervalCount=0"
+    assert compute_nonzero_count(dispatch_active) == 2, "Active data should have NonZeroIntervalCount=2"
+

@@ -596,6 +596,7 @@ class AEMOAgent:
                  dispatch_duid_gen: Optional[str] = None,
                  dispatch_duid_load: Optional[str] = None,
                  assume_single_duid_is_generator: bool = True,
+                 dispatch_type: Optional[str] = None,
                  dispatch_action_mode: Optional[str] = None,
                  rtg_value: float = 0.0,
                  dt_gamma: float = 0.99,
@@ -623,7 +624,8 @@ class AEMOAgent:
                 dispatch_duid=dispatch_duid,
                 dispatch_duid_gen=dispatch_duid_gen,
                 dispatch_duid_load=dispatch_duid_load,
-                assume_single_duid_is_generator=assume_single_duid_is_generator
+                assume_single_duid_is_generator=assume_single_duid_is_generator,
+                dispatch_type=dispatch_type,
             )
 
     @staticmethod
@@ -647,7 +649,37 @@ class AEMOAgent:
                           dispatch_duid: Optional[str] = None,
                           dispatch_duid_gen: Optional[str] = None,
                           dispatch_duid_load: Optional[str] = None,
-                          assume_single_duid_is_generator: bool = True) -> None:
+                          assume_single_duid_is_generator: bool = True,
+                          dispatch_type: Optional[str] = None) -> None:
+        """Configure dispatch replay from a NEMOSIS DISPATCHLOAD DataFrame.
+
+        Args:
+            dispatch_data: Polars DataFrame with SETTLEMENTDATE, DUID, TOTALCLEARED, and
+                FCAS columns (as returned by ``fetch_aemo_unit_dispatch``).
+            dispatch_duid: Single DUID to replay.  Used when the battery is registered
+                as a "Bidirectional Unit" or when only one DUID is available.
+            dispatch_duid_gen: Generator (discharge) DUID for paired gen/load batteries.
+                When provided together with ``dispatch_duid_load``, the net energy action
+                is computed as ``LOAD_MW - GEN_MW``.
+            dispatch_duid_load: Load (charge) DUID for paired gen/load batteries.
+            assume_single_duid_is_generator: When ``dispatch_duid`` is set and neither
+                ``dispatch_duid_gen`` nor ``dispatch_duid_load`` is set, this controls
+                the sign of the energy action.  ``True`` (default) → battery is a
+                generator, so ``NET_MW = -TOTALCLEARED`` (negative = discharging);
+                ``False`` → battery is a load, so ``NET_MW = +TOTALCLEARED``
+                (positive = charging).  Automatically overridden to ``False`` when
+                ``dispatch_type`` is ``'Load'``.
+            dispatch_type: Optional AEMO dispatch type string (e.g. ``'Load'``,
+                ``'Generating Unit'``, ``'Bidirectional Unit'``).  When ``'Load'`` is
+                passed, ``assume_single_duid_is_generator`` is forced to ``False``
+                regardless of its explicit value.
+        """
+        # Auto-correct the sign convention when the DUID is explicitly a Load unit.
+        if dispatch_type is not None:
+            dt_lower = str(dispatch_type).strip().lower()
+            if 'load' in dt_lower and 'generating' not in dt_lower:
+                assume_single_duid_is_generator = False
+
         self.dispatch_actions = self._build_dispatch_actions(
             dispatch_data,
             dispatch_duid=dispatch_duid,

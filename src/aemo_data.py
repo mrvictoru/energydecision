@@ -874,7 +874,25 @@ def get_dispatch_active_battery_units(
     generator_info_path: Optional[str] = None,
     refresh: bool = False,
 ) -> pl.DataFrame:
-    """Return battery DUIDs from the static table that also appear in DISPATCHLOAD for the date window."""
+    """Return battery DUIDs from the static table that appear in DISPATCHLOAD for the date window.
+
+    Returned columns include activity statistics so callers can distinguish
+    batteries that were actually dispatched from those with only zero-valued records:
+
+      - All columns from ``get_available_battery_units``
+      - ``DispatchIntervalCount`` – number of unique 5-min intervals with any record
+      - ``NonZeroIntervalCount`` – intervals where at least one dispatch column is non-zero
+      - ``MaxEnergyMW`` – peak absolute TOTALCLEARED across all intervals
+      - ``FirstDispatchInterval`` / ``LastDispatchInterval`` – timestamp range
+      - ``PairedGenDUID`` / ``PairedLoadDUID`` – populated for old-model batteries
+        registered as separate "Generating Unit" + "Load" DUIDs at the same station
+
+    Rows are sorted by ``NonZeroIntervalCount`` descending so the most-active
+    batteries appear first.  If all found batteries have ``NonZeroIntervalCount=0``
+    (i.e. none were dispatched during the window), a warning is printed and the
+    rows are still returned with zero activity stats so callers can surface this
+    information to the user.
+    """
     battery_units = get_available_battery_units(
         cache_dir=cache_dir,
         generator_info_path=generator_info_path,
@@ -895,23 +913,147 @@ def get_dispatch_active_battery_units(
     if dispatch_df.height == 0 or 'DUID' not in dispatch_df.columns:
         return battery_units.head(0)
 
-    dispatch_summary = (
-        dispatch_df
-        .with_columns(pl.col('SETTLEMENTDATE').cast(pl.Datetime, strict=False))
-        .group_by('DUID')
-        .agg([
-            pl.len().alias('DispatchRowCount'),
-            pl.col('SETTLEMENTDATE').n_unique().alias('DispatchIntervalCount'),
-            pl.col('SETTLEMENTDATE').min().alias('FirstDispatchInterval'),
-            pl.col('SETTLEMENTDATE').max().alias('LastDispatchInterval'),
+    # Compute per-DUID activity statistics
+    dispatch_numeric_cols = [c for c in dispatch_df.columns if c not in {'SETTLEMENTDATE', 'DUID'}]
+
+    # Build a per-row "any column is non-zero" flag
+    activity_df = dispatch_df.with_columns(
+        pl.col('SETTLEMENTDATE').cast(pl.Datetime, strict=False)
+    )
+    if dispatch_numeric_cols:
+        nonzero_cond: Optional[pl.Expr] = None
+        for col in dispatch_numeric_cols:
+            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > 0.001
+            nonzero_cond = expr if nonzero_cond is None else (nonzero_cond | expr)
+        activity_df = activity_df.with_columns(
+            pl.when(nonzero_cond).then(1).otherwise(0).alias('_has_activity')
+        )
+        tc_expr = pl.col('TOTALCLEARED').cast(pl.Float64, strict=False).abs() if 'TOTALCLEARED' in dispatch_numeric_cols else pl.lit(0.0)
+        dispatch_summary = (
+            activity_df
+            .group_by('DUID')
+            .agg([
+                pl.len().alias('DispatchRowCount'),
+                pl.col('SETTLEMENTDATE').n_unique().alias('DispatchIntervalCount'),
+                pl.col('SETTLEMENTDATE').min().alias('FirstDispatchInterval'),
+                pl.col('SETTLEMENTDATE').max().alias('LastDispatchInterval'),
+                pl.col('_has_activity').sum().cast(pl.UInt32).alias('NonZeroIntervalCount'),
+                tc_expr.max().alias('MaxEnergyMW'),
+            ])
+        )
+    else:
+        dispatch_summary = (
+            activity_df
+            .group_by('DUID')
+            .agg([
+                pl.len().alias('DispatchRowCount'),
+                pl.col('SETTLEMENTDATE').n_unique().alias('DispatchIntervalCount'),
+                pl.col('SETTLEMENTDATE').min().alias('FirstDispatchInterval'),
+                pl.col('SETTLEMENTDATE').max().alias('LastDispatchInterval'),
+                pl.lit(0, dtype=pl.UInt32).alias('NonZeroIntervalCount'),
+                pl.lit(None, dtype=pl.Float64).alias('MaxEnergyMW'),
+            ])
+        )
+
+    result = battery_units.join(dispatch_summary, on='DUID', how='inner')
+
+    # ------------------------------------------------------------------
+    # Detect paired gen/load DUID batteries (old AEMO registration model).
+    # A "Generating Unit" DUID and a "Load" DUID form a logical battery
+    # pair.  We expose PairedGenDUID / PairedLoadDUID so callers can pass
+    # both to set_dispatch_data() for a correct net-energy replay.
+    #
+    # Pairing strategy (safest first):
+    #   1. If a StationName column exists, pair within (StationName, Region)
+    #      to get exactly one gen+one load per physical station.
+    #   2. Otherwise, pair within Region – but only if there is exactly
+    #      one gen DUID and one load DUID in that region, to avoid creating
+    #      a spurious Cartesian product when there are multiple gen or load
+    #      DUIDs in the same region.
+    # ------------------------------------------------------------------
+    if 'DispatchType' in result.columns:
+        gen_duids = result.filter(
+            pl.col('DispatchType').cast(pl.Utf8, strict=False).str.to_lowercase().str.contains('generating')
+        )
+        load_duids = result.filter(
+            pl.col('DispatchType').cast(pl.Utf8, strict=False).str.to_lowercase().str.contains('load')
+        )
+
+        gen_load_pairs: Optional[pl.DataFrame] = None
+        if gen_duids.height > 0 and load_duids.height > 0:
+            station_col = 'StationName' if 'StationName' in result.columns else None
+            if station_col:
+                # Most precise: pair within the same station and region
+                gen_sel = gen_duids.select(['DUID', 'Region', station_col]).rename({'DUID': 'GenDUID'})
+                load_sel = load_duids.select(['DUID', 'Region', station_col]).rename({'DUID': 'LoadDUID'})
+                gen_load_pairs = gen_sel.join(load_sel, on=['Region', station_col], how='inner').select(['GenDUID', 'LoadDUID', 'Region'])
+            else:
+                # Fallback: pair by region, but only when there is exactly
+                # one gen and one load per region to avoid Cartesian products.
+                gen_per_region = gen_duids.group_by('Region').agg(pl.count().alias('_n_gen'))
+                load_per_region = load_duids.group_by('Region').agg(pl.count().alias('_n_load'))
+                safe_regions = (
+                    gen_per_region
+                    .join(load_per_region, on='Region', how='inner')
+                    .filter((pl.col('_n_gen') == 1) & (pl.col('_n_load') == 1))
+                    .select('Region')
+                )
+                if safe_regions.height > 0:
+                    gen_sel = gen_duids.select(['DUID', 'Region']).rename({'DUID': 'GenDUID'})
+                    load_sel = load_duids.select(['DUID', 'Region']).rename({'DUID': 'LoadDUID'})
+                    gen_load_pairs = (
+                        gen_sel
+                        .join(load_sel, on='Region', how='inner')
+                        .join(safe_regions, on='Region', how='inner')
+                        .select(['GenDUID', 'LoadDUID', 'Region'])
+                    )
+
+        if gen_load_pairs is not None and gen_load_pairs.height > 0:
+            # Add PairedLoadDUID column to gen rows
+            result = result.join(
+                gen_load_pairs.select(['GenDUID', 'LoadDUID']).rename({'GenDUID': 'DUID', 'LoadDUID': 'PairedLoadDUID'}),
+                on='DUID', how='left',
+            )
+            # Add PairedGenDUID column to load rows
+            result = result.join(
+                gen_load_pairs.select(['LoadDUID', 'GenDUID']).rename({'LoadDUID': 'DUID', 'GenDUID': 'PairedGenDUID'}),
+                on='DUID', how='left',
+            )
+        else:
+            result = result.with_columns([
+                pl.lit(None, dtype=pl.Utf8).alias('PairedGenDUID'),
+                pl.lit(None, dtype=pl.Utf8).alias('PairedLoadDUID'),
+            ])
+    else:
+        result = result.with_columns([
+            pl.lit(None, dtype=pl.Utf8).alias('PairedGenDUID'),
+            pl.lit(None, dtype=pl.Utf8).alias('PairedLoadDUID'),
         ])
+
+    # Sort: batteries with actual non-zero dispatch come first
+    result = result.sort(
+        ['NonZeroIntervalCount', 'DispatchIntervalCount', 'MaxEnergyMW'],
+        descending=[True, True, True],
+        nulls_last=True,
     )
 
-    return (
-        battery_units
-        .join(dispatch_summary, on='DUID', how='inner')
-        .sort(['DispatchIntervalCount', 'DispatchRowCount'], descending=[True, True])
-    )
+    # Warn if no battery was actually dispatched during this window
+    if result['NonZeroIntervalCount'].max() == 0:
+        import warnings as _warnings
+        _warnings.warn(
+            f"All battery DUIDs found in DISPATCHLOAD for {'region ' + region + ' ' if region else ''}"
+            f"{start_date.date()} to {end_date.date()} have zero dispatch values "
+            f"(TOTALCLEARED=0, all FCAS=0).\n"
+            f"Found DUIDs: {result['DUID'].to_list()}\n"
+            "The dispatch replay will produce no actions for this period.\n"
+            "Possible fixes:\n"
+            "  1. Try a different (wider) date range when the battery was actively dispatched.\n"
+            "  2. Try a different region (e.g. SA1 has Hornsdale Power Reserve which is often active).\n"
+            "  3. Use a rule-based or RL agent instead of the dispatch replay agent.",
+            stacklevel=2,
+        )
+
+    return result
 
 
 def _get_generators_static_table(cache_path: Path, refresh: bool):
@@ -1125,10 +1267,16 @@ def get_available_battery_units(
     Output columns (when available in the source static table):
       - DUID
       - Region
+      - DispatchType (e.g. "Bidirectional Unit", "Generating Unit", "Load")
       - TechnologyType
       - FuelType
       - StorageCapacityMWh
       - RegisteredCapacityMW
+
+    ``DispatchType`` is important for paired gen/load batteries registered under
+    the old AEMO model: a "Generating Unit" DUID handles discharge and its
+    corresponding "Load" DUID handles charging.  Most modern batteries are
+    "Bidirectional Unit" (single DUID for both directions).
 
     Args:
         cache_dir: path to cache directory used by NEMOSIS (default: data/aemo)
@@ -1190,6 +1338,11 @@ def get_available_battery_units(
             "fuel",
         ],
         keyword_groups=[["fuel"]],
+    )
+    dispatch_type_col = _find_column_by_candidates(
+        columns,
+        exact_candidates=["dispatch type", "dispatchtype"],
+        keyword_groups=[["dispatch", "type"]],
     )
 
     storage_mwh_col = _find_column_by_candidates(
@@ -1261,6 +1414,11 @@ def get_available_battery_units(
         select_exprs.append(pl.col(region_col).alias("Region"))
     else:
         select_exprs.append(pl.lit(None, dtype=pl.Utf8).alias("Region"))
+
+    if dispatch_type_col:
+        select_exprs.append(pl.col(dispatch_type_col).cast(pl.Utf8, strict=False).str.strip_chars().alias("DispatchType"))
+    else:
+        select_exprs.append(pl.lit(None, dtype=pl.Utf8).alias("DispatchType"))
 
     if tech_col:
         select_exprs.append(pl.col(tech_col).cast(pl.Utf8, strict=False).alias("TechnologyType"))
