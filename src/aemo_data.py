@@ -749,8 +749,6 @@ def check_aemo_dispatch_availability(
             end_time=window_end.strftime('%Y/%m/%d %H:%M:%S'),
             table_name='DISPATCHLOAD',
             raw_data_location=str(cache_path),
-            fformat='feather',
-            keep_csv=refresh,
         )
         chunk_pl = _normalize_columns(_as_polars(chunk))
         if chunk_pl.height == 0 or 'DUID' not in chunk_pl.columns:
@@ -819,6 +817,8 @@ def get_dispatch_active_battery_units(
     dispatch_df = fetch_aemo_unit_dispatch(
         start_date=start_date,
         end_date=end_date,
+        region=region,
+        generator_info_path=generator_info_path,
         cache_dir=cache_dir,
         refresh=refresh,
     )

@@ -700,7 +700,7 @@ class AEMOAgent:
             if merged is None:
                 return None
             if gen_df is not None and load_df is not None:
-                merged = gen_df.join(load_df, on='SETTLEMENTDATE', how='outer_coalesce')
+                merged = gen_df.join(load_df, on='SETTLEMENTDATE', how='full', coalesce=True)
 
             required_cols = {
                 'GEN_MW': 0.0,
@@ -750,6 +750,25 @@ class AEMOAgent:
         )
         aligned = grid.join(dispatch_res, on='SETTLEMENTDATE', how='left').fill_null(0.0)
 
+        total_nonzero = (
+            aligned['NET_MW'].abs().sum()
+            + aligned['RAISEREG_MW'].abs().sum()
+            + aligned['LOWERREG_MW'].abs().sum()
+        )
+        if total_nonzero == 0.0:
+            warnings.warn(
+                "Dispatch actions are all zero after aligning with the environment grid. "
+                "Possible causes:\n"
+                "  1. TOTALCLEARED is zero for all intervals (battery was not dispatched for energy).\n"
+                "  2. RAISEREG/LOWERREG are zero (battery did not provide regulation FCAS).\n"
+                "  3. Timestamp mismatch between dispatch data and environment data.\n"
+                "Check that the selected DUID was actively dispatched during the date range. "
+                "For batteries that only provide contingency FCAS (RAISE6SEC, LOWER6SEC, etc.), "
+                "consider using the paired gen/load DUID approach via dispatch_duid_gen and "
+                "dispatch_duid_load arguments.",
+                stacklevel=3,
+            )
+
         net = aligned['NET_MW'].to_numpy()
         a0 = np.clip(net / float(self.env.max_battery_flow), -1.0, 1.0).astype(np.float32)
 
@@ -763,7 +782,8 @@ class AEMOAgent:
     def _dispatch_action(self) -> np.ndarray:
         if self.dispatch_actions is None:
             return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
-        idx = int(self.env.current_step)
+        episode_start = int(getattr(self.env, 'episode_start_idx', 0))
+        idx = episode_start + int(self.env.current_step)
         if idx < 0 or idx >= len(self.dispatch_actions):
             return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
         return self.dispatch_actions[idx]
