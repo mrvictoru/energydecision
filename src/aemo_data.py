@@ -54,6 +54,10 @@ FUEL_TYPES = [
     "gas_ccgt", "gas_ocgt", "gas_recip", "hydro", "battery_discharging"
 ]
 
+# Minimum absolute MW value to consider a dispatch interval "non-zero".
+# Values below this threshold (e.g. rounding artefacts) are treated as zero.
+DISPATCH_NONZERO_THRESHOLD: float = 0.001
+
 
 def _as_polars(df: Any) -> pl.DataFrame:
     """Best-effort conversion of foreign DataFrames (e.g. pandas from NEMOSIS) to Polars."""
@@ -921,12 +925,12 @@ def get_dispatch_active_battery_units(
         pl.col('SETTLEMENTDATE').cast(pl.Datetime, strict=False)
     )
     if dispatch_numeric_cols:
-        nonzero_cond: Optional[pl.Expr] = None
+        nonzero_condition: Optional[pl.Expr] = None
         for col in dispatch_numeric_cols:
-            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > 0.001
-            nonzero_cond = expr if nonzero_cond is None else (nonzero_cond | expr)
+            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > DISPATCH_NONZERO_THRESHOLD
+            nonzero_condition = expr if nonzero_condition is None else (nonzero_condition | expr)
         activity_df = activity_df.with_columns(
-            pl.when(nonzero_cond).then(1).otherwise(0).alias('_has_activity')
+            pl.when(nonzero_condition).then(1).otherwise(0).alias('_has_activity')
         )
         tc_expr = pl.col('TOTALCLEARED').cast(pl.Float64, strict=False).abs() if 'TOTALCLEARED' in dispatch_numeric_cols else pl.lit(0.0)
         dispatch_summary = (

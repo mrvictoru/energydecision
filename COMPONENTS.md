@@ -17,7 +17,8 @@ This document provides comprehensive documentation for all key components in the
 9. [Decision Transformer (`decision_transformer.py`)](#9-decision-transformer-decision_transformerpy)
 10. [Transformer Training (`transformer_training.py`)](#10-transformer-training-transformer_trainingpy)
 11. [Stable-Baselines3 Training (`sb3train.py`)](#11-stable-baselines3-training-sb3trainpy)
-12. [Performance Optimizations](#12-performance-optimizations)
+12. [Dispatch Replay Utilities (`dispatch_utils.py`)](#12-dispatch-replay-utilities-dispatch_utilspy)
+13. [Performance Optimizations](#13-performance-optimizations)
 
 ---
 
@@ -732,7 +733,70 @@ trajectories.write_parquet("data/ppo_test_episode_logs.parquet")
 
 ---
 
-## 12. Performance Optimizations
+## 12. Dispatch Replay Utilities (`dispatch_utils.py`)
+
+### Overview
+
+`dispatch_utils` provides high-level helpers for **dispatch replay** simulations
+using real AEMO DISPATCHLOAD data.  It bridges the raw data-fetching functions in
+`aemo_data` with `AEMOBatteryTradingEnv` and `AEMOAgent` so notebooks stay clean
+and readable.
+
+For a full description of the module, see
+**[docs/AEMO_DISPATCH_UTILS.md](docs/AEMO_DISPATCH_UTILS.md)**.
+
+### Key Functions
+
+| Function | Description |
+|----------|-------------|
+| `show_dispatch_table` | Pretty-print a column-filtered DataFrame view |
+| `list_dispatch_candidates` | List all battery DUIDs in a region and the dispatch-active subset |
+| `resolve_dispatch_selection` | Select a DUID and resolve env-sizing / paired DUID metadata |
+| `run_dispatch_replay` | Run N dispatch replay episodes and save logs to parquet |
+| `scan_duid_availability` | Cross-region scan of battery DUID activity for a date window |
+
+### Basic Usage
+
+```python
+from dispatch_utils import list_dispatch_candidates, resolve_dispatch_selection, run_dispatch_replay
+
+# Step 1 – discover which batteries were dispatched
+battery_units, active_units = list_dispatch_candidates(
+    region="SA1",
+    start_date=datetime(2025, 1, 1),
+    end_date=datetime(2025, 1, 7),
+)
+
+# Step 2 – select a DUID
+selection = resolve_dispatch_selection(
+    battery_units=battery_units,
+    active_battery_units=active_units,
+    selected_duid="HPRG1",
+    start_date=datetime(2025, 1, 1),
+    end_date=datetime(2025, 1, 7),
+)
+
+# Step 3 – run replay episodes
+ep_logs, inc_logs, all_logs = run_dispatch_replay(
+    processed_data=processed_data,
+    selection=selection,
+    start_date=datetime(2025, 1, 1),
+    end_date=datetime(2025, 1, 7),
+    region="SA1",
+    num_episodes=3,
+    output_dir="data/aemo_sim_output",
+    run_tag="aemo_mm",
+)
+```
+
+### Notebooks
+
+- `test_aemo_simrun.ipynb` section 2.2 — full dispatch replay workflow
+- `test_aemo_data.ipynb` section 5 — DUID availability exploration
+
+---
+
+## 13. Performance Optimizations
 
 ### Summary of Implemented Optimizations
 

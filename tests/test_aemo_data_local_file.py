@@ -336,10 +336,11 @@ def test_nonzero_interval_count_logic():
     })
 
     def compute_nonzero_count(df: pl.DataFrame) -> int:
+        from aemo_data import DISPATCH_NONZERO_THRESHOLD
         numeric_cols = [c for c in df.columns if c not in {'SETTLEMENTDATE', 'DUID'}]
         cond = None
         for col in numeric_cols:
-            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > 0.001
+            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > DISPATCH_NONZERO_THRESHOLD
             cond = expr if cond is None else (cond | expr)
         flagged = df.with_columns(pl.when(cond).then(1).otherwise(0).alias('_active'))
         return int(flagged['_active'].sum())
