@@ -130,13 +130,67 @@ def _rows_to_polars(headers: list[str], rows: Iterable[Iterable[Any]]) -> pl.Dat
     return _normalize_columns(df)
 
 
+def _is_zip_format(file_path: Path) -> bool:
+    """Return True if the file starts with the ZIP magic bytes (``PK\\x03\\x04``), indicating
+    it is actually in XLSX/OOXML format regardless of its file extension."""
+    try:
+        with open(file_path, "rb") as f:
+            return f.read(4) == b"PK\x03\x04"
+    except Exception:
+        return False
+
+
+def _read_excel_via_pandas(file_path: Path) -> pl.DataFrame:
+    """Read an Excel workbook (any extension) using pandas and return a Polars DataFrame.
+
+    Selects the first sheet that contains both a 'DUID' and 'Region' column.
+    Falls back to the first non-empty sheet if no such sheet is found.
+    Column names are stripped of leading/trailing whitespace before conversion.
+    """
+    import pandas as pd
+
+    required = {"duid", "region"}
+    pd_sheets: dict = pd.read_excel(str(file_path), sheet_name=None, dtype=str)
+
+    chosen_df = None
+    for _sheet_name, df in pd_sheets.items():
+        cols_lower = {str(c).strip().lower() for c in df.columns}
+        if required.issubset(cols_lower):
+            chosen_df = df
+            break
+
+    if chosen_df is None:
+        # Fall back to the first non-empty sheet
+        for df in pd_sheets.values():
+            if not df.empty:
+                chosen_df = df
+                break
+
+    if chosen_df is None:
+        return pl.DataFrame()
+
+    # Normalise column names (strip surrounding whitespace)
+    chosen_df = chosen_df.copy()
+    chosen_df.columns = [str(c).strip() for c in chosen_df.columns]
+    return _normalize_columns(_as_polars(chosen_df))
+
+
 def _read_generator_info_file(file_path: Path) -> pl.DataFrame:
     suffix = file_path.suffix.lower()
     if suffix == ".csv":
         return _normalize_columns(pl.read_csv(file_path))
 
     # Support reading old .xls by converting to .xlsx first (xls2xlsx is in requirements).
+    # However, AEMO sometimes distributes files with a .xls extension that are actually in
+    # XLSX/OOXML (ZIP) format.  xls2xlsx cannot convert these files, so detect the format
+    # via magic bytes and use the pandas path directly when the file is already XLSX.
     if suffix == ".xls":
+        if _is_zip_format(file_path):
+            # File is XLSX format despite the .xls extension – use pandas which handles
+            # the actual binary content rather than relying on the extension.
+            return _read_excel_via_pandas(file_path)
+
+        # Genuine BIFF/XLS format – convert to .xlsx with xls2xlsx then continue.
         try:
             from xls2xlsx import XLS2XLSX
         except Exception as e:
@@ -153,7 +207,14 @@ def _read_generator_info_file(file_path: Path) -> pl.DataFrame:
         suffix = ".xlsx"
 
     if suffix in {".xlsx", ".xlsm"}:
-        # Prefer Polars' Excel reader if available; otherwise use openpyxl.
+        # Try pandas first – it reliably handles multi-sheet workbooks and all column
+        # names regardless of edge cases in the Polars/openpyxl readers.
+        try:
+            return _read_excel_via_pandas(file_path)
+        except Exception:
+            pass
+
+        # Fallback 1: Polars' native Excel reader.
         if hasattr(pl, "read_excel"):
             try:
                 sheets = pl.read_excel(file_path, sheet_name=None)  # type: ignore[attr-defined]
@@ -168,6 +229,7 @@ def _read_generator_info_file(file_path: Path) -> pl.DataFrame:
             except Exception:
                 pass
 
+        # Fallback 2: openpyxl.
         try:
             from openpyxl import load_workbook
         except Exception as e:
@@ -206,16 +268,23 @@ def _read_generator_info_file(file_path: Path) -> pl.DataFrame:
 
 
 def _auto_detect_generator_info_file() -> Optional[Path]:
-    """Best-effort lookup for a locally downloaded generator info XLS/XLSX/CSV."""
-    candidates: List[Path] = []
-    repo_root = Path(__file__).resolve().parent.parent
-    for p in [repo_root / "src/data/aemo", repo_root / "data/aemo"]:
-        if p.exists() and p.is_dir():
-            for ext in ("*.xls", "*.xlsx", "*.csv"):
-                candidates.extend(sorted(p.glob(ext)))
+    """Best-effort lookup for a locally downloaded generator info XLS/XLSX/CSV.
 
-    if len(candidates) == 1:
-        return candidates[0]
+    Searches ``src/data/aemo`` first (project-bundled copy), then ``data/aemo``
+    (NEMOSIS runtime cache).  Returns the first matching file found so that a
+    bundled copy in ``src/data/aemo`` takes priority over the cache.
+    If no file is found, returns ``None``.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    search_dirs = [repo_root / "src/data/aemo", repo_root / "data/aemo"]
+
+    for directory in search_dirs:
+        if not (directory.exists() and directory.is_dir()):
+            continue
+        for ext in ("*.xls", "*.xlsx", "*.csv"):
+            for candidate in sorted(directory.glob(ext)):
+                return candidate  # return first match from highest-priority dir
+
     return None
 
 
@@ -231,7 +300,8 @@ def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = N
         gen_info = static_table(
             table_name='Generators and Scheduled Loads',
             raw_data_location=str(cache_path),
-            update_static_file=False
+            update_static_file=False,
+            select_columns='all',
         )
         if gen_info is not None and len(gen_info) > 0:
             return _normalize_columns(_as_polars(gen_info))
@@ -886,6 +956,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
             table_name='Generators and Scheduled Loads',
             raw_data_location=str(cache_path),
             update_static_file=bool(refresh),
+            select_columns='all',
         )
     except Exception as excel_error:
         msg = str(excel_error)
@@ -934,6 +1005,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                             table_name='Generators and Scheduled Loads',
                             raw_data_location=str(cache_path),
                             update_static_file=False,
+                            select_columns='all',
                         )
                     except Exception:
                         # fall through to forced refresh below
@@ -956,6 +1028,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                     table_name='Generators and Scheduled Loads',
                     raw_data_location=str(cache_path),
                     update_static_file=True,
+                    select_columns='all',
                 )
                 # Check if the newly downloaded file is an HTML error
                 try:
@@ -1129,8 +1202,11 @@ def get_available_battery_units(
             "energy capacity mwh",
             "max storage (mwh)",
             "battery storage (mwh)",
+            # AEMO NEM Registration and Exemption List actual column name
+            "maximum storage capacity",
+            "storage capacity",
         ],
-        keyword_groups=[["storage", "mwh"], ["energy", "mwh"], ["capacity", "mwh"]],
+        keyword_groups=[["storage", "mwh"], ["energy", "mwh"], ["capacity", "mwh"], ["storage", "capacity"]],
     )
     reg_cap_mw_col = _find_column_by_candidates(
         columns,
@@ -1142,6 +1218,9 @@ def get_available_battery_units(
             "max capacity (mw)",
             "capacity (mw)",
             "maxcap mw",
+            # AEMO NEM Registration and Exemption List actual column names
+            "reg cap generation (mw)",
+            "max cap generation (mw)",
         ],
         keyword_groups=[["reg", "cap", "mw"], ["registered", "capacity"], ["capacity", "mw"]],
     )
