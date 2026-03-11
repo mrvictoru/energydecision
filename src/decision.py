@@ -680,10 +680,7 @@ class AEMOAgent:
             return df.group_by_dynamic('SETTLEMENTDATE', every=every, label='left', closed='left').agg(aggs)
 
         df = dispatch_data
-        if 'DUID' in df.columns and (dispatch_duid_gen or dispatch_duid_load or dispatch_duid):
-            if dispatch_duid and not dispatch_duid_gen and not dispatch_duid_load:
-                dispatch_duid_gen = dispatch_duid
-
+        if 'DUID' in df.columns and (dispatch_duid_gen or dispatch_duid_load):
             gen_df = None
             load_df = None
             if dispatch_duid_gen:
@@ -704,6 +701,22 @@ class AEMOAgent:
                 return None
             if gen_df is not None and load_df is not None:
                 merged = gen_df.join(load_df, on='SETTLEMENTDATE', how='outer_coalesce')
+
+            required_cols = {
+                'GEN_MW': 0.0,
+                'LOAD_MW': 0.0,
+                'GEN_RAISEREG': 0.0,
+                'LOAD_RAISEREG': 0.0,
+                'GEN_LOWERREG': 0.0,
+                'LOAD_LOWERREG': 0.0,
+            }
+            missing_exprs = [
+                pl.lit(default_value).alias(col_name)
+                for col_name, default_value in required_cols.items()
+                if col_name not in merged.columns
+            ]
+            if missing_exprs:
+                merged = merged.with_columns(missing_exprs)
             merged = merged.fill_null(0.0)
 
             dispatch_res = merged.with_columns([
@@ -712,6 +725,10 @@ class AEMOAgent:
                 (pl.col('GEN_LOWERREG').fill_null(0.0) + pl.col('LOAD_LOWERREG').fill_null(0.0)).alias('LOWERREG_MW'),
             ]).select(['SETTLEMENTDATE', 'NET_MW', 'RAISEREG_MW', 'LOWERREG_MW'])
         else:
+            if 'DUID' in df.columns and dispatch_duid:
+                df = df.filter(pl.col('DUID') == dispatch_duid)
+                if df.height == 0:
+                    return None
             dispatch_res = _prep(df)
             if 'TOTALCLEARED' not in dispatch_res.columns:
                 return None
@@ -722,7 +739,15 @@ class AEMOAgent:
                 pl.col('LOWERREG').fill_null(0.0).alias('LOWERREG_MW') if 'LOWERREG' in dispatch_res.columns else pl.lit(0.0).alias('LOWERREG_MW'),
             ]).select(['SETTLEMENTDATE', 'NET_MW', 'RAISEREG_MW', 'LOWERREG_MW'])
 
-        grid = self.env.aemo_data.select(['SETTLEMENTDATE']).sort('SETTLEMENTDATE')
+        dispatch_res = dispatch_res.with_columns(
+            pl.col('SETTLEMENTDATE').cast(pl.Datetime('us'), strict=False)
+        )
+        grid = (
+            self.env.aemo_data
+            .select(['SETTLEMENTDATE'])
+            .with_columns(pl.col('SETTLEMENTDATE').cast(pl.Datetime('us'), strict=False))
+            .sort('SETTLEMENTDATE')
+        )
         aligned = grid.join(dispatch_res, on='SETTLEMENTDATE', how='left').fill_null(0.0)
 
         net = aligned['NET_MW'].to_numpy()

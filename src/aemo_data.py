@@ -798,6 +798,52 @@ def check_aemo_dispatch_availability(
     }
 
 
+def get_dispatch_active_battery_units(
+    start_date: datetime,
+    end_date: datetime,
+    region: Optional[str] = None,
+    cache_dir: str = "data/aemo",
+    generator_info_path: Optional[str] = None,
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """Return battery DUIDs from the static table that also appear in DISPATCHLOAD for the date window."""
+    battery_units = get_available_battery_units(
+        cache_dir=cache_dir,
+        generator_info_path=generator_info_path,
+        region=region,
+        refresh=refresh,
+    )
+    if battery_units.height == 0 or 'DUID' not in battery_units.columns:
+        return battery_units
+
+    dispatch_df = fetch_aemo_unit_dispatch(
+        start_date=start_date,
+        end_date=end_date,
+        cache_dir=cache_dir,
+        refresh=refresh,
+    )
+    if dispatch_df.height == 0 or 'DUID' not in dispatch_df.columns:
+        return battery_units.head(0)
+
+    dispatch_summary = (
+        dispatch_df
+        .with_columns(pl.col('SETTLEMENTDATE').cast(pl.Datetime, strict=False))
+        .group_by('DUID')
+        .agg([
+            pl.len().alias('DispatchRowCount'),
+            pl.col('SETTLEMENTDATE').n_unique().alias('DispatchIntervalCount'),
+            pl.col('SETTLEMENTDATE').min().alias('FirstDispatchInterval'),
+            pl.col('SETTLEMENTDATE').max().alias('LastDispatchInterval'),
+        ])
+    )
+
+    return (
+        battery_units
+        .join(dispatch_summary, on='DUID', how='inner')
+        .sort(['DispatchIntervalCount', 'DispatchRowCount'], descending=[True, True])
+    )
+
+
 def _get_generators_static_table(cache_path: Path, refresh: bool):
     """
     Helper to robustly load the 'Generators and Scheduled Loads' static table.

@@ -27,6 +27,8 @@ This document describes the agent-related modules that manage policy logic, opti
   - **rl/dt**: forwards obs to provided RL or Decision Transformer models similar to `Agent` but with AEMO observation layout
   - **DT buffering**: replicates `Agent`'s buffer logic to support `DecisionTransformer.get_action` (same context_len handling)
 - **Dispatch mapping helper**: `_build_dispatch_actions()` resamples dispatch time series to env step duration and aligns to `SETTLEMENTDATE`, producing actions in `[-1, 1]` and optional FCAS bid fractions.
+  - Supports a **single replay DUID** by deriving `NET_MW` directly from that DUID's `TOTALCLEARED` stream.
+  - Supports **paired generation/load DUIDs** when `dispatch_duid_gen` and `dispatch_duid_load` are supplied explicitly.
 
 ## Running Multiple Agents
 - Use `run_episodes_parallel()` for `Agent` on `SolarBatteryEnv` with `algorithm` in `['rule','sdp','mrdp','dt','oracle','dispatch']` (new addition for `dispatch` replay).
@@ -87,10 +89,16 @@ episode_df, incident_df = agent.run_episode()
 - `set_dispatch_data(dispatch_data, dispatch_duid=None, dispatch_duid_gen=None, dispatch_duid_load=None, assume_single_duid_is_generator=True)`
   - **Args**: accepts the raw dispatch dataframe from `fetch_aemo_unit_dispatch()` plus optional DUID filters for separating generation/load streams.
   - **Returns**: `None`. Side effect is populating `self.dispatch_actions` with a resampled, normalized action trace used by the `dispatch` algorithm.
+  - **Notes**: passing only `dispatch_duid` uses single-stream replay; passing `dispatch_duid_gen` and/or `dispatch_duid_load` uses the paired-stream branch.
 
 - `_build_dispatch_actions(dispatch_data, dispatch_duid=None, dispatch_duid_gen=None, dispatch_duid_load=None, assume_single_duid_is_generator=True)`
-  - **Args**: same inputs as `set_dispatch_data`. Internally groups data by `SETTLEMENTDATE` to the env cadence, coalesces generator/load rows, and renames columns (NET_MW, RAISEREG_MW, LOWERREG_MW).
+  - **Args**: same inputs as `set_dispatch_data`. Internally groups data by `SETTLEMENTDATE` to the env cadence, coalesces generator/load rows when both sides are supplied, and otherwise falls back to single-stream replay from `TOTALCLEARED`.
   - **Returns**: `np.ndarray` shaped `(steps, 1)` for simple mode or `(steps, 3)` when FCAS bids are requested; values are clipped to `[-1, 1]` relative to `env.max_battery_flow`. Returns `None` when there is no dispatch data or when the env lacks `aemo_data`.
+
+### Dispatch Unit Discovery
+
+- Use `get_dispatch_active_battery_units(start_date, end_date, region=..., cache_dir=...)` from `src.aemo_data` to list static-table battery DUIDs that actually appear in `DISPATCHLOAD` for the chosen window.
+- Use `check_aemo_dispatch_availability(...)` to verify that a specific replay DUID has rows over the requested date range before running a notebook or collecting logs.
 
 - `_dispatch_action()`
   - **Args**: none; reads `self.env.current_step` internally.
