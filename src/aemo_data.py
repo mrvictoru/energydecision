@@ -870,6 +870,98 @@ def check_aemo_dispatch_availability(
     }
 
 
+def find_duid_first_dispatch(
+    duid: str,
+    search_start: datetime,
+    search_end: Optional[datetime] = None,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+    verbose: bool = True,
+) -> Optional[datetime]:
+    """Find the earliest date a DUID appears in the AEMO DISPATCHLOAD table.
+
+    Scans DISPATCHLOAD month-by-month forward from *search_start* until the
+    DUID is found or *search_end* is reached.  Stops at the first month that
+    contains at least one row for *duid*.  Use this to discover when a battery
+    was first commissioned or when its current DUID became active.
+
+    .. note::
+        The current ``get_available_battery_units`` static table only lists
+        *current* AEMO registrations.  Many batteries have been re-registered
+        under new **Bidirectional Unit** DUIDs (e.g. ``HPR1``, ``LBB1``) after
+        previously operating as separate **Generating Unit** + **Load** pairs
+        (e.g. ``HPRG1``/``HPRL1``).  The new DUIDs appear in DISPATCHLOAD only
+        from the date of re-registration.  If this function returns a date in
+        2022–2025 for a battery that has been operating since 2017–2020, the
+        battery almost certainly has historical data under its older DUID pair.
+
+    Args:
+        duid: Dispatch Unit ID to search for.
+        search_start: Earliest date to scan (e.g. ``datetime(2018, 1, 1)``).
+        search_end: Latest date to scan (defaults to today).
+        cache_dir: Path to the NEMOSIS data cache directory.
+        refresh: When ``True``, force re-download of cached files.
+        verbose: Print progress messages.
+
+    Returns:
+        The earliest ``datetime`` with at least one DISPATCHLOAD record for
+        *duid*, or ``None`` if no records were found in the search range.
+    """
+    if not HAS_NEMOSIS:
+        raise ImportError(
+            "NEMOSIS is required to fetch actual AEMO data. "
+            "Install with: pip install nemosis"
+        )
+
+    if search_end is None:
+        search_end = datetime.now()
+
+    cache_path = get_cache_dir(cache_dir)
+    windows = _iter_month_windows(search_start, search_end)
+
+    if verbose:
+        print(
+            f"Scanning {len(windows)} month(s) for DUID {duid!r}: "
+            f"{search_start.date()} → {search_end.date()}"
+        )
+
+    for window_start, window_end in windows:
+        if verbose:
+            print(f"  Checking {window_start.date()} …", end=" ", flush=True)
+        try:
+            chunk = dynamic_data_compiler(
+                start_time=window_start.strftime('%Y/%m/%d %H:%M:%S'),
+                end_time=window_end.strftime('%Y/%m/%d %H:%M:%S'),
+                table_name='DISPATCHLOAD',
+                raw_data_location=str(cache_path),
+            )
+            chunk_pl = _normalize_columns(_as_polars(chunk))
+            if chunk_pl.height == 0 or 'DUID' not in chunk_pl.columns:
+                if verbose:
+                    print("no data")
+                continue
+
+            filtered = chunk_pl.filter(pl.col('DUID') == duid)
+            if filtered.height == 0:
+                if verbose:
+                    print("not found")
+                continue
+
+            filtered = _coerce_datetime(filtered, 'SETTLEMENTDATE')
+            first_dt = filtered['SETTLEMENTDATE'].min()
+            if verbose:
+                print(f"FOUND — first interval: {first_dt}")
+            return first_dt
+        except Exception as exc:  # pragma: no cover
+            if verbose:
+                print(f"error ({exc})")
+            continue
+
+    if verbose:
+        print(f"DUID {duid!r} not found in search range.")
+    return None
+
+
 def get_dispatch_active_battery_units(
     start_date: datetime,
     end_date: datetime,

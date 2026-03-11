@@ -194,6 +194,89 @@ summary.filter(pl.col("InDispatchLoad")).sort("NonZeroIntervalCount", descending
 
 ---
 
+### `scan_duid_historical_availability(duids, regions, search_start, cache_dir, refresh, verbose)`
+
+Scan DISPATCHLOAD month-by-month forward from `search_start` and return the
+**earliest dispatch date** for each DUID.  This answers *"when was this battery
+first operational under its current DUID?"*.
+
+Returns a Polars DataFrame with columns `DUID`, `Region`,
+`FirstDispatchInHistory`, `SearchStart`, `SearchEnd`.
+
+```python
+from dispatch_utils import scan_duid_historical_availability
+from datetime import datetime
+
+history = scan_duid_historical_availability(
+    regions=["SA1"],
+    search_start=datetime(2022, 1, 1),
+    cache_dir="data/aemo",
+)
+print(history)
+```
+
+See also `aemo_data.find_duid_first_dispatch()` for the per-DUID function that
+underlies this scan.
+
+---
+
+## Why older dates show zero dispatch activity
+
+When running `scan_duid_availability` or `list_dispatch_candidates` for dates
+before 2024, many battery DUIDs will show **zero activity** or not appear in
+DISPATCHLOAD at all.  This is expected and has two root causes:
+
+### 1. Newly commissioned batteries
+
+Most batteries in the current AEMO static table were built between 2022 and 2025:
+
+| Battery | DUID | Commissioned ≈ |
+|---------|------|----------------|
+| Waratah Super Battery (NSW) | `WTAHB1` | Dec 2024 |
+| Torrens Island BESS (SA) | `TIB1` | 2024 |
+| Blyth BESS (SA) | `BLYTHB1` | 2023 |
+| Western Downs BESS (QLD) | `WDBESS1/2` | 2023–2024 |
+| Victorian Big Battery (VIC) | `VBB1` | Nov 2021 |
+
+### 2. DUID re-registration (gen/load pairs → Bidirectional Units)
+
+Before 2021–2022, AEMO registered batteries as *two* separate DUIDs:
+- a **Generating Unit** DUID for the discharge direction (e.g. `HPRG1`)
+- a **Load** DUID for the charge direction (e.g. `HPRL1`)
+
+Starting from 2021, AEMO introduced **Bidirectional Unit** DUIDs where a single
+DUID handles both directions (e.g. `HPR1`).  When a battery re-registers, the
+old DUIDs are retired and the new Bidirectional DUID starts appearing in
+DISPATCHLOAD from the transition date.
+
+**Known transitions**:
+
+| Current DUID | Old Gen DUID | Old Load DUID | Re-registered ≈ |
+|-------------|-------------|--------------|-----------------|
+| `HPR1` (Hornsdale, SA1) | `HPRG1` | `HPRL1` | 2022 |
+| `LBB1` (Lake Bonney, SA1) | `LBBG1` | `LBBL1` | 2022 |
+| `BALB1` (Ballarat, VIC1) | `BALBG1` | — | 2023 |
+| `GANNB1` (Gannawarra, VIC1) | `GANNBG1` | `GANNBL1` | 2023 |
+| `DALNTH1` (Dalrymple North, SA1) | `DALNTH01` | — | 2023 |
+
+To fetch data for a battery before its re-registration date, use the older DUID
+pair directly:
+
+```python
+from aemo_data import fetch_aemo_unit_dispatch
+from datetime import datetime
+
+# Hornsdale historical data using the OLD generator DUID
+old_dispatch = fetch_aemo_unit_dispatch(
+    start_date=datetime(2022, 1, 1),
+    end_date=datetime(2022, 1, 7),
+    duid="HPRG1",
+    cache_dir="data/aemo",
+)
+```
+
+---
+
 ## Paired gen/load batteries (old AEMO model)
 
 Some batteries (particularly older registrations) are modelled as **two separate
@@ -220,4 +303,4 @@ so the net energy action is computed correctly (`LOAD_MW − GEN_MW`).
 | Notebook | Description |
 |----------|-------------|
 | `test_aemo_simrun.ipynb` | Full simulation pipeline; section 2.2 uses all four functions |
-| `test_aemo_data.ipynb` | Data exploration; section 5 demonstrates `list_dispatch_candidates` and `scan_duid_availability` |
+| `test_aemo_data.ipynb` | Data exploration; section 5 demonstrates `list_dispatch_candidates`, `scan_duid_availability`, and `scan_duid_historical_availability` |

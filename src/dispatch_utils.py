@@ -642,3 +642,141 @@ def scan_duid_availability(
         descending=[True, True, False, True],
         nulls_last=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Historical DUID availability
+# ---------------------------------------------------------------------------
+
+def scan_duid_historical_availability(
+    duids: Optional[List[str]] = None,
+    regions: Optional[List[str]] = None,
+    search_start: Optional[datetime] = None,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+    verbose: bool = True,
+) -> pl.DataFrame:
+    """Find the earliest DISPATCHLOAD date for each battery DUID across a historical range.
+
+    This is useful for understanding when batteries became operational (or when
+    their current DUID was first used after an AEMO re-registration).
+
+    .. note:: **Why historical data might be missing for some DUIDs**
+
+        AEMO's current static table (*NEM Registration and Exemption List*)
+        only contains **current** DUID registrations.  Many batteries have
+        changed their registration over time:
+
+        * **Old model (pre-2021)**: Batteries were registered as *two* separate
+          DUIDs — a *Generating Unit* (discharge, e.g. ``HPRG1``) and a *Load*
+          (charge, e.g. ``HPRL1``).
+        * **New model (2021+)**: AEMO introduced *Bidirectional Unit* DUIDs
+          (e.g. ``HPR1``) where a single DUID handles both charge and discharge.
+
+        When a battery transitions from the old to the new model, the old DUIDs
+        are retired and the new Bidirectional DUID starts appearing in
+        DISPATCHLOAD.  Therefore:
+
+        * Scanning for ``HPR1`` (Hornsdale Power Reserve) in 2022 DISPATCHLOAD
+          will find no results because the data at that time used ``HPRG1`` /
+          ``HPRL1``.
+        * The ``FirstDispatchInterval`` returned by this function is the first
+          date the *current* DUID appears in DISPATCHLOAD — not the battery's
+          commissioning date.
+
+        To find historical data for a battery that has transitioned, you need to
+        use its old DUID pair (gen + load) directly with
+        :func:`aemo_data.fetch_aemo_unit_dispatch`.
+
+    Args:
+        duids: Explicit list of DUIDs to scan.  When *None*, all battery DUIDs
+            from the static table for *regions* are used.
+        regions: Region codes to use when *duids* is ``None``.  Defaults to all
+            five NEM regions.
+        search_start: Earliest date to scan.  Defaults to ``datetime(2019, 1, 1)``
+            (around when the first grid-scale batteries came online in the NEM).
+        cache_dir: Path to the NEMOSIS data cache directory.
+        refresh: When ``True``, force re-download of cached files.
+        verbose: Print month-by-month progress messages.
+
+    Returns:
+        Polars DataFrame with one row per DUID and columns:
+
+        * ``DUID``
+        * ``Region`` (from the static table, if *duids* was ``None``)
+        * ``FirstDispatchInHistory`` — earliest ``SETTLEMENTDATE`` found, or
+          ``null`` if the DUID was not found in the search range.
+        * ``SearchStart`` / ``SearchEnd`` — the date range that was scanned.
+    """
+    from aemo_data import AEMO_REGIONS, get_available_battery_units, find_duid_first_dispatch
+
+    if search_start is None:
+        search_start = datetime(2019, 1, 1)
+
+    search_end = datetime.now()
+
+    # Build the DUID list
+    duid_region_map: Dict[str, Optional[str]] = {}
+
+    if duids is not None:
+        for d in duids:
+            duid_region_map[d] = None
+    else:
+        if regions is None:
+            regions = list(AEMO_REGIONS)
+        for region in regions:
+            units = get_available_battery_units(
+                cache_dir=cache_dir,
+                region=region,
+                refresh=refresh,
+            )
+            for row in units.iter_rows(named=True):
+                duid_region_map[row["DUID"]] = row.get("Region")
+
+    if not duid_region_map:
+        print("[INFO] No DUIDs to scan.")
+        return pl.DataFrame({
+            "DUID": pl.Series([], dtype=pl.Utf8),
+            "Region": pl.Series([], dtype=pl.Utf8),
+            "FirstDispatchInHistory": pl.Series([], dtype=pl.Datetime),
+            "SearchStart": pl.Series([], dtype=pl.Datetime),
+            "SearchEnd": pl.Series([], dtype=pl.Datetime),
+        })
+
+    print(
+        f"Scanning {len(duid_region_map)} DUID(s) for earliest DISPATCHLOAD record "
+        f"from {search_start.date()} onward…"
+    )
+
+    rows: List[Dict[str, Any]] = []
+    for duid, region in duid_region_map.items():
+        print(f"\n[DUID={duid!r}]")
+        first_dt = find_duid_first_dispatch(
+            duid=duid,
+            search_start=search_start,
+            search_end=search_end,
+            cache_dir=cache_dir,
+            refresh=refresh,
+            verbose=verbose,
+        )
+        rows.append({
+            "DUID": duid,
+            "Region": region,
+            "FirstDispatchInHistory": first_dt,
+            "SearchStart": search_start,
+            "SearchEnd": search_end,
+        })
+
+    result = pl.DataFrame(rows, schema_overrides={
+        "FirstDispatchInHistory": pl.Datetime,
+        "SearchStart": pl.Datetime,
+        "SearchEnd": pl.Datetime,
+    })
+
+    # Sort: DUIDs with earliest first dispatch first, then by region
+    return result.sort(
+        ["FirstDispatchInHistory", "Region", "DUID"],
+        descending=[False, False, False],
+        nulls_last=True,
+    )
+

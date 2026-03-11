@@ -294,3 +294,104 @@ def test_run_dispatch_replay_returns_logs(monkeypatch, tmp_path):
 
     # Check parquet saved
     assert (tmp_path / "test_dispatch_logs.parquet").exists()
+
+
+# ---------------------------------------------------------------------------
+# find_duid_first_dispatch — unit test with mocked NEMOSIS
+# ---------------------------------------------------------------------------
+
+def test_find_duid_first_dispatch_returns_first_month(monkeypatch):
+    """find_duid_first_dispatch returns the earliest settlement date when the DUID is found."""
+    import aemo_data as _aemo
+
+    call_count = [0]
+
+    def fake_dynamic_data_compiler(start_time, end_time, table_name, raw_data_location):
+        import pandas as pd
+        call_count[0] += 1
+        # Return data only on the second call (second month)
+        if call_count[0] == 1:
+            return pd.DataFrame()  # first month empty
+        # Second month has data for target DUID
+        return pd.DataFrame({
+            "SETTLEMENTDATE": [datetime(2022, 2, 1, 0, 5), datetime(2022, 2, 1, 0, 10)],
+            "DUID": ["HPR1", "HPR1"],
+            "TOTALCLEARED": [100.0, -50.0],
+        })
+
+    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_dynamic_data_compiler)
+
+    result = _aemo.find_duid_first_dispatch(
+        duid="HPR1",
+        search_start=datetime(2022, 1, 1),
+        search_end=datetime(2022, 3, 1),
+        cache_dir="data/aemo",
+        verbose=False,
+    )
+    assert result is not None
+    assert result.year == 2022
+    assert result.month == 2
+
+
+def test_find_duid_first_dispatch_returns_none_when_not_found(monkeypatch):
+    """find_duid_first_dispatch returns None when no records are found."""
+    import aemo_data as _aemo
+    import pandas as pd
+
+    monkeypatch.setattr(
+        _aemo, "dynamic_data_compiler",
+        lambda **kw: pd.DataFrame()
+    )
+
+    result = _aemo.find_duid_first_dispatch(
+        duid="NONEXISTENT99",
+        search_start=datetime(2024, 1, 1),
+        search_end=datetime(2024, 2, 1),
+        cache_dir="data/aemo",
+        verbose=False,
+    )
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# scan_duid_historical_availability — unit test with mocked dependencies
+# ---------------------------------------------------------------------------
+
+def test_scan_duid_historical_availability_returns_first_dispatch_dates(monkeypatch):
+    """scan_duid_historical_availability returns one row per DUID."""
+    import dispatch_utils as du
+    import aemo_data as _aemo
+
+    # Patch get_available_battery_units
+    def _fake_get_avail(cache_dir, region, refresh):
+        if region == "SA1":
+            return pl.DataFrame({"DUID": ["HPR1", "LBB1"], "Region": ["SA1", "SA1"]})
+        return pl.DataFrame()
+
+    monkeypatch.setattr(_aemo, "get_available_battery_units", _fake_get_avail)
+
+    # Patch find_duid_first_dispatch: HPR1 found, LBB1 not found
+    def _fake_find_first(duid, search_start, search_end, cache_dir, refresh, verbose):
+        if duid == "HPR1":
+            return datetime(2022, 6, 1, 0, 5)
+        return None  # LBB1 not found
+
+    monkeypatch.setattr(_aemo, "find_duid_first_dispatch", _fake_find_first)
+
+    result = du.scan_duid_historical_availability(
+        regions=["SA1"],
+        search_start=datetime(2022, 1, 1),
+        cache_dir="data/aemo",
+        verbose=False,
+    )
+    assert result.height == 2
+    assert "DUID" in result.columns
+    assert "FirstDispatchInHistory" in result.columns
+
+    hpr = result.filter(pl.col("DUID") == "HPR1")
+    assert hpr.height == 1
+    assert hpr["FirstDispatchInHistory"][0].year == 2022
+
+    lbb = result.filter(pl.col("DUID") == "LBB1")
+    assert lbb.height == 1
+    assert lbb["FirstDispatchInHistory"][0] is None
