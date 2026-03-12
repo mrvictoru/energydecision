@@ -59,6 +59,340 @@ FUEL_TYPES = [
 DISPATCH_NONZERO_THRESHOLD: float = 0.001
 
 
+# ---------------------------------------------------------------------------
+# Battery station registry – historical DUID mappings
+# ---------------------------------------------------------------------------
+# Maps a short canonical key → station metadata + list of DUIDs ordered by
+# registration period (newest first).  ``valid_until=None`` means the DUID is
+# still active.  Dates are approximate — use ``find_duid_first_dispatch`` to
+# determine the exact transition date for a specific battery.
+#
+# Dispatch types:
+#   "bidirectional" — single DUID handles both charge and discharge (new model)
+#   "generator"     — discharge-only DUID of a gen/load pair (old model)
+#   "load"          — charge-only DUID of a gen/load pair (old model)
+# ---------------------------------------------------------------------------
+
+BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
+    # --- South Australia (SA1) ---
+    "hornsdale": {
+        "full_name": "Hornsdale Power Reserve",
+        "region": "SA1",
+        "aliases": ["hpr", "hornsdale power reserve", "hornsdale power"],
+        "duids": [
+            {"duid": "HPR1",  "type": "bidirectional", "valid_from": datetime(2022, 10, 1), "valid_until": None},
+            {"duid": "HPRG1", "type": "generator",     "valid_from": datetime(2017, 12, 1), "valid_until": datetime(2022, 10, 1)},
+            {"duid": "HPRL1", "type": "load",          "valid_from": datetime(2017, 12, 1), "valid_until": datetime(2022, 10, 1)},
+        ],
+    },
+    "lake_bonney": {
+        "full_name": "Lake Bonney BESS1",
+        "region": "SA1",
+        "aliases": ["lbb", "lbb1", "lake bonney", "lake bonney bess"],
+        "duids": [
+            {"duid": "LBB1",  "type": "bidirectional", "valid_from": datetime(2022, 6, 1),  "valid_until": None},
+            {"duid": "LBBG1", "type": "generator",     "valid_from": datetime(2019, 8, 1),  "valid_until": datetime(2022, 6, 1)},
+            {"duid": "LBBL1", "type": "load",          "valid_from": datetime(2019, 8, 1),  "valid_until": datetime(2022, 6, 1)},
+        ],
+    },
+    "dalrymple_north": {
+        "full_name": "Dalrymple North BESS",
+        "region": "SA1",
+        "aliases": ["dalnth", "dalnth1", "dalrymple north"],
+        "duids": [
+            {"duid": "DALNTH1",  "type": "bidirectional", "valid_from": datetime(2023, 1, 1), "valid_until": None},
+            {"duid": "DALNTH01", "type": "bidirectional", "valid_from": datetime(2018, 4, 1), "valid_until": datetime(2023, 1, 1)},
+        ],
+    },
+    "blyth": {
+        "full_name": "Blyth Battery Energy Storage System",
+        "region": "SA1",
+        "aliases": ["blythb1", "blyth bess"],
+        "duids": [
+            {"duid": "BLYTHB1", "type": "bidirectional", "valid_from": datetime(2023, 1, 1), "valid_until": None},
+        ],
+    },
+    "bungama": {
+        "full_name": "Bungama Battery Energy Storage System",
+        "region": "SA1",
+        "aliases": ["bungamb1"],
+        "duids": [
+            {"duid": "BUNGAMB1", "type": "bidirectional", "valid_from": datetime(2023, 6, 1), "valid_until": None},
+        ],
+    },
+    "torrens_island": {
+        "full_name": "Torrens Island BESS",
+        "region": "SA1",
+        "aliases": ["tib1", "torrens island bess", "torrens"],
+        "duids": [
+            {"duid": "TIB1", "type": "bidirectional", "valid_from": datetime(2024, 1, 1), "valid_until": None},
+        ],
+    },
+    # --- Victoria (VIC1) ---
+    "ballarat": {
+        "full_name": "Ballarat Battery Energy Storage System",
+        "region": "VIC1",
+        "aliases": ["balb1", "ballarat bess"],
+        "duids": [
+            {"duid": "BALB1",  "type": "bidirectional", "valid_from": datetime(2023, 1, 1), "valid_until": None},
+            {"duid": "BALBG1", "type": "generator",     "valid_from": datetime(2019, 7, 1), "valid_until": datetime(2023, 1, 1)},
+        ],
+    },
+    "gannawarra": {
+        "full_name": "Gannawarra Energy Storage System",
+        "region": "VIC1",
+        "aliases": ["gannb1", "gannawarra ess"],
+        "duids": [
+            {"duid": "GANNB1",  "type": "bidirectional", "valid_from": datetime(2023, 1, 1),  "valid_until": None},
+            {"duid": "GANNBG1", "type": "generator",     "valid_from": datetime(2018, 12, 1), "valid_until": datetime(2023, 1, 1)},
+            {"duid": "GANNBL1", "type": "load",          "valid_from": datetime(2018, 12, 1), "valid_until": datetime(2023, 1, 1)},
+        ],
+    },
+    "victorian_big_battery": {
+        "full_name": "Victorian Big Battery",
+        "region": "VIC1",
+        "aliases": ["vbb1", "vbb", "big battery"],
+        "duids": [
+            {"duid": "VBB1", "type": "bidirectional", "valid_from": datetime(2021, 11, 1), "valid_until": None},
+        ],
+    },
+    "bulgana": {
+        "full_name": "Bulgana Green Power Hub",
+        "region": "VIC1",
+        "aliases": ["bulbes1", "bulgana green power"],
+        "duids": [
+            {"duid": "BULBES1", "type": "bidirectional", "valid_from": datetime(2019, 12, 1), "valid_until": None},
+        ],
+    },
+    # --- Queensland (QLD1) ---
+    "kennedy_energy_park": {
+        "full_name": "Kennedy Energy Park Battery",
+        "region": "QLD1",
+        "aliases": ["kennedy", "kepbg1", "kepbl1"],
+        "duids": [
+            {"duid": "KEPBG1", "type": "generator", "valid_from": datetime(2019, 12, 1), "valid_until": None},
+            {"duid": "KEPBL1", "type": "load",      "valid_from": datetime(2019, 12, 1), "valid_until": None},
+        ],
+    },
+    "wandoan": {
+        "full_name": "Wandoan Battery Energy Storage System",
+        "region": "QLD1",
+        "aliases": ["wandb1", "wandoan bess"],
+        "duids": [
+            {"duid": "WANDB1", "type": "bidirectional", "valid_from": datetime(2021, 6, 1), "valid_until": None},
+        ],
+    },
+    # --- New South Wales (NSW1) ---
+    "waratah": {
+        "full_name": "Waratah Super Battery",
+        "region": "NSW1",
+        "aliases": ["wtahb1", "waratah super"],
+        "duids": [
+            {"duid": "WTAHB1", "type": "bidirectional", "valid_from": datetime(2024, 12, 1), "valid_until": None},
+        ],
+    },
+    "wallgrove": {
+        "full_name": "Wallgrove BESS 1",
+        "region": "NSW1",
+        "aliases": ["walgrv1", "wallgrove bess"],
+        "duids": [
+            {"duid": "WALGRV1", "type": "bidirectional", "valid_from": datetime(2021, 4, 1), "valid_until": None},
+        ],
+    },
+}
+
+# Build a reverse lookup: DUID → registry key
+_DUID_TO_REGISTRY_KEY: Dict[str, str] = {
+    entry["duid"]: key
+    for key, info in BATTERY_REGISTRY.items()
+    for entry in info["duids"]
+}
+
+
+def list_known_batteries() -> pl.DataFrame:
+    """Return a DataFrame of all batteries in the built-in ``BATTERY_REGISTRY``.
+
+    Each row represents one DUID registration period.  Use the ``Key`` column
+    to pass a station name to :func:`resolve_battery_duids`.
+
+    Columns:
+
+    * ``Key`` — canonical registry key (short, lowercase, usable as a name)
+    * ``StationName`` — human-readable station name
+    * ``Region`` — NEM region
+    * ``DUID`` — dispatch unit ID
+    * ``DispatchType`` — ``"bidirectional"``, ``"generator"``, or ``"load"``
+    * ``ValidFrom`` — approximate start of this DUID registration
+    * ``ValidUntil`` — approximate end (``null`` = still active)
+
+    Example::
+
+        from aemo_data import list_known_batteries
+        list_known_batteries()
+    """
+    rows = []
+    for key, info in BATTERY_REGISTRY.items():
+        for entry in info["duids"]:
+            rows.append({
+                "Key":          key,
+                "StationName":  info["full_name"],
+                "Region":       info["region"],
+                "DUID":         entry["duid"],
+                "DispatchType": entry["type"],
+                "ValidFrom":    entry.get("valid_from"),
+                "ValidUntil":   entry.get("valid_until"),
+            })
+    return pl.DataFrame(rows, schema_overrides={
+        "ValidFrom": pl.Datetime,
+        "ValidUntil": pl.Datetime,
+    }).sort(["Region", "StationName", "ValidFrom"])
+
+
+def resolve_battery_duids(
+    name_or_duid: str,
+    start_date: datetime,
+    end_date: datetime,
+) -> Dict[str, Any]:
+    """Resolve a station name or DUID to the correct DUID(s) for a date range.
+
+    This is the recommended entry-point when you want to query a specific
+    battery by name without worrying about which DUID it used in a given
+    period.  The function looks up the station in :data:`BATTERY_REGISTRY`
+    (supports fuzzy matching on the ``Key`` field and common aliases) and
+    returns the DUIDs that were **active** during ``[start_date, end_date)``.
+
+    When the date range **spans a transition** (e.g. a battery changed from a
+    gen/load pair to a bidirectional DUID mid-range) both the old and new DUIDs
+    are returned so callers can stitch the data together.
+
+    Args:
+        name_or_duid: A registry key (e.g. ``"hornsdale"``), a station name
+            alias (e.g. ``"Hornsdale Power Reserve"``), or an exact DUID
+            (e.g. ``"HPR1"``).  Matching is case-insensitive.
+        start_date: Start of the date range you want to query.
+        end_date: End of the date range.
+
+    Returns:
+        A dict with the following keys:
+
+        ``found`` (bool)
+            Whether the name / DUID was found in the registry.
+        ``key`` (str | None)
+            Registry key, or ``None`` if not found.
+        ``station_name`` (str | None)
+            Human-readable station name.
+        ``region`` (str | None)
+            NEM region.
+        ``active_duids`` (list[dict])
+            List of ``{"duid", "type", "valid_from", "valid_until"}`` entries
+            that overlap with the requested date range.
+        ``all_duids_in_range`` (list[str])
+            Flat list of all active DUIDs (convenient for passing to
+            :func:`fetch_aemo_unit_dispatch`).
+        ``gen_duid`` (str | None)
+            Generator DUID active in the range (for old-model batteries).
+        ``load_duid`` (str | None)
+            Load DUID active in the range.
+        ``bidi_duid`` (str | None)
+            Bidirectional DUID active in the range.
+        ``spans_transition`` (bool)
+            ``True`` when the range covers a DUID transition.
+        ``transition_dates`` (list[datetime])
+            Transition dates that fall within the range.
+
+    Example::
+
+        from aemo_data import resolve_battery_duids
+        from datetime import datetime
+
+        result = resolve_battery_duids("hornsdale", datetime(2021, 1, 1), datetime(2023, 6, 30))
+        # spans_transition=True because Hornsdale moved from HPRG1/HPRL1 to HPR1 in Oct 2022
+        print(result["all_duids_in_range"])   # ['HPRG1', 'HPRL1', 'HPR1']
+    """
+    # Normalise the query
+    query = str(name_or_duid).strip().lower()
+
+    # 1. Check if the query matches a registry key directly
+    matched_key: Optional[str] = None
+    if query in BATTERY_REGISTRY:
+        matched_key = query
+    else:
+        # 2. Check aliases
+        for key, info in BATTERY_REGISTRY.items():
+            aliases_lower = [a.lower() for a in info.get("aliases", [])]
+            if query in aliases_lower:
+                matched_key = key
+                break
+        # 3. Check if it is a known DUID
+        if matched_key is None:
+            duid_upper = query.upper()
+            if duid_upper in _DUID_TO_REGISTRY_KEY:
+                matched_key = _DUID_TO_REGISTRY_KEY[duid_upper]
+        # 4. Partial match on full station name or key
+        if matched_key is None:
+            for key, info in BATTERY_REGISTRY.items():
+                if query in info["full_name"].lower() or query in key:
+                    matched_key = key
+                    break
+
+    if matched_key is None:
+        return {
+            "found": False,
+            "key": None,
+            "station_name": None,
+            "region": None,
+            "active_duids": [],
+            "all_duids_in_range": [],
+            "gen_duid": None,
+            "load_duid": None,
+            "bidi_duid": None,
+            "spans_transition": False,
+            "transition_dates": [],
+        }
+
+    info = BATTERY_REGISTRY[matched_key]
+    active_entries = []
+    transition_dates_in_range = []
+
+    for entry in info["duids"]:
+        v_from = entry.get("valid_from") or datetime(2000, 1, 1)
+        v_until = entry.get("valid_until") or datetime(9999, 12, 31)
+        # Overlap: entry is active during [v_from, v_until) and query spans [start, end)
+        if v_from < end_date and v_until > start_date:
+            active_entries.append(entry)
+        # Collect transitions within range
+        if entry.get("valid_until") and start_date <= entry["valid_until"] <= end_date:
+            transition_dates_in_range.append(entry["valid_until"])
+
+    gen_duid: Optional[str] = None
+    load_duid: Optional[str] = None
+    bidi_duid: Optional[str] = None
+    for entry in active_entries:
+        t = entry.get("type", "")
+        if t == "generator":
+            gen_duid = entry["duid"]
+        elif t == "load":
+            load_duid = entry["duid"]
+        elif t == "bidirectional":
+            bidi_duid = entry["duid"]
+
+    spans = len(transition_dates_in_range) > 0
+
+    return {
+        "found": True,
+        "key": matched_key,
+        "station_name": info["full_name"],
+        "region": info["region"],
+        "active_duids": active_entries,
+        "all_duids_in_range": [e["duid"] for e in active_entries],
+        "gen_duid": gen_duid,
+        "load_duid": load_duid,
+        "bidi_duid": bidi_duid,
+        "spans_transition": spans,
+        "transition_dates": sorted(transition_dates_in_range),
+    }
+
+
 def _as_polars(df: Any) -> pl.DataFrame:
     """Best-effort conversion of foreign DataFrames (e.g. pandas from NEMOSIS) to Polars."""
     if df is None:
@@ -584,6 +918,7 @@ def fetch_aemo_unit_dispatch(
     start_date: datetime,
     end_date: datetime,
     duid: Optional[str] = None,
+    duids: Optional[List[str]] = None,
     region: Optional[str] = None,
     generator_info_path: Optional[str] = None,
     cache_dir: str = "data/aemo",
@@ -591,86 +926,111 @@ def fetch_aemo_unit_dispatch(
 ) -> pl.DataFrame:
     """
     Fetch unit-specific dispatch data from AEMO DISPATCHLOAD table.
-    
+
     This function provides detailed dispatch information for individual units (DUIDs),
     including energy dispatch targets and FCAS enablement across all services. This is
     essential for calculating actual FCAS revenue and understanding operational constraints.
-    
+
     The DISPATCHLOAD table contains the dispatch targets set by AEMO for each unit in
     each 5-minute interval, including:
     - Energy dispatch (TOTALCLEARED)
     - FCAS enablement for each service (raise/lower, regulation/contingency)
     - Availability and bid data
-    
+
     Args:
         start_date: Start date for data retrieval
         end_date: End date for data retrieval
-        duid: Specific Dispatch Unit ID to fetch (e.g., "LBBG1"). If None, fetches all units
-        region: Filter by AEMO region (NSW1, QLD1, SA1, TAS1, VIC1). If None, fetches all regions
+        duid: Single Dispatch Unit ID to fetch (e.g., "LBBG1").
+        duids: List of Dispatch Unit IDs to fetch.  Takes precedence over ``region``
+            when both are specified.  More memory-efficient than ``region`` for large
+            date windows because the per-month filter is applied immediately.
+        region: Filter by AEMO region (NSW1, QLD1, SA1, TAS1, VIC1).  Only used when
+            neither ``duid`` nor ``duids`` is provided.
+        generator_info_path: Optional path to a local NEM registration spreadsheet.
         cache_dir: Directory to cache downloaded data
         refresh: If True, re-download even if cached data exists
-        
+
     Returns:
         Polars DataFrame with columns:
             - SETTLEMENTDATE: Datetime of the dispatch interval
             - DUID: Dispatch Unit ID
             - TOTALCLEARED: Total energy dispatch target (MW)
-            - RAISE6SEC: Enabled capacity for 6-second raise (MW)
-            - RAISE60SEC: Enabled capacity for 60-second raise (MW)
-            - RAISE5MIN: Enabled capacity for 5-minute raise (MW)
-            - RAISEREG: Enabled capacity for regulation raise (MW)
-            - LOWER6SEC: Enabled capacity for 6-second lower (MW)
-            - LOWER60SEC: Enabled capacity for 60-second lower (MW)
-            - LOWER5MIN: Enabled capacity for 5-minute lower (MW)
-            - LOWERREG: Enabled capacity for regulation lower (MW)
-            - Additional columns: AVAILABILITY, RAMPUPRATE, RAMPDOWNRATE, etc.
-            
+            - RAISE6SEC / RAISE60SEC / RAISE5MIN / RAISEREG: FCAS raise enablement (MW)
+            - LOWER6SEC / LOWER60SEC / LOWER5MIN / LOWERREG: FCAS lower enablement (MW)
+
+    Memory note:
+        DISPATCHLOAD contains all NEM units (~1 000–2 000 DUIDs, ~850 K rows/month).
+        When fetching a long date range without a ``duid``/``duids`` filter the raw
+        data for each month is kept in memory briefly while the filter runs.  For
+        windows longer than ~4 weeks, always provide ``duid`` or ``duids`` to keep
+        per-chunk memory usage low.
+
     Example:
         >>> # Fetch dispatch data for a specific battery unit
         >>> start = datetime(2024, 1, 1)
         >>> end = datetime(2024, 1, 2)
         >>> dispatch = fetch_aemo_unit_dispatch(start, end, duid="LBBG1")
         >>> print(dispatch.head())
-        >>> 
-        >>> # Calculate FCAS revenue for a unit
-        >>> # Revenue = Enablement (MW) * Price ($/MW/h) * interval duration (hours)
     """
     if region and region not in AEMO_REGIONS:
         raise ValueError(f"Region must be one of {AEMO_REGIONS}")
-    
+
     if not HAS_NEMOSIS:
         raise ImportError(
             "NEMOSIS is required to fetch actual AEMO data. "
             "Install with: pip install nemosis"
         )
-    
+
     cache_path = get_cache_dir(cache_dir)
-    
-    # Format datetime for NEMOSIS
-    start_time = start_date.strftime('%Y/%m/%d %H:%M:%S')
-    end_time = end_date.strftime('%Y/%m/%d %H:%M:%S')
-    
-    duid_str = f" for DUID {duid}" if duid else ""
+
+    # Build the per-chunk DUID filter set BEFORE the loop so we can trim each
+    # raw month immediately (avoids accumulating ~850 K rows × N months).
+    duid_filter: Optional[set] = None
+    if duid:
+        duid_filter = {str(duid).strip()}
+    elif duids:
+        duid_filter = {str(d).strip() for d in duids if d}
+    elif region:
+        # Get region DUIDs from the static table once, before the download loop
+        try:
+            gen_info_pre = _get_generators_static_table(cache_path, refresh)
+        except Exception:
+            gen_info_pre = _get_generator_info(
+                cache_path, generator_info_path=generator_info_path
+            )
+        if gen_info_pre is not None:
+            gen_info_pl_pre = _normalize_columns(_as_polars(gen_info_pre))
+            if 'Region' in gen_info_pl_pre.columns and 'DUID' in gen_info_pl_pre.columns:
+                duid_filter = set(
+                    gen_info_pl_pre.filter(pl.col('Region') == region)
+                    .select('DUID')
+                    .unique()['DUID']
+                    .to_list()
+                )
+                print(
+                    f"Pre-filtering to {len(duid_filter)} DUIDs in region {region}"
+                )
+            else:
+                print(
+                    "Warning: Could not load generator static info to filter by region. "
+                    "Provide `generator_info_path` (or set env var AEMO_GENERATORS_FILE)."
+                )
+
+    duid_str = f" for DUID {duid}" if duid else (f" for {len(duid_filter)} DUIDs" if duid_filter else "")
     region_str = f" in {region}" if region else ""
-    print(f"Fetching unit dispatch data{duid_str}{region_str} from {start_date.date()} to {end_date.date()}...")
-    
+    print(
+        f"Fetching unit dispatch data{duid_str}{region_str} "
+        f"from {start_date.date()} to {end_date.date()}..."
+    )
+
+    columns_to_keep = ['SETTLEMENTDATE', 'DUID', 'TOTALCLEARED',
+                       'RAISE6SEC', 'RAISE60SEC', 'RAISE5MIN', 'RAISEREG',
+                       'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN', 'LOWERREG']
+
+    dispatch_frames: list[pl.DataFrame] = []
+    windows = _iter_month_windows(start_date, end_date)
+
     try:
-        columns_to_keep = ['SETTLEMENTDATE', 'DUID', 'TOTALCLEARED']
-
-        fcas_columns = [
-            'RAISE6SEC',
-            'RAISE60SEC',
-            'RAISE5MIN',
-            'RAISEREG',
-            'LOWER6SEC',
-            'LOWER60SEC',
-            'LOWER5MIN',
-            'LOWERREG',
-        ]
-        columns_to_keep.extend(fcas_columns)
-
-        dispatch_frames: list[pl.DataFrame] = []
-        windows = _iter_month_windows(start_date, end_date)
         for idx, (window_start, window_end) in enumerate(windows, start=1):
             window_start_time = window_start.strftime('%Y/%m/%d %H:%M:%S')
             window_end_time = window_end.strftime('%Y/%m/%d %H:%M:%S')
@@ -680,111 +1040,64 @@ def fetch_aemo_unit_dispatch(
                     f"{window_start.date()} to {window_end.date()}"
                 )
 
-            chunk = dynamic_data_compiler(
+            chunk_raw = dynamic_data_compiler(
                 start_time=window_start_time,
                 end_time=window_end_time,
                 table_name='DISPATCHLOAD',
-                raw_data_location=str(cache_path)
+                raw_data_location=str(cache_path),
             )
-            chunk_pl = _normalize_columns(_as_polars(chunk))
+            chunk_pl = _normalize_columns(_as_polars(chunk_raw))
+            del chunk_raw  # free pandas memory immediately
+
             if chunk_pl.height == 0:
                 continue
 
-            if duid and 'DUID' in chunk_pl.columns:
-                before_filter = chunk_pl.height
-                chunk_pl = chunk_pl.filter(pl.col('DUID') == duid)
-                print(
-                    f"    DUID filter: {before_filter} records before filter, "
-                    f"{chunk_pl.height} after filtering for '{duid}'"
-                )
+            # Apply DUID filter immediately to keep per-chunk memory low
+            if duid_filter is not None and 'DUID' in chunk_pl.columns:
+                chunk_pl = chunk_pl.filter(pl.col('DUID').is_in(duid_filter))
                 if chunk_pl.height == 0:
                     continue
 
             chunk_pl = _coerce_datetime(chunk_pl, 'SETTLEMENTDATE')
-            available_columns = list(dict.fromkeys(col for col in columns_to_keep if col in chunk_pl.columns))
+            available_columns = list(
+                dict.fromkeys(col for col in columns_to_keep if col in chunk_pl.columns)
+            )
             if not available_columns:
                 continue
             dispatch_frames.append(chunk_pl.select(available_columns))
 
-        if not dispatch_frames:
-            print("No dispatch data returned from NEMOSIS")
-            return pl.DataFrame(schema={
-                'SETTLEMENTDATE': pl.Datetime,
-                'DUID': pl.Utf8,
-                'TOTALCLEARED': pl.Float64,
-                'RAISE6SEC': pl.Float64,
-                'RAISE60SEC': pl.Float64,
-                'RAISE5MIN': pl.Float64,
-                'RAISEREG': pl.Float64,
-                'LOWER6SEC': pl.Float64,
-                'LOWER60SEC': pl.Float64,
-                'LOWER5MIN': pl.Float64,
-                'LOWERREG': pl.Float64,
-            })
-        dispatch_pl = pl.concat(dispatch_frames, how='vertical_relaxed')
-
-        if duid and dispatch_pl.height == 0:
-            print(f"Warning: No data found for DUID {duid}")
-            print(f"Hint: Check if DUID '{duid}' exists in DISPATCHLOAD table for this date range")
-            return pl.DataFrame(schema={
-                'SETTLEMENTDATE': pl.Datetime,
-                'DUID': pl.Utf8,
-                'TOTALCLEARED': pl.Float64,
-                'RAISE6SEC': pl.Float64,
-                'RAISE60SEC': pl.Float64,
-                'RAISE5MIN': pl.Float64,
-                'RAISEREG': pl.Float64,
-                'LOWER6SEC': pl.Float64,
-                'LOWER60SEC': pl.Float64,
-                'LOWER5MIN': pl.Float64,
-                'LOWERREG': pl.Float64,
-            })
-
-        dispatch_pl = dispatch_pl.unique(subset=['SETTLEMENTDATE', 'DUID'], keep='last').sort('SETTLEMENTDATE')
-        
-        # Filter by region if specified (requires generator static info)
-        # NOTE: Only filter by region if DUID was NOT specified (DUID already implies region)
-        if region and not duid:
-            # Prefer the robust static-table reader which attempts conversions and forced refreshes
-            gen_info = None
-            try:
-                gen_info = _get_generators_static_table(cache_path, refresh)
-            except Exception:
-                # Fall back to local file or env var when the static_table path fails
-                gen_info = _get_generator_info(cache_path, generator_info_path=generator_info_path)
-
-            gen_info_pl = _normalize_columns(_as_polars(gen_info)) if gen_info is not None else None
-
-            if gen_info_pl is not None and 'Region' in gen_info_pl.columns and 'DUID' in gen_info_pl.columns:
-                region_duids = gen_info_pl.filter(pl.col('Region') == region).select('DUID').unique()
-                before_region_filter = dispatch_pl.height
-                if region_duids.height > 0:
-                    dispatch_pl = dispatch_pl.join(region_duids, on='DUID', how='inner')
-                after_region_filter = dispatch_pl.height
-                print(f"Region filter: {before_region_filter} records before filter, {after_region_filter} after filtering for region '{region}'")
-            else:
-                print(
-                    "Warning: Could not load generator static info to filter by region. "
-                    "Provide `generator_info_path` (or set env var AEMO_GENERATORS_FILE)."
-                )
-
-        # Select only the columns that exist and cast numerics
-        available_columns = list(dict.fromkeys(col for col in columns_to_keep if col in dispatch_pl.columns))
-        select_exprs = []
-        for c in available_columns:
-            if c == 'SETTLEMENTDATE' or c == 'DUID':
-                select_exprs.append(pl.col(c))
-            else:
-                select_exprs.append(pl.col(c).cast(pl.Float64, strict=False))
-
-        out = dispatch_pl.select(select_exprs).sort('SETTLEMENTDATE')
-        print(f"Fetched {len(out)} dispatch records for {out['DUID'].n_unique()} unique units")
-        return out
-        
     except Exception as e:
         print(f"Error fetching unit dispatch data from NEMOSIS: {e}")
         print("Note: NEMOSIS requires internet connection to download data from AEMO")
         raise
+
+    if not dispatch_frames:
+        print("No dispatch data returned from NEMOSIS")
+        if duid:
+            print(f"Hint: Check if DUID '{duid}' exists in DISPATCHLOAD table for this date range")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime, 'DUID': pl.Utf8, 'TOTALCLEARED': pl.Float64,
+            'RAISE6SEC': pl.Float64, 'RAISE60SEC': pl.Float64, 'RAISE5MIN': pl.Float64,
+            'RAISEREG': pl.Float64, 'LOWER6SEC': pl.Float64, 'LOWER60SEC': pl.Float64,
+            'LOWER5MIN': pl.Float64, 'LOWERREG': pl.Float64,
+        })
+
+    dispatch_pl = pl.concat(dispatch_frames, how='vertical_relaxed')
+    dispatch_pl = dispatch_pl.unique(subset=['SETTLEMENTDATE', 'DUID'], keep='last').sort('SETTLEMENTDATE')
+
+    # Cast numeric columns
+    available_columns = list(
+        dict.fromkeys(col for col in columns_to_keep if col in dispatch_pl.columns)
+    )
+    select_exprs = []
+    for c in available_columns:
+        if c in ('SETTLEMENTDATE', 'DUID'):
+            select_exprs.append(pl.col(c))
+        else:
+            select_exprs.append(pl.col(c).cast(pl.Float64, strict=False))
+    out = dispatch_pl.select(select_exprs).sort('SETTLEMENTDATE')
+    print(f"Fetched {len(out)} dispatch records for {out['DUID'].n_unique()} unique units")
+    return out
 
 
 def check_aemo_dispatch_availability(
@@ -998,10 +1311,15 @@ def get_dispatch_active_battery_units(
     if battery_units.height == 0 or 'DUID' not in battery_units.columns:
         return battery_units
 
+    # Pass the battery DUID list so fetch_aemo_unit_dispatch can filter per-chunk.
+    # This is critical for long date windows: without a DUID filter the full
+    # DISPATCHLOAD (~850 K rows/month) is kept in memory for every month.
+    battery_duid_list = battery_units['DUID'].drop_nulls().to_list()
+
     dispatch_df = fetch_aemo_unit_dispatch(
         start_date=start_date,
         end_date=end_date,
-        region=region,
+        duids=battery_duid_list,
         generator_info_path=generator_info_path,
         cache_dir=cache_dir,
         refresh=refresh,

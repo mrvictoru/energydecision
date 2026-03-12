@@ -395,3 +395,136 @@ def test_scan_duid_historical_availability_returns_first_dispatch_dates(monkeypa
     lbb = result.filter(pl.col("DUID") == "LBB1")
     assert lbb.height == 1
     assert lbb["FirstDispatchInHistory"][0] is None
+
+
+# ---------------------------------------------------------------------------
+# BATTERY_REGISTRY / list_known_batteries / resolve_battery_duids
+# ---------------------------------------------------------------------------
+
+def test_list_known_batteries_returns_dataframe():
+    """list_known_batteries returns a non-empty DataFrame with expected columns."""
+    from dispatch_utils import list_known_batteries
+    kb = list_known_batteries()
+    assert kb.height > 0
+    for col in ("Key", "StationName", "Region", "DUID", "DispatchType", "ValidFrom"):
+        assert col in kb.columns, f"Expected column {col!r}"
+
+
+def test_list_known_batteries_contains_hornsdale():
+    """Hornsdale Power Reserve must appear with both old and new DUIDs."""
+    from dispatch_utils import list_known_batteries
+    kb = list_known_batteries()
+    hpr_rows = kb.filter(pl.col("Key") == "hornsdale")
+    assert hpr_rows.height >= 3  # HPR1 + HPRG1 + HPRL1
+    duids = hpr_rows["DUID"].to_list()
+    assert "HPR1" in duids
+    assert "HPRG1" in duids
+    assert "HPRL1" in duids
+
+
+def test_resolve_battery_duids_pre_transition():
+    """Querying Hornsdale before the transition returns old gen/load DUIDs."""
+    import aemo_data as _aemo
+    result = _aemo.resolve_battery_duids("hornsdale", datetime(2021, 1, 1), datetime(2021, 6, 30))
+    assert result["found"] is True
+    assert result["station_name"] == "Hornsdale Power Reserve"
+    assert "HPRG1" in result["all_duids_in_range"]
+    assert "HPRL1" in result["all_duids_in_range"]
+    assert "HPR1" not in result["all_duids_in_range"]
+    assert result["spans_transition"] is False
+
+
+def test_resolve_battery_duids_post_transition():
+    """Querying Hornsdale after transition returns only the bidirectional DUID."""
+    import aemo_data as _aemo
+    result = _aemo.resolve_battery_duids("HPR1", datetime(2023, 1, 1), datetime(2023, 6, 30))
+    assert result["found"] is True
+    assert result["all_duids_in_range"] == ["HPR1"]
+    assert result["bidi_duid"] == "HPR1"
+    assert result["spans_transition"] is False
+
+
+def test_resolve_battery_duids_spans_transition():
+    """A range that covers the transition returns all DUIDs and spans_transition=True."""
+    import aemo_data as _aemo
+    result = _aemo.resolve_battery_duids("hornsdale", datetime(2022, 1, 1), datetime(2023, 1, 1))
+    assert result["found"] is True
+    assert result["spans_transition"] is True
+    assert "HPRG1" in result["all_duids_in_range"]
+    assert "HPR1" in result["all_duids_in_range"]
+    assert len(result["transition_dates"]) >= 1
+
+
+def test_resolve_battery_duids_unknown_name():
+    """An unknown name returns found=False."""
+    import aemo_data as _aemo
+    result = _aemo.resolve_battery_duids("nonexistent station xyz", datetime(2023, 1, 1), datetime(2023, 6, 30))
+    assert result["found"] is False
+    assert result["all_duids_in_range"] == []
+
+
+def test_fetch_aemo_unit_dispatch_accepts_duids_list(monkeypatch):
+    """fetch_aemo_unit_dispatch filters per-chunk when a duids list is given."""
+    import aemo_data as _aemo
+    import pandas as pd
+
+    captured_filters = []
+
+    def fake_ddc(start_time, end_time, table_name, raw_data_location):
+        # Return a fake DISPATCHLOAD chunk with multiple DUIDs
+        return pd.DataFrame({
+            "SETTLEMENTDATE": ["2025/01/01 00:05:00", "2025/01/01 00:05:00"],
+            "DUID": ["HPR1", "OTHER_DUID"],
+            "TOTALCLEARED": [100.0, 50.0],
+        })
+
+    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_ddc)
+
+    result = _aemo.fetch_aemo_unit_dispatch(
+        start_date=datetime(2025, 1, 1),
+        end_date=datetime(2025, 1, 2),
+        duids=["HPR1"],
+        cache_dir="data/aemo",
+    )
+    # Only HPR1 should be kept; OTHER_DUID should be filtered out
+    assert result.height >= 1
+    assert set(result["DUID"].to_list()) == {"HPR1"}
+
+
+def test_fetch_aemo_unit_dispatch_region_prefilter(monkeypatch):
+    """fetch_aemo_unit_dispatch pre-filters region DUIDs before the loop."""
+    import aemo_data as _aemo
+    import pandas as pd
+
+    call_data = {}
+
+    def fake_ddc(start_time, end_time, table_name, raw_data_location):
+        return pd.DataFrame({
+            "SETTLEMENTDATE": ["2025/01/01 00:05:00", "2025/01/01 00:05:00",
+                               "2025/01/01 00:05:00"],
+            "DUID": ["SA1_UNIT", "OTHER_REGION", "SA1_UNIT2"],
+            "TOTALCLEARED": [100.0, 50.0, 75.0],
+        })
+
+    # Fake static table with Region column
+    fake_gen_info = pl.DataFrame({
+        "DUID": ["SA1_UNIT", "SA1_UNIT2", "OTHER_REGION"],
+        "Region": ["SA1", "SA1", "NSW1"],
+    })
+
+    def fake_static(cache_path, refresh):
+        return fake_gen_info.to_pandas()
+
+    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_ddc)
+    monkeypatch.setattr(_aemo, "_get_generators_static_table", fake_static)
+
+    result = _aemo.fetch_aemo_unit_dispatch(
+        start_date=datetime(2025, 1, 1),
+        end_date=datetime(2025, 1, 2),
+        region="SA1",
+        cache_dir="data/aemo",
+    )
+    # Only SA1 units should be kept
+    assert result.height >= 1
+    assert "OTHER_REGION" not in result["DUID"].to_list()
+    assert "SA1_UNIT" in result["DUID"].to_list()

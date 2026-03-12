@@ -9,15 +9,20 @@ and ``AEMOAgent`` so that notebooks stay clean and readable.
 
 Typical workflow
 ----------------
-1. Call :func:`list_dispatch_candidates` to see which battery DUIDs are available
-   and which were actually dispatched during a chosen date window.
-2. Call :func:`resolve_dispatch_selection` to pick a DUID (by name or index) and
+1. Call :func:`list_known_batteries` to see all batteries registered in the
+   built-in registry with their historical DUIDs.
+2. Call :func:`list_dispatch_candidates` to see which battery DUIDs are available
+   and which were actually dispatched during a chosen date window.  Pass a
+   station name (e.g. ``"hornsdale"``) instead of a DUID to automatically use
+   the correct historical DUID(s) for the requested period.
+3. Call :func:`resolve_dispatch_selection` to pick a DUID (by name or index) and
    obtain sizing information and DUID metadata.
-3. Call :func:`run_dispatch_replay` to run N episodes with the dispatch replay
+4. Call :func:`run_dispatch_replay` to run N episodes with the dispatch replay
    agent and save the logs to parquet files.
 
 Public API
 ----------
+- :func:`list_known_batteries` — show all batteries in the built-in registry
 - :func:`show_dispatch_table` — pretty-print a subset of columns from a DataFrame
 - :func:`list_dispatch_candidates` — list available battery DUIDs and their
   dispatch-activity statistics for a given region and date window
@@ -51,6 +56,23 @@ _DEFAULT_SOC_RATIO: float = 0.5
 # Public helpers
 # ---------------------------------------------------------------------------
 
+def list_known_batteries() -> pl.DataFrame:
+    """Return a DataFrame of all batteries in the built-in registry.
+
+    Convenience re-export of :func:`aemo_data.list_known_batteries`.
+    Each row represents one DUID registration period.  The ``Key`` column
+    can be passed to :func:`list_dispatch_candidates` or
+    :func:`resolve_dispatch_selection` as a station name.
+
+    Example::
+
+        from dispatch_utils import list_known_batteries
+        list_known_batteries()
+    """
+    from aemo_data import list_known_batteries as _lkb
+    return _lkb()
+
+
 def show_dispatch_table(
     df: pl.DataFrame,
     columns: List[str],
@@ -81,6 +103,7 @@ def list_dispatch_candidates(
     region: str,
     start_date: datetime,
     end_date: datetime,
+    station_name: Optional[str] = None,
     cache_dir: str = "data/aemo",
     refresh: bool = False,
 ) -> Tuple[pl.DataFrame, pl.DataFrame]:
@@ -90,10 +113,26 @@ def list_dispatch_candidates(
     DISPATCHLOAD to find those that were actually dispatched between *start_date*
     and *end_date*.
 
+    You can optionally pass a ``station_name`` (e.g. ``"hornsdale"`` or
+    ``"Hornsdale Power Reserve"``) to restrict the query to a single battery.
+    The function will automatically resolve the correct DUID(s) for the
+    requested date range using :func:`aemo_data.resolve_battery_duids`, so
+    you get the right historical DUID(s) even for pre-transition periods.
+
+    .. note::
+        For date windows longer than ~1 month the underlying data download is
+        automatically memory-optimised by filtering to only the battery DUIDs
+        found in the static table (typically 10–15 DUIDs per region), rather
+        than downloading all ~1 000+ NEM units per month.
+
     Args:
         region: AEMO region code (e.g. ``"SA1"``, ``"QLD1"``).
         start_date: Start of the date window (inclusive).
         end_date: End of the date window (inclusive).
+        station_name: Optional station name or registry key (e.g.
+            ``"hornsdale"``, ``"lake bonney"``, ``"HPR1"``).  When provided,
+            only that battery is queried — and its historical DUIDs are used
+            automatically for pre-transition periods.
         cache_dir: Path to the NEMOSIS data cache directory.
         refresh: When ``True``, force re-download of cached files.
 
@@ -111,8 +150,136 @@ def list_dispatch_candidates(
         Sorted by ``NonZeroIntervalCount`` descending so the most-active
         batteries appear first.
     """
-    from aemo_data import get_available_battery_units, get_dispatch_active_battery_units
+    from aemo_data import (
+        get_available_battery_units,
+        get_dispatch_active_battery_units,
+        resolve_battery_duids,
+        fetch_aemo_unit_dispatch,
+        DISPATCH_NONZERO_THRESHOLD,
+    )
 
+    # -------------------------------------------------------------------------
+    # Station-name path: resolve to historical DUIDs automatically
+    # -------------------------------------------------------------------------
+    if station_name:
+        resolution = resolve_battery_duids(station_name, start_date, end_date)
+        if not resolution["found"]:
+            print(
+                f"[WARN] Station name {station_name!r} not found in the battery registry.\n"
+                "       Available stations:\n"
+                + "\n".join(
+                    f"  {k}: {v['full_name']}"
+                    for k, v in __import__("aemo_data").BATTERY_REGISTRY.items()
+                )
+            )
+            return pl.DataFrame(), pl.DataFrame()
+
+        duids_in_range = resolution["all_duids_in_range"]
+        print(
+            f"Station: {resolution['station_name']!r} ({resolution['region']})\n"
+            f"DUIDs active in {start_date.date()} → {end_date.date()}: {duids_in_range}"
+        )
+        if resolution["spans_transition"]:
+            td = [str(d.date()) for d in resolution["transition_dates"]]
+            print(
+                f"[NOTE] The date range spans a DUID transition on {td}.\n"
+                "       Data will be fetched for all relevant DUIDs and merged."
+            )
+
+        # Fetch dispatch for the resolved DUIDs
+        dispatch_df = fetch_aemo_unit_dispatch(
+            start_date=start_date,
+            end_date=end_date,
+            duids=duids_in_range,
+            cache_dir=cache_dir,
+            refresh=refresh,
+        )
+
+        # Build a minimal activity summary table matching the normal output format
+        if dispatch_df.height == 0:
+            print(f"No DISPATCHLOAD data found for {duids_in_range} in the requested range.")
+            return pl.DataFrame(), pl.DataFrame()
+
+        dispatch_numeric_cols = [c for c in dispatch_df.columns if c not in {"SETTLEMENTDATE", "DUID"}]
+        activity_df = dispatch_df.with_columns(
+            pl.col("SETTLEMENTDATE").cast(pl.Datetime, strict=False)
+        )
+        nonzero_condition = None
+        for col in dispatch_numeric_cols:
+            expr = pl.col(col).cast(pl.Float64, strict=False).abs() > DISPATCH_NONZERO_THRESHOLD
+            nonzero_condition = expr if nonzero_condition is None else (nonzero_condition | expr)
+
+        if nonzero_condition is not None:
+            activity_df = activity_df.with_columns(
+                pl.when(nonzero_condition).then(1).otherwise(0).alias("_has_activity")
+            )
+        else:
+            activity_df = activity_df.with_columns(pl.lit(0).alias("_has_activity"))
+
+        tc_expr = (
+            pl.col("TOTALCLEARED").cast(pl.Float64, strict=False).abs()
+            if "TOTALCLEARED" in dispatch_numeric_cols
+            else pl.lit(0.0)
+        )
+        summary = (
+            activity_df.group_by("DUID").agg([
+                pl.col("SETTLEMENTDATE").n_unique().alias("DispatchIntervalCount"),
+                pl.col("SETTLEMENTDATE").min().alias("FirstDispatchInterval"),
+                pl.col("SETTLEMENTDATE").max().alias("LastDispatchInterval"),
+                pl.col("_has_activity").sum().cast(pl.UInt32).alias("NonZeroIntervalCount"),
+                tc_expr.max().alias("MaxEnergyMW"),
+            ])
+        )
+
+        # Build a minimal battery_units table for the resolved station
+        static_rows = [{
+            "DUID": e["duid"],
+            "Region": resolution["region"],
+            "DispatchType": e["type"],
+            "TechnologyType": "Battery and Inverter",
+            "FuelType": "Grid",
+            "StorageCapacityMWh": None,
+            "RegisteredCapacityMW": None,
+        } for e in resolution["active_duids"]]
+        battery_units = pl.DataFrame(static_rows, schema_overrides={
+            "StorageCapacityMWh": pl.Float64,
+            "RegisteredCapacityMW": pl.Float64,
+        })
+
+        active_battery_units = battery_units.join(summary, on="DUID", how="inner")
+        active_battery_units = active_battery_units.with_columns([
+            pl.lit(None, dtype=pl.Utf8).alias("PairedGenDUID"),
+            pl.lit(None, dtype=pl.Utf8).alias("PairedLoadDUID"),
+        ])
+        # Populate gen/load DUID for paired batteries
+        if resolution["gen_duid"]:
+            active_battery_units = active_battery_units.with_columns(
+                pl.when(pl.col("DispatchType") == "load")
+                .then(pl.lit(resolution["gen_duid"]))
+                .otherwise(pl.col("PairedGenDUID"))
+                .alias("PairedGenDUID")
+            )
+        if resolution["load_duid"]:
+            active_battery_units = active_battery_units.with_columns(
+                pl.when(pl.col("DispatchType") == "generator")
+                .then(pl.lit(resolution["load_duid"]))
+                .otherwise(pl.col("PairedLoadDUID"))
+                .alias("PairedLoadDUID")
+            )
+
+        show_dispatch_table(
+            active_battery_units,
+            ["DUID", "Region", "DispatchType", "NonZeroIntervalCount",
+             "DispatchIntervalCount", "MaxEnergyMW",
+             "FirstDispatchInterval", "LastDispatchInterval",
+             "PairedGenDUID", "PairedLoadDUID"],
+            label=f"Dispatch data for {resolution['station_name']!r}",
+        )
+        return battery_units, active_battery_units
+
+    # -------------------------------------------------------------------------
+    # Normal path: region-based query
+    # -------------------------------------------------------------------------
     battery_units = get_available_battery_units(
         cache_dir=cache_dir,
         region=region,
@@ -258,7 +425,7 @@ def resolve_dispatch_selection(
             :func:`aemo_data.check_aemo_dispatch_availability`, or ``None``
             if *start_date* / *end_date* were not provided.
     """
-    from aemo_data import check_aemo_dispatch_availability
+    from aemo_data import check_aemo_dispatch_availability, resolve_battery_duids
 
     source_table = active_battery_units if active_battery_units.height > 0 else battery_units
     source_label = "dispatch-active" if active_battery_units.height > 0 else "static"
@@ -267,10 +434,29 @@ def resolve_dispatch_selection(
         raise ValueError("No battery DUIDs are available for dispatch replay.")
 
     if selected_duid and str(selected_duid).strip():
-        duid = str(selected_duid).strip()
+        query = str(selected_duid).strip()
+        # First try direct DUID match
+        duid = query
         chosen = source_table.filter(pl.col("DUID") == duid).head(1)
         if chosen.height == 0:
             chosen = battery_units.filter(pl.col("DUID") == duid).head(1)
+
+        # If not found as a DUID, try station-name resolution
+        if chosen.height == 0 and start_date and end_date:
+            resolution = resolve_battery_duids(query, start_date, end_date)
+            if resolution["found"]:
+                # Use the primary DUID for this period: prefer bidi, then gen
+                bidi = resolution["bidi_duid"]
+                gen = resolution["gen_duid"]
+                duid = bidi or gen or duid
+                chosen = source_table.filter(pl.col("DUID") == duid).head(1)
+                if chosen.height == 0:
+                    chosen = battery_units.filter(pl.col("DUID") == duid).head(1)
+                print(
+                    f"Resolved station name {query!r} → DUID {duid!r} "
+                    f"for {start_date.date()} to {end_date.date()}"
+                )
+
         print(f"Selected dispatch DUID from manual input: {duid}")
     else:
         idx = max(0, min(int(selected_index), source_table.height - 1))
@@ -289,7 +475,7 @@ def resolve_dispatch_selection(
                 stacklevel=2,
             )
 
-    # Resolve paired gen/load DUIDs
+    # Resolve paired gen/load DUIDs (also consult registry if date range spans a transition)
     dispatch_type: Optional[str] = None
     dispatch_duid_gen: Optional[str] = None
     dispatch_duid_load: Optional[str] = None
@@ -304,6 +490,13 @@ def resolve_dispatch_selection(
             val = chosen["PairedLoadDUID"][0]
             if val is not None and str(val).strip():
                 dispatch_duid_load = str(val)
+
+    # Supplement with registry info if still no paired DUIDs
+    if dispatch_duid_gen is None and dispatch_duid_load is None and start_date and end_date:
+        resolution = resolve_battery_duids(duid, start_date, end_date)
+        if resolution["found"]:
+            dispatch_duid_gen = dispatch_duid_gen or resolution["gen_duid"]
+            dispatch_duid_load = dispatch_duid_load or resolution["load_duid"]
 
     if dispatch_duid_gen or dispatch_duid_load:
         print(
