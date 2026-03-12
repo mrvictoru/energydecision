@@ -179,6 +179,25 @@ def list_dispatch_candidates(
             f"Station: {resolution['station_name']!r} ({resolution['region']})\n"
             f"DUIDs active in {start_date.date()} → {end_date.date()}: {duids_in_range}"
         )
+
+        # Guard: battery not registered in this period at all
+        if not duids_in_range:
+            # Show what DUIDs exist and when, to help user pick the right range
+            all_periods = [
+                f"  {e['duid']} ({e['type']}): "
+                f"{e.get('valid_from','?').date() if e.get('valid_from') else '?'}"
+                f" → "
+                f"{e['valid_until'].date() if e.get('valid_until') else 'present'}"
+                for e in __import__("aemo_data").BATTERY_REGISTRY[resolution["key"]]["duids"]
+            ]
+            print(
+                f"[WARN] {resolution['station_name']!r} has no registered DUID(s) "
+                f"for {start_date.date()} → {end_date.date()}.\n"
+                f"       Known registration periods:\n" + "\n".join(all_periods) + "\n"
+                f"       Call list_known_batteries() to review all registration details."
+            )
+            return pl.DataFrame(), pl.DataFrame()
+
         if resolution["spans_transition"]:
             td = [str(d.date()) for d in resolution["transition_dates"]]
             print(
@@ -199,6 +218,7 @@ def list_dispatch_candidates(
         if dispatch_df.height == 0:
             print(f"No DISPATCHLOAD data found for {duids_in_range} in the requested range.")
             return pl.DataFrame(), pl.DataFrame()
+
 
         dispatch_numeric_cols = [c for c in dispatch_df.columns if c not in {"SETTLEMENTDATE", "DUID"}]
         activity_df = dispatch_df.with_columns(

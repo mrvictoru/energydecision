@@ -319,7 +319,8 @@ def test_find_duid_first_dispatch_returns_first_month(monkeypatch):
             "TOTALCLEARED": [100.0, -50.0],
         })
 
-    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_dynamic_data_compiler)
+    monkeypatch.setattr(_aemo, "HAS_NEMOSIS", True)
+    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_dynamic_data_compiler, raising=False)
 
     result = _aemo.find_duid_first_dispatch(
         duid="HPR1",
@@ -338,9 +339,11 @@ def test_find_duid_first_dispatch_returns_none_when_not_found(monkeypatch):
     import aemo_data as _aemo
     import pandas as pd
 
+    monkeypatch.setattr(_aemo, "HAS_NEMOSIS", True)
     monkeypatch.setattr(
         _aemo, "dynamic_data_compiler",
-        lambda **kw: pd.DataFrame()
+        lambda **kw: pd.DataFrame(),
+        raising=False,
     )
 
     result = _aemo.find_duid_first_dispatch(
@@ -468,8 +471,6 @@ def test_fetch_aemo_unit_dispatch_accepts_duids_list(monkeypatch):
     import aemo_data as _aemo
     import pandas as pd
 
-    captured_filters = []
-
     def fake_ddc(start_time, end_time, table_name, raw_data_location):
         # Return a fake DISPATCHLOAD chunk with multiple DUIDs
         return pd.DataFrame({
@@ -478,7 +479,8 @@ def test_fetch_aemo_unit_dispatch_accepts_duids_list(monkeypatch):
             "TOTALCLEARED": [100.0, 50.0],
         })
 
-    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_ddc)
+    monkeypatch.setattr(_aemo, "HAS_NEMOSIS", True)
+    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_ddc, raising=False)
 
     result = _aemo.fetch_aemo_unit_dispatch(
         start_date=datetime(2025, 1, 1),
@@ -495,8 +497,6 @@ def test_fetch_aemo_unit_dispatch_region_prefilter(monkeypatch):
     """fetch_aemo_unit_dispatch pre-filters region DUIDs before the loop."""
     import aemo_data as _aemo
     import pandas as pd
-
-    call_data = {}
 
     def fake_ddc(start_time, end_time, table_name, raw_data_location):
         return pd.DataFrame({
@@ -515,7 +515,8 @@ def test_fetch_aemo_unit_dispatch_region_prefilter(monkeypatch):
     def fake_static(cache_path, refresh):
         return fake_gen_info.to_pandas()
 
-    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_ddc)
+    monkeypatch.setattr(_aemo, "HAS_NEMOSIS", True)
+    monkeypatch.setattr(_aemo, "dynamic_data_compiler", fake_ddc, raising=False)
     monkeypatch.setattr(_aemo, "_get_generators_static_table", fake_static)
 
     result = _aemo.fetch_aemo_unit_dispatch(
