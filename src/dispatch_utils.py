@@ -664,14 +664,17 @@ def run_dispatch_replay(
 
     # Fetch dispatch data
     if dispatch_duid_gen or dispatch_duid_load:
-        raw_dispatch = fetch_aemo_unit_dispatch(
+        # Use paired DUIDs directly — do NOT use region= here, because historical
+        # DUIDs (e.g. HPRG1/HPRL1 before the Hornsdale re-registration) may no
+        # longer appear in the current static generator table, causing the region
+        # pre-filter to silently exclude them.
+        paired_duids = [d for d in [dispatch_duid_gen, dispatch_duid_load] if d]
+        dispatch_df = fetch_aemo_unit_dispatch(
             start_date=start_date,
             end_date=end_date,
-            region=region,
+            duids=paired_duids,
             cache_dir=cache_dir,
         )
-        paired_duids = [d for d in [dispatch_duid_gen, dispatch_duid_load] if d]
-        dispatch_df = raw_dispatch.filter(pl.col("DUID").is_in(paired_duids))
     else:
         dispatch_df = fetch_aemo_unit_dispatch(
             start_date=start_date,

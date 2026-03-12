@@ -296,6 +296,86 @@ def test_run_dispatch_replay_returns_logs(monkeypatch, tmp_path):
     assert (tmp_path / "test_dispatch_logs.parquet").exists()
 
 
+def test_run_dispatch_replay_historical_duids_not_filtered_by_region(monkeypatch, tmp_path):
+    """run_dispatch_replay must use duids= (not region=) for gen/load pairs.
+
+    Regression: historical DUIDs (e.g. HPRG1/HPRL1 pre-2022) are absent from
+    the current static generator table, so fetching with region= silently
+    excluded them, causing "No dispatch data returned for DUID".  The fix is to
+    pass duids=[gen, load] directly.
+    """
+    import dispatch_utils as du
+    import aemo_data as _aemo
+
+    processed_data = pl.DataFrame({
+        "SETTLEMENTDATE": [datetime(2021, 1, 1, 0, 0), datetime(2021, 1, 1, 0, 30)],
+        "RRP": [50.0, 60.0],
+    })
+
+    fake_dispatch = pl.DataFrame({
+        "SETTLEMENTDATE": [datetime(2021, 1, 1, 0, 0), datetime(2021, 1, 1, 0, 30),
+                           datetime(2021, 1, 1, 0, 0), datetime(2021, 1, 1, 0, 30)],
+        "DUID": ["HPRG1", "HPRG1", "HPRL1", "HPRL1"],
+        "TOTALCLEARED": [80.0, 80.0, -40.0, -40.0],
+    })
+
+    # Track what kwargs were passed to fetch_aemo_unit_dispatch
+    call_kwargs: dict = {}
+
+    def fake_fetch(**kw):
+        call_kwargs.update(kw)
+        return fake_dispatch
+
+    monkeypatch.setattr(_aemo, "fetch_aemo_unit_dispatch", fake_fetch)
+
+    import AEMOBatteryEnv as _env_mod
+    import decision as _dec
+
+    fake_ep_log = pl.DataFrame({"step": [0], "action": [[0.5]], "reward": [1.0]})
+    fake_inc_log = pl.DataFrame()
+
+    class FakeEnv:
+        def __init__(self, **kw):
+            self.aemo_data = processed_data
+            self.step_duration = kw.get("step_duration", 0.5)
+            self.max_battery_flow = kw.get("max_battery_flow", 5.0)
+            self.battery_capacity = kw.get("battery_capacity", 10.0)
+            self.action_mode = kw.get("action_mode", "multi_market")
+
+    monkeypatch.setattr(_env_mod, "AEMOBatteryTradingEnv", FakeEnv)
+    monkeypatch.setattr(_dec, "run_single", lambda cls, env, agent_kwargs=None, **kw: (fake_ep_log, fake_inc_log))
+
+    selection = {
+        "duid": "HPRG1",
+        "dispatch_type": "generator",
+        "dispatch_duid_gen": "HPRG1",
+        "dispatch_duid_load": "HPRL1",
+        "battery_capacity": 193.5,
+        "max_battery_flow": 150.0,
+        "init_battery_level": 96.75,
+        "availability": None,
+    }
+
+    du.run_dispatch_replay(
+        processed_data=processed_data,
+        selection=selection,
+        start_date=datetime(2021, 1, 1),
+        end_date=datetime(2021, 1, 7),
+        region="SA1",
+        cache_dir="data/aemo",
+        num_episodes=1,
+    )
+
+    # Must NOT have used region= when gen/load DUIDs are specified
+    assert "region" not in call_kwargs, (
+        "run_dispatch_replay must not pass region= when gen/load DUIDs are set "
+        "(historical DUIDs may be absent from the static table)"
+    )
+    # Must have passed the paired DUIDs directly
+    assert "duids" in call_kwargs
+    assert set(call_kwargs["duids"]) == {"HPRG1", "HPRL1"}
+
+
 # ---------------------------------------------------------------------------
 # find_duid_first_dispatch — unit test with mocked NEMOSIS
 # ---------------------------------------------------------------------------
