@@ -163,9 +163,128 @@ def test_resolve_raises_when_no_units():
         )
 
 
-# ---------------------------------------------------------------------------
-# scan_duid_availability — static-only mode (no network needed)
-# ---------------------------------------------------------------------------
+def test_resolve_generator_with_paired_load_sets_dispatch_duid_gen():
+    """For an old-model battery the primary DUID is the generator (discharge).
+    When PairedLoadDUID is set and PairedGenDUID is null, resolve_dispatch_selection
+    must set dispatch_duid_gen = primary_duid so both sides are fetched/replayed.
+    Regression: without this fix, dispatch_duid_gen was None → no discharge actions.
+    """
+    battery_units = pl.DataFrame({
+        "DUID": ["HPRG1", "HPRL1"],
+        "Region": ["SA1", "SA1"],
+        "DispatchType": ["generator", "load"],
+        "StorageCapacityMWh": [194.0, 194.0],
+        "RegisteredCapacityMW": [150.0, 120.0],
+    })
+    active_battery_units = pl.DataFrame({
+        "DUID": ["HPRG1", "HPRL1"],
+        "Region": ["SA1", "SA1"],
+        "DispatchType": ["generator", "load"],
+        "StorageCapacityMWh": [194.0, 194.0],
+        "RegisteredCapacityMW": [150.0, 120.0],
+        "NonZeroIntervalCount": [1728, 1728],
+        "DispatchIntervalCount": [1728, 1728],
+        "MaxEnergyMW": [140.0, 120.0],
+        "PairedGenDUID": [None, "HPRG1"],  # load → gen=HPRG1; gen → gen=None
+        "PairedLoadDUID": ["HPRL1", None],  # gen → load=HPRL1; load → load=None
+    })
+
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active_battery_units,
+        selected_duid="HPRG1",
+        apply_unit_sizing=True,
+    )
+
+    # Primary DUID is the generator; it must be carried as dispatch_duid_gen
+    assert sel["duid"] == "HPRG1"
+    assert sel["dispatch_duid_gen"] == "HPRG1", (
+        "dispatch_duid_gen must equal the primary DUID when it is a generator "
+        "with a paired load DUID (so discharge data is fetched and replayed)"
+    )
+    assert sel["dispatch_duid_load"] == "HPRL1"
+    # Capacity should come from the static table
+    assert sel["battery_capacity"] == 194.0
+
+
+def test_resolve_registry_capacity_fallback(monkeypatch):
+    """When StorageCapacityMWh is None in the active table, resolve_dispatch_selection
+    must fall back to the BATTERY_REGISTRY capacity_mwh value.
+    Regression: without this fix, capacity defaulted to 10.0 (notebook default).
+    """
+    import aemo_data as _aemo
+
+    # Patch resolve_battery_duids to return a registry hit with known capacity
+    def fake_resolve(name, start_date, end_date):
+        return {
+            "found": True,
+            "key": "hornsdale",
+            "station_name": "Hornsdale Power Reserve",
+            "region": "SA1",
+            "active_duids": [
+                {
+                    "duid": "HPRG1",
+                    "type": "generator",
+                    "valid_from": datetime(2017, 12, 1),
+                    "valid_until": datetime(2022, 10, 1),
+                }
+            ],
+            "all_duids_in_range": ["HPRG1", "HPRL1"],
+            "gen_duid": "HPRG1",
+            "load_duid": "HPRL1",
+            "bidi_duid": None,
+            "spans_transition": False,
+            "transition_dates": [],
+        }
+
+    monkeypatch.setattr(_aemo, "resolve_battery_duids", fake_resolve)
+
+    # Patch the availability check so no NEMOSIS call is made
+    monkeypatch.setattr(_aemo, "check_aemo_dispatch_availability", lambda **kw: {
+        "has_data": True,
+        "row_count": 1728,
+        "unique_intervals": 1728,
+        "expected_intervals": 1728,
+        "coverage_ratio": 1.0,
+        "first_settlement": datetime(2021, 1, 1),
+        "last_settlement": datetime(2021, 1, 7),
+    })
+
+    # Active table has null capacity (as in the station-name path before the fix)
+    active = pl.DataFrame({
+        "DUID": ["HPRG1"],
+        "Region": ["SA1"],
+        "DispatchType": ["generator"],
+        "StorageCapacityMWh": [None],
+        "RegisteredCapacityMW": [None],
+        "NonZeroIntervalCount": [1728],
+        "DispatchIntervalCount": [1728],
+        "MaxEnergyMW": [140.0],
+        "PairedGenDUID": [None],
+        "PairedLoadDUID": ["HPRL1"],
+    }, schema_overrides={"StorageCapacityMWh": pl.Float64, "RegisteredCapacityMW": pl.Float64})
+
+    sel = resolve_dispatch_selection(
+        battery_units=active,
+        active_battery_units=active,
+        selected_duid="HPRG1",
+        battery_capacity=10.0,  # notebook default that should be overridden
+        max_battery_flow=5.0,
+        init_soc=5.0,
+        apply_unit_sizing=True,
+        start_date=datetime(2021, 1, 1),
+        end_date=datetime(2021, 1, 7),
+    )
+
+    # Must have picked up 194.0 MWh and 150.0 MW from the BATTERY_REGISTRY
+    assert sel["battery_capacity"] == 194.0, (
+        f"Expected registry fallback capacity 194.0 MWh, got {sel['battery_capacity']}"
+    )
+    assert sel["max_battery_flow"] == 150.0, (
+        f"Expected registry fallback max_flow 150.0 MW, got {sel['max_battery_flow']}"
+    )
+
+
 
 
 def test_scan_duid_availability_static_only(monkeypatch):

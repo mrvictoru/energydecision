@@ -156,6 +156,7 @@ def list_dispatch_candidates(
         resolve_battery_duids,
         fetch_aemo_unit_dispatch,
         DISPATCH_NONZERO_THRESHOLD,
+        BATTERY_REGISTRY,
     )
 
     # -------------------------------------------------------------------------
@@ -251,15 +252,21 @@ def list_dispatch_candidates(
             ])
         )
 
-        # Build a minimal battery_units table for the resolved station
+        # Build a minimal battery_units table for the resolved station.
+        # Populate capacity from the BATTERY_REGISTRY as a reliable fallback for
+        # historical gen/load DUIDs that are deregistered from the NEMOSIS static
+        # table (e.g. HPRG1/HPRL1 before Hornsdale's 2022 transition to HPR1).
+        station_info = BATTERY_REGISTRY.get(resolution["key"], {})
+        registry_capacity_mwh: Optional[float] = station_info.get("capacity_mwh")
+        registry_max_power_mw: Optional[float] = station_info.get("max_power_mw")
         static_rows = [{
             "DUID": e["duid"],
             "Region": resolution["region"],
             "DispatchType": e["type"],
             "TechnologyType": "Battery and Inverter",
             "FuelType": "Grid",
-            "StorageCapacityMWh": None,
-            "RegisteredCapacityMW": None,
+            "StorageCapacityMWh": registry_capacity_mwh,
+            "RegisteredCapacityMW": registry_max_power_mw,
         } for e in resolution["active_duids"]]
         battery_units = pl.DataFrame(static_rows, schema_overrides={
             "StorageCapacityMWh": pl.Float64,
@@ -445,7 +452,7 @@ def resolve_dispatch_selection(
             :func:`aemo_data.check_aemo_dispatch_availability`, or ``None``
             if *start_date* / *end_date* were not provided.
     """
-    from aemo_data import check_aemo_dispatch_availability, resolve_battery_duids
+    from aemo_data import check_aemo_dispatch_availability, resolve_battery_duids, BATTERY_REGISTRY
 
     source_table = active_battery_units if active_battery_units.height > 0 else battery_units
     source_label = "dispatch-active" if active_battery_units.height > 0 else "static"
@@ -518,6 +525,15 @@ def resolve_dispatch_selection(
             dispatch_duid_gen = dispatch_duid_gen or resolution["gen_duid"]
             dispatch_duid_load = dispatch_duid_load or resolution["load_duid"]
 
+    # For old-model gen+load pairs the primary DUID is typically a "generator"
+    # (discharge direction) and PairedLoadDUID points to the charge unit.
+    # In this case PairedGenDUID is null (the DUID *is* the gen unit), so we
+    # set dispatch_duid_gen = duid to ensure discharge data is fetched and
+    # passed to the replay agent alongside the load data.
+    if dispatch_duid_load is not None and dispatch_duid_gen is None:
+        if dispatch_type and dispatch_type.lower() in {"generator", "generating unit"}:
+            dispatch_duid_gen = duid
+
     if dispatch_duid_gen or dispatch_duid_load:
         print(
             f"Paired gen/load DUID detected: gen={dispatch_duid_gen!r}, load={dispatch_duid_load!r}\n"
@@ -549,14 +565,30 @@ def resolve_dispatch_selection(
                 f"{start_date.date()} to {end_date.date()}."
             )
 
-    # Sizing
+    # Sizing — prefer static-table values; fall back to BATTERY_REGISTRY when
+    # the DUID is historical and absent from (or has null values in) the table.
     suggested_mwh: Optional[float] = None
     suggested_mw: Optional[float] = None
     if chosen.height > 0:
         if "StorageCapacityMWh" in chosen.columns:
-            suggested_mwh = chosen["StorageCapacityMWh"][0]
+            val = chosen["StorageCapacityMWh"][0]
+            if val is not None:
+                suggested_mwh = float(val)
         if "RegisteredCapacityMW" in chosen.columns:
-            suggested_mw = chosen["RegisteredCapacityMW"][0]
+            val = chosen["RegisteredCapacityMW"][0]
+            if val is not None:
+                suggested_mw = float(val)
+
+    # Registry fallback for historical / deregistered DUIDs
+    if (suggested_mwh is None or suggested_mw is None) and start_date and end_date:
+        _reg_res = resolve_battery_duids(duid, start_date, end_date)
+        if _reg_res["found"]:
+            _station_info = BATTERY_REGISTRY.get(_reg_res["key"], {})
+            if suggested_mwh is None:
+                suggested_mwh = _station_info.get("capacity_mwh")
+            if suggested_mw is None:
+                suggested_mw = _station_info.get("max_power_mw")
+
     print(f"Suggested env sizing from table → capacity={suggested_mwh} MWh, max_flow={suggested_mw} MW")
 
     resolved_capacity = battery_capacity

@@ -79,6 +79,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Hornsdale Power Reserve",
         "region": "SA1",
         "aliases": ["hpr", "hornsdale power reserve", "hornsdale power"],
+        "capacity_mwh": 194.0,   # 150 MW / 194 MWh after 2020 expansion
+        "max_power_mw": 150.0,
         "duids": [
             {"duid": "HPR1",  "type": "bidirectional", "valid_from": datetime(2022, 10, 1), "valid_until": None},
             {"duid": "HPRG1", "type": "generator",     "valid_from": datetime(2017, 12, 1), "valid_until": datetime(2022, 10, 1)},
@@ -89,6 +91,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Lake Bonney BESS1",
         "region": "SA1",
         "aliases": ["lbb", "lbb1", "lake bonney", "lake bonney bess"],
+        "capacity_mwh": 25.0,
+        "max_power_mw": 25.0,
         "duids": [
             {"duid": "LBB1",  "type": "bidirectional", "valid_from": datetime(2022, 6, 1),  "valid_until": None},
             {"duid": "LBBG1", "type": "generator",     "valid_from": datetime(2019, 8, 1),  "valid_until": datetime(2022, 6, 1)},
@@ -99,6 +103,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Dalrymple North BESS",
         "region": "SA1",
         "aliases": ["dalnth", "dalnth1", "dalrymple north"],
+        "capacity_mwh": 8.0,
+        "max_power_mw": 30.0,
         "duids": [
             {"duid": "DALNTH1",  "type": "bidirectional", "valid_from": datetime(2023, 1, 1), "valid_until": None},
             {"duid": "DALNTH01", "type": "bidirectional", "valid_from": datetime(2018, 4, 1), "valid_until": datetime(2023, 1, 1)},
@@ -108,6 +114,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Blyth Battery Energy Storage System",
         "region": "SA1",
         "aliases": ["blythb1", "blyth bess"],
+        "capacity_mwh": 14.0,
+        "max_power_mw": 10.0,
         "duids": [
             {"duid": "BLYTHB1", "type": "bidirectional", "valid_from": datetime(2023, 1, 1), "valid_until": None},
         ],
@@ -116,6 +124,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Bungama Battery Energy Storage System",
         "region": "SA1",
         "aliases": ["bungamb1"],
+        "capacity_mwh": 50.0,
+        "max_power_mw": 50.0,
         "duids": [
             {"duid": "BUNGAMB1", "type": "bidirectional", "valid_from": datetime(2023, 6, 1), "valid_until": None},
         ],
@@ -124,6 +134,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Torrens Island BESS",
         "region": "SA1",
         "aliases": ["tib1", "torrens island bess", "torrens"],
+        "capacity_mwh": 250.0,
+        "max_power_mw": 250.0,
         "duids": [
             {"duid": "TIB1", "type": "bidirectional", "valid_from": datetime(2024, 1, 1), "valid_until": None},
         ],
@@ -133,6 +145,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Ballarat Battery Energy Storage System",
         "region": "VIC1",
         "aliases": ["balb1", "ballarat bess"],
+        "capacity_mwh": 30.0,
+        "max_power_mw": 30.0,
         "duids": [
             {"duid": "BALB1",  "type": "bidirectional", "valid_from": datetime(2023, 1, 1), "valid_until": None},
             {"duid": "BALBG1", "type": "generator",     "valid_from": datetime(2019, 7, 1), "valid_until": datetime(2023, 1, 1)},
@@ -142,6 +156,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Gannawarra Energy Storage System",
         "region": "VIC1",
         "aliases": ["gannb1", "gannawarra ess"],
+        "capacity_mwh": 25.0,
+        "max_power_mw": 25.0,
         "duids": [
             {"duid": "GANNB1",  "type": "bidirectional", "valid_from": datetime(2023, 1, 1),  "valid_until": None},
             {"duid": "GANNBG1", "type": "generator",     "valid_from": datetime(2018, 12, 1), "valid_until": datetime(2023, 1, 1)},
@@ -152,6 +168,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Victorian Big Battery",
         "region": "VIC1",
         "aliases": ["vbb1", "vbb", "big battery"],
+        "capacity_mwh": 450.0,
+        "max_power_mw": 300.0,
         "duids": [
             {"duid": "VBB1", "type": "bidirectional", "valid_from": datetime(2021, 11, 1), "valid_until": None},
         ],
@@ -160,6 +178,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Bulgana Green Power Hub",
         "region": "VIC1",
         "aliases": ["bulbes1", "bulgana green power"],
+        "capacity_mwh": 20.0,
+        "max_power_mw": 20.0,
         "duids": [
             {"duid": "BULBES1", "type": "bidirectional", "valid_from": datetime(2019, 12, 1), "valid_until": None},
         ],
@@ -169,6 +189,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Kennedy Energy Park Battery",
         "region": "QLD1",
         "aliases": ["kennedy", "kepbg1", "kepbl1"],
+        "capacity_mwh": 4.0,
+        "max_power_mw": 2.0,
         "duids": [
             {"duid": "KEPBG1", "type": "generator", "valid_from": datetime(2019, 12, 1), "valid_until": None},
             {"duid": "KEPBL1", "type": "load",      "valid_from": datetime(2019, 12, 1), "valid_until": None},
@@ -178,6 +200,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Wandoan Battery Energy Storage System",
         "region": "QLD1",
         "aliases": ["wandb1", "wandoan bess"],
+        "capacity_mwh": 150.0,
+        "max_power_mw": 100.0,
         "duids": [
             {"duid": "WANDB1", "type": "bidirectional", "valid_from": datetime(2021, 6, 1), "valid_until": None},
         ],
@@ -187,6 +211,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Waratah Super Battery",
         "region": "NSW1",
         "aliases": ["wtahb1", "waratah super"],
+        "capacity_mwh": 850.0,
+        "max_power_mw": 850.0,
         "duids": [
             {"duid": "WTAHB1", "type": "bidirectional", "valid_from": datetime(2024, 12, 1), "valid_until": None},
         ],
@@ -195,6 +221,8 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "full_name": "Wallgrove BESS 1",
         "region": "NSW1",
         "aliases": ["walgrv1", "wallgrove bess"],
+        "capacity_mwh": 50.0,
+        "max_power_mw": 50.0,
         "duids": [
             {"duid": "WALGRV1", "type": "bidirectional", "valid_from": datetime(2021, 4, 1), "valid_until": None},
         ],
