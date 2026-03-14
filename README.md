@@ -75,28 +75,44 @@ Run [test_simrun.ipynb](notebooks/test_simrun.ipynb) to:
 - Execute Rule-based and SDP agents.
 - Generate interaction logs (`.parquet`) for offline training.
 
-AEMO-specific data collection: the repository includes an `AEMOAgent` that can replay real unit dispatch (from `fetch_aemo_unit_dispatch`) into `AEMOBatteryTradingEnv` to generate realistic offline trajectories. Example:
+AEMO-specific data collection: the repository includes an `AEMOAgent` that can replay real unit dispatch (from `fetch_aemo_unit_dispatch`) into `AEMOBatteryTradingEnv` to generate realistic offline trajectories.
+
+The high-level `dispatch_utils` module (see [docs/AEMO_DISPATCH_UTILS.md](docs/AEMO_DISPATCH_UTILS.md)) simplifies this workflow:
 
 ```python
 from datetime import datetime
-from src.aemo_data import fetch_aemo_data_bundle, fetch_aemo_unit_dispatch
+from src.aemo_data import fetch_aemo_data_bundle
 from src.AEMOBatteryEnv import AEMODataPreprocessor, AEMOBatteryTradingEnv
-from src.decision import AEMOAgent
+from src.dispatch_utils import list_dispatch_candidates, resolve_dispatch_selection, run_dispatch_replay
 
-# Fetch market & dispatch data for a period
-start, end = datetime(2023, 6, 1), datetime(2023, 6, 2)
-bundle = fetch_aemo_data_bundle(start, end, region='NSW1')
-dispatch = fetch_aemo_unit_dispatch(start, end, duid='YOUR_DUID')
-
-# Preprocess and create env
-pre = AEMODataPreprocessor(step_duration_hours=0.5, add_normalized_features=True, update_stats_from_data=True)
+# Step 1 – fetch and preprocess market data
+start, end = datetime(2025, 1, 1), datetime(2025, 1, 7)
+bundle = fetch_aemo_data_bundle(start, end, region='SA1')
+pre = AEMODataPreprocessor(step_duration_hours=0.5)
 processed = pre.preprocess_aemo_data(bundle['prices'], bundle['fcas'], bundle['generation'])
-env = AEMOBatteryTradingEnv(aemo_data=processed, action_mode='simple', normalize_obs=True, return_raw_obs=True)
 
-# Create AEMO agent that will replay dispatch as actions
-agent = AEMOAgent(env, algorithm='dispatch', dispatch_data=dispatch, dispatch_duid='YOUR_DUID')
-episode_df, incident_df = agent.run_episode()
+# Step 2 – discover which batteries were dispatched
+battery_units, active_units = list_dispatch_candidates(region='SA1', start_date=start, end_date=end)
+
+# Step 3 – select a DUID and resolve sizing
+selection = resolve_dispatch_selection(
+    battery_units=battery_units,
+    active_battery_units=active_units,
+    selected_duid='HPRG1',
+    start_date=start, end_date=end,
+)
+
+# Step 4 – run replay episodes and save logs
+ep_logs, inc_logs, all_logs = run_dispatch_replay(
+    processed_data=processed,
+    selection=selection,
+    start_date=start, end_date=end,
+    region='SA1', num_episodes=3,
+    output_dir='data/aemo_sim_output',
+)
 ```
+
+Use `test_aemo_data.ipynb` section 5 to interactively explore DUID availability across all NEM regions.
 
 ### 2. Online RL Training
 Run [test_sb3train.ipynb](notebooks/test_sb3train.ipynb) to:
@@ -476,3 +492,4 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 *   **[COMPONENTS.md](COMPONENTS.md)**: Detailed usage guide for key scripts (`decision.py`, `batterydeg.py`, etc.).
 *   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
+*   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.

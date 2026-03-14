@@ -695,6 +695,222 @@ class EpisodeVisualizer:
             plt.show()
         return fig
 
+    # ------------------------------------------------------------------
+    # Long-horizon summary plot
+    # ------------------------------------------------------------------
+
+    def plot_long_horizon(
+        self,
+        period_hours: float = 24.0,
+        start_step: int = 0,
+        num_periods: Optional[int] = None,
+        title: Optional[str] = None,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        figsize: Optional[Tuple[float, float]] = None,
+        show: bool = True,
+    ) -> plt.Figure:
+        """Summary plot optimised for multi-day / long time horizons.
+
+        Instead of plotting every individual 5-minute step (which becomes
+        unreadable over weeks), this method **aggregates data into periods**
+        (default: 24 h = one day per bar) and shows high-level statistics:
+
+        * **SOC band** — shaded area from min to max SOC within each period,
+          with the mean SOC overlaid as a line.
+        * **Net energy per period** — stacked bars showing total charge
+          energy (positive, green) and discharge energy (negative, red) so
+          you can see whether the battery was predominantly charging or
+          discharging on each day.
+        * **Cumulative revenue** — running total of energy + FCAS revenue
+          (AEMO) or grid-import cost savings (household).
+        * **Mean spot price per period** (AEMO only) — average RRP for each
+          aggregation window so price-dispatch relationships are visible.
+
+        Parameters
+        ----------
+        period_hours : float
+            Aggregation window in hours (default ``24.0`` = daily).
+        start_step : int
+            First step to include (default ``0``).
+        num_periods : int, optional
+            Number of periods to show.  When ``None``, all available data
+            from *start_step* is included.
+        title : str, optional
+            Figure title.  A sensible default is generated when ``None``.
+        save_path : str, optional
+            If provided the figure is saved to this path.
+        dpi : int
+            Resolution for saved figures (default ``150``).
+        figsize : tuple of float, optional
+            ``(width, height)`` in inches.
+        show : bool
+            Whether to call ``plt.show()`` (default ``True``).
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        is_aemo = self.env_type == self._AEMO
+        steps_per_period = max(1, int(round(period_hours * self.steps_per_hour)))
+
+        end_step = len(self._df)
+        if num_periods is not None:
+            end_step = min(start_step + num_periods * steps_per_period, end_step)
+        sl = self._df.iloc[start_step:end_step]
+        total_steps = len(sl)
+        if total_steps == 0:
+            raise ValueError("Window is empty — check start_step and num_periods.")
+
+        # ---- Extract raw series ----
+        if is_aemo:
+            soc_raw = self._extract_info_series("battery_soc")[start_step:end_step]
+            e_rev_raw = self._extract_info_series("energy_revenue")[start_step:end_step]
+            f_rev_raw = self._extract_info_series("fcas_revenue")[start_step:end_step]
+            price_raw = self._extract_info_series("energy_price")[start_step:end_step]
+            soc_arr = np.array([s if s is not None else 0.0 for s in soc_raw], dtype=float)
+            e_rev_arr = np.array([v if v is not None else 0.0 for v in e_rev_raw], dtype=float)
+            f_rev_arr = np.array([v if v is not None else 0.0 for v in f_rev_raw], dtype=float)
+            price_arr = np.array([v if v is not None else 0.0 for v in price_raw], dtype=float)
+            rev_arr = e_rev_arr + f_rev_arr
+            soc_label = "Battery SOC (MWh)"
+        else:
+            raw_obs = list(sl["raw_observation"])
+            soc_arr = np.array(
+                # obs[-2] is battery level (penultimate element); obs[-1] is degradation
+                [obs[-2] if hasattr(obs, "__len__") and len(obs) >= 2 else 0.0
+                 for obs in raw_obs], dtype=float
+            )
+            reward_arr = np.array(
+                [float(r) for r in sl["reward"]], dtype=float
+            )
+            rev_arr = reward_arr  # household: reward ≈ savings
+            price_arr = None
+            soc_label = "Battery Level (kWh)"
+
+        actions_raw = list(sl["action"])
+        dispatch_arr = np.array(
+            [a[0] if hasattr(a, "__len__") else float(a) for a in actions_raw],
+            dtype=float,
+        )
+
+        # ---- Aggregate into periods ----
+        n_periods = int(np.ceil(total_steps / steps_per_period))
+        period_idx = np.arange(n_periods)
+
+        soc_min = np.zeros(n_periods)
+        soc_max = np.zeros(n_periods)
+        soc_mean = np.zeros(n_periods)
+        charge_energy = np.zeros(n_periods)
+        discharge_energy = np.zeros(n_periods)
+        cumrev = np.zeros(n_periods)
+        mean_price = np.zeros(n_periods) if price_arr is not None else None
+
+        for p in range(n_periods):
+            s = p * steps_per_period
+            e = min(s + steps_per_period, total_steps)
+            soc_slice = soc_arr[s:e]
+            soc_min[p] = float(np.min(soc_slice))
+            soc_max[p] = float(np.max(soc_slice))
+            soc_mean[p] = float(np.mean(soc_slice))
+            d_slice = dispatch_arr[s:e]
+            charge_energy[p] = float(np.sum(d_slice[d_slice > 0]) * self.step_duration)
+            discharge_energy[p] = float(np.sum(d_slice[d_slice < 0]) * self.step_duration)
+            cumrev[p] = float(np.sum(rev_arr[:e]))
+            if mean_price is not None:
+                mean_price[p] = float(np.mean(price_arr[s:e]))
+
+        # ---- Build figure ----
+        num_panels = 4 if is_aemo else 3
+        if figsize is None:
+            width = max(10.0, min(0.6 * n_periods, 24.0))
+            figsize = (width, 3.2 * num_panels)
+
+        fig, axes = plt.subplots(num_panels, 1, figsize=figsize, sharex=True)
+        x = period_idx
+
+        def _fmt_period_label(p_idx: int) -> str:
+            """Label each period as 'Day N' or elapsed hours."""
+            elapsed_h = start_step * self.step_duration + p_idx * period_hours
+            if period_hours >= 24.0:
+                return f"Day {int(elapsed_h // 24) + 1}"
+            return f"{elapsed_h:.0f}h"
+
+        xlabel = (
+            f"Day (each bar = {period_hours:.0f} h)" if period_hours >= 24.0
+            else f"Period (each bar = {period_hours:.0f} h)"
+        )
+
+        # Panel 0: SOC band (min–max shaded, mean line)
+        axes[0].fill_between(x, soc_min, soc_max, alpha=0.25, color="tab:blue",
+                              label="SOC range")
+        axes[0].plot(x, soc_mean, color="tab:blue", linewidth=1.5, label="Mean SOC")
+        axes[0].set_ylabel(soc_label)
+        axes[0].set_title("State of Charge — range and mean per period")
+        axes[0].legend(fontsize=8, loc="upper right")
+        axes[0].grid(alpha=0.3)
+
+        # Panel 1: Charge / discharge energy per period
+        bar_w = 0.6
+        axes[1].bar(x, charge_energy, width=bar_w, color="tab:green",
+                    label="Charge (MWh)" if is_aemo else "Charge (kWh)")
+        axes[1].bar(x, discharge_energy, width=bar_w, color="tab:red",
+                    label="Discharge (MWh)" if is_aemo else "Discharge (kWh)")
+        axes[1].axhline(0, color="black", linewidth=0.5)
+        axes[1].set_ylabel("Energy per period")
+        axes[1].set_title("Charge / Discharge Energy per Period")
+        axes[1].legend(fontsize=8)
+        axes[1].grid(alpha=0.3)
+
+        # Panel 2: Cumulative revenue / savings
+        axes[2].plot(x, cumrev, color="tab:purple", linewidth=1.5)
+        axes[2].axhline(0, color="black", linewidth=0.5, linestyle="--")
+        axes[2].fill_between(
+            x, cumrev, 0,
+            where=cumrev >= 0, alpha=0.15, color="tab:green",
+            label="Net positive",
+        )
+        axes[2].fill_between(
+            x, cumrev, 0,
+            where=cumrev < 0, alpha=0.15, color="tab:red",
+            label="Net negative",
+        )
+        rev_label = "Cumulative Revenue ($)" if is_aemo else "Cumulative Savings ($)"
+        axes[2].set_ylabel(rev_label)
+        axes[2].set_title("Cumulative Revenue / Savings")
+        axes[2].legend(fontsize=8, loc="upper left")
+        axes[2].grid(alpha=0.3)
+
+        # Panel 3 (AEMO only): mean spot price per period
+        if is_aemo and mean_price is not None:
+            axes[3].bar(x, mean_price, width=bar_w, color="tab:orange", alpha=0.7)
+            axes[3].set_ylabel("Mean RRP ($/MWh)")
+            axes[3].set_title("Mean Spot Price (RRP) per Period")
+            axes[3].grid(alpha=0.3)
+
+        # X-axis formatting
+        fmt_labels = [_fmt_period_label(i) for i in range(n_periods)]
+        # Show at most ~15 labels to avoid crowding
+        step = max(1, n_periods // 15)
+        for ax in axes:
+            ax.set_xticks(x[::step])
+            ax.set_xticklabels(fmt_labels[::step], rotation=45, ha="right", fontsize=8)
+        axes[-1].set_xlabel(xlabel)
+
+        total_hours = total_steps * self.step_duration
+        default_title = (
+            f"{'AEMO' if is_aemo else 'Household'} Long-Horizon Summary — "
+            f"{total_hours:.0f} h ({n_periods} × {period_hours:.0f} h periods)"
+        )
+        fig.suptitle(title or default_title, fontsize=13, y=0.99)
+        fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        if show:
+            plt.show()
+        return fig
+
     @staticmethod
     def compare(
         logs_df1,

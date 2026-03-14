@@ -261,5 +261,136 @@ class TestEdgeCases:
             vis.plot(start_step=9999, num_hours=24, show=False)
 
 
+# ---------------------------------------------------------------------------
+# Fixtures — long-horizon logs (≥ 480 steps ≈ 10 days at 30-min resolution)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def aemo_long_log():
+    """AEMO log with 480 steps (~10 days at 30-min intervals)."""
+    np.random.seed(0)
+    N = 480
+    return pl.DataFrame({
+        'step': list(range(N)),
+        'raw_observation': [[0.0] * 18 for _ in range(N)],
+        'action': [
+            [float(np.clip(np.random.normal(0, 0.3), -1, 1))]
+            for _ in range(N)
+        ],
+        'reward': [float(np.random.normal(0, 0.05)) for _ in range(N)],
+        'info': [
+            {'battery_soc': 5.0 + 2.0 * np.sin(i / 48 * 2 * np.pi),
+             'energy_price': 50 + 30 * np.sin(i / 48 * np.pi),
+             'energy_revenue': float(np.random.normal(0, 10)),
+             'fcas_revenue': float(np.random.uniform(0, 2)),
+             'battery_dispatch': float(np.random.normal(0, 2)),
+             'step_degradation': 0.0001,
+             'total_degradation': 0.0001 * i,
+             'capacity_mwh': 10.0 - 0.0005 * i}
+            for i in range(N)
+        ],
+    })
+
+
+@pytest.fixture
+def household_long_log():
+    """Household log with 480 steps (~10 days at 30-min intervals)."""
+    np.random.seed(1)
+    N = 480
+    return pl.DataFrame({
+        'step': list(range(N)),
+        'raw_observation': [
+            [0.0, 0.0, 0.0, 0.0, 0.0,
+             max(0, 3.0 * np.sin(i / 48 * np.pi)),
+             2.0,
+             0.25,
+             0.05,
+             3.5 + 0.5 * np.sin(i / 10), 0.001]
+            for i in range(N)
+        ],
+        'action': [[float(np.clip(np.random.normal(0, 0.3), -1, 1))]
+                   for _ in range(N)],
+        'reward': [float(np.random.normal(-0.05, 0.02)) for _ in range(N)],
+        'info': [
+            {'battery_level': 3.5 + 0.5 * np.sin(i / 10),
+             'grid_energy': float(np.random.normal(0, 1)),
+             'step_degradation': 0.001,
+             'total_degradation': 0.001 * i,
+             'capacity_kwh': 7.0 - 0.001 * i}
+            for i in range(N)
+        ],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Tests — plot_long_horizon
+# ---------------------------------------------------------------------------
+
+class TestLongHorizonPlot:
+    """Tests for EpisodeVisualizer.plot_long_horizon()."""
+
+    def test_aemo_returns_figure(self, aemo_long_log):
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, show=False)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_aemo_has_four_panels(self, aemo_long_log):
+        """AEMO long-horizon plot: SOC band, energy, cumrev, price."""
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, show=False)
+        assert len(fig.axes) == 4
+        plt.close(fig)
+
+    def test_household_has_three_panels(self, household_long_log):
+        """Household long-horizon plot: SOC band, energy, cumrev (no price)."""
+        vis = EpisodeVisualizer(household_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, show=False)
+        assert len(fig.axes) == 3
+        plt.close(fig)
+
+    def test_num_periods_limits_window(self, aemo_long_log):
+        """num_periods=3 should produce exactly 3 aggregation buckets."""
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, num_periods=3, show=False)
+        assert isinstance(fig, plt.Figure)
+        # The bar chart panel (index 1) should have exactly 3 bars
+        ax = fig.axes[1]
+        bars = [p for p in ax.patches]
+        # 3 periods × 2 bar groups (charge + discharge)
+        assert len(bars) == 6
+        plt.close(fig)
+
+    def test_saves_file(self, aemo_long_log, tmp_path):
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        out = str(tmp_path / "long_horizon.png")
+        fig = vis.plot_long_horizon(period_hours=24, show=False, save_path=out)
+        assert os.path.exists(out)
+        plt.close(fig)
+
+    def test_custom_period_hours(self, aemo_long_log):
+        """12-h period should produce twice as many bars as 24-h period."""
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        fig24 = vis.plot_long_horizon(period_hours=24, show=False)
+        fig12 = vis.plot_long_horizon(period_hours=12, show=False)
+        bars24 = [p for p in fig24.axes[1].patches]
+        bars12 = [p for p in fig12.axes[1].patches]
+        assert len(bars12) > len(bars24)
+        plt.close(fig24)
+        plt.close(fig12)
+
+    def test_empty_window_raises(self, aemo_long_log):
+        """Starting past end of data raises ValueError."""
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        with pytest.raises(ValueError, match="empty"):
+            vis.plot_long_horizon(period_hours=24, start_step=9999, show=False)
+
+    def test_custom_title(self, aemo_long_log):
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, title="My Title", show=False)
+        assert "My Title" in fig.texts[0].get_text()
+        plt.close(fig)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
