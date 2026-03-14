@@ -51,6 +51,13 @@ import polars as pl
 # Default SOC ratio used when battery_capacity is zero (50 %)
 _DEFAULT_SOC_RATIO: float = 0.5
 
+# AEMO dispatch type strings that indicate a bidirectional (combined charge/discharge) DUID
+_BIDI_DISPATCH_TYPES: frozenset = frozenset({"bidirectional", "bidirectional unit"})
+
+# Suffix appended to the synthetic DUID name created when merging a transition-spanning
+# dispatch signal (pre-transition gen/load + post-transition bidi).
+_TRANSITION_DUID_SUFFIX: str = "__TRANSITION__"
+
 
 # ---------------------------------------------------------------------------
 # Public helpers
@@ -502,10 +509,17 @@ def resolve_dispatch_selection(
                 stacklevel=2,
             )
 
-    # Resolve paired gen/load DUIDs (also consult registry if date range spans a transition)
+    # Resolve paired gen/load DUIDs and check for DUID transitions
     dispatch_type: Optional[str] = None
     dispatch_duid_gen: Optional[str] = None
     dispatch_duid_load: Optional[str] = None
+    spans_transition: bool = False
+    transition_dates: list = []
+    all_dispatch_duids: list = [duid]  # DUIDs needed across the full date range
+    _registry_gen_duid: Optional[str] = None
+    _registry_load_duid: Optional[str] = None
+    _registry_bidi_duid: Optional[str] = None
+
     if chosen.height > 0:
         if "DispatchType" in chosen.columns:
             dispatch_type = chosen["DispatchType"][0]
@@ -518,12 +532,30 @@ def resolve_dispatch_selection(
             if val is not None and str(val).strip():
                 dispatch_duid_load = str(val)
 
-    # Supplement with registry info if still no paired DUIDs
-    if dispatch_duid_gen is None and dispatch_duid_load is None and start_date and end_date:
-        resolution = resolve_battery_duids(duid, start_date, end_date)
-        if resolution["found"]:
-            dispatch_duid_gen = dispatch_duid_gen or resolution["gen_duid"]
-            dispatch_duid_load = dispatch_duid_load or resolution["load_duid"]
+    # Consult registry for transition info and paired DUIDs.
+    # IMPORTANT: only supplement gen/load DUIDs when the primary DUID is NOT bidirectional.
+    # For a bidi DUID (e.g. HPR1), adding the old gen/load pair as "paired DUIDs" would
+    # cause run_dispatch_replay to fetch only those old DUIDs, skipping the bidi period.
+    if start_date and end_date:
+        _res = resolve_battery_duids(duid, start_date, end_date)
+        if _res["found"]:
+            spans_transition = _res["spans_transition"]
+            transition_dates = _res["transition_dates"]
+            _registry_gen_duid = _res["gen_duid"]
+            _registry_load_duid = _res["load_duid"]
+            _registry_bidi_duid = _res["bidi_duid"]
+            all_dispatch_duids = _res["all_duids_in_range"] or [duid]
+
+            _is_bidi = dispatch_type and dispatch_type.lower() in _BIDI_DISPATCH_TYPES
+            if spans_transition:
+                print(
+                    f"[NOTE] The date range spans a DUID transition. "
+                    f"All DUIDs will be fetched: {all_dispatch_duids}"
+                )
+            # Only supplement gen/load from registry when primary DUID is not bidirectional
+            if not _is_bidi and dispatch_duid_gen is None and dispatch_duid_load is None:
+                dispatch_duid_gen = dispatch_duid_gen or _registry_gen_duid
+                dispatch_duid_load = dispatch_duid_load or _registry_load_duid
 
     # For old-model gen+load pairs the primary DUID is typically a "generator"
     # (discharge direction) and PairedLoadDUID points to the charge unit.
@@ -540,9 +572,58 @@ def resolve_dispatch_selection(
             "The replay will fetch both units and combine them."
         )
 
-    # Availability check
+    # Availability check — skip the expensive full re-download when the
+    # active_battery_units table already tells us there is dispatch data.
+    # This avoids re-reading 35 M+ rows for long date windows.
     availability: Optional[Dict[str, Any]] = None
-    if start_date is not None and end_date is not None:
+    _skip_avail_check = False
+    _chosen_nonzero = 0
+    if chosen.height > 0 and "NonZeroIntervalCount" in chosen.columns:
+        _chosen_nonzero = int(chosen["NonZeroIntervalCount"][0] or 0)
+    if _chosen_nonzero > 0 or (active_battery_units.height > 0 and spans_transition):
+        # Two conditions allow us to skip the expensive NEMOSIS download:
+        # 1. NonZeroIntervalCount > 0 — list_dispatch_candidates already confirmed
+        #    non-zero dispatch activity for this DUID in the date range.
+        # 2. spans_transition — active_battery_units was built from all sub-period DUIDs;
+        #    even if any single DUID shows NonZeroIntervalCount=0 (e.g. HPR1 has data only
+        #    in the post-transition sub-period), the combined table has_data=True.
+        _first = chosen["FirstDispatchInterval"][0] if (
+            chosen.height > 0 and "FirstDispatchInterval" in chosen.columns
+        ) else None
+        _last = chosen["LastDispatchInterval"][0] if (
+            chosen.height > 0 and "LastDispatchInterval" in chosen.columns
+        ) else None
+        _cnt = int(chosen["DispatchIntervalCount"][0]) if (
+            chosen.height > 0 and "DispatchIntervalCount" in chosen.columns
+            and chosen["DispatchIntervalCount"][0] is not None
+        ) else _chosen_nonzero
+        _expected = max(
+            0,
+            int((end_date - start_date).total_seconds() // (5 * 60))
+        ) if start_date and end_date else 0
+        _cov = float(_cnt) / float(_expected) if _expected > 0 else 1.0
+        availability = {
+            "duid": duid,
+            "start_date": start_date,
+            "end_date": end_date,
+            "has_data": True,
+            "row_count": int(_cnt),
+            "unique_intervals": int(_cnt),
+            "expected_intervals": _expected,
+            "coverage_ratio": _cov,
+            "months_checked": 0,
+            "months_with_data": 1,
+            "first_settlement": _first,
+            "last_settlement": _last,
+        }
+        print(
+            f"Dispatch availability for {duid} (from cached table): has_data=True, "
+            f"intervals={_cnt}/{_expected}, coverage={_cov:.2%}"
+        )
+        print(f"  First: {_first}, Last: {_last}")
+        _skip_avail_check = True
+
+    if not _skip_avail_check and start_date is not None and end_date is not None:
         availability = check_aemo_dispatch_availability(
             start_date=start_date,
             end_date=end_date,
@@ -611,11 +692,127 @@ def resolve_dispatch_selection(
         "dispatch_type": dispatch_type,
         "dispatch_duid_gen": dispatch_duid_gen,
         "dispatch_duid_load": dispatch_duid_load,
+        # Transition-aware fields (populated when the date range crosses a DUID
+        # registration boundary, e.g. Hornsdale HPRG1/HPRL1 → HPR1 in Oct 2022)
+        "spans_transition": spans_transition,
+        "transition_dates": transition_dates,
+        "all_dispatch_duids": all_dispatch_duids,
+        # Registry gen/load/bidi DUIDs (used by run_dispatch_replay for transitions)
+        "_registry_gen_duid": _registry_gen_duid,
+        "_registry_load_duid": _registry_load_duid,
+        "_registry_bidi_duid": _registry_bidi_duid,
         "battery_capacity": resolved_capacity,
         "max_battery_flow": resolved_max_flow,
         "init_battery_level": resolved_init_soc,
         "availability": availability,
     }
+
+
+# ---------------------------------------------------------------------------
+
+def _merge_transition_dispatch(
+    dispatch_df: pl.DataFrame,
+    selection: Dict[str, Any],
+    transition_dates: list,
+) -> pl.DataFrame:
+    """Merge a multi-DUID dispatch DataFrame across a DUID transition into a
+    single generator-convention TOTALCLEARED series.
+
+    For periods before each transition date the gen/load pair is used:
+    ``TOTALCLEARED = GEN_MW - LOAD_MW`` (positive = discharging, negative = charging).
+    For periods after the last transition date the bidirectional DUID is used directly
+    (TOTALCLEARED in the same generator convention).
+
+    The resulting DataFrame has a single synthetic DUID column and can be passed to
+    ``AEMOAgent`` with ``assume_single_duid_is_generator=True``.
+    """
+    _registry_gen = selection.get("_registry_gen_duid")
+    _registry_load = selection.get("_registry_load_duid")
+    _registry_bidi = selection.get("_registry_bidi_duid")
+    duid_primary = selection.get("duid", "MERGED")
+
+    # Use first transition date to split pre/post periods
+    transition_date = min(transition_dates) if transition_dates else None
+
+    numeric_cols = [c for c in dispatch_df.columns if c not in {"SETTLEMENTDATE", "DUID"}]
+
+    def _get(duid: Optional[str]) -> pl.DataFrame:
+        if not duid or dispatch_df.height == 0:
+            return pl.DataFrame()
+        return dispatch_df.filter(pl.col("DUID") == duid)
+
+    # --- Pre-transition: gen/load pair → TOTALCLEARED = GEN_MW - LOAD_MW ---
+    parts: list[pl.DataFrame] = []
+    if _registry_gen or _registry_load:
+        gen_raw = _get(_registry_gen)
+        load_raw = _get(_registry_load)
+
+        if gen_raw.height > 0 and load_raw.height > 0:
+            gen_s = gen_raw.select(
+                ["SETTLEMENTDATE"] + numeric_cols
+            ).rename({c: f"_gen_{c}" for c in numeric_cols})
+            load_s = load_raw.select(
+                ["SETTLEMENTDATE"] + numeric_cols
+            ).rename({c: f"_load_{c}" for c in numeric_cols})
+            pre_merged = gen_s.join(load_s, on="SETTLEMENTDATE", how="full", coalesce=True)
+            # Generator convention: positive = generating (discharging)
+            tc_expr = (
+                pl.col(f"_gen_TOTALCLEARED").fill_null(0.0)
+                - pl.col(f"_load_TOTALCLEARED").fill_null(0.0)
+            ).alias("TOTALCLEARED") if "TOTALCLEARED" in numeric_cols else pl.lit(0.0).alias("TOTALCLEARED")
+            reg_r = (
+                pl.col(f"_gen_RAISEREG").fill_null(0.0)
+                + pl.col(f"_load_RAISEREG").fill_null(0.0)
+            ).alias("RAISEREG") if "RAISEREG" in numeric_cols else pl.lit(0.0).alias("RAISEREG")
+            reg_l = (
+                pl.col(f"_gen_LOWERREG").fill_null(0.0)
+                + pl.col(f"_load_LOWERREG").fill_null(0.0)
+            ).alias("LOWERREG") if "LOWERREG" in numeric_cols else pl.lit(0.0).alias("LOWERREG")
+            pre = pre_merged.with_columns([tc_expr, reg_r, reg_l]).select(
+                ["SETTLEMENTDATE", "TOTALCLEARED", "RAISEREG", "LOWERREG"]
+            )
+            if transition_date is not None:
+                pre = pre.filter(pl.col("SETTLEMENTDATE") < transition_date)
+            parts.append(pre)
+        elif gen_raw.height > 0:
+            pre = gen_raw.select(
+                ["SETTLEMENTDATE"] + [c for c in ["TOTALCLEARED", "RAISEREG", "LOWERREG"] if c in numeric_cols]
+            )
+            if transition_date is not None:
+                pre = pre.filter(pl.col("SETTLEMENTDATE") < transition_date)
+            parts.append(pre)
+
+    # --- Post-transition: bidirectional DUID (already in generator convention) ---
+    if _registry_bidi:
+        bidi_raw = _get(_registry_bidi)
+        if bidi_raw.height > 0:
+            post = bidi_raw.select(
+                ["SETTLEMENTDATE"] + [c for c in ["TOTALCLEARED", "RAISEREG", "LOWERREG"] if c in bidi_raw.columns]
+            )
+            if transition_date is not None:
+                post = post.filter(pl.col("SETTLEMENTDATE") >= transition_date)
+            parts.append(post)
+
+    if not parts:
+        # Fallback: return a pass-through single DUID with TOTALCLEARED=0
+        return dispatch_df.filter(pl.col("DUID") == (
+            _registry_bidi or _registry_gen or duid_primary
+        ))
+
+    unified = pl.concat(parts, how="diagonal_relaxed").sort("SETTLEMENTDATE")
+    # Fill any gaps in RAISEREG/LOWERREG
+    for col in ["RAISEREG", "LOWERREG"]:
+        if col not in unified.columns:
+            unified = unified.with_columns(pl.lit(0.0).alias(col))
+    unified = unified.with_columns(
+        pl.lit(f"{duid_primary}{_TRANSITION_DUID_SUFFIX}").alias("DUID")
+    )
+    print(
+        f"[Transition] Unified dispatch signal: {unified.height} intervals "
+        f"across {len(parts)} sub-periods "
+        f"(transition at {transition_date.date() if transition_date else 'N/A'})"
+    )
+    return unified
 
 
 # ---------------------------------------------------------------------------
@@ -677,6 +874,9 @@ def run_dispatch_replay(
     dispatch_duid_gen = selection.get("dispatch_duid_gen")
     dispatch_duid_load = selection.get("dispatch_duid_load")
     dispatch_type = selection.get("dispatch_type")
+    spans_transition = selection.get("spans_transition", False)
+    all_dispatch_duids = selection.get("all_dispatch_duids") or [duid]
+    transition_dates = selection.get("transition_dates") or []
 
     # Create independent env instances
     dispatch_envs = [
@@ -695,7 +895,30 @@ def run_dispatch_replay(
     ]
 
     # Fetch dispatch data
-    if dispatch_duid_gen or dispatch_duid_load:
+    if spans_transition and len(all_dispatch_duids) > 1:
+        # Date range spans a DUID transition (e.g. Hornsdale HPRG1/HPRL1 → HPR1 Oct 2022).
+        # Fetch ALL DUIDs for the full range and merge them into a unified dispatch signal
+        # so the replay covers the complete episode without gaps at the transition boundary.
+        print(
+            f"[Transition] Fetching all DUIDs for transition-spanning range: {all_dispatch_duids}"
+        )
+        raw_all = fetch_aemo_unit_dispatch(
+            start_date=start_date,
+            end_date=end_date,
+            duids=all_dispatch_duids,
+            cache_dir=cache_dir,
+        )
+        dispatch_df = _merge_transition_dispatch(
+            dispatch_df=raw_all,
+            selection=selection,
+            transition_dates=transition_dates,
+        )
+        # Reset paired gen/load — the merged signal is a single generator-convention series
+        dispatch_duid_gen = None
+        dispatch_duid_load = None
+        dispatch_type = "generator"
+        duid = f"{selection['duid']}{_TRANSITION_DUID_SUFFIX}"
+    elif dispatch_duid_gen or dispatch_duid_load:
         # Use paired DUIDs directly — do NOT use region= here, because historical
         # DUIDs (e.g. HPRG1/HPRL1 before the Hornsdale re-registration) may no
         # longer appear in the current static generator table, causing the region
@@ -711,7 +934,7 @@ def run_dispatch_replay(
         dispatch_df = fetch_aemo_unit_dispatch(
             start_date=start_date,
             end_date=end_date,
-            duid=duid,
+            duid=selection["duid"],
             cache_dir=cache_dir,
         )
 

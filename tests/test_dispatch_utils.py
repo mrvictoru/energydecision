@@ -285,6 +285,173 @@ def test_resolve_registry_capacity_fallback(monkeypatch):
     )
 
 
+def test_resolve_bidi_duid_does_not_get_gen_load_supplement():
+    """For a bidirectional DUID (e.g. HPR1), the registry supplement must NOT
+    set dispatch_duid_gen / dispatch_duid_load from historical gen/load DUIDs.
+    Regression: without this fix, HPR1 selected over 2019-2022 would get
+    dispatch_duid_gen=HPRG1, dispatch_duid_load=HPRL1, causing run_dispatch_replay
+    to fetch only the old gen/load pair and miss HPR1's post-Oct-2022 data.
+    """
+    battery_units = pl.DataFrame({
+        "DUID": ["HPRG1", "HPRL1", "HPR1"],
+        "Region": ["SA1", "SA1", "SA1"],
+        "DispatchType": ["generator", "load", "bidirectional"],
+        "StorageCapacityMWh": [194.0, 194.0, 194.0],
+        "RegisteredCapacityMW": [150.0, 150.0, 150.0],
+    })
+    active_battery_units = battery_units.with_columns([
+        pl.lit(5000).alias("NonZeroIntervalCount"),
+        pl.lit(5000).alias("DispatchIntervalCount"),
+        pl.lit(140.0).alias("MaxEnergyMW"),
+        pl.lit(datetime(2019, 6, 1)).alias("FirstDispatchInterval"),
+        pl.lit(datetime(2022, 12, 31)).alias("LastDispatchInterval"),
+        pl.lit(None, dtype=pl.Utf8).alias("PairedGenDUID"),
+        pl.lit(None, dtype=pl.Utf8).alias("PairedLoadDUID"),
+    ])
+
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active_battery_units,
+        selected_duid="HPR1",
+        start_date=datetime(2019, 6, 1),
+        end_date=datetime(2022, 12, 31),
+    )
+
+    assert sel["duid"] == "HPR1"
+    assert sel["dispatch_duid_gen"] is None, (
+        "Bidirectional DUID must not receive a gen-DUID supplement from registry "
+        f"(got dispatch_duid_gen={sel['dispatch_duid_gen']!r})"
+    )
+    assert sel["dispatch_duid_load"] is None, (
+        "Bidirectional DUID must not receive a load-DUID supplement from registry "
+        f"(got dispatch_duid_load={sel['dispatch_duid_load']!r})"
+    )
+    assert sel["spans_transition"] is True
+    assert set(sel["all_dispatch_duids"]) == {"HPR1", "HPRG1", "HPRL1"}
+
+
+def test_resolve_bidi_includes_all_duids_in_transition_selection():
+    """spans_transition=True and all_dispatch_duids contains all period DUIDs."""
+    battery_units = pl.DataFrame({
+        "DUID": ["HPRG1", "HPRL1", "HPR1"],
+        "Region": ["SA1"] * 3,
+        "DispatchType": ["generator", "load", "bidirectional"],
+        "StorageCapacityMWh": [194.0, 194.0, 194.0],
+        "RegisteredCapacityMW": [150.0, 150.0, 150.0],
+    })
+    active = battery_units.with_columns([
+        pl.lit(1).alias("NonZeroIntervalCount"),
+        pl.lit(1).alias("DispatchIntervalCount"),
+        pl.lit(10.0).alias("MaxEnergyMW"),
+        pl.lit(datetime(2019, 6, 1)).alias("FirstDispatchInterval"),
+        pl.lit(datetime(2022, 12, 31)).alias("LastDispatchInterval"),
+        pl.lit(None, dtype=pl.Utf8).alias("PairedGenDUID"),
+        pl.lit(None, dtype=pl.Utf8).alias("PairedLoadDUID"),
+    ])
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active,
+        selected_duid="HPR1",
+        start_date=datetime(2019, 6, 1),
+        end_date=datetime(2022, 12, 31),
+    )
+    assert sel["spans_transition"] is True
+    assert len(sel["transition_dates"]) >= 1
+    assert "HPRG1" in sel["all_dispatch_duids"]
+    assert "HPR1" in sel["all_dispatch_duids"]
+    assert sel["_registry_gen_duid"] == "HPRG1"
+    assert sel["_registry_bidi_duid"] == "HPR1"
+
+
+def test_merge_transition_dispatch_gen_load_to_bidi():
+    """_merge_transition_dispatch must produce a unified generator-convention
+    TOTALCLEARED column: GEN-LOAD for the pre-transition period, and the
+    bidirectional TOTALCLEARED for the post-transition period.
+    """
+    from dispatch_utils import _merge_transition_dispatch
+
+    transition = datetime(2022, 10, 1)
+
+    raw = pl.DataFrame({
+        "SETTLEMENTDATE": [
+            datetime(2021, 1, 1), datetime(2021, 1, 1),   # gen+load pre
+            datetime(2022, 11, 1),                          # bidi post
+        ],
+        "DUID":          ["HPRG1", "HPRL1", "HPR1"],
+        "TOTALCLEARED":  [100.0, 30.0, 80.0],
+        "RAISEREG":      [5.0, 2.0, 8.0],
+        "LOWERREG":      [0.0, 0.0, 4.0],
+    })
+
+    sel = {
+        "duid": "HPR1",
+        "_registry_gen_duid": "HPRG1",
+        "_registry_load_duid": "HPRL1",
+        "_registry_bidi_duid": "HPR1",
+    }
+    merged = _merge_transition_dispatch(raw, sel, [transition])
+
+    # Pre-transition row: TOTALCLEARED = GEN - LOAD = 100 - 30 = 70
+    pre_row = merged.filter(pl.col("SETTLEMENTDATE") == datetime(2021, 1, 1))
+    assert pre_row.height == 1
+    assert abs(pre_row["TOTALCLEARED"][0] - 70.0) < 1e-6
+
+    # Post-transition row: TOTALCLEARED = bidi TOTALCLEARED = 80
+    post_row = merged.filter(pl.col("SETTLEMENTDATE") == datetime(2022, 11, 1))
+    assert post_row.height == 1
+    assert abs(post_row["TOTALCLEARED"][0] - 80.0) < 1e-6
+
+    # All rows should use the synthetic DUID name
+    assert all("TRANSITION" in d for d in merged["DUID"].to_list())
+
+
+def test_resolve_skips_availability_check_when_active_table_has_data(monkeypatch):
+    """When active_battery_units already has NonZeroIntervalCount > 0,
+    resolve_dispatch_selection must derive availability from the table and NOT call
+    check_aemo_dispatch_availability (which would trigger an expensive NEMOSIS download).
+    """
+    import aemo_data as _aemo
+
+    calls = []
+
+    def _spy_avail(**kw):
+        calls.append(kw)
+        return {"has_data": True, "row_count": 1, "unique_intervals": 1,
+                "expected_intervals": 1, "coverage_ratio": 1.0,
+                "first_settlement": None, "last_settlement": None}
+
+    monkeypatch.setattr(_aemo, "check_aemo_dispatch_availability", _spy_avail)
+
+    active = pl.DataFrame({
+        "DUID": ["HPRG1"],
+        "Region": ["SA1"],
+        "DispatchType": ["generator"],
+        "StorageCapacityMWh": [194.0],
+        "RegisteredCapacityMW": [150.0],
+        "NonZeroIntervalCount": [2016],       # non-zero → should skip download
+        "DispatchIntervalCount": [2016],
+        "MaxEnergyMW": [140.0],
+        "FirstDispatchInterval": [datetime(2021, 1, 1)],
+        "LastDispatchInterval": [datetime(2021, 1, 7)],
+        "PairedGenDUID": [None],
+        "PairedLoadDUID": ["HPRL1"],
+    })
+
+    sel = resolve_dispatch_selection(
+        battery_units=active,
+        active_battery_units=active,
+        selected_duid="HPRG1",
+        start_date=datetime(2021, 1, 1),
+        end_date=datetime(2021, 1, 7),
+    )
+
+    assert sel["availability"]["has_data"] is True
+    assert calls == [], (
+        "check_aemo_dispatch_availability must NOT be called when the active "
+        "table already confirms non-zero dispatch data"
+    )
+
+
 
 
 def test_scan_duid_availability_static_only(monkeypatch):
