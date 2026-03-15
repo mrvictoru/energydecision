@@ -2,7 +2,7 @@
 
 ## Abstract
 
-The effective integration of battery energy storage is critical for a reliable, renewable-dominant grid, spanning both behind-the-meter residential operation and utility-scale market participation. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic demand/generation, time-varying tariffs or market prices, and battery degradation. This report documents a research codebase that provides two Gymnasium-compatible environments—(i) a household solar+battery controller and (ii) a utility battery trading environment for AEMO/NEM—and a shared evaluation workflow.
+The effective integration of battery energy storage is critical for a reliable, renewable-dominant grid, spanning both behind-the-meter residential operation and utility-scale market participation. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic demand/generation, time-varying tariffs or market prices, and battery degradation. This report documents a research codebase that provides two Gymnasium-compatible environments—(i) a household solar+battery controller and (ii) a utility battery trading environment for AEMO/NEM with an implemented historical dispatch-replay workflow—and a shared evaluation workflow.
 
 The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). A core motivation of this repository is to bring **modern transformer-based sequence modeling** to the practical challenge of battery operation, and to evaluate these models against established planning and RL baselines under consistent dynamics and metrics. Rule-based heuristics, dynamic-programming planners (SDP/MRDP), online RL baselines (Stable-Baselines3), and dispatch-replay baselines for the AEMO environment are included primarily as comparators and data-generators for DT training.
 
@@ -21,7 +21,7 @@ Recent review work supports this benchmark direction: Subramanya et al. [6] note
 
 ### 1.2 Contributions and Research Goals
 This work establishes a consolidated, reproducible benchmark to address these limitations. We provide:
-1.  **Two Gymnasium-Compatible Simulation Environments:** Environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS).
+1.  **Two Gymnasium-Compatible Simulation Environments:** Environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS), including replay of historical utility-scale station actions.
 2.  **Decision Transformer as the Primary Model:** A modernized Decision Transformer implementation plus an offline training pipeline built around trajectory logging, RTG construction, return scaling, and robust checkpoint loading.
 3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, online RL (PPO, SAC, etc.), and (for AEMO) dispatch replay against DT, and for generating trajectory data for offline learning.
 4.  **Standardized Evaluation Workflow:** Metrics for return, grid energy flows, degradation, risk proxies (Sharpe/Sortino ratios), tail-risk analysis (VaR/CVaR at 5%), bootstrap confidence intervals, and paired statistical comparisons (Wilcoxon signed-rank), plus plotting utilities.
@@ -58,6 +58,7 @@ Environment: `src/AEMOBatteryEnv.py` defines `AEMOBatteryTradingEnv`, a Gymnasiu
 	- `action_mode='multi_market'`: 3D action `[battery_dispatch, fcas_raise_bid, fcas_lower_bid]` with dispatch in [-1,1] and FCAS bids in [0,1].
 - **Units and scale:** default capacity/flow are specified in MWh/MW (grid-scale), distinct from the household environment (kWh/kW).
 - **Degradation:** supports `degradation_mode='rainflow'` using the same `DegradationModel` + `RainflowCounter` primitives as the household environment, tracking `step_degradation`, `total_degradation`, and capacity fade.
+- **Historical dispatch replay:** utility-scale notebooks and helpers can resolve a station name or DUID to the battery unit(s) active in a selected historical window, load AEMO `DISPATCHLOAD` records, and replay those observed actions inside the environment as a benchmark trajectory.
 
 
 ## 4. Methods
@@ -143,6 +144,8 @@ For the AEMO/NEM environment, the repository includes `src/aemo_data.py`, which 
 - optional generation mix by fuel type (requires generator static information).
 
 `AEMODataPreprocessor` (`src/AEMOBatteryEnv.py`) aligns these series to the environment step duration (default 30 minutes), interpolates missing numeric values, adds cyclical time features, and writes normalized columns.
+
+For historical replay, the repository also queries unit metadata and `DISPATCHLOAD` records so that a notebook can discover which battery stations were active in a date window, resolve historical DUID changes for a named station, and reconstruct observed dispatch actions as episode logs.
 
 > **NOTE (repo-backed):** Actual AEMO data fetching requires the optional dependency `nemosis` to be installed; otherwise fetch functions raise `ImportError`.
 
@@ -336,7 +339,13 @@ The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` qu
 
 ### 8.5 AEMO Environment
 
-The repository supports utility-scale evaluation via `AEMOBatteryTradingEnv` and `AEMOAgent`. Results for AEMO experiments will be added once a consistent set of episode logs and evaluation outputs are generated.
+The utility-scale AEMO environment is now implemented at the workflow level via `AEMOBatteryTradingEnv`, `AEMOAgent`, `aemo_data.py`, and the dispatch-replay helpers. In addition to rule-based and learning-based control modes, the current implementation can replay historical actions from existing battery stations by resolving the correct historical DUID or station mapping for a selected date range and then converting `DISPATCHLOAD` records into environment-aligned actions.
+
+This replay capability is important for two reasons. First, it provides a realistic benchmark trace derived from actual market participation rather than a synthetic heuristic. Second, it allows the same evaluation stack used for household experiments to be applied to utility-scale episodes, including reward, state-of-charge, price, and degradation diagnostics. The broader AEMO benchmark is still being expanded, but the core environment plus historical-station replay path is already operational.
+
+![Representative AEMO dispatch replay showing reward, state of charge, replayed historical actions, and price signals](eval_output/aemo/dispatchreplay_hpr1_20192022.png)
+
+The replay graph illustrates a representative utility-scale episode produced by the current notebook workflow. The plotted action trace is sourced from historical station dispatch, while the surrounding panels show how those actions interact with simulated battery state and contemporaneous market prices inside the environment. This demonstrates that the repository has moved beyond a placeholder AEMO design: it can already ingest historical utility-scale data and replay existing station behavior end-to-end.
 
 ## 9. Proposed Research Roadmap
 
@@ -386,7 +395,7 @@ DT-centric near-term extensions (repo-aligned):
 
 ## 11. Conclusion
 
-This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
+This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior. This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
 ## References
 
