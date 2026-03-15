@@ -722,10 +722,15 @@ class EpisodeVisualizer:
           energy (positive, green) and discharge energy (negative, red) so
           you can see whether the battery was predominantly charging or
           discharging on each day.
-        * **Cumulative revenue** — running total of energy + FCAS revenue
-          (AEMO) or grid-import cost savings (household).
-        * **Mean spot price per period** (AEMO only) — average RRP for each
-          aggregation window so price-dispatch relationships are visible.
+                * **Cumulative gross economics** — running total before degradation
+                    costs: energy + FCAS revenue (AEMO) or grid cashflow / savings
+                    (household).
+                * **Cumulative net economics** — running total after degradation
+                    costs so both environments present a like-for-like net view.
+                * **Cumulative degradation cost** — running total of per-step battery
+                    wear cost, kept separate from gross and net views.
+                * **Mean spot price per period** (AEMO only) — average RRP for each
+                    aggregation window so price-dispatch relationships are visible.
 
         Parameters
         ----------
@@ -763,34 +768,84 @@ class EpisodeVisualizer:
             raise ValueError("Window is empty — check start_step and num_periods.")
 
         # ---- Extract raw series ----
+        def _coerce_float(value, default: float = 0.0) -> float:
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
         if is_aemo:
             soc_raw = self._extract_info_series("battery_soc")[start_step:end_step]
             e_rev_raw = self._extract_info_series("energy_revenue")[start_step:end_step]
             f_rev_raw = self._extract_info_series("fcas_revenue")[start_step:end_step]
+            deg_cost_raw = self._extract_info_series("degradation_cost")[start_step:end_step]
             price_raw = self._extract_info_series("energy_price")[start_step:end_step]
-            soc_arr = np.array([s if s is not None else 0.0 for s in soc_raw], dtype=float)
-            e_rev_arr = np.array([v if v is not None else 0.0 for v in e_rev_raw], dtype=float)
-            f_rev_arr = np.array([v if v is not None else 0.0 for v in f_rev_raw], dtype=float)
-            price_arr = np.array([v if v is not None else 0.0 for v in price_raw], dtype=float)
-            rev_arr = e_rev_arr + f_rev_arr
+            soc_arr = np.array([_coerce_float(s) for s in soc_raw], dtype=float)
+            e_rev_arr = np.array([_coerce_float(v) for v in e_rev_raw], dtype=float)
+            f_rev_arr = np.array([_coerce_float(v) for v in f_rev_raw], dtype=float)
+            deg_cost_arr = np.array([_coerce_float(v) for v in deg_cost_raw], dtype=float)
+            price_arr = np.array([_coerce_float(v) for v in price_raw], dtype=float)
+            gross_arr = e_rev_arr + f_rev_arr
+            net_arr = gross_arr - deg_cost_arr
             soc_label = "Battery SOC (MWh)"
+            gross_label = "Cumulative Gross Revenue ($)"
+            gross_title = "Cumulative Gross Revenue (Energy + FCAS)"
+            net_label = "Cumulative Net Revenue ($)"
+            net_title = "Cumulative Net Revenue (After Degradation)"
         else:
             raw_obs = list(sl["raw_observation"])
+            info_soc_raw = self._extract_info_series("battery_level")[start_step:end_step]
+            info_grid_raw = self._extract_info_series("grid_energy")[start_step:end_step]
+
+            soc_vals = []
+            deg_cost_vals = []
+            gross_vals = []
+            for obs, info_soc, info_grid in zip(raw_obs, info_soc_raw, info_grid_raw):
+                obs_seq = obs if hasattr(obs, "__len__") else ()
+                reward_default = 0.0
+                if hasattr(obs_seq, "__len__") and len(obs_seq) >= 2:
+                    soc_vals.append(_coerce_float(obs_seq[-2], _coerce_float(info_soc)))
+                    deg_cost = _coerce_float(obs_seq[-1])
+                    deg_cost_vals.append(deg_cost)
+
+                    grid_energy = _coerce_float(info_grid, np.nan)
+                    if np.isfinite(grid_energy) and len(obs_seq) >= 4:
+                        import_price = _coerce_float(obs_seq[-4])
+                        export_price = _coerce_float(obs_seq[-3])
+                        energy_price = import_price if grid_energy >= 0 else export_price
+                        gross_vals.append(-(grid_energy * energy_price))
+                    else:
+                        gross_vals.append(reward_default + deg_cost)
+                else:
+                    soc_vals.append(_coerce_float(info_soc))
+                    deg_cost_vals.append(0.0)
+                    gross_vals.append(reward_default)
+
             soc_arr = np.array(
-                # obs[-2] is battery level (penultimate element); obs[-1] is degradation
-                [obs[-2] if hasattr(obs, "__len__") and len(obs) >= 2 else 0.0
-                 for obs in raw_obs], dtype=float
+                soc_vals,
+                dtype=float,
             )
             reward_arr = np.array(
-                [float(r) for r in sl["reward"]], dtype=float
+                [_coerce_float(r) for r in sl["reward"]], dtype=float
             )
-            rev_arr = reward_arr  # household: reward ≈ savings
+            deg_cost_arr = np.array(deg_cost_vals, dtype=float)
+            gross_arr = np.array(gross_vals, dtype=float)
+            net_arr = gross_arr - deg_cost_arr
             price_arr = None
             soc_label = "Battery Level (kWh)"
+            if not np.any(gross_arr):
+                gross_arr = reward_arr + deg_cost_arr
+                net_arr = reward_arr
+            gross_label = "Cumulative Gross Savings ($)"
+            gross_title = "Cumulative Gross Savings (Before Degradation)"
+            net_label = "Cumulative Net Savings ($)"
+            net_title = "Cumulative Net Savings (After Degradation)"
 
         actions_raw = list(sl["action"])
         dispatch_arr = np.array(
-            [a[0] if hasattr(a, "__len__") else float(a) for a in actions_raw],
+            [_coerce_float(a[0]) if hasattr(a, "__len__") else _coerce_float(a) for a in actions_raw],
             dtype=float,
         )
 
@@ -803,7 +858,9 @@ class EpisodeVisualizer:
         soc_mean = np.zeros(n_periods)
         charge_energy = np.zeros(n_periods)
         discharge_energy = np.zeros(n_periods)
-        cumrev = np.zeros(n_periods)
+        cumgross = np.zeros(n_periods)
+        cumnet = np.zeros(n_periods)
+        cumdeg = np.zeros(n_periods)
         mean_price = np.zeros(n_periods) if price_arr is not None else None
 
         for p in range(n_periods):
@@ -816,12 +873,14 @@ class EpisodeVisualizer:
             d_slice = dispatch_arr[s:e]
             charge_energy[p] = float(np.sum(d_slice[d_slice > 0]) * self.step_duration)
             discharge_energy[p] = float(np.sum(d_slice[d_slice < 0]) * self.step_duration)
-            cumrev[p] = float(np.sum(rev_arr[:e]))
+            cumgross[p] = float(np.sum(gross_arr[:e]))
+            cumnet[p] = float(np.sum(net_arr[:e]))
+            cumdeg[p] = float(np.sum(deg_cost_arr[:e]))
             if mean_price is not None:
                 mean_price[p] = float(np.mean(price_arr[s:e]))
 
         # ---- Build figure ----
-        num_panels = 4 if is_aemo else 3
+        num_panels = 6 if is_aemo else 5
         if figsize is None:
             width = max(10.0, min(0.6 * n_periods, 24.0))
             figsize = (width, 3.2 * num_panels)
@@ -862,31 +921,56 @@ class EpisodeVisualizer:
         axes[1].legend(fontsize=8)
         axes[1].grid(alpha=0.3)
 
-        # Panel 2: Cumulative revenue / savings
-        axes[2].plot(x, cumrev, color="tab:purple", linewidth=1.5)
+        # Panel 2: Cumulative gross economics
+        axes[2].plot(x, cumgross, color="tab:purple", linewidth=1.5)
         axes[2].axhline(0, color="black", linewidth=0.5, linestyle="--")
         axes[2].fill_between(
-            x, cumrev, 0,
-            where=cumrev >= 0, alpha=0.15, color="tab:green",
+            x, cumgross, 0,
+            where=cumgross >= 0, alpha=0.15, color="tab:green",
             label="Net positive",
         )
         axes[2].fill_between(
-            x, cumrev, 0,
-            where=cumrev < 0, alpha=0.15, color="tab:red",
+            x, cumgross, 0,
+            where=cumgross < 0, alpha=0.15, color="tab:red",
             label="Net negative",
         )
-        rev_label = "Cumulative Revenue ($)" if is_aemo else "Cumulative Savings ($)"
-        axes[2].set_ylabel(rev_label)
-        axes[2].set_title("Cumulative Revenue / Savings")
+        axes[2].set_ylabel(gross_label)
+        axes[2].set_title(gross_title)
         axes[2].legend(fontsize=8, loc="upper left")
         axes[2].grid(alpha=0.3)
 
-        # Panel 3 (AEMO only): mean spot price per period
+        # Panel 3: Cumulative net economics
+        axes[3].plot(x, cumnet, color="tab:cyan", linewidth=1.5)
+        axes[3].axhline(0, color="black", linewidth=0.5, linestyle="--")
+        axes[3].fill_between(
+            x, cumnet, 0,
+            where=cumnet >= 0, alpha=0.15, color="tab:green",
+            label="Net positive",
+        )
+        axes[3].fill_between(
+            x, cumnet, 0,
+            where=cumnet < 0, alpha=0.15, color="tab:red",
+            label="Net negative",
+        )
+        axes[3].set_ylabel(net_label)
+        axes[3].set_title(net_title)
+        axes[3].legend(fontsize=8, loc="upper left")
+        axes[3].grid(alpha=0.3)
+
+        # Panel 4: Cumulative degradation cost
+        axes[4].plot(x, cumdeg, color="tab:orange", linewidth=1.5)
+        axes[4].fill_between(x, cumdeg, 0, alpha=0.15, color="tab:orange")
+        axes[4].axhline(0, color="black", linewidth=0.5, linestyle="--")
+        axes[4].set_ylabel("Cumulative Degradation Cost ($)")
+        axes[4].set_title("Cumulative Degradation Cost")
+        axes[4].grid(alpha=0.3)
+
+        # Panel 5 (AEMO only): mean spot price per period
         if is_aemo and mean_price is not None:
-            axes[3].bar(x, mean_price, width=bar_w, color="tab:orange", alpha=0.7)
-            axes[3].set_ylabel("Mean RRP ($/MWh)")
-            axes[3].set_title("Mean Spot Price (RRP) per Period")
-            axes[3].grid(alpha=0.3)
+            axes[5].bar(x, mean_price, width=bar_w, color="tab:orange", alpha=0.7)
+            axes[5].set_ylabel("Mean RRP ($/MWh)")
+            axes[5].set_title("Mean Spot Price (RRP) per Period")
+            axes[5].grid(alpha=0.3)
 
         # X-axis formatting
         fmt_labels = [_fmt_period_label(i) for i in range(n_periods)]

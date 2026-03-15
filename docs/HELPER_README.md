@@ -25,6 +25,7 @@ SolarBatteryEnv keys:
 - grid_energy
 - step_degradation
 - battery_flow_energy
+- battery_level
 
 AEMOBatteryTradingEnv keys:
 - energy_revenue
@@ -36,6 +37,15 @@ AEMOBatteryTradingEnv keys:
 - battery_soc
 
 Missing keys are handled safely and return 0.0 averages.
+
+For long-horizon economics plots, `EpisodeVisualizer.plot_long_horizon()`
+uses slightly richer assumptions when available:
+- Household gross economics are reconstructed from `info.grid_energy` plus
+  the import/export price fields stored in `raw_observation`.
+- Household degradation cost is read from the last element of
+  `raw_observation` when present.
+- AEMO gross economics use `energy_revenue + fcas_revenue`, and degradation
+  uses `info.degradation_cost`.
 
 ## Core Data Helpers
 
@@ -142,6 +152,45 @@ EpisodeVisualizer.compare(
     num_hours=48, save_path="rule_vs_sac.png",
 )
 ```
+
+#### `.plot_long_horizon()` — aggregated multi-day view
+
+Use `plot_long_horizon()` when an episode spans several days or weeks and the
+per-step view becomes too dense.
+
+```python
+fig = vis.plot_long_horizon(
+    period_hours=24.0,  # aggregation window, 24 h = daily
+    start_step=0,
+    num_periods=None,
+    title=None,
+    save_path=None,
+    dpi=150,
+    figsize=None,
+    show=True,
+)
+```
+
+The long-horizon layout is aligned across both environments:
+
+| Panel | Household | AEMO |
+|-------|-----------|------|
+| **1 – SOC band** | Min / max / mean battery level per period | Min / max / mean battery SOC per period |
+| **2 – Energy** | Charge / discharge energy per period | Charge / discharge energy per period |
+| **3 – Gross economics** | Cumulative gross savings before degradation | Cumulative gross revenue = energy + FCAS |
+| **4 – Net economics** | Cumulative net savings after degradation | Cumulative net revenue after degradation |
+| **5 – Degradation** | Cumulative degradation cost | Cumulative degradation cost |
+| **6 – Price** | *(not shown)* | Mean spot price per period |
+
+Economic semantics:
+- Gross economics are shown before degradation costs.
+- Net economics subtract degradation costs in both environments.
+- Degradation is also shown as its own cumulative panel so the relationship
+    between gross, net, and battery wear is explicit.
+
+This means the long-horizon view is now comparable across environments:
+- Household: gross and net are based on grid cashflow and degradation.
+- AEMO: gross and net are based on energy revenue, FCAS revenue, and degradation.
 
 ## Evaluation Functions
 

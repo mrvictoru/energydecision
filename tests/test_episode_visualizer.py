@@ -283,6 +283,7 @@ def aemo_long_log():
              'energy_price': 50 + 30 * np.sin(i / 48 * np.pi),
              'energy_revenue': float(np.random.normal(0, 10)),
              'fcas_revenue': float(np.random.uniform(0, 2)),
+             'degradation_cost': 0.2 + 0.01 * (i % 24),
              'battery_dispatch': float(np.random.normal(0, 2)),
              'step_degradation': 0.0001,
              'total_degradation': 0.0001 * i,
@@ -335,18 +336,77 @@ class TestLongHorizonPlot:
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
-    def test_aemo_has_four_panels(self, aemo_long_log):
-        """AEMO long-horizon plot: SOC band, energy, cumrev, price."""
+    def test_aemo_has_six_panels(self, aemo_long_log):
+        """AEMO long-horizon plot: SOC, energy, gross, net, degradation, price."""
         vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
         fig = vis.plot_long_horizon(period_hours=24, show=False)
-        assert len(fig.axes) == 4
+        assert len(fig.axes) == 6
         plt.close(fig)
 
-    def test_household_has_three_panels(self, household_long_log):
-        """Household long-horizon plot: SOC band, energy, cumrev (no price)."""
+    def test_household_has_five_panels(self, household_long_log):
+        """Household long-horizon plot: SOC, energy, gross, net, degradation."""
         vis = EpisodeVisualizer(household_long_log, step_duration=0.5)
         fig = vis.plot_long_horizon(period_hours=24, show=False)
-        assert len(fig.axes) == 3
+        assert len(fig.axes) == 5
+        plt.close(fig)
+
+    def test_aemo_gross_and_net_panels_are_cumulative(self, aemo_long_log):
+        vis = EpisodeVisualizer(aemo_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, num_periods=3, show=False)
+        gross_line = fig.axes[2].lines[0]
+        net_line = fig.axes[3].lines[0]
+        gross_expected = np.array([
+            np.sum([row['energy_revenue'] + row['fcas_revenue'] for row in aemo_long_log['info'][:48]]),
+            np.sum([row['energy_revenue'] + row['fcas_revenue'] for row in aemo_long_log['info'][:96]]),
+            np.sum([row['energy_revenue'] + row['fcas_revenue'] for row in aemo_long_log['info'][:144]]),
+        ])
+        net_expected = np.array([
+            np.sum([row['energy_revenue'] + row['fcas_revenue'] - row['degradation_cost'] for row in aemo_long_log['info'][:48]]),
+            np.sum([row['energy_revenue'] + row['fcas_revenue'] - row['degradation_cost'] for row in aemo_long_log['info'][:96]]),
+            np.sum([row['energy_revenue'] + row['fcas_revenue'] - row['degradation_cost'] for row in aemo_long_log['info'][:144]]),
+        ])
+        np.testing.assert_allclose(gross_line.get_ydata(), gross_expected)
+        np.testing.assert_allclose(net_line.get_ydata(), net_expected)
+        plt.close(fig)
+
+    def test_household_gross_and_net_panels_are_cumulative(self, household_long_log):
+        vis = EpisodeVisualizer(household_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, num_periods=2, show=False)
+        gross_line = fig.axes[2].lines[0]
+        net_line = fig.axes[3].lines[0]
+        gross_expected = np.array([
+            np.sum([
+                -(row['grid_energy'] * (obs[-4] if row['grid_energy'] >= 0 else obs[-3]))
+                for obs, row in zip(household_long_log['raw_observation'][:48], household_long_log['info'][:48])
+            ]),
+            np.sum([
+                -(row['grid_energy'] * (obs[-4] if row['grid_energy'] >= 0 else obs[-3]))
+                for obs, row in zip(household_long_log['raw_observation'][:96], household_long_log['info'][:96])
+            ]),
+        ])
+        net_expected = np.array([
+            np.sum([
+                -(row['grid_energy'] * (obs[-4] if row['grid_energy'] >= 0 else obs[-3])) - obs[-1]
+                for obs, row in zip(household_long_log['raw_observation'][:48], household_long_log['info'][:48])
+            ]),
+            np.sum([
+                -(row['grid_energy'] * (obs[-4] if row['grid_energy'] >= 0 else obs[-3])) - obs[-1]
+                for obs, row in zip(household_long_log['raw_observation'][:96], household_long_log['info'][:96])
+            ]),
+        ])
+        np.testing.assert_allclose(gross_line.get_ydata(), gross_expected)
+        np.testing.assert_allclose(net_line.get_ydata(), net_expected)
+        plt.close(fig)
+
+    def test_degradation_panel_is_still_cumulative(self, household_long_log):
+        vis = EpisodeVisualizer(household_long_log, step_duration=0.5)
+        fig = vis.plot_long_horizon(period_hours=24, num_periods=2, show=False)
+        deg_line = fig.axes[4].lines[0]
+        expected = np.array([
+            np.sum([obs[-1] for obs in household_long_log['raw_observation'][:48]]),
+            np.sum([obs[-1] for obs in household_long_log['raw_observation'][:96]]),
+        ])
+        np.testing.assert_allclose(deg_line.get_ydata(), expected)
         plt.close(fig)
 
     def test_num_periods_limits_window(self, aemo_long_log):
