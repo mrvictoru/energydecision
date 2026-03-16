@@ -80,8 +80,8 @@ All features normalized to [0, 1] range for stable learning.
 **Multi-Market Mode** (energy + FCAS):
 - 3D continuous action space:
   - `action[0]`: Battery dispatch [-1, 1]
-  - `action[1]`: FCAS raise bid [0, 1] (fraction of capacity)
-  - `action[2]`: FCAS lower bid [0, 1] (fraction of capacity)
+    - `action[1]`: FCAS raise bid [0, 1] (fraction of `max_battery_flow` in MW)
+    - `action[2]`: FCAS lower bid [0, 1] (fraction of `max_battery_flow` in MW)
 
 ### Reward Function
 
@@ -92,9 +92,15 @@ reward = energy_revenue - energy_cost + fcas_revenue - degradation_cost - penalt
 Components:
 - **Energy revenue**: Discharge power × RRP × time (when discharging)
 - **Energy cost**: Charge power × RRP × time (when charging)
-- **FCAS revenue**: Enablement × FCAS price × time (multi-market mode)
+- **FCAS revenue**: Simplified FCAS enablement in MW × FCAS price ($/MW/h) × time (multi-market mode)
 - **Degradation cost**: Based on depth of discharge and cycle count
 - **Penalties**: SOC constraint violations
+
+In the simplified FCAS model, bid fractions are converted to MW using
+`max_battery_flow`, then capped by one-step SOC headroom before settlement.
+This keeps FCAS revenue dimensionally consistent with AEMO FCAS prices and
+avoids inflating revenue by treating battery energy capacity (MWh) as power
+capability (MW).
 
 Reward is normalized to approximately [-1, 1] range for training stability.
 

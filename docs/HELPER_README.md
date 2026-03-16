@@ -47,6 +47,12 @@ uses slightly richer assumptions when available:
 - AEMO gross economics use `energy_revenue + fcas_revenue`, and degradation
   uses `info.degradation_cost`.
 
+For AEMO runs generated with the corrected FCAS model, `fcas_revenue` is based
+on FCAS enablement in MW rather than battery energy capacity in MWh. Older
+FCAS-heavy plots created before that fix can materially overstate gross and net
+revenue, even if the gross-minus-net gap still matches cumulative degradation
+cost.
+
 ## Core Data Helpers
 
 ### transform_polars_df
@@ -191,6 +197,9 @@ Economic semantics:
 This means the long-horizon view is now comparable across environments:
 - Household: gross and net are based on grid cashflow and degradation.
 - AEMO: gross and net are based on energy revenue, FCAS revenue, and degradation.
+
+For corrected AEMO runs, the FCAS portion of gross revenue is derived from MW
+enablement limited by `max_battery_flow` and one-step SOC headroom.
 
 ## Evaluation Functions
 

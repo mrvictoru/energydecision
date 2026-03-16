@@ -456,8 +456,8 @@ class AEMOBatteryTradingEnv(gym.Env):
         else:
             # Multi-market action: [battery_dispatch, fcas_raise_bid, fcas_lower_bid]
             # battery_dispatch: [-1, 1]
-            # fcas_raise_bid: [0, 1] (fraction of capacity to bid)
-            # fcas_lower_bid: [0, 1] (fraction of capacity to bid)
+            # fcas_raise_bid: [0, 1] (fraction of FCAS MW capability to bid)
+            # fcas_lower_bid: [0, 1] (fraction of FCAS MW capability to bid)
             self.action_space = spaces.Box(
                 low=np.array([-1.0, 0.0, 0.0]),
                 high=np.array([1.0, 1.0, 1.0]),
@@ -797,11 +797,24 @@ class AEMOBatteryTradingEnv(gym.Env):
         # In reality, revenue depends on enablement (MW) × price ($/MW/h) × duration
         fcas_revenue = 0.0
         if self.action_mode == 'multi_market':
-            # Calculate available capacity for FCAS
-            fcas_raise_capacity = min(fcas_raise_bid * self.battery_capacity,
-                                     self.battery_capacity - self.battery_soc)
-            fcas_lower_capacity = min(fcas_lower_bid * self.battery_capacity,
-                                     self.battery_soc)
+            requested_raise_mw = max(0.0, float(fcas_raise_bid)) * float(self.max_battery_flow)
+            requested_lower_mw = max(0.0, float(fcas_lower_bid)) * float(self.max_battery_flow)
+
+            # Simplified FCAS enablement model:
+            # bids are fractions of inverter power capability (MW), then capped by
+            # one-step SOC headroom so the enabled regulation service is physically feasible.
+            if self.step_duration > 0:
+                available_raise_mw = max(0.0, float(self.battery_soc) / float(self.step_duration))
+                available_lower_mw = max(
+                    0.0,
+                    float(self.battery_capacity - self.battery_soc) / float(self.step_duration),
+                )
+            else:
+                available_raise_mw = float(self.max_battery_flow)
+                available_lower_mw = float(self.max_battery_flow)
+
+            fcas_raise_capacity = min(requested_raise_mw, float(self.max_battery_flow), available_raise_mw)
+            fcas_lower_capacity = min(requested_lower_mw, float(self.max_battery_flow), available_lower_mw)
             
             # Get FCAS prices ($/MW/h)
             raisereg_price = market_data.get('FCAS_RAISEREG', 0)
