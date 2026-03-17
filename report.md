@@ -347,6 +347,13 @@ This replay capability is important for two reasons. First, it provides a realis
 
 The replay graph illustrates a representative utility-scale episode produced by the current notebook workflow. The plotted action trace is sourced from historical station dispatch, while the surrounding panels show how those actions interact with simulated battery state and contemporaneous market prices inside the environment. This demonstrates that the repository has moved beyond a placeholder AEMO design: it can already ingest historical utility-scale data and replay existing station behavior end-to-end.
 
+### 8.6 Overall Observations on the Decision Transformer
+
+Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive and uniquely flexible control strategy for battery operation:
+1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT matches or outperforms established planners (like SDP, MRDP) and standard online RL agents (like PPO and SAC). Remarkably, its best variants achieved mean returns that are statistically significant improvements over the perfect-foresight Oracle.
+2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. For instance, ambitious target returns drastically reduced battery degradation while maintaining high performance.
+3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines.
+
 ## 9. Proposed Research Roadmap
 
 This framework provides the necessary tooling to pursue several practical extensions and evaluation directions:
