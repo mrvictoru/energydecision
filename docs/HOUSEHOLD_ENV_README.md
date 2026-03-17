@@ -50,13 +50,13 @@ The flowchart below illustrates how `SolarBatteryEnv` processes actions and upda
 
 ```mermaid
 graph TD;
-    A[Agent Action -1 to 1] --> B[Scale to kW Flow]
+    A[Agent Action -1 to 1] --> B[Scale to kW Battery Energy Flow]
     B --> C[Apply Battery Physics Constraints]
     
     C -->|Calculate Step Energy| D[Update Battery SOC]
     D --> E[Compute Degradation]
     
-    C --> F[Calculate Grid Energy Needed]
+    C --> F[Calculate if Grid Energy Needed]
     F -->|Net of Load, Solar & Battery| G{Import or Export?}
     
     G -- Import --> H[Apply Import Tariff]
@@ -106,11 +106,13 @@ The observation vectors are normalized to $[0, 1]$ (or $[-1, 1]$ for time featur
 
 ### Action Space
 **Continuous 1D Box:** $[-1, 1]$
-- $-1$: Maximum Discharge
-- $1$: Maximum Charge
+
+The action represents the **normalized requested battery active power flow**:
+- $-1$: Maximum Discharge (selling/pushing to the limits to grid/load)
+- $1$: Maximum Charge (buying/saving energy into battery limits)
 - $0$: Idle
 
-Mapped to physical units (kW) using `max_battery_flow`.
+Mapped to physical physical continuous units (kW) using the environment's `max_battery_flow` rating.
 
 ### Reward Function
 The goal is to maximize the negative cost (minimize cost).

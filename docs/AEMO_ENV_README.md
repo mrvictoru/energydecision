@@ -102,15 +102,19 @@ All features normalized to [0, 1] range for stable learning.
 
 ### Action Space
 
+The action represents the **normalized requested capability allocation**. It is scaled to actual physical limits (MW) by multiplying the action by the grid-scale `max_battery_flow`.
+
 **Simple Mode** (energy arbitrage only):
-- Single continuous action in [-1, 1]
-- -1 = maximum discharge, 0 = idle, +1 = maximum charge
+- Single continuous action in `[-1, 1]` indicating Active Power flow.
+- `-1` = maximum discharge (sell to grid)
+- `0` = idle
+- `+1` = maximum charge (buy from grid)
 
 **Multi-Market Mode** (energy + FCAS):
 - 3D continuous action space:
-  - `action[0]`: Battery dispatch [-1, 1]
-    - `action[1]`: FCAS raise bid [0, 1] (fraction of `max_battery_flow` in MW)
-    - `action[2]`: FCAS lower bid [0, 1] (fraction of `max_battery_flow` in MW)
+  - `action[0]`: Battery energy dispatch in `[-1, 1]`
+    - `action[1]`: FCAS raise bid capability in `[0, 1]` (fraction of `max_battery_flow` in MW dedicated to raise support)
+    - `action[2]`: FCAS lower bid capability in `[0, 1]` (fraction of `max_battery_flow` in MW dedicated to lower support)
 
 ### Reward Function
 
