@@ -44,6 +44,35 @@ while not done:
 
 ## System Model
 
+### Simulation Workflow
+
+The flowchart below illustrates how `SolarBatteryEnv` processes actions and updates household energy states during a step operation:
+
+```mermaid
+graph TD;
+    A[Agent Action -1 to 1] --> B[Scale to kW Flow]
+    B --> C[Apply Battery Physics Constraints]
+    
+    C -->|Calculate Step Energy| D[Update Battery SOC]
+    D --> E[Compute Degradation]
+    
+    C --> F[Calculate Grid Energy Needed]
+    F -->|Net of Load, Solar & Battery| G{Import or Export?}
+    
+    G -- Import --> H[Apply Import Tariff]
+    G -- Export --> I[Apply Export Tariff]
+    
+    H --> J[Grid Financial Cost]
+    I --> J
+    E -->|Lost Capacity * Replacement Cost| K[Degradation Cost]
+    
+    J --> L((Calculate Total Reward))
+    K --> L
+    
+    L --> M[Prepare Next Observation]
+    M -->|Observation, Reward, Done, Info| N[(Return to Agent)]
+```
+
 ### Dynamics
 The system evolves in discrete time steps (default $\Delta t = 0.5$ hours).
 

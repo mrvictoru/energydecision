@@ -12,6 +12,35 @@ This environment enables reinforcement learning agents to learn optimal battery 
 - **Real market data**: Integration with AEMO via NEMOSIS
 - **Battery degradation**: Realistic cost modeling
 
+## Simulation Workflow
+
+The flowchart below illustrates how the `AEMOBatteryTradingEnv` processes actions and updates the market state during a step operation:
+
+```mermaid
+graph TD;
+    A[Agent Action] --> B{Action Space Mode}
+    B -- Simple Mode --> B1[Energy Dispatch]
+    B -- Multi-Market --> B2[Energy Dispatch + FCAS Bids]
+    
+    B1 --> C[Apply Physical Constraints]
+    B2 --> C
+    
+    C -->|Calculate bounded MW flow| D[Update Battery SOC]
+    D --> E[Compute Degradation]
+    
+    E --> F[Calculate Step Finances]
+    F -->|Energy * Spot Price| G[Energy Revenue/Cost]
+    F -->|FCAS MW * Market Prices| H[FCAS Revenue]
+    F -->|Cycle Wear * Replacement Cost| I[Degradation Cost]
+    
+    G --> J((Calculate Total Reward))
+    H --> J
+    I --> J
+    
+    J --> K[Prepare Next Observation]
+    K -->|Observation, Reward, Done, Info| L[(Return to Agent)]
+```
+
 ## Quick Start
 
 ### Installation
