@@ -832,6 +832,8 @@ def run_dispatch_replay(
     run_tag: str = "dispatch",
     action_mode: str = "multi_market",
     degradation_mode: str = "rainflow",
+    degradation_chemistry: str = "NMC",
+    degradation_temperature: float = 25.0,
 ) -> Tuple[List[pl.DataFrame], List[pl.DataFrame], pl.DataFrame]:
     """Run dispatch replay episodes and save logs to parquet.
 
@@ -857,6 +859,10 @@ def run_dispatch_replay(
         run_tag: Prefix for output file names.
         action_mode: Environment action mode (default ``"multi_market"``).
         degradation_mode: Battery degradation model (default ``"rainflow"``).
+        degradation_chemistry: Cell chemistry preset for the ``'real_world'``
+            degradation model.  One of ``'NMC'`` or ``'LFP'``.
+        degradation_temperature: Ambient / cell temperature in °C for
+            degradation calculations.
 
     Returns:
         ``(episode_logs, incident_logs, all_logs_combined)``
@@ -890,6 +896,8 @@ def run_dispatch_replay(
             battery_life_cost=battery_life_cost,
             action_mode=action_mode,
             degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
         )
         for _ in range(num_episodes)
     ]
