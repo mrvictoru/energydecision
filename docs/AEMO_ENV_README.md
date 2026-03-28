@@ -10,7 +10,7 @@ This environment enables reinforcement learning agents to learn optimal battery 
 - **FCAS market participation**: Provide frequency regulation services
 - **Multi-market optimization**: Simultaneous energy and FCAS trading
 - **Real market data**: Integration with AEMO via NEMOSIS
-- **Battery degradation**: Realistic cost modeling
+- **Battery degradation**: Realistic cost modeling with three modes: Muenzel et al. (2015) rainflow cycle counting, real-world BESS calendar + cycle aging (Kampker et al. 2025), or simplified linear
 
 ## Simulation Workflow
 
@@ -64,8 +64,9 @@ env = create_aemo_env_from_data(
     battery_capacity=10.0,   # MWh
     max_battery_flow=5.0,    # MW
     action_mode='simple',    # 'simple' or 'multi_market'
-    degradation_mode='rainflow',  # 'rainflow' (physics-based) or 'simple'
-    degradation_temperature=25.0, # °C for the degradation model
+    degradation_mode='real_world',    # 'real_world', 'rainflow', or 'simple'
+    degradation_chemistry='LFP',      # 'NMC' or 'LFP' (for real_world mode)
+    degradation_temperature=25.0,     # °C for the degradation model
 )
 
 # Standard Gym interface
@@ -155,7 +156,10 @@ Data is automatically resampled to match environment step duration (default 30 m
 - **Capacity limits**: SOC ∈ [0, battery_capacity]
 - **Power limits**: |P| ≤ max_battery_flow
 - **Energy conservation**: SOC(t+1) = SOC(t) + P·Δt
-- **Degradation tracking**: Muenzel et al. rainflow counting with capacity fade and detailed info tracking (step_degradation, rainflow cycles, capacity_mwh, total_degradation)
+- **Degradation tracking**: Three modes available:
+  - `'real_world'` — Combined calendar + cycle aging adapted from Kampker et al. (2025), with Arrhenius temperature dependency and NMC/LFP chemistry presets. Recommended for grid-scale simulations. Tracks `calendar_degradation` and `cycle_degradation` separately.
+  - `'rainflow'` — Muenzel et al. (2015) rainflow counting with capacity fade (cycle aging only, no calendar aging)
+  - `'simple'` — Linear DoD-based approximation (backward compatible)
 
 ### Data Preprocessing
 
@@ -223,7 +227,8 @@ env = create_aemo_env_from_data(
     start_date=datetime(2024, 1, 1),
     end_date=datetime(2024, 12, 31),
     region="NSW1",
-    degradation_mode='rainflow',
+    degradation_mode='real_world',        # Combined calendar + cycle aging
+    degradation_chemistry='LFP',          # LFP chemistry preset
     degradation_temperature=25.0,
 )
 
@@ -234,7 +239,10 @@ while True:
     action = policy(obs)
     obs, reward, done, _, info = env.step(action)
     total_revenue += info['total_revenue']
-    print(f"Cycle degradation {info['step_degradation']:.6f}, capacity {info['capacity_mwh']:.2f} MWh")
+    print(f"Step degradation {info['step_degradation']:.6f}, "
+          f"calendar={info['calendar_degradation']:.6f}, "
+          f"cycle={info['cycle_degradation']:.6f}, "
+          f"capacity {info['capacity_mwh']:.2f} MWh")
     if done:
         break
 
@@ -256,15 +264,23 @@ AEMOBatteryTradingEnv(
     step_duration=0.5,              # Hours (30 min)
     battery_life_cost=1_000_000.0,  # USD
     action_mode='simple',           # or 'multi_market'
-    degradation_mode='rainflow',    # 'rainflow' (physics-based) or 'simple'
+    degradation_mode='real_world',  # 'real_world', 'rainflow', or 'simple'
+    degradation_chemistry='LFP',    # 'NMC' or 'LFP' (real_world mode only)
     degradation_temperature=25.0,   # °C ambient temperature for degradation
 )
-
-`degradation_temperature` feeds the Muenzel et al. cycle-life model and should
-match the ambient operating temperature of the grid asset (default 25 °C); higher
-temperatures accelerate the reported degradation per cycle, so adjust it if your
-asset runs significantly hotter or colder than room temperature.
 ```
+
+**Degradation modes:**
+
+| Mode | Model | Calendar aging | Cycle aging | Chemistry presets | Best for |
+|------|-------|---------------|-------------|-------------------|----------|
+| `'real_world'` | Kampker et al. (2025) | ✅ Arrhenius + SOC stress | ✅ Power-law DoD + Arrhenius + C-rate | NMC / LFP | Grid-scale AEMO simulations |
+| `'rainflow'` | Muenzel et al. (2015) | ❌ | ✅ Multi-factor polynomial | — | Cell-level research |
+| `'simple'` | Linear approximation | ❌ | ✅ Linear DoD | — | Quick prototyping |
+
+`degradation_temperature` feeds the degradation model and should match the ambient
+operating temperature of the grid asset (default 25 °C); higher temperatures accelerate
+degradation in both calendar and cycling modes via the Arrhenius relationship.
 
 ### Data Fetching Parameters
 
@@ -276,7 +292,8 @@ create_aemo_env_from_data(
     cache_dir="data/aemo",
     battery_capacity=10.0,
     max_battery_flow=5.0,
-    degradation_mode='rainflow',    # ensure rainflow degradation tracking
+    degradation_mode='real_world',  # recommended for grid-scale
+    degradation_chemistry='LFP',    # LFP for modern utility BESS
     degradation_temperature=25.0,
 )
 ```
@@ -292,15 +309,15 @@ create_aemo_env_from_data(
     - **Returns**: unified DataFrame containing resampled market features, cyclical time encodings, normalized columns, and generation mix percentages, aligned to the env step scale. Internally uses `_resample_data`, `_resample_fcas`, `_resample_generation`, `_merge_datasets`, `_handle_missing_data`, `_add_time_features`, and `_normalize_features` to produce the final table.
 
 ### `AEMOBatteryTradingEnv`
-- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.5, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False, degradation_mode='rainflow', degradation_temperature=25.0)`
-    - **Args**: `aemo_data` is the processed Polars DataFrame; the others configure capacity/flow, episode length, FCAS action mode, normalization toggles, and whether `get_raw_obs()` results should be returned from `reset()`/`step()`. `degradation_mode` selects either the physics-based rainflow tracking (`'rainflow'`) or the legacy linear model (`'simple'`), and `degradation_temperature` feeds the Muenzel et al. model.
+- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.5, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False, degradation_mode='rainflow', degradation_temperature=25.0, degradation_chemistry='NMC')`
+    - **Args**: `aemo_data` is the processed Polars DataFrame; the others configure capacity/flow, episode length, FCAS action mode, normalization toggles, and whether `get_raw_obs()` results should be returned from `reset()`/`step()`. `degradation_mode` selects the physics model: `'real_world'` for combined calendar + cycle aging (Kampker et al. 2025, recommended for grid-scale), `'rainflow'` for Muenzel et al. (2015) cycle-only aging, or `'simple'` for the legacy linear model. `degradation_temperature` sets the ambient temperature for Arrhenius-based models. `degradation_chemistry` (`'NMC'` or `'LFP'`) selects chemistry presets for the `'real_world'` mode.
     - **Returns**: `AEMOBatteryTradingEnv` instance with observation/action spaces, SOC bookkeeping, revenue tracking, and degradation accounting initialized.
 - `reset(seed=None, options=None)`
     - **Args**: optional Gym seed and `options` dict (supports `return_raw_obs` override).
     - **Returns**: `(obs, info)` where `obs` is the normalized observation vector (plus raw if `return_raw_obs`) and `info` is an empty dict (populated later by `step`). Random episode start index is chosen within cached data.
 - `step(action)`
     - **Args**: normalized action ([-1,1]) or 3-vector depending on `action_mode`. Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
-    - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `step_degradation`, `total_degradation`, `capacity_mwh`, `rainflow_cumulative_deg`, `rainflow_num_cycles`, `total_revenue`, `total_degradation_cost`, and the latest `market_data` row.
+    - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `step_degradation`, `total_degradation`, `capacity_mwh`, `rainflow_cumulative_deg`, `rainflow_num_cycles`, `calendar_degradation`, `cycle_degradation`, `total_revenue`, `total_degradation_cost`, and the latest `market_data` row.
 - `render()`
     - **Returns**: currently a placeholder (prints human-friendly summary when implemented). Use `render_mode='human'` to enable future output.
 
@@ -366,9 +383,9 @@ Access via `info` dict returned by `step()`.
 
 - [x] Phase 1: Basic environment with energy arbitrage
 - [x] Phase 2: FCAS market integration
+- [x] Phase 5: Advanced degradation models (real-world BESS calendar + cycle aging)
 - [ ] Phase 3: Price forecasting features
 - [ ] Phase 4: Multi-region support
-- [ ] Phase 5: Advanced degradation models
 - [ ] Phase 6: Benchmark suite with trained agents
 
 ## References

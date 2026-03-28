@@ -143,3 +143,128 @@ If an agent attempts a cycle outside these bounds, the `degradation_per_cycle` m
 ## 6. References
 *   **Primary Paper**: Muenzel, V., et al. (2015). "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management."
 *   **Standard**: ASTM E1049-85, "Standard Practices for Cycle Counting in Fatigue Analysis."
+
+---
+
+## 7. Real-World BESS Degradation Model (`RealWorldBESSDegradationModel`)
+
+### Overview
+
+For utility-scale grid simulations (e.g., AEMO environment), the Muenzel et al. (2015) model has significant limitations:
+- **No calendar aging**: Grid-scale BESS sits idle for long periods (overnight, weekends). Calendar aging from SEI growth is absent.
+- **Empirical temperature model**: Uses a cubic polynomial fitted to small lab cells rather than the physically-grounded Arrhenius equation.
+
+The `RealWorldBESSDegradationModel` class addresses these gaps. It is adapted from the framework described in:
+
+> Kampker, A.; Späth, B.; Song, X.; Wang, D. (2025). "Modelling of Battery Energy Storage Systems Under Real-World Applications and Conditions." *Batteries* 11(11):392. doi:[10.3390/batteries11110392](https://doi.org/10.3390/batteries11110392)
+
+### Relationship to the Paper
+
+The paper presents a modular simulation framework integrating electrical, thermal, and aging models for LFP cells. Its aging module (Section 3.4, adapted from Wang et al. 2011) uses a continuous throughput-based differential equation (Eq. 5):
+
+$$\frac{dQ_{loss}}{dt} = \left(\frac{15}{C_{rate}}\right)^{1/3} \cdot 10000 \cdot e^{(-31700 + 370.3 \cdot C_{rate})/(R \cdot T)} \cdot 0.55 \cdot Ah^{-0.45} \cdot C_{rate}^{2/3}$$
+
+Our `RealWorldBESSDegradationModel` is a **practical adaptation** of the paper's principles for use in an RL environment with discrete timesteps and rainflow cycle counting. Rather than directly porting Eq. 5 (which requires continuous Ah throughput tracking), we decompose aging into two independently evaluated components:
+
+| Aspect | Paper (Eq. 5) | Our Adaptation |
+|--------|--------------|----------------|
+| **Form** | Continuous differential (dQloss/dt) | Discrete per-timestep (calendar) + per-cycle (cycle) |
+| **Temperature** | Arrhenius with C-rate-coupled Ea | Normalized Arrhenius with fixed Ea per aging mode |
+| **C-rate** | Coupled in exponent + power-law prefactor | Linear sensitivity factor in cycle aging |
+| **DoD/throughput** | Cumulative Ah^(-0.45) (sublinear) | Per-cycle (DoD/100)^α power-law |
+| **Calendar aging** | Described qualitatively (Arrhenius) | Explicit: k_cal · arr(T) · soc_stress · Δt |
+| **Chemistry** | LFP only | NMC and LFP presets |
+
+**Key principles preserved from the paper:**
+1. ✅ Combined calendar + cycle aging (paper Section 3.4)
+2. ✅ Arrhenius temperature dependency for both aging modes
+3. ✅ C-rate sensitivity in cycle aging
+4. ✅ DoD/cycling depth dependency
+5. ✅ SOC-dependent calendar aging (high SOC accelerates degradation)
+6. ✅ Capacity fade: $C(t) = C_{nom} \cdot (1 - Q_{loss})$
+
+### Mathematical Formulation
+
+**Total capacity loss** (fraction of nominal capacity):
+$$Q_{loss} = Q_{cal} + Q_{cyc} \quad (\text{capped at 1.0})$$
+
+**Calendar aging per timestep** $\Delta t$ (hours):
+$$\Delta Q_{cal} = k_{cal} \cdot \frac{\exp(-E_{a,cal}/(R \cdot T_K))}{\exp(-E_{a,cal}/(R \cdot T_{ref}))} \cdot [1 + k_{soc} \cdot (SOC_{frac} - 0.5)] \cdot \Delta t$$
+
+where:
+- $k_{cal}$ — calendar aging rate [capacity fraction / hour] at $T_{ref}$, 50% SOC
+- $E_{a,cal}$ — activation energy for calendar aging [J/mol]
+- $R = 8.314$ J/(mol·K) — universal gas constant
+- $T_K$ — cell temperature [K] = T_celsius + 273.15
+- $T_{ref}$ = 298.15 K (25°C)
+- $k_{soc}$ — SOC stress coefficient; higher SOC increases calendar degradation
+- $SOC_{frac} \in [0, 1]$
+
+**Cycle aging per detected rainflow cycle:**
+$$\Delta Q_{cyc} = k_{cyc} \cdot \frac{\exp(-E_{a,cyc}/(R \cdot T_K))}{\exp(-E_{a,cyc}/(R \cdot T_{ref}))} \cdot \left(\frac{DOD}{100}\right)^{\alpha} \cdot (1 + \beta \cdot C_{rate})$$
+
+where:
+- $k_{cyc}$ — cycle aging coefficient [capacity fraction / full-DoD cycle] at $T_{ref}$, 1C
+- $E_{a,cyc}$ — activation energy for cycle aging [J/mol]
+- $\alpha$ — DoD power-law exponent (≥ 0)
+- $\beta$ — C-rate linear sensitivity factor (≥ 0)
+- $DOD$ — depth of discharge [0–100%]
+- $C_{rate}$ — equivalent C-rate of the cycle
+
+### Chemistry Presets
+
+| Parameter | NMC | LFP |
+|-----------|-----|-----|
+| `k_cal_rate` | 2.85 × 10⁻⁶ /h | 1.20 × 10⁻⁶ /h |
+| `Ea_cal` | 28,500 J/mol | 17,500 J/mol |
+| `k_soc` | 0.5 | 0.2 |
+| `k_cyc` | 3.5 × 10⁻⁴ /cycle | 1.95 × 10⁻⁴ /cycle |
+| `Ea_cyc` | 17,100 J/mol | 10,000 J/mol |
+| `alpha_dod` | 1.2 | 0.5 |
+| `beta_crate` | 0.5 | 0.3 |
+| Approx. cycle life (100% DoD, 1C, 25°C) | ~2,000 | ~5,000 |
+| Approx. calendar EOL (25°C, 50% SOC) | ~12–15 years | ~20+ years |
+
+### Usage
+
+```python
+from src.batterydeg import RealWorldBESSDegradationModel
+
+# Initialize with LFP preset (recommended for utility-scale BESS)
+model = RealWorldBESSDegradationModel(chemistry='LFP')
+
+# Calendar aging: 30-minute step at 35°C, 80% SOC
+cal_loss = model.calendar_aging_per_step(T_celsius=35.0, soc_frac=0.8, dt_hours=0.5)
+
+# Cycle aging: one cycle at 80% DoD, 0.5C, 25°C
+cyc_loss = model.cycle_aging_per_cycle(T_celsius=25.0, dod_pct=80.0, c_rate=0.5)
+
+# Custom parameters (override preset)
+custom = RealWorldBESSDegradationModel(chemistry='NMC', k_cal_rate=3e-6, alpha_dod=1.0)
+
+# Inspect parameters
+print(model.describe())
+```
+
+### Integration in `AEMOBatteryTradingEnv`
+
+Select the `'real_world'` degradation mode:
+
+```python
+env = AEMOBatteryTradingEnv(
+    aemo_data=data,
+    degradation_mode='real_world',
+    degradation_chemistry='LFP',
+    degradation_temperature=35.0,  # hot Australian climate
+)
+```
+
+The environment computes:
+- **Calendar aging every step** (even when idle) based on current SOC and temperature
+- **Cycle aging per rainflow-detected cycle** using DoD, C-rate, and temperature
+- Separate tracking: `info['calendar_degradation']` and `info['cycle_degradation']`
+- Total: `info['total_degradation']` = calendar + cycle (capped at 1.0)
+
+### References
+- Kampker, A.; Späth, B.; Song, X.; Wang, D. (2025). "Modelling of Battery Energy Storage Systems Under Real-World Applications and Conditions." *Batteries* 11(11):392.
+- Wang, J.; Liu, P.; Hicks-Garner, J.; et al. (2011). "Cycle-life model for graphite-LiFePO4 cells." *Journal of Power Sources*, 196(8):3942–3948.

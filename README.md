@@ -19,7 +19,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
-[![Tests](https://img.shields.io/badge/tests-104%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-132%20passing-brightgreen)]()
 
 ### Roadmap
 *   [x] **Core:** Gymnasium environment & Rule-based agents.
@@ -29,6 +29,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Evaluation:** Metrics for return, risk proxies (Sharpe/Sortino), and degradation.
 *   [x] **Grid Market:** AEMO Environment Implementation.
 *   [x] **Grid battery degradation modelling:** Rainflow-based degradation and capacity fade in `AEMOBatteryTradingEnv`.
+*   [x] **Real-world BESS degradation model:** Combined calendar + cycle aging model (`RealWorldBESSDegradationModel`) for utility-scale BESS, with Arrhenius temperature dependency and NMC/LFP chemistry presets, adapted from the framework in Kampker et al. (2025, doi:10.3390/batteries11110392).
 *   [x] **Risk-sensitive evaluation:** CVaR/VaR tail-risk metrics (`var_5`, `cvar_5`) computed by `evaluate_experiment_logs`.
 *   [x] **Statistical comparisons:** Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired Wilcoxon signed-rank tests (`paired_comparison`) across customers/seeds.
 *   [ ] **Conduct data gathering and training on AEMO env:** Run dispatch replay and RL-agent in `AEMOBatteryTradingEnv` to collect trajectories for offline training for DT and evaluation.
@@ -465,12 +466,13 @@ pytest tests/ -v --durations=10
 | `test_performance.py` | Performance benchmarks and optimization validation | 6 |
 | `test_quantile_scenarios.py` | Quantile scenario generation | 22 |
 | `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking | 12 |
+| `test_real_world_degradation.py` | RealWorldBESSDegradationModel unit tests, AEMO env integration, mode switching | 28 |
 | `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases | 16 |
 | `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init | 5 |
 | `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space | 5 |
 | `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons | 22 |
 
-**Total: 104 tests**
+**Total: 132 tests**
 
 ---
 
