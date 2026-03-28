@@ -18,7 +18,7 @@ from pathlib import Path
 
 from EnergySimEnv import SolarBatteryEnv
 from aemo_data import fetch_aemo_data_bundle
-from batterydeg import DegradationModel, RainflowCounter
+from batterydeg import DegradationModel, RainflowCounter, RealWorldBESSDegradationModel
 
 
 class AEMODataPreprocessor:
@@ -342,8 +342,9 @@ class AEMOBatteryTradingEnv(gym.Env):
                  normalize_obs: bool = True,
                  return_raw_obs: bool = False,
                  random_episode_start: bool = False,
-                 degradation_mode: str = 'rainflow',  # 'rainflow' or 'simple'
-                 degradation_temperature: float = 25.0):
+                 degradation_mode: str = 'rainflow',  # 'rainflow', 'real_world', or 'simple'
+                 degradation_temperature: float = 25.0,
+                 degradation_chemistry: str = 'NMC'):
         """
         Initialize AEMO Battery Trading Environment.
         
@@ -359,10 +360,22 @@ class AEMOBatteryTradingEnv(gym.Env):
             action_mode: 'simple' for energy-only or 'multi_market' for energy+FCAS
             random_episode_start: If True, sample a random valid episode start on
                 reset; otherwise default to starting at index 0
-            degradation_mode: 'rainflow' for physics-based Muenzel et al. model
-                with rainflow cycle counting (recommended), or 'simple' for the
-                original linear DoD-based approximation
-            degradation_temperature: Ambient temperature in °C for degradation model
+            degradation_mode: Degradation model to use:
+                - 'rainflow'   — physics-based Muenzel et al. (2015) multi-factor model
+                                 with ASTM E1049-85 rainflow cycle counting (cycle aging
+                                 only, no calendar aging).
+                - 'real_world' — combined calendar + cycle aging model for utility-scale
+                                 BESS based on the framework in Modelling of Battery
+                                 Energy Storage Systems Under Real-World Applications and
+                                 Conditions (doi:10.3390/batteries11110392).  Uses
+                                 Arrhenius temperature dependency and power-law DoD
+                                 scaling.  Recommended for AEMO grid-scale simulations.
+                - 'simple'     — original linear DoD-based approximation (backward
+                                 compatible, not recommended for research use).
+            degradation_temperature: Ambient / cell temperature in °C used by all
+                degradation models.
+            degradation_chemistry: Cell chemistry preset for the 'real_world' model.
+                One of 'NMC' or 'LFP' (case-insensitive).  Ignored for other modes.
         """
         super().__init__()
         
@@ -381,6 +394,7 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.random_episode_start = random_episode_start
         self.degradation_mode = degradation_mode
         self.degradation_temperature = float(degradation_temperature)
+        self.degradation_chemistry = degradation_chemistry
 
         self._fcas_services = [
             'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
@@ -390,9 +404,16 @@ class AEMOBatteryTradingEnv(gym.Env):
         self._raw_col_bounds = self._compute_raw_col_bounds()
 
         # Degradation model setup
+        max_c_rate = self.max_battery_flow / self.initial_battery_capacity
         if self.degradation_mode == 'rainflow':
             self.degradation_model = DegradationModel()
-            max_c_rate = self.max_battery_flow / self.initial_battery_capacity
+            self._rainflow_counter = RainflowCounter(
+                step_duration=self.step_duration, max_c_rate=max_c_rate
+            )
+        elif self.degradation_mode == 'real_world':
+            self.degradation_model = RealWorldBESSDegradationModel(
+                chemistry=self.degradation_chemistry
+            )
             self._rainflow_counter = RainflowCounter(
                 step_duration=self.step_duration, max_c_rate=max_c_rate
             )
@@ -406,6 +427,8 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.total_degradation = 0.0
         self._rainflow_deg_cumulative = 0.0
         self._rainflow_num_cycles = 0
+        self._calendar_degradation = 0.0   # real_world mode: cumulative calendar loss
+        self._cycle_degradation = 0.0      # real_world mode: cumulative cycle loss
         self.soc_history: List[float] = []
         
         # Define observation and action spaces
@@ -497,12 +520,14 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.total_degradation = 0.0
         self._rainflow_deg_cumulative = 0.0
         self._rainflow_num_cycles = 0
+        self._calendar_degradation = 0.0
+        self._cycle_degradation = 0.0
 
         # Reset degradation tracking
         init_soc_pct = float((self.battery_soc / self.initial_battery_capacity) * 100.0)
         self.soc_history = [init_soc_pct]
-        if self.degradation_mode == 'rainflow':
-            max_c_rate = self.max_battery_flow / self.initial_battery_capacity
+        max_c_rate = self.max_battery_flow / self.initial_battery_capacity
+        if self.degradation_mode in ('rainflow', 'real_world'):
             self._rainflow_counter = RainflowCounter(
                 step_duration=self.step_duration, max_c_rate=max_c_rate
             )
@@ -574,6 +599,37 @@ class AEMOBatteryTradingEnv(gym.Env):
                 step_degradation += inc
             self._rainflow_num_cycles += len(new_cycles)
             self._rainflow_deg_cumulative += step_degradation
+        elif self.degradation_mode == 'real_world':
+            if not isinstance(self.degradation_model, RealWorldBESSDegradationModel):
+                raise RuntimeError(
+                    "degradation_model is not a RealWorldBESSDegradationModel; "
+                    "this should not happen — re-initialise the environment."
+                )
+            rw_model = self.degradation_model
+
+            # Calendar aging — applied every step regardless of cycling
+            soc_frac = float(np.clip(self.battery_soc / max(self.initial_battery_capacity, 1e-9), 0.0, 1.0))
+            cal_inc = rw_model.calendar_aging_per_step(
+                T_celsius=self.degradation_temperature,
+                soc_frac=soc_frac,
+                dt_hours=self.step_duration,
+            )
+            self._calendar_degradation += cal_inc
+            step_degradation += cal_inc
+
+            # Cycle aging — per detected rainflow cycle
+            new_cycles = self._rainflow_counter.update(soc_pct)
+            for SoC_avg, DoD, Id_cycle, Ich_cycle in new_cycles:
+                c_rate = max(Id_cycle, Ich_cycle)
+                cyc_inc = rw_model.cycle_aging_per_cycle(
+                    T_celsius=self.degradation_temperature,
+                    dod_pct=DoD,
+                    c_rate=c_rate,
+                )
+                self._cycle_degradation += cyc_inc
+                step_degradation += cyc_inc
+            self._rainflow_num_cycles += len(new_cycles)
+            self._rainflow_deg_cumulative += step_degradation
         else:
             # Simplified degradation (original model)
             dod = abs(actual_energy) / self.initial_battery_capacity
@@ -629,6 +685,8 @@ class AEMOBatteryTradingEnv(gym.Env):
             capacity_mwh=self.battery_capacity,
             rainflow_cumulative_deg=self._rainflow_deg_cumulative,
             rainflow_num_cycles=self._rainflow_num_cycles,
+            calendar_degradation=self._calendar_degradation,
+            cycle_degradation=self._cycle_degradation,
         )
 
         if self.return_raw_obs:
@@ -854,7 +912,9 @@ class AEMOBatteryTradingEnv(gym.Env):
                           total_degradation: float = 0.0,
                           capacity_mwh: float = 0.0,
                           rainflow_cumulative_deg: float = 0.0,
-                          rainflow_num_cycles: int = 0) -> Dict[str, float]:
+                          rainflow_num_cycles: int = 0,
+                          calendar_degradation: float = 0.0,
+                          cycle_degradation: float = 0.0) -> Dict[str, float]:
         """Return a compact reward/info dict for debugging and tracking."""
         return {
             'battery_soc': battery_soc,
@@ -871,6 +931,8 @@ class AEMOBatteryTradingEnv(gym.Env):
             'capacity_mwh': capacity_mwh,
             'rainflow_cumulative_deg': rainflow_cumulative_deg,
             'rainflow_num_cycles': rainflow_num_cycles,
+            'calendar_degradation': calendar_degradation,
+            'cycle_degradation': cycle_degradation,
             'total_revenue': self.total_revenue,
             'total_degradation_cost': self.total_degradation_cost,
             'current_step': current_step,
