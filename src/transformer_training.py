@@ -102,15 +102,27 @@ class TrajectoryDataset(Dataset):
         act_dim: int,
         discount_factor: float = 0.99,
     ) -> "TrajectoryDataset":
-        """Construct a TrajectoryDataset from pre-loaded episode dicts without reading a parquet file.
+        """Internal classmethod: construct a TrajectoryDataset from pre-loaded episode dicts.
+
+        Used primarily by :func:`episode_train_val_split` to create train/val datasets
+        that share the same episode data but have disjoint window indices, avoiding
+        the need to reload data from disk.
+
+        Each episode dict must have the following keys:
+
+        - ``states``    – ``np.ndarray`` of shape ``[L, state_dim]``
+        - ``actions``   – ``np.ndarray`` of shape ``[L, act_dim]``
+        - ``rtgs``      – ``np.ndarray`` of shape ``[L]`` (pre-computed returns-to-go)
+        - ``timesteps`` – ``np.ndarray`` of shape ``[L]`` (integer step indices)
+        - ``length``    – ``int`` equal to ``L``, the number of time-steps in the episode
 
         Args:
-            episodes: List of episode dicts with keys ``states``, ``actions``, ``rtgs``,
-                ``timesteps``, and ``length``.
-            context_length: Fixed window length (T).
+            episodes: List of episode dicts as described above.
+            context_length: Fixed window length (T) used by :meth:`__getitem__`.
             state_dim: Dimensionality of the observation vector.
             act_dim: Dimensionality of the action vector.
-            discount_factor: Gamma (stored for reference; RTGs are already computed).
+            discount_factor: Gamma (stored for reference; RTGs are already computed
+                and stored inside each episode dict).
         """
         obj = cls.__new__(cls)
         obj.context_length = context_length

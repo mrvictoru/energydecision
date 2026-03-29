@@ -280,9 +280,10 @@ def main() -> None:
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    # Split at the episode level so that all windows from the same episode stay
-    # in a single split. This prevents overlapping windows from the same episode
-    # leaking across the train/val boundary.
+    # Split at the episode level so that all windows derived from the same
+    # episode stay together in a single split. This prevents the data-leakage
+    # that arises when splitting after window extraction: overlapping windows
+    # from the same episode would otherwise appear in both train and val sets.
     train_dataset, val_dataset = episode_train_val_split(
         datasets,
         val_split=args.val_split,
