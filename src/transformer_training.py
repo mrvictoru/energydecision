@@ -93,6 +93,37 @@ class TrajectoryDataset(Dataset):
         return rtgs
 
 
+    @classmethod
+    def _from_episodes(
+        cls,
+        episodes: list,
+        context_length: int,
+        state_dim: int,
+        act_dim: int,
+        discount_factor: float = 0.99,
+    ) -> "TrajectoryDataset":
+        """Construct a TrajectoryDataset from pre-loaded episode dicts without reading a parquet file.
+
+        Args:
+            episodes: List of episode dicts with keys ``states``, ``actions``, ``rtgs``,
+                ``timesteps``, and ``length``.
+            context_length: Fixed window length (T).
+            state_dim: Dimensionality of the observation vector.
+            act_dim: Dimensionality of the action vector.
+            discount_factor: Gamma (stored for reference; RTGs are already computed).
+        """
+        obj = cls.__new__(cls)
+        obj.context_length = context_length
+        obj.state_dim = state_dim
+        obj.act_dim = act_dim
+        obj.gamma = discount_factor
+        obj.episodes = episodes
+        obj.indices = []
+        for ep_idx, ep in enumerate(episodes):
+            for start_idx in range(ep["length"]):
+                obj.indices.append((ep_idx, start_idx))
+        return obj
+
     def __len__(self) -> int:
         """
         Returns the total number of sliding windows (across all episodes) in the dataset.
@@ -955,4 +986,83 @@ def concat_trajectory_datasets(datasets: list[TrajectoryDataset]) -> ConcatDatas
     Returns a torch.utils.data.ConcatDataset.
     """
     return ConcatDataset(datasets)
+
+
+def episode_train_val_split(
+    datasets: list[TrajectoryDataset],
+    val_split: float,
+    seed: int = 42,
+) -> tuple[TrajectoryDataset, TrajectoryDataset]:
+    """Split a list of TrajectoryDataset objects into train and validation datasets
+    at the **episode level**, so all sliding windows from the same episode stay
+    together and cannot appear in both splits simultaneously.
+
+    This avoids the data-leakage issue that arises when ``torch.random_split``
+    is applied after window extraction, where overlapping windows from the same
+    episode can end up in both the training and validation sets.
+
+    Args:
+        datasets: Non-empty list of :class:`TrajectoryDataset` instances to
+            merge and split.  All datasets must share the same ``context_length``,
+            ``state_dim``, ``act_dim``, and ``gamma``.
+        val_split: Fraction of episodes to reserve for validation (0.0–1.0).
+            Pass ``0.0`` to skip validation (returns an empty val dataset).
+        seed: Random seed used when shuffling episode indices.
+
+    Returns:
+        ``(train_dataset, val_dataset)`` — two :class:`TrajectoryDataset`
+        instances whose episode sets are disjoint.
+
+    Raises:
+        ValueError: If ``datasets`` is empty or contains no episodes.
+        RuntimeError: If ``val_split`` is so large that no episodes remain for
+            training.
+    """
+    if not datasets:
+        raise ValueError("datasets must be non-empty")
+
+    # Merge all episodes from every source dataset into a single list.
+    all_episodes: list = []
+    for ds in datasets:
+        all_episodes.extend(ds.episodes)
+
+    n_episodes = len(all_episodes)
+    if n_episodes == 0:
+        raise ValueError("No episodes found in the provided datasets.")
+
+    # Shuffle episode indices deterministically.
+    rng = np.random.default_rng(seed)
+    ep_indices = list(range(n_episodes))
+    rng.shuffle(ep_indices)
+
+    n_val = int(n_episodes * max(0.0, min(1.0, val_split)))
+    val_ep_indices = ep_indices[:n_val]
+    train_ep_indices = ep_indices[n_val:]
+
+    if not train_ep_indices:
+        raise RuntimeError(
+            f"val_split={val_split!r} is too large; no episodes remain for training."
+        )
+
+    # Inherit metadata from the first dataset (all must be identical).
+    first = datasets[0]
+
+    train_episodes = [all_episodes[i] for i in train_ep_indices]
+    val_episodes = [all_episodes[i] for i in val_ep_indices]
+
+    train_ds = TrajectoryDataset._from_episodes(
+        train_episodes,
+        first.context_length,
+        first.state_dim,
+        first.act_dim,
+        first.gamma,
+    )
+    val_ds = TrajectoryDataset._from_episodes(
+        val_episodes,
+        first.context_length,
+        first.state_dim,
+        first.act_dim,
+        first.gamma,
+    )
+    return train_ds, val_ds
 

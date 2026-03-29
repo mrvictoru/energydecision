@@ -14,6 +14,7 @@ from decision_transformer import DecisionTransformer
 from transformer_training import (
     TrajectoryDataset,
     concat_trajectory_datasets,
+    episode_train_val_split,
     train_decision_transformer,
 )
 
@@ -270,27 +271,22 @@ def main() -> None:
         datasets.append(ds)
         print(f"  -> collected {len(ds)} sliding windows")
 
-    combined_dataset = concat_trajectory_datasets(datasets)
-    total_samples = len(combined_dataset)
-    if total_samples == 0:
-        raise RuntimeError("Combined dataset has no samples to train on.")
-    print(f"Combined dataset size: {total_samples}")
+    total_episodes = sum(len(ds.episodes) for ds in datasets)
+    if total_episodes == 0:
+        raise RuntimeError("Combined dataset has no episodes to train on.")
+    print(f"Total episodes across all files: {total_episodes}")
 
-    val_split = max(0.0, min(1.0, args.val_split))
-    val_size = int(total_samples * val_split)
-    train_size = total_samples - val_size
-    if train_size == 0:
-        raise RuntimeError("Validation split too large; no samples left for training.")
-
-    generator = torch.Generator().manual_seed(args.seed)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        combined_dataset,
-        [train_size, val_size],
-        generator=generator,
+    # Split at the episode level so that all windows from the same episode stay
+    # in a single split. This prevents overlapping windows from the same episode
+    # leaking across the train/val boundary.
+    train_dataset, val_dataset = episode_train_val_split(
+        datasets,
+        val_split=args.val_split,
+        seed=args.seed,
     )
     print(f"Training samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
