@@ -312,7 +312,7 @@ def main() -> None:
         checkpoint_path=checkpoint_path_str,
         checkpoint_interval=args.checkpoint_interval,
         checkpoints_per_epoch=args.checkpoints_per_epoch,
-        val_ds=val_dataset if val_size > 0 else None,
+        val_ds=val_dataset if len(val_dataset) > 0 else None,
         resume=args.resume,
         action_loss_weight=args.action_loss_weight,
         state_loss_weight=args.state_loss_weight,
