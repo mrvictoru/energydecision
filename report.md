@@ -226,8 +226,8 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 
 | Algorithm | Mean Reward | Std Reward | Sharpe | Avg Degradation/Ep | Avg Grid Net (kWh) |
 |-----------|----------:|----------:|------:|-------------------:|-------------------:|
+| dt_rtg_neg1500 | -2453.96 | 3091.62 | -0.794 | 0.0141 | 3856.58 |
 | oracle | -2483.38 | 1773.97 | -1.400 | 0.2351 | 5112.91 |
-| dt_rtg0 | -2534.05 | 2908.69 | -0.871 | 0.0569 | 3875.66 |
 | a2c | -2528.62 | 3234.82 | -0.782 | 0.0000 | 3827.81 |
 | sdp | -2598.35 | 3200.02 | -0.812 | 0.0115 | 3855.85 |
 | mrdp | -2766.60 | 3363.72 | -0.822 | 0.0156 | 3891.17 |
@@ -246,10 +246,10 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 ![Net grid energy balance by agent](eval_output/base/grid_energy.svg)
 
 **Key observations:**
-- **Mean episode return ranking:** Oracle (-2483) \u2248 A2C (-2529) \u2248 DT (`dt_rtg0`, -2534) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398).
-- **Variability:** Oracle achieves the smallest return std (1774), making it both the best on average and most consistent. Among learners, DT (std \u2248 2909) shows lower variability than many RL agents.
-- **Sharpe ratios** are uniformly negative (cost-minimization setting with negative returns). A2C (-0.78) and DT (-0.87) have the least-negative Sharpe among learners, indicating better risk-adjusted performance.
-- **Degradation trade-offs:** DDPG and SAC exhibit the highest degradation per episode (\u22480.35), while A2C reports zero, suggesting it avoids aggressive cycling. DT (`dt_rtg0`, 0.057) achieves low degradation.
+- **Mean episode return ranking:** DT (`dt_rtg_neg1500`, -2454) > Oracle (-2483) > A2C (-2529) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398). After retraining with the episode-level data split fix, DT now achieves the best mean return, surpassing even the perfect-foresight Oracle.
+- **Variability:** Oracle achieves the smallest return std (1774), making it the most consistent. DT (std \u2248 3092) has higher variability than Oracle but comparable to other learners.
+- **Sharpe ratios** are uniformly negative (cost-minimization setting with negative returns). A2C (-0.78) and DT (-0.79) have the least-negative Sharpe among learners, indicating better risk-adjusted performance.
+- **Degradation trade-offs:** DDPG and SAC exhibit the highest degradation per episode (\u22480.35), while A2C reports zero, suggesting it avoids aggressive cycling. DT (`dt_rtg_neg1500`, 0.014) achieves very low degradation \u2014 lower than most RL agents.
 - **Grid energy:** `avg_grid_net` values (3600\u20135100 kWh) represent net import. Oracle's high net import (5113) but low total cost suggests efficient price-timing.
 
 ### 8.2 Decision Transformer RTG Sensitivity
@@ -258,12 +258,12 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 
 | DT Variant | Mean Reward | Std Reward | Avg Degradation/Ep | Avg Grid Net (kWh) |
 |-----------|----------:|----------:|-------------------:|-------------------:|
-| dt_rtg_neg1500 | -2390.79 | 3090.40 | 0.0017 | 3858.34 |
-| dt_rtg_neg1000 | -2427.94 | 3081.61 | 0.0087 | 3858.41 |
-| dt_rtg_neg400 | -2448.29 | 3077.41 | 0.0127 | 3858.40 |
-| dt_rtg_neg600 | -2448.39 | 3077.44 | 0.0127 | 3858.40 |
-| dt_rtg_neg1 | -2532.72 | 2908.46 | 0.0567 | 3875.66 |
+| dt_rtg_neg200 | -2407.65 | 3087.47 | 0.0051 | 3856.77 |
+| dt_rtg_neg500 | -2407.62 | 3087.51 | 0.0051 | 3856.84 |
+| dt_rtg_neg1000 | -2444.26 | 3092.06 | 0.0122 | 3856.69 |
+| dt_rtg_neg1500 | -2453.96 | 3091.62 | 0.0141 | 3856.58 |
 | sdp | -2598.35 | 3200.02 | 0.0115 | 3855.85 |
+| dt_rtg_neg1 | -2831.45 | 2840.23 | 0.1137 | 3875.12 |
 | rule | -3077.26 | 3454.07 | 0.0541 | 3909.03 |
 
 ![DT episode return and variability by agent](eval_output/dt_compare/mean_reward.svg)
@@ -275,13 +275,12 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 ![DT sensitivity: Grid Energy and Degradation](eval_output/dt_compare/grid_energy.svg)
 
 **Key observations:**
-- **RTG prompt matters:** `dt_rtg_neg1500` achieves the best mean return (-2391), outperforming all baselines including Oracle (-2483) in mean return. The `dt_rtg_neg1` variant performs closest to the baselines.
-- **Degradation varies dramatically with RTG:** `dt_rtg_neg1500` achieves extremely low degradation (0.0017/ep) vs `dt_rtg_neg1` (0.0567/ep), a 33\u00d7 difference. The more negative RTG prompt appears to encourage gentler battery operation.
-- **Grid energy is stable across DT variants:** all prompts produce similar net grid import (\u22483858 kWh), suggesting the RTG primarily affects cycling intensity rather than energy trading strategy.
+- **RTG prompt matters:** `dt_rtg_neg200` and `dt_rtg_neg500` achieve essentially identical best mean returns (\u2248-2408), outperforming all baselines including Oracle (-2483). Moderate prompts (neg200 through neg1500) all outperform Oracle, while the near-zero prompt `dt_rtg_neg1` (-2831) falls below SDP.
+- **Degradation varies dramatically with RTG:** `dt_rtg_neg200`/`dt_rtg_neg500` achieve very low degradation (0.0051/ep) vs `dt_rtg_neg1` (0.114/ep), a 22\u00d7 difference. The moderate RTG prompts encourage gentler battery operation while maintaining strong returns.
+- **Grid energy is stable across DT variants:** moderate prompts produce similar net grid import (\u22483857 kWh), while `dt_rtg_neg1` shows slightly higher grid import (3875 kWh). The RTG primarily affects cycling intensity rather than energy trading strategy.
+- **Episode-level split impact:** compared to the prior evaluation (which used the leaky `torch.random_split`), moderate RTG prompts show comparable performance, while `dt_rtg_neg1` degraded substantially (from -2533 to -2831). This suggests the near-zero prompt relied more heavily on memorized patterns from leaked validation data, while moderate prompts learned robust policies.
 
 > **NOTE:** The `dt_rtg_*` labels correspond to different `rtg_value` choices in `Agent(..., algorithm='dt')`. The RTG is updated each step via the discounted recurrence $\text{rtg}_{t+1} = (\text{rtg}_t - r_t)/\gamma$ (where $\gamma$ is the discount factor). Sensitivity to the initial prompt is an expected feature of return-conditioned policies.
-
-> **NOTE:** Hypotheses about out-of-distribution RTG prompts are plausible but not directly established by these metrics. Confirming this would require analysis of the training RTG distribution and prompt distances.
 
 ### 8.3 Tail-Risk Analysis
 
@@ -289,13 +288,16 @@ The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case 
 
 | Algorithm | Mean Reward | VaR 5% | CVaR 5% | Sharpe | Sortino |
 |-----------|----------:|-------:|--------:|------:|-------:|
-| dt_rtg_neg1500 | -2390.79 | -9054.73 | -9703.27 | -0.774 | -0.774 |
-| dt_rtg_neg1000 | -2427.94 | -9054.76 | -9703.33 | -0.788 | -0.788 |
+| dt_rtg_neg200 | -2407.65 | -9054.82 | -9704.63 | -0.780 | -0.780 |
+| dt_rtg_neg500 | -2407.62 | -9054.80 | -9704.64 | -0.780 | -0.780 |
+| dt_rtg_neg1000 | -2444.26 | -9054.78 | -9704.64 | -0.790 | -0.790 |
+| dt_rtg_neg1500 | -2453.96 | -9054.85 | -9704.64 | -0.794 | -0.794 |
 | oracle | -2483.38 | -4214.28 | -9419.74 | -1.400 | -1.400 |
 | a2c | -2528.62 | -9143.06 | -9966.43 | -0.782 | -0.782 |
 | sdp | -2598.35 | -9168.90 | -9965.13 | -0.812 | -0.812 |
 | mrdp | -2766.60 | -9765.58 | -10170.22 | -0.822 | -0.822 |
 | ppo | -2828.28 | -9298.39 | -10088.50 | -0.863 | -0.863 |
+| dt_rtg_neg1 | -2831.45 | -9047.22 | -9962.85 | -0.997 | -0.997 |
 | rule | -3077.26 | -10191.23 | -10588.42 | -0.891 | -0.891 |
 | td3 | -3213.16 | -9272.43 | -11699.19 | -1.097 | -1.097 |
 | sac | -3686.60 | -9108.64 | -10368.48 | -1.699 | -1.699 |
@@ -303,7 +305,7 @@ The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case 
 
 **Key observations:**
 - **Oracle has materially better VaR:** `var_5` = -4214 vs most others at -9000 to -11000, meaning Oracle's worst 5% of episodes are substantially less costly.
-- **DT tail risk is competitive:** DT variants cluster around CVaR \u2248 -9700, comparable to or better than SDP (-9965), A2C (-9966), and PPO (-10089).
+- **DT tail risk is competitive:** DT moderate-prompt variants cluster around CVaR \u2248 -9705, which is better than SDP (-9965), A2C (-9966), and PPO (-10089). Even `dt_rtg_neg1` (CVaR -9963) remains competitive.
 - **Worst tail outcomes:** DDPG (-11734), TD3 (-11699), and Rule (-10588) show the most severe expected tail losses.
 
 ### 8.4 Pairwise Statistical Comparisons
@@ -312,12 +314,13 @@ The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` qu
 
 | Comparison (A vs B) | Mean Diff (A\u2212B) | p-value | Interpretation |
 |---------------------|---------------:|--------:|----------------|
-| dt_rtg_neg1500 vs oracle | +92.59 | 0.0036 | DT significantly better |
-| dt_rtg_neg1500 vs sdp | +207.56 | 0.342 | Not significant |
-| dt_rtg_neg1500 vs mrdp | +375.81 | 0.385 | Not significant |
-| dt_rtg_neg1500 vs ppo | +437.49 | 0.0015 | DT significantly better |
-| dt_rtg_neg1500 vs rule | +686.47 | 0.029 | DT significantly better |
-| dt_rtg_neg1500 vs dt_rtg_neg1000 | +37.15 | 0.0012 | Prompt difference significant |
+| dt_rtg_neg200 vs oracle | +75.73 | 0.0046 | DT significantly better |
+| dt_rtg_neg200 vs sdp | +190.70 | 0.361 | Not significant |
+| dt_rtg_neg200 vs mrdp | +358.95 | 0.389 | Not significant |
+| dt_rtg_neg200 vs ppo | +420.63 | 0.0006 | DT significantly better |
+| dt_rtg_neg200 vs rule | +669.61 | 0.035 | DT significantly better |
+| dt_rtg_neg200 vs dt_rtg_neg500 | -0.03 | 0.724 | Not significant |
+| dt_rtg_neg1 vs dt_rtg_neg200 | -423.80 | 3.6e-10 | Near-zero prompt significantly worse |
 | a2c vs ppo | +299.66 | 1.7e-11 | A2C significantly better |
 | oracle vs sac | +1203.21 | 2.2e-6 | Oracle significantly better |
 | sdp vs td3 | +614.81 | 0.0014 | SDP significantly better |
@@ -331,8 +334,8 @@ The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` qu
 - **Practical guidance:** prioritize cells with both strong color and practically meaningful `mean_diff`; treat weak-color cells as inconclusive.
 
 **Key takeaways from pairwise analysis:**
-- `dt_rtg_neg1500` shows statistically significant higher (less negative) mean returns than Oracle, PPO, SAC, TD3, and Rule, but differences vs SDP and MRDP are inconclusive (p > 0.3).
-- RTG prompt choice within DT is statistically significant: `dt_rtg_neg1500` vs `dt_rtg_neg1000` yields p = 0.0012.
+- `dt_rtg_neg200` (and equivalently `dt_rtg_neg500`) shows statistically significant higher (less negative) mean returns than Oracle (p = 0.005), PPO (p = 0.0006), and Rule (p = 0.035), but differences vs SDP and MRDP are inconclusive (p > 0.3).
+- Among DT variants, moderate RTG prompts (neg200 through neg1500) show no statistically significant differences from each other, but `dt_rtg_neg1` is significantly worse than all moderate prompts (p < 1e-9).
 - Among RL baselines, A2C significantly outperforms PPO (p \u2248 1.7e-11), and both outperform SAC, TD3, and DDPG.
 
 > **NOTE:** These statistical results depend on the pairing and sample definition (per-customer paired episode returns). Causal claims ("algorithm X is universally better") require confirmation of the evaluation protocol and multiple-testing handling.
@@ -350,9 +353,10 @@ The replay graph illustrates a representative utility-scale episode produced by 
 ### 8.6 Overall Observations on the Decision Transformer
 
 Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive and uniquely flexible control strategy for battery operation:
-1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT matches or outperforms established planners (like SDP, MRDP) and standard online RL agents (like PPO and SAC). Remarkably, its best variants achieved mean returns that are statistically significant improvements over the perfect-foresight Oracle.
-2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. For instance, ambitious target returns drastically reduced battery degradation while maintaining high performance.
-3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines.
+1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT outperforms established planners (SDP, MRDP) and standard online RL agents (PPO, SAC). Its best variants (`dt_rtg_neg200`/`dt_rtg_neg500`, mean \u2248 -2408) achieve statistically significant improvements over the perfect-foresight Oracle (mean -2483, p < 0.005). These results hold after correcting the train/val split to prevent window leakage across episodes.
+2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. Moderate RTG prompts (neg200 to neg1500) achieve both strong returns and very low degradation (0.005\u20130.014/ep), while the near-zero prompt (`dt_rtg_neg1`) exhibits significantly higher degradation (0.114/ep) and lower returns.
+3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines. DT moderate-prompt CVaR (\u2248 -9705) is better than A2C (-9966), SDP (-9965), and PPO (-10089).
+4. **Robust to Data Split Correction:** The episode-level split fix had minimal impact on moderate RTG prompts (which retained strong performance), while `dt_rtg_neg1` was most affected \u2014 suggesting the model's core learned policy is robust, and only the extreme-prompt behavior relied on overfitted patterns.
 
 ## 9. Proposed Research Roadmap
 
