@@ -495,3 +495,4 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 *   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
 *   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
+*   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Reproducible AEMO offline-data collection and Decision Transformer training workflow.
