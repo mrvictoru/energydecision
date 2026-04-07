@@ -246,7 +246,7 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 ![Net grid energy balance by agent](eval_output/base/grid_energy.svg)
 
 **Key observations:**
-- **Mean episode return ranking:** DT (`dt_rtg_neg1500`, -2454) > Oracle (-2483) > A2C (-2529) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398). After retraining with the episode-level data split fix, DT now achieves the best mean return, surpassing even the perfect-foresight Oracle.
+- **Mean episode return ranking:** DT (`dt_rtg_neg1500`, -2454) > Oracle (-2483) > A2C (-2529) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398). After retraining with the episode-level data split fix, DT achieves the best mean return in the base comparison, surpassing even the perfect-foresight Oracle. Other DT RTG prompts (e.g., `dt_rtg_neg200` at -2408) perform even better \u2014 see Section 8.2.
 - **Variability:** Oracle achieves the smallest return std (1774), making it the most consistent. DT (std \u2248 3092) has higher variability than Oracle but comparable to other learners.
 - **Sharpe ratios** are uniformly negative (cost-minimization setting with negative returns). A2C (-0.78) and DT (-0.79) have the least-negative Sharpe among learners, indicating better risk-adjusted performance.
 - **Degradation trade-offs:** DDPG and SAC exhibit the highest degradation per episode (\u22480.35), while A2C reports zero, suggesting it avoids aggressive cycling. DT (`dt_rtg_neg1500`, 0.014) achieves very low degradation \u2014 lower than most RL agents.
