@@ -1,124 +1,154 @@
-# AEMO Decision Transformer Workflow
+# AEMO notebook-first offline RL workflow
 
-This workflow turns the existing AEMO notebook path into a reproducible offline-DT pipeline:
+The AEMO offline RL workflow is now centered on notebooks so you can inspect intermediate tables, debug trajectories, and change configs without leaving the notebook UI.
 
-1. fetch + preprocess AEMO market data
-2. collect rule and/or dispatch-replay trajectories
-3. merge them into a DT parquet dataset
-4. write an AEMO-specific DT model config + dataset manifest
-5. optionally launch `<repo_root>/src/pretrain_decision_transformer.py`
+## Main files
 
-## Files added for this workflow
-
-- `<repo_root>/src/aemo_dt_workflow.py`
+- `<repo_root>/aemo_simrun.ipynb`
+- `<repo_root>/aemo_sb3train.ipynb`
+- `<repo_root>/src/aemo_notebook_utils.py`
 - `<repo_root>/configs/aemo_decision_transformer_model_kwargs.json`
 
-## Default AEMO DT assumptions
+## What `aemo_simrun.ipynb` does
 
-- observation space: **18D**
-- action mode: **`multi_market`**
-- DT action dimension: **3**
-- degradation defaults:
-  - `degradation_mode='real_world'`
-  - `degradation_chemistry='LFP'`
-  - `degradation_temperature=30.0`
+`aemo_simrun.ipynb` is the main offline-data notebook. It is structured so you can stop after any stage and inspect the objects in memory.
 
-## Recommended first run
+It covers:
 
-Use a small SA1 run first:
+1. fetch + preprocess + cache AEMO market data
+2. configure a target AEMO experiment
+3. sweep multiple battery sizes
+4. collect behavior trajectories from:
+   - rule-based AEMO agent
+   - dispatch replay
+   - SB3-based models
+5. save raw parquet logs per policy / battery variant
+6. merge those logs into a DT-ready parquet dataset
+7. write a dataset manifest + AEMO DT model config
+8. optionally launch DT training
 
-```bash
-cd <repo_root>
-python src/aemo_dt_workflow.py \
-  --mode both \
-  --region SA1 \
-  --start-date 2024-01-01 \
-  --end-date 2024-02-01 \
-  --episode-hours 24 \
-  --step-duration 0.0833333333 \
-  --action-mode multi_market \
-  --num-rule-episodes 8 \
-  --num-dispatch-episodes 4 \
-  --dispatch-station hornsdale \
-  --random-episode-start \
-  --output-dir <repo_root>/data/aemo_dt \
-  --cache-dir <repo_root>/data/aemo
+## Notebook configuration points
+
+Inside `aemo_simrun.ipynb`, edit these cells first:
+
+- `REGION`, `START_DATE`, `END_DATE`
+- `STEP_DURATION`, `EPISODE_HOURS`
+- `ACTION_MODE`
+- `DEGRADATION_MODE`, `DEGRADATION_CHEMISTRY`, `DEGRADATION_TEMPERATURE`
+- `BATTERY_VARIANTS`
+- `BEHAVIOR_RUNS`
+
+### Battery-size sweeps
+
+`BATTERY_VARIANTS` lets you run multiple battery sizes in the same workflow. Each variant is tagged separately in the saved logs and dataset manifest.
+
+Example shape:
+
+```python
+BATTERY_VARIANTS = [
+    {"name": "small", "capacity_mwh": 2.0, "max_power_mw": 1.0, "init_soc_ratio": 0.5},
+    {"name": "medium", "capacity_mwh": 10.0, "max_power_mw": 5.0, "init_soc_ratio": 0.5},
+    {"name": "large", "capacity_mwh": 50.0, "max_power_mw": 25.0, "init_soc_ratio": 0.5},
+]
 ```
 
-## Output artifacts
+### Behavior-policy sweeps
 
-With the defaults above, the workflow writes:
+`BEHAVIOR_RUNS` controls which policies are simulated.
 
-- dataset parquet  
+Supported notebook policies:
+
+- `rule`
+- `dispatch`
+- `sb3`
+
+Example shape:
+
+```python
+BEHAVIOR_RUNS = [
+    {"policy": "rule", "episodes": 4, "battery_variants": ["small", "medium", "large"]},
+    {"policy": "dispatch", "episodes": 2, "battery_variants": ["medium"], "station_name": "hornsdale"},
+    {
+        "policy": "sb3",
+        "episodes": 2,
+        "battery_variants": ["small", "medium"],
+        "algorithm": "PPO",
+        "model_path": <repo_root>/models/aemo_ppo_model.zip,
+    },
+]
+```
+
+## DT dataset expectations
+
+The notebook writes parquet logs that are then merged into the schema expected by `TrajectoryDataset`:
+
+- `episode_id`
+- `step`
+- `norm_observation`
+- `action`
+- `reward`
+
+The helper validates the AEMO dimensions before writing the final DT dataset:
+
+- observation space: **18D**
+- `multi_market` → `act_dim=3`
+- `simple` → `act_dim=1`
+
+## Output artifacts from `aemo_simrun.ipynb`
+
+By default the notebook writes:
+
+- DT dataset parquet  
   `<repo_root>/data/aemo_dt/aemo_dt_dataset.parquet`
 - dataset manifest  
   `<repo_root>/data/aemo_dt/aemo_dt_manifest.json`
-- raw rule logs  
-  `<repo_root>/data/aemo_dt/raw_logs/aemo_dt_rule_logs.parquet`
-- raw dispatch logs  
-  `<repo_root>/data/aemo_dt/raw_logs/aemo_dt_dispatch_dispatch_logs.parquet`
+- raw logs directory  
+  `<repo_root>/data/aemo_dt/raw_logs/`
 - AEMO DT model config  
   `<repo_root>/configs/aemo_decision_transformer_model_kwargs.json`
-- trained model checkpoint outputs  
-  `<repo_root>/data/aemo_dt/aemo_dt_dt_model.pt`  
-  `<repo_root>/data/aemo_dt/aemo_dt_dt_checkpoint.pt`  
-  `<repo_root>/data/aemo_dt/aemo_dt_dt_loss_history.csv`
 
-## Collect only
+If DT training is enabled in the notebook config, it also writes:
 
-```bash
-cd <repo_root>
-python src/aemo_dt_workflow.py \
-  --mode collect \
-  --region SA1 \
-  --start-date 2024-01-01 \
-  --end-date 2024-02-01 \
-  --episode-hours 24 \
-  --dispatch-station hornsdale \
-  --random-episode-start
-```
+- `<repo_root>/data/aemo_dt/aemo_dt_dt_model.pt`
+- `<repo_root>/data/aemo_dt/aemo_dt_dt_checkpoint.pt`
+- `<repo_root>/data/aemo_dt/aemo_dt_dt_loss_history.csv`
 
-## Train only on an existing dataset
+## What `aemo_sb3train.ipynb` does
 
-```bash
-cd <repo_root>
-python src/aemo_dt_workflow.py \
-  --mode train \
-  --start-date 2024-01-01 \
-  --end-date 2024-02-01 \
-  --dataset-path <repo_root>/data/aemo_dt/aemo_dt_dataset.parquet \
-  --model-config-path <repo_root>/configs/aemo_decision_transformer_model_kwargs.json \
-  --output-dir <repo_root>/data/aemo_dt
-```
+`aemo_sb3train.ipynb` is the online RL notebook for AEMO + SB3.
 
-## Using extra behavior-policy logs
+It covers:
 
-If you already have parquet logs from RL runs, include them in the merged offline dataset:
+1. fetch + cache AEMO data
+2. define one or more battery variants
+3. choose an SB3 algorithm (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`)
+4. train the online RL model on AEMO environments
+5. save the trained model
+6. export rollout parquet logs for later offline-DT use
 
-```bash
-cd <repo_root>
-python src/aemo_dt_workflow.py \
-  --mode collect \
-  --region SA1 \
-  --start-date 2024-01-01 \
-  --end-date 2024-02-01 \
-  --num-rule-episodes 4 \
-  --num-dispatch-episodes 2 \
-  --dispatch-station hornsdale \
-  --include-log /absolute/path/to/aemo_mm_ppo_logs.parquet /absolute/path/to/aemo_mm_sac_logs.parquet
-```
+Default rollout outputs go under:
 
-Each included parquet is split by `episode_id` when present, then merged into the final DT dataset with a `source_policy` tag for provenance.
+- `<repo_root>/data/aemo_sb3/raw_logs/`
 
-## Manifest contents
+## Recommended usage
 
-The manifest records:
+1. Open `<repo_root>/aemo_sb3train.ipynb` if you need a fresh SB3 policy.
+2. Save the trained model.
+3. Open `<repo_root>/aemo_simrun.ipynb`.
+4. Add that SB3 model to `BEHAVIOR_RUNS`.
+5. Collect rule + dispatch + SB3 trajectories across your battery variants.
+6. Build the DT dataset and manifest.
+7. Optionally launch DT training from the notebook.
 
-- experiment definition (`region`, dates, step duration, degradation settings)
-- battery/env settings
-- model config used for training
-- raw source files used to build the dataset
-- per-source episode/row counts
-- per-episode index with detected `state_dim` and `act_dim`
+## Helper module notes
 
-That gives you the provenance needed to keep AEMO dataset builds reproducible.
+`<repo_root>/src/aemo_notebook_utils.py` contains the reusable notebook helpers for:
+
+- AEMO data fetching / caching
+- battery-variant resolution
+- rule / dispatch / SB3 rollout collection
+- parquet log persistence
+- DT dataset assembly
+- DT model-config writing
+- DT training launch
+- SB3 online training

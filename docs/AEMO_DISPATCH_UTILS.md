@@ -302,5 +302,5 @@ so the net energy action is computed correctly (`LOAD_MW − GEN_MW`).
 
 | Notebook | Description |
 |----------|-------------|
-| `test_aemo_simrun.ipynb` | Full simulation pipeline; section 2.2 uses all four functions |
+| `aemo_simrun.ipynb` | Configurable simulation pipeline with rule / dispatch / SB3 runs and battery-size sweeps |
 | `test_aemo_data.ipynb` | Data exploration; section 5 demonstrates `list_dispatch_candidates`, `scan_duid_availability`, and `scan_duid_historical_availability` |

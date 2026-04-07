@@ -116,11 +116,18 @@ ep_logs, inc_logs, all_logs = run_dispatch_replay(
 Use `test_aemo_data.ipynb` section 5 to interactively explore DUID availability across all NEM regions.
 
 ### 2. Online RL Training
-Run [test_sb3train.ipynb](notebooks/test_sb3train.ipynb) to:
-- Train PPO/SAC agents.
-- Save models and log additional trajectories.
+Run [`aemo_sb3train.ipynb`](aemo_sb3train.ipynb) to:
+- Train AEMO SB3 agents (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`).
+- Sweep across multiple battery sizes.
+- Save models and export rollout logs for offline DT data collection.
 
 ### 3. Offline RL Training
+Use [`aemo_simrun.ipynb`](aemo_simrun.ipynb) to:
+- Fetch/cache AEMO data.
+- Collect rule, dispatch-replay, and SB3-based trajectories.
+- Sweep multiple battery sizes in one run.
+- Export raw logs plus a DT-ready parquet dataset and manifest.
+
 Train a Decision Transformer using the collected logs.
 
 #### 3.1 Train from scratch
@@ -495,4 +502,4 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 *   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
 *   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
-*   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Reproducible AEMO offline-data collection and Decision Transformer training workflow.
+*   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.
