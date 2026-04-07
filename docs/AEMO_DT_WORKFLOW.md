@@ -6,12 +6,12 @@ This workflow turns the existing AEMO notebook path into a reproducible offline-
 2. collect rule and/or dispatch-replay trajectories
 3. merge them into a DT parquet dataset
 4. write an AEMO-specific DT model config + dataset manifest
-5. optionally launch `/home/runner/work/energydecision/energydecision/src/pretrain_decision_transformer.py`
+5. optionally launch `<repo_root>/src/pretrain_decision_transformer.py`
 
 ## Files added for this workflow
 
-- `/home/runner/work/energydecision/energydecision/src/aemo_dt_workflow.py`
-- `/home/runner/work/energydecision/energydecision/configs/aemo_decision_transformer_model_kwargs.json`
+- `<repo_root>/src/aemo_dt_workflow.py`
+- `<repo_root>/configs/aemo_decision_transformer_model_kwargs.json`
 
 ## Default AEMO DT assumptions
 
@@ -28,7 +28,7 @@ This workflow turns the existing AEMO notebook path into a reproducible offline-
 Use a small SA1 run first:
 
 ```bash
-cd /home/runner/work/energydecision/energydecision
+cd <repo_root>
 python src/aemo_dt_workflow.py \
   --mode both \
   --region SA1 \
@@ -41,8 +41,8 @@ python src/aemo_dt_workflow.py \
   --num-dispatch-episodes 4 \
   --dispatch-station hornsdale \
   --random-episode-start \
-  --output-dir /home/runner/work/energydecision/energydecision/data/aemo_dt \
-  --cache-dir /home/runner/work/energydecision/energydecision/data/aemo
+  --output-dir <repo_root>/data/aemo_dt \
+  --cache-dir <repo_root>/data/aemo
 ```
 
 ## Output artifacts
@@ -50,24 +50,24 @@ python src/aemo_dt_workflow.py \
 With the defaults above, the workflow writes:
 
 - dataset parquet  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/aemo_dt_dataset.parquet`
+  `<repo_root>/data/aemo_dt/aemo_dt_dataset.parquet`
 - dataset manifest  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/aemo_dt_manifest.json`
+  `<repo_root>/data/aemo_dt/aemo_dt_manifest.json`
 - raw rule logs  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/raw_logs/aemo_dt_rule_logs.parquet`
+  `<repo_root>/data/aemo_dt/raw_logs/aemo_dt_rule_logs.parquet`
 - raw dispatch logs  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/raw_logs/aemo_dt_dispatch_dispatch_logs.parquet`
+  `<repo_root>/data/aemo_dt/raw_logs/aemo_dt_dispatch_dispatch_logs.parquet`
 - AEMO DT model config  
-  `/home/runner/work/energydecision/energydecision/configs/aemo_decision_transformer_model_kwargs.json`
+  `<repo_root>/configs/aemo_decision_transformer_model_kwargs.json`
 - trained model checkpoint outputs  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/aemo_dt_dt_model.pt`  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/aemo_dt_dt_checkpoint.pt`  
-  `/home/runner/work/energydecision/energydecision/data/aemo_dt/aemo_dt_dt_loss_history.csv`
+  `<repo_root>/data/aemo_dt/aemo_dt_dt_model.pt`  
+  `<repo_root>/data/aemo_dt/aemo_dt_dt_checkpoint.pt`  
+  `<repo_root>/data/aemo_dt/aemo_dt_dt_loss_history.csv`
 
 ## Collect only
 
 ```bash
-cd /home/runner/work/energydecision/energydecision
+cd <repo_root>
 python src/aemo_dt_workflow.py \
   --mode collect \
   --region SA1 \
@@ -81,14 +81,14 @@ python src/aemo_dt_workflow.py \
 ## Train only on an existing dataset
 
 ```bash
-cd /home/runner/work/energydecision/energydecision
+cd <repo_root>
 python src/aemo_dt_workflow.py \
   --mode train \
   --start-date 2024-01-01 \
   --end-date 2024-02-01 \
-  --dataset-path /home/runner/work/energydecision/energydecision/data/aemo_dt/aemo_dt_dataset.parquet \
-  --model-config-path /home/runner/work/energydecision/energydecision/configs/aemo_decision_transformer_model_kwargs.json \
-  --output-dir /home/runner/work/energydecision/energydecision/data/aemo_dt
+  --dataset-path <repo_root>/data/aemo_dt/aemo_dt_dataset.parquet \
+  --model-config-path <repo_root>/configs/aemo_decision_transformer_model_kwargs.json \
+  --output-dir <repo_root>/data/aemo_dt
 ```
 
 ## Using extra behavior-policy logs
@@ -96,7 +96,7 @@ python src/aemo_dt_workflow.py \
 If you already have parquet logs from RL runs, include them in the merged offline dataset:
 
 ```bash
-cd /home/runner/work/energydecision/energydecision
+cd <repo_root>
 python src/aemo_dt_workflow.py \
   --mode collect \
   --region SA1 \
