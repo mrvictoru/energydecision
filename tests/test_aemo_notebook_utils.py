@@ -103,7 +103,7 @@ def test_get_sb3_model_class_supports_expected_algorithms():
 
 
 def test_new_notebooks_exist_and_expose_config_cells():
-    repo_root = Path("/home/runner/work/energydecision/energydecision")
+    repo_root = Path(__file__).resolve().parents[1]
     sim_nb = json.loads((repo_root / "aemo_simrun.ipynb").read_text())
     sb3_nb = json.loads((repo_root / "aemo_sb3train.ipynb").read_text())
 

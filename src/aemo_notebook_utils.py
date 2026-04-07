@@ -230,22 +230,28 @@ def make_aemo_env_fns(
     degradation_temperature: float = 30.0,
     random_episode_start: bool = True,
 ) -> list[Callable[[], AEMOBatteryTradingEnv]]:
+    def _make_env_factory(
+        battery_variant: dict[str, Any],
+    ) -> Callable[[], AEMOBatteryTradingEnv]:
+        def _factory() -> AEMOBatteryTradingEnv:
+            return create_aemo_env(
+                processed_data=processed_data,
+                battery_variant=battery_variant,
+                max_step=max_step,
+                step_duration=step_duration,
+                action_mode=action_mode,
+                degradation_mode=degradation_mode,
+                degradation_chemistry=degradation_chemistry,
+                degradation_temperature=degradation_temperature,
+                random_episode_start=random_episode_start,
+            )
+
+        return _factory
+
     env_fns: list[Callable[[], AEMOBatteryTradingEnv]] = []
     for battery_variant in resolve_battery_variants(battery_variants):
         for _ in range(episodes_per_variant):
-            env_fns.append(
-                lambda battery_variant=battery_variant: create_aemo_env(
-                    processed_data=processed_data,
-                    battery_variant=battery_variant,
-                    max_step=max_step,
-                    step_duration=step_duration,
-                    action_mode=action_mode,
-                    degradation_mode=degradation_mode,
-                    degradation_chemistry=degradation_chemistry,
-                    degradation_temperature=degradation_temperature,
-                    random_episode_start=random_episode_start,
-                )
-            )
+            env_fns.append(_make_env_factory(battery_variant))
     return env_fns
 
 
@@ -698,17 +704,20 @@ def train_sb3_model_on_aemo(
         degradation_temperature=degradation_temperature,
         random_episode_start=random_episode_start,
     )
-    eval_env_fn = lambda: create_aemo_env(
-        processed_data=processed_data,
-        battery_variant=eval_variant,
-        max_step=max_step,
-        step_duration=step_duration,
-        action_mode=action_mode,
-        degradation_mode=degradation_mode,
-        degradation_chemistry=degradation_chemistry,
-        degradation_temperature=degradation_temperature,
-        random_episode_start=random_episode_start,
-    )
+
+    def eval_env_fn() -> AEMOBatteryTradingEnv:
+        return create_aemo_env(
+            processed_data=processed_data,
+            battery_variant=eval_variant,
+            max_step=max_step,
+            step_duration=step_duration,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+        )
+
     return train_model(
         model_class=get_sb3_model_class(algorithm),
         vec_env=env_fns,
