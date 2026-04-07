@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -100,6 +101,22 @@ def test_resolve_battery_variants_derives_label_soc_and_cost():
 def test_get_sb3_model_class_supports_expected_algorithms():
     assert get_sb3_model_class("ppo").__name__ == "PPO"
     assert get_sb3_model_class("sac").__name__ == "SAC"
+
+
+def test_validate_aemo_dt_dimensions_rejects_bad_state_dim():
+    with pytest.raises(ValueError, match="state_dim=18"):
+        validate_aemo_dt_dimensions(
+            {"state_dims": [12], "act_dims": [3]},
+            action_mode="multi_market",
+        )
+
+
+def test_validate_aemo_dt_dimensions_rejects_bad_action_dim():
+    with pytest.raises(ValueError, match="act_dim=1"):
+        validate_aemo_dt_dimensions(
+            {"state_dims": [18], "act_dims": [3]},
+            action_mode="simple",
+        )
 
 
 def test_new_notebooks_exist_and_expose_config_cells():

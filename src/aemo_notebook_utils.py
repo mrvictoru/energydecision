@@ -598,6 +598,21 @@ def prepare_run_paths(
     dataset_path: str | Path | None = None,
     manifest_path: str | Path | None = None,
 ) -> dict[str, Path]:
+    """Prepare output paths for an AEMO notebook run.
+
+    Args:
+        output_dir: Base directory for this run.
+        dataset_tag: Prefix used to name dataset and manifest files.
+        dataset_path: Optional explicit dataset parquet path.
+        manifest_path: Optional explicit manifest JSON path.
+
+    Returns:
+        Dict with keys:
+        - ``output_dir``: resolved base directory
+        - ``raw_dir``: directory for raw policy logs
+        - ``dataset_path``: resolved DT dataset parquet path
+        - ``manifest_path``: resolved manifest JSON path
+    """
     resolved_output_dir = Path(output_dir).resolve()
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
     raw_dir = resolved_output_dir / "raw_logs"
@@ -656,6 +671,15 @@ def build_dispatch_selection(
 
 
 def validate_aemo_dt_dimensions(manifest: dict[str, Any], *, action_mode: str) -> None:
+    """Validate that an AEMO DT dataset manifest matches expected dimensions.
+
+    Validation rules:
+    - ``state_dims`` must be exactly ``[18]``
+    - ``act_dims`` must be ``[3]`` for ``multi_market`` and ``[1]`` for ``simple``
+
+    Raises:
+        ValueError: If the manifest dimensions do not match the selected action mode.
+    """
     expected_act_dim = 3 if action_mode == "multi_market" else 1
     if manifest["state_dims"] != [18]:
         raise ValueError(
@@ -688,6 +712,15 @@ def train_sb3_model_on_aemo(
     n_jobs: int = 10,
     default_model: bool = True,
 ):
+    """Train an SB3 model on AEMO environments assembled from battery variants.
+
+    The helper resolves the requested battery variants, builds a list of AEMO
+    environment factories for training, creates a separate evaluation
+    environment, and then delegates to ``sb3train.train_model``.
+
+    Returns:
+        Tuple ``(model, eval_result)`` matching ``sb3train.train_model``.
+    """
     resolved_variants = resolve_battery_variants(battery_variants)
     eval_variant = resolve_battery_variants(
         [eval_battery_variant or resolved_variants[0]]
