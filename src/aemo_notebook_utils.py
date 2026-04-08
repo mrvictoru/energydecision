@@ -107,6 +107,102 @@ def _processed_cache_path(
     )
 
 
+def _scenario_label(scenario: dict[str, Any], index: int) -> str:
+    label = scenario.get("label") or scenario.get("name")
+    if label:
+        return str(label)
+    region = scenario["region"]
+    start_date = scenario["start_date"]
+    end_date = scenario["end_date"]
+    return f"{region}_{start_date:%Y%m%d}_{end_date:%Y%m%d}_{index}"
+
+
+def _scenario_entry(scenario: dict[str, Any], index: int) -> dict[str, Any]:
+    return {
+        "label": _scenario_label(scenario, index),
+        "region": str(scenario["region"]),
+        "start_date": scenario["start_date"],
+        "end_date": scenario["end_date"],
+        "index": index,
+    }
+
+
+def _update_bounds(
+    stats: dict[str, dict[str, float]],
+    key: str,
+    *,
+    min_value: float | None,
+    max_value: float | None,
+) -> None:
+    if min_value is None or max_value is None:
+        return
+    stats[key]["min"] = min(float(stats[key]["min"]), float(min_value))
+    stats[key]["max"] = max(float(stats[key]["max"]), float(max_value))
+
+
+def _fit_global_stats_from_frames(frames: Sequence[pl.DataFrame]) -> dict[str, dict[str, float]]:
+    stats = {
+        "RRP": {"min": float("inf"), "max": float("-inf")},
+        "FCAS_PRICE": {"min": float("inf"), "max": float("-inf")},
+        "TOTALDEMAND": {"min": float("inf"), "max": float("-inf")},
+        "GENERATION": {"min": float("inf"), "max": float("-inf")},
+    }
+    for frame in frames:
+        if frame.height == 0:
+            continue
+
+        if "RRP" in frame.columns:
+            _update_bounds(
+                stats,
+                "RRP",
+                min_value=frame.select(pl.col("RRP").min()).item(),
+                max_value=frame.select(pl.col("RRP").max()).item(),
+            )
+
+        if "TOTALDEMAND" in frame.columns:
+            _update_bounds(
+                stats,
+                "TOTALDEMAND",
+                min_value=frame.select(pl.col("TOTALDEMAND").min()).item(),
+                max_value=frame.select(pl.col("TOTALDEMAND").max()).item(),
+            )
+
+        fcas_cols = [c for c in frame.columns if c.startswith("FCAS_") and not c.endswith("_normalized")]
+        if fcas_cols:
+            fcas_mins = frame.select([pl.col(c).min() for c in fcas_cols]).row(0)
+            fcas_maxs = frame.select([pl.col(c).max() for c in fcas_cols]).row(0)
+            valid_mins = [v for v in fcas_mins if v is not None]
+            valid_maxs = [v for v in fcas_maxs if v is not None]
+            if valid_mins and valid_maxs:
+                _update_bounds(
+                    stats,
+                    "FCAS_PRICE",
+                    min_value=min(valid_mins),
+                    max_value=max(valid_maxs),
+                )
+
+        gen_cols = [c for c in frame.columns if c.startswith("GEN_") and not c.endswith("_pct")]
+        if gen_cols:
+            gen_mins = frame.select([pl.col(c).min() for c in gen_cols]).row(0)
+            gen_maxs = frame.select([pl.col(c).max() for c in gen_cols]).row(0)
+            valid_mins = [v for v in gen_mins if v is not None]
+            valid_maxs = [v for v in gen_maxs if v is not None]
+            if valid_mins and valid_maxs:
+                _update_bounds(
+                    stats,
+                    "GENERATION",
+                    min_value=min(valid_mins),
+                    max_value=max(valid_maxs),
+                )
+
+    defaults = AEMODataPreprocessor.default_stats()
+    for key, value in stats.items():
+        if value["min"] == float("inf") or value["max"] == float("-inf"):
+            stats[key] = dict(defaults[key])
+
+    return stats
+
+
 def fetch_and_preprocess_aemo_data(
     *,
     region: str,
@@ -115,6 +211,7 @@ def fetch_and_preprocess_aemo_data(
     cache_dir: Path,
     step_duration: float,
     refresh: bool = False,
+    fixed_stats: dict[str, dict[str, float]] | None = None,
 ) -> tuple[pl.DataFrame, Path]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     processed_cache = _processed_cache_path(
@@ -124,7 +221,7 @@ def fetch_and_preprocess_aemo_data(
         end_date=end_date,
         step_duration=step_duration,
     )
-    if processed_cache.exists() and not refresh:
+    if processed_cache.exists() and not refresh and fixed_stats is None:
         return pl.read_parquet(str(processed_cache)), processed_cache
 
     raw_data = fetch_aemo_data_bundle(
@@ -135,7 +232,10 @@ def fetch_and_preprocess_aemo_data(
         fuel_types=DEFAULT_FUEL_TYPES,
         cache_dir=str(cache_dir),
     )
-    preprocessor = AEMODataPreprocessor(step_duration_hours=step_duration)
+    preprocessor = AEMODataPreprocessor(
+        step_duration_hours=step_duration,
+        fixed_stats=fixed_stats,
+    )
     processed_data = preprocessor.preprocess_aemo_data(
         prices=raw_data["prices"],
         fcas=raw_data["fcas"],
@@ -143,6 +243,72 @@ def fetch_and_preprocess_aemo_data(
     )
     processed_data.write_parquet(str(processed_cache))
     return processed_data, processed_cache
+
+
+def fit_aemo_global_stats(
+    *,
+    scenarios: Sequence[dict[str, Any]],
+    cache_dir: Path,
+    step_duration: float,
+    refresh: bool = False,
+) -> tuple[dict[str, dict[str, float]], list[dict[str, Any]]]:
+    scenario_manifest: list[dict[str, Any]] = []
+    prepared_frames: list[pl.DataFrame] = []
+
+    for index, scenario in enumerate(scenarios):
+        entry = _scenario_entry(scenario, index)
+        scenario_manifest.append(entry)
+        raw_data = fetch_aemo_data_bundle(
+            start_date=entry["start_date"],
+            end_date=entry["end_date"],
+            region=entry["region"],
+            fcas_services=DEFAULT_FCAS_SERVICES,
+            fuel_types=DEFAULT_FUEL_TYPES,
+            cache_dir=str(cache_dir),
+            refresh=refresh,
+        )
+        preprocessor = AEMODataPreprocessor(
+            step_duration_hours=step_duration,
+            add_normalized_features=False,
+            update_stats_from_data=False,
+        )
+        prepared_frames.append(
+            preprocessor.prepare_aemo_data(
+                prices=raw_data["prices"],
+                fcas=raw_data["fcas"],
+                generation=raw_data["generation"],
+            )
+        )
+
+    return _fit_global_stats_from_frames(prepared_frames), scenario_manifest
+
+
+def fetch_and_preprocess_aemo_scenarios(
+    *,
+    scenarios: Sequence[dict[str, Any]],
+    cache_dir: Path,
+    step_duration: float,
+    refresh: bool = False,
+    fixed_stats: dict[str, dict[str, float]] | None = None,
+) -> tuple[dict[str, pl.DataFrame], list[dict[str, Any]]]:
+    processed_by_label: dict[str, pl.DataFrame] = {}
+    scenario_manifest: list[dict[str, Any]] = []
+
+    for index, scenario in enumerate(scenarios):
+        entry = _scenario_entry(scenario, index)
+        processed, _ = fetch_and_preprocess_aemo_data(
+            region=entry["region"],
+            start_date=entry["start_date"],
+            end_date=entry["end_date"],
+            cache_dir=cache_dir,
+            step_duration=step_duration,
+            refresh=refresh,
+            fixed_stats=fixed_stats,
+        )
+        processed_by_label[entry["label"]] = processed
+        scenario_manifest.append(entry)
+
+    return processed_by_label, scenario_manifest
 
 
 def _battery_life_cost(capacity_mwh: float, battery_cost_per_kwh: float) -> float:
@@ -252,6 +418,37 @@ def make_aemo_env_fns(
     for battery_variant in resolve_battery_variants(battery_variants):
         for _ in range(episodes_per_variant):
             env_fns.append(_make_env_factory(battery_variant))
+    return env_fns
+
+
+def make_multi_scenario_aemo_env_fns(
+    *,
+    scenario_data: Sequence[tuple[dict[str, Any], pl.DataFrame]],
+    battery_variants: Sequence[dict[str, Any]],
+    episodes_per_variant: int,
+    max_step: int,
+    step_duration: float,
+    action_mode: str = "multi_market",
+    degradation_mode: str = "real_world",
+    degradation_chemistry: str = "LFP",
+    degradation_temperature: float = 30.0,
+    random_episode_start: bool = True,
+) -> list[Callable[[], AEMOBatteryTradingEnv]]:
+    env_fns: list[Callable[[], AEMOBatteryTradingEnv]] = []
+    for scenario, processed_data in scenario_data:
+        for env_fn in make_aemo_env_fns(
+            processed_data=processed_data,
+            battery_variants=battery_variants,
+            episodes_per_variant=episodes_per_variant,
+            max_step=max_step,
+            step_duration=step_duration,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+        ):
+            env_fns.append(env_fn)
     return env_fns
 
 

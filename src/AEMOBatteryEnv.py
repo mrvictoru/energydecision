@@ -12,6 +12,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import polars as pl
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
@@ -31,19 +32,49 @@ class AEMODataPreprocessor:
                  step_duration_hours: float = 0.5,
                  missing_data_method: str = 'interpolate',
                  add_normalized_features: bool = True,
-                 update_stats_from_data: bool = True):
+                 update_stats_from_data: bool = True,
+                 fixed_stats: Optional[Dict[str, Dict[str, float]]] = None):
         self.step_duration_hours = step_duration_hours
         self.missing_data_method = missing_data_method
         self.add_normalized_features = add_normalized_features
-        self.update_stats_from_data = update_stats_from_data
-        
-        # Normalization bounds (will be updated from actual data)
-        self.stats = {
+        self.stats = self.default_stats()
+        if fixed_stats is not None:
+            self.stats = self._coerce_stats(fixed_stats)
+            self.update_stats_from_data = False
+        else:
+            self.update_stats_from_data = update_stats_from_data
+
+    @staticmethod
+    def default_stats() -> Dict[str, Dict[str, float]]:
+        return {
             'RRP': {'min': -100.0, 'max': 500.0},  # Energy can go negative
             'FCAS_PRICE': {'min': 0.0, 'max': 100.0},
             'TOTALDEMAND': {'min': 4000.0, 'max': 12000.0},
             'GENERATION': {'min': 0.0, 'max': 5000.0},
         }
+
+    @staticmethod
+    def _coerce_stats(stats: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, float]]:
+        return {
+            key: {'min': float(value['min']), 'max': float(value['max'])}
+            for key, value in stats.items()
+        }
+
+    def copy_stats(self) -> Dict[str, Dict[str, float]]:
+        return deepcopy(self.stats)
+
+    def prepare_aemo_data(
+        self,
+        prices: pl.DataFrame,
+        fcas: pl.DataFrame,
+        generation: pl.DataFrame,
+    ) -> pl.DataFrame:
+        prices_resampled = self._resample_data(prices, 'SETTLEMENTDATE')
+        fcas_resampled = self._resample_fcas(fcas)
+        gen_resampled = self._resample_generation(generation)
+        merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled)
+        merged = self._handle_missing_data(merged)
+        return self._add_time_features(merged)
     
     def preprocess_aemo_data(self, 
                              prices: pl.DataFrame,
@@ -60,23 +91,7 @@ class AEMODataPreprocessor:
         Returns:
             Preprocessed Polars DataFrame ready for environment use
         """
-        prices_pl = prices
-        fcas_pl = fcas
-        gen_pl = generation
-
-        # Resample to match environment step duration
-        prices_resampled = self._resample_data(prices_pl, 'SETTLEMENTDATE')
-        fcas_resampled = self._resample_fcas(fcas_pl)
-        gen_resampled = self._resample_generation(gen_pl)
-        
-        # Merge all datasets
-        merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled)
-        
-        # Handle missing data
-        merged = self._handle_missing_data(merged)
-        
-        # Add time features
-        merged = self._add_time_features(merged)
+        merged = self.prepare_aemo_data(prices, fcas, generation)
         
         # Update stats from data
         if self.update_stats_from_data:
@@ -275,7 +290,7 @@ class AEMODataPreprocessor:
 
         # Normalize RRP (can be negative)
         if 'RRP' in out.columns:
-            denom = (self.stats['RRP']['max'] - self.stats['RRP']['min'])
+            denom = max(self.stats['RRP']['max'] - self.stats['RRP']['min'], 1e-9)
             out = out.with_columns(
                 ((pl.col('RRP').cast(pl.Float64, strict=False) - self.stats['RRP']['min']) / denom)
                 .clip(0.0, 1.0)
@@ -284,7 +299,7 @@ class AEMODataPreprocessor:
 
         # Normalize TOTALDEMAND
         if 'TOTALDEMAND' in out.columns:
-            denom = (self.stats['TOTALDEMAND']['max'] - self.stats['TOTALDEMAND']['min'])
+            denom = max(self.stats['TOTALDEMAND']['max'] - self.stats['TOTALDEMAND']['min'], 1e-9)
             out = out.with_columns(
                 ((pl.col('TOTALDEMAND').cast(pl.Float64, strict=False) - self.stats['TOTALDEMAND']['min']) / denom)
                 .clip(0.0, 1.0)
@@ -294,7 +309,7 @@ class AEMODataPreprocessor:
         # Normalize FCAS prices
         fcas_cols = [col for col in out.columns if col.startswith('FCAS_')]
         if fcas_cols:
-            denom = (self.stats['FCAS_PRICE']['max'] - self.stats['FCAS_PRICE']['min'])
+            denom = max(self.stats['FCAS_PRICE']['max'] - self.stats['FCAS_PRICE']['min'], 1e-9)
             out = out.with_columns([
                 ((pl.col(col).cast(pl.Float64, strict=False) - self.stats['FCAS_PRICE']['min']) / denom)
                 .clip(0.0, 1.0)
