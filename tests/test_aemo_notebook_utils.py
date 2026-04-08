@@ -146,7 +146,7 @@ def test_resolve_battery_variants_derives_label_soc_and_cost():
     assert resolved[0]["battery_capacity"] == 2.0
     assert resolved[0]["max_battery_flow"] == 1.0
     assert resolved[0]["init_soc"] == 0.5
-    assert resolved[0]["battery_life_cost"] == 700000.0
+    assert resolved[0]["battery_life_cost"] == pytest.approx(291150.0, rel=1e-3)
 
 
 def test_get_sb3_model_class_supports_expected_algorithms():

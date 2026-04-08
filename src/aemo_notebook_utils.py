@@ -34,7 +34,11 @@ DEFAULT_FCAS_SERVICES = [
     "LOWER5MIN",
 ]
 DEFAULT_FUEL_TYPES = ["solar", "wind"]
-DEFAULT_BATTERY_COST_PER_KWH = 350.0
+DEFAULT_BATTERY_CORE_COST_PER_KWH = 75.0  # battery pack cost only
+DEFAULT_BATTERY_FIXED_COST_BASE_PER_KWH = 50.0  # fixed installation/grid cost at 10 MWh reference size
+DEFAULT_BATTERY_COST_SCALE_EXPONENT = 0.15  # economy of scale factor for fixed costs
+DEFAULT_BATTERY_COST_PREMIUM = 1.05  # small margin for contingencies and BOP
+DEFAULT_BATTERY_COST_PER_KWH = DEFAULT_BATTERY_CORE_COST_PER_KWH
 SB3_MODEL_CLASSES = {
     "A2C": A2C,
     "DDPG": DDPG,
@@ -311,8 +315,23 @@ def fetch_and_preprocess_aemo_scenarios(
     return processed_by_label, scenario_manifest
 
 
+def _battery_fixed_cost_per_kwh(
+    capacity_mwh: float,
+    base_fixed_cost_per_kwh: float = DEFAULT_BATTERY_FIXED_COST_BASE_PER_KWH,
+    reference_capacity_mwh: float = 10.0,
+    scale_exponent: float = DEFAULT_BATTERY_COST_SCALE_EXPONENT,
+) -> float:
+    capacity_mwh = float(capacity_mwh)
+    return float(base_fixed_cost_per_kwh) * (
+        reference_capacity_mwh / max(capacity_mwh, 1e-6)
+    ) ** float(scale_exponent)
+
+
 def _battery_life_cost(capacity_mwh: float, battery_cost_per_kwh: float) -> float:
-    return float(battery_cost_per_kwh) * float(capacity_mwh) * 1000.0
+    core_cost = float(battery_cost_per_kwh)
+    fixed_cost = _battery_fixed_cost_per_kwh(capacity_mwh)
+    total_cost_per_kwh = core_cost + fixed_cost
+    return total_cost_per_kwh * DEFAULT_BATTERY_COST_PREMIUM * float(capacity_mwh) * 1000.0
 
 
 def resolve_battery_variants(
