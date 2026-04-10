@@ -80,7 +80,7 @@ def sac_model_kwargs_fn(trial, vec_env=None):
     gamma = trial.suggest_float("gamma", 0.90, 0.999)
     tau = trial.suggest_float("tau", 0.001, 0.02)
     ent_coef = trial.suggest_float("ent_coef", 1e-8, 1e-2)
-    batch_size = trial.suggest_float("batch_size", [64, 128, 256])
+    batch_size = trial.suggest_categorical("batch_size", [64, 128, 256])
     net_arch_choice = trial.suggest_categorical("net_arch", ["small", "medium", "large"])
     if net_arch_choice == "small":
         net_arch = [64, 64]
