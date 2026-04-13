@@ -404,6 +404,7 @@ def resolve_dispatch_selection(
     battery_capacity: float = 10.0,
     max_battery_flow: float = 5.0,
     init_soc: float = 5.0,
+    init_soc_ratio: Optional[float] = None,
     apply_unit_sizing: bool = True,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -427,6 +428,9 @@ def resolve_dispatch_selection(
             *apply_unit_sizing* is ``False``.
         max_battery_flow: Default max discharge/charge rate (MW).
         init_soc: Default initial state-of-charge (MWh).
+        init_soc_ratio: Optional initial state-of-charge ratio applied after
+            unit sizing is resolved. When provided, this takes precedence over
+            the legacy ``init_soc`` / ``battery_capacity`` ratio fallback.
         apply_unit_sizing: When ``True``, override *battery_capacity* and
             *max_battery_flow* with values from the static table (if available
             and finite).
@@ -697,8 +701,13 @@ def resolve_dispatch_selection(
         if suggested_mw is not None and np.isfinite(float(suggested_mw)) and float(suggested_mw) > 0:
             resolved_max_flow = float(suggested_mw)
 
-    init_soc_ratio = (init_soc / battery_capacity) if battery_capacity > 0 else _DEFAULT_SOC_RATIO
-    resolved_init_soc = float(np.clip(resolved_capacity * init_soc_ratio, 0.0, resolved_capacity))
+    if init_soc_ratio is None:
+        resolved_init_soc_ratio = (init_soc / battery_capacity) if battery_capacity > 0 else _DEFAULT_SOC_RATIO
+    else:
+        resolved_init_soc_ratio = float(np.clip(init_soc_ratio, 0.0, 1.0))
+    resolved_init_soc = float(
+        np.clip(resolved_capacity * resolved_init_soc_ratio, 0.0, resolved_capacity)
+    )
     print(
         f"Dispatch replay env params → capacity={resolved_capacity:.3f} MWh, "
         f"max_flow={resolved_max_flow:.3f} MW, init_soc={resolved_init_soc:.3f} MWh"

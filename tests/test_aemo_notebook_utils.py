@@ -18,6 +18,8 @@ from aemo_notebook_utils import (  # noqa: E402
     fetch_and_preprocess_aemo_scenarios,
     fit_aemo_global_stats,
     make_multi_scenario_aemo_env_fns,
+    resolve_dispatch_battery_life_cost,
+    resolve_dispatch_replay_runs,
     resolve_dispatch_run_region,
     resolve_battery_variants,
     should_run_dispatch_for_scenario,
@@ -182,9 +184,36 @@ def test_new_notebooks_exist_and_expose_config_cells():
 
     assert "BATTERY_VARIANTS" in sim_code
     assert "BEHAVIOR_RUNS" in sim_code
+    assert "DISPATCH_RUNS" in sim_code
     assert "run_dispatch_replay" in sim_code or "build_dispatch_selection" in sim_code
     assert "train_sb3_model_on_aemo" in sb3_code
     assert "SB3_ALGORITHM" in sb3_code
+
+
+def test_resolve_dispatch_replay_runs_assigns_labels_and_defaults():
+    resolved = resolve_dispatch_replay_runs(
+        [
+            {
+                "station_name": "hornsdale",
+                "episodes": 2,
+            }
+        ]
+    )
+
+    assert resolved[0]["label"] == "hornsdale"
+    assert resolved[0]["episodes"] == 2
+    assert resolved[0]["init_soc_ratio"] == 0.5
+    assert resolved[0]["dispatch_index"] == 0
+
+
+def test_resolve_dispatch_battery_life_cost_uses_station_capacity():
+    cost = resolve_dispatch_battery_life_cost(
+        dispatch_run={"battery_cost_per_kwh": 75.0},
+        station_capacity_mwh=193.5,
+    )
+
+    assert cost > 0.0
+    assert cost > 193.5 * 1000.0 * 75.0
 
 
 def test_resolve_dispatch_run_region_returns_registry_region():

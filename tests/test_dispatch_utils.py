@@ -123,6 +123,23 @@ def test_resolve_apply_unit_sizing_false():
     assert sel["max_battery_flow"] == 5.0
 
 
+def test_resolve_init_soc_ratio_applies_after_unit_sizing():
+    battery_units, active = _make_battery_tables()
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active,
+        selected_duid="HPRG1",
+        battery_capacity=10.0,
+        max_battery_flow=5.0,
+        init_soc=5.0,
+        init_soc_ratio=0.25,
+        apply_unit_sizing=True,
+    )
+
+    assert sel["battery_capacity"] == 193.5
+    assert sel["init_battery_level"] == pytest.approx(193.5 * 0.25)
+
+
 def test_resolve_paired_duid():
     battery_units, active = _make_battery_tables(has_paired=True)
     sel = resolve_dispatch_selection(

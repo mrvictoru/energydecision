@@ -374,6 +374,43 @@ def resolve_battery_variants(
     return resolved
 
 
+def resolve_dispatch_replay_runs(
+    runs: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    resolved: list[dict[str, Any]] = []
+    for idx, run in enumerate(runs):
+        label = str(
+            run.get("name")
+            or run.get("label")
+            or run.get("station_name")
+            or run.get("dispatch_duid")
+            or f"dispatch_{idx}"
+        )
+        resolved.append(
+            {
+                **run,
+                "label": label,
+                "episodes": int(run.get("episodes", 1)),
+                "init_soc_ratio": float(np.clip(run.get("init_soc_ratio", 0.5), 0.0, 1.0)),
+                "dispatch_index": int(run.get("dispatch_index", 0)),
+            }
+        )
+    return resolved
+
+
+def resolve_dispatch_battery_life_cost(
+    *,
+    dispatch_run: dict[str, Any],
+    station_capacity_mwh: float,
+    default_cost_per_kwh: float = DEFAULT_BATTERY_COST_PER_KWH,
+) -> float:
+    explicit_cost = dispatch_run.get("battery_life_cost")
+    if explicit_cost is not None:
+        return float(explicit_cost)
+    battery_cost_per_kwh = float(dispatch_run.get("battery_cost_per_kwh", default_cost_per_kwh))
+    return _battery_life_cost(float(station_capacity_mwh), battery_cost_per_kwh)
+
+
 def create_aemo_env(
     *,
     processed_data: pl.DataFrame,
@@ -863,6 +900,7 @@ def build_dispatch_selection(
     battery_capacity: float,
     max_battery_flow: float,
     init_soc: float,
+    init_soc_ratio: float | None = None,
 ) -> dict[str, Any]:
     battery_units, active_battery_units = list_dispatch_candidates(
         region=region,
@@ -879,6 +917,7 @@ def build_dispatch_selection(
         battery_capacity=battery_capacity,
         max_battery_flow=max_battery_flow,
         init_soc=init_soc,
+        init_soc_ratio=init_soc_ratio,
         apply_unit_sizing=True,
         start_date=start_date,
         end_date=end_date,

@@ -37,6 +37,7 @@ Inside `aemo_simrun.ipynb`, edit these cells first:
 - `DEGRADATION_MODE`, `DEGRADATION_CHEMISTRY`, `DEGRADATION_TEMPERATURE`
 - `BATTERY_VARIANTS`
 - `BEHAVIOR_RUNS`
+- `DISPATCH_RUNS`
 
 ### Battery-size sweeps
 
@@ -59,7 +60,6 @@ BATTERY_VARIANTS = [
 Supported notebook policies:
 
 - `rule`
-- `dispatch`
 - `sb3`
 
 Example shape:
@@ -67,7 +67,6 @@ Example shape:
 ```python
 BEHAVIOR_RUNS = [
     {"policy": "rule", "episodes": 4, "battery_variants": ["small", "medium", "large"]},
-    {"policy": "dispatch", "episodes": 2, "battery_variants": ["medium"], "station_name": "hornsdale"},
     {
         "policy": "sb3",
         "episodes": 2,
@@ -77,6 +76,33 @@ BEHAVIOR_RUNS = [
     },
 ]
 ```
+
+### Dispatch replay configs
+
+`DISPATCH_RUNS` is separate from `BATTERY_VARIANTS` because dispatch replay should use the
+station sizing implied by the AEMO battery record rather than a synthetic battery variant.
+
+Example shape:
+
+```python
+DISPATCH_RUNS = [
+    {
+        "label": "hornsdale_replay",
+        "episodes": 1,
+        "station_name": "hornsdale",
+        "init_soc_ratio": 0.5,
+    },
+]
+```
+
+Notes:
+
+- `episodes` may be greater than 1, but repeated dispatch replays are expected to be nearly identical
+  unless you intentionally vary initial conditions or economics.
+- Station capacity and max power come from the resolved AEMO unit metadata.
+- `init_soc_ratio` is applied after station sizing is resolved.
+- `battery_life_cost` or `battery_cost_per_kwh` can be supplied if you want to override the
+  degradation economics for dispatch replay.
 
 ## DT dataset expectations
 
