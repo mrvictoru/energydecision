@@ -13,7 +13,7 @@ from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from AEMOBatteryEnv import AEMOBatteryTradingEnv, AEMODataPreprocessor
-from aemo_data import fetch_aemo_data_bundle
+from aemo_data import fetch_aemo_data_bundle, resolve_battery_duids
 from decision import AEMOAgent, run_sb3_model_on_vec_env
 from dispatch_utils import (
     list_dispatch_candidates,
@@ -884,6 +884,42 @@ def build_dispatch_selection(
         end_date=end_date,
         cache_dir=str(cache_dir),
     )
+
+
+def resolve_dispatch_run_region(
+    *,
+    dispatch_station: str | None,
+    dispatch_duid: str | None,
+    start_date: datetime,
+    end_date: datetime,
+) -> str | None:
+    dispatch_target = dispatch_station or dispatch_duid
+    if dispatch_target is None:
+        return None
+
+    resolution = resolve_battery_duids(dispatch_target, start_date, end_date)
+    if not resolution["found"]:
+        return None
+    return resolution["region"]
+
+
+def should_run_dispatch_for_scenario(
+    *,
+    scenario_region: str,
+    dispatch_station: str | None,
+    dispatch_duid: str | None,
+    start_date: datetime,
+    end_date: datetime,
+) -> tuple[bool, str | None]:
+    dispatch_region = resolve_dispatch_run_region(
+        dispatch_station=dispatch_station,
+        dispatch_duid=dispatch_duid,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if dispatch_region is None:
+        return True, None
+    return dispatch_region == scenario_region, dispatch_region
 
 
 def validate_aemo_dt_dimensions(manifest: dict[str, Any], *, action_mode: str) -> None:

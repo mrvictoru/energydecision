@@ -18,7 +18,9 @@ from aemo_notebook_utils import (  # noqa: E402
     fetch_and_preprocess_aemo_scenarios,
     fit_aemo_global_stats,
     make_multi_scenario_aemo_env_fns,
+    resolve_dispatch_run_region,
     resolve_battery_variants,
+    should_run_dispatch_for_scenario,
     validate_aemo_dt_dimensions,
     write_combined_episode_logs,
 )
@@ -183,6 +185,43 @@ def test_new_notebooks_exist_and_expose_config_cells():
     assert "run_dispatch_replay" in sim_code or "build_dispatch_selection" in sim_code
     assert "train_sb3_model_on_aemo" in sb3_code
     assert "SB3_ALGORITHM" in sb3_code
+
+
+def test_resolve_dispatch_run_region_returns_registry_region():
+    region = resolve_dispatch_run_region(
+        dispatch_station="hornsdale",
+        dispatch_duid=None,
+        start_date=datetime(2022, 4, 1),
+        end_date=datetime(2023, 12, 1),
+    )
+
+    assert region == "SA1"
+
+
+def test_should_run_dispatch_for_scenario_skips_region_mismatch():
+    should_run, dispatch_region = should_run_dispatch_for_scenario(
+        scenario_region="NSW1",
+        dispatch_station="hornsdale",
+        dispatch_duid=None,
+        start_date=datetime(2022, 4, 1),
+        end_date=datetime(2023, 12, 1),
+    )
+
+    assert should_run is False
+    assert dispatch_region == "SA1"
+
+
+def test_should_run_dispatch_for_scenario_allows_region_match():
+    should_run, dispatch_region = should_run_dispatch_for_scenario(
+        scenario_region="SA1",
+        dispatch_station="hornsdale",
+        dispatch_duid=None,
+        start_date=datetime(2022, 4, 1),
+        end_date=datetime(2023, 12, 1),
+    )
+
+    assert should_run is True
+    assert dispatch_region == "SA1"
 
 
 def test_fit_aemo_global_stats_and_locked_preprocessing(monkeypatch, tmp_path: Path):

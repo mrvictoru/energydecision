@@ -363,6 +363,22 @@ def test_resolve_bidi_includes_all_duids_in_transition_selection():
     assert sel["_registry_bidi_duid"] == "HPR1"
 
 
+def test_resolve_selection_returns_region_metadata():
+    battery_units, active = _make_battery_tables()
+
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active,
+        selected_duid="HPRG1",
+        start_date=datetime(2021, 1, 1),
+        end_date=datetime(2021, 1, 7),
+    )
+
+    assert sel["region"] == "SA1"
+    assert sel["station_name"] == "Hornsdale Power Reserve"
+    assert sel["station_key"] == "hornsdale"
+
+
 def test_merge_transition_dispatch_gen_load_to_bidi():
     """_merge_transition_dispatch must produce a unified generator-convention
     TOTALCLEARED column: GEN-LOAD for the pre-transition period, and the
@@ -660,6 +676,39 @@ def test_run_dispatch_replay_historical_duids_not_filtered_by_region(monkeypatch
     # Must have passed the paired DUIDs directly
     assert "duids" in call_kwargs
     assert set(call_kwargs["duids"]) == {"HPRG1", "HPRL1"}
+
+
+def test_run_dispatch_replay_rejects_selection_region_mismatch(monkeypatch):
+    import dispatch_utils as du
+
+    processed_data = pl.DataFrame({
+        "SETTLEMENTDATE": [datetime(2025, 1, 1, 0, 0)],
+        "REGIONID": ["NSW1"],
+        "RRP": [50.0],
+    })
+
+    selection = {
+        "duid": "HPR1",
+        "region": "SA1",
+        "dispatch_type": "Bidirectional Unit",
+        "dispatch_duid_gen": None,
+        "dispatch_duid_load": None,
+        "battery_capacity": 193.5,
+        "max_battery_flow": 150.0,
+        "init_battery_level": 96.75,
+        "availability": None,
+    }
+
+    with pytest.raises(ValueError, match="selection region='SA1'.*replay region='NSW1'"):
+        du.run_dispatch_replay(
+            processed_data=processed_data,
+            selection=selection,
+            start_date=datetime(2025, 1, 1),
+            end_date=datetime(2025, 1, 7),
+            region="NSW1",
+            cache_dir="data/aemo",
+            num_episodes=1,
+        )
 
 
 # ---------------------------------------------------------------------------

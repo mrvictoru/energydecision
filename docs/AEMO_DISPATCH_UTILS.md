@@ -136,6 +136,9 @@ Returns a dict with keys:
 ```python
 {
     "duid": str,                   # selected DUID
+    "region": str | None,          # resolved station / unit region
+    "station_name": str | None,    # resolved registry station name
+    "station_key": str | None,     # resolved registry key
     "dispatch_type": str | None,   # "Bidirectional Unit" / "Generating Unit" / "Load"
     "dispatch_duid_gen": str|None, # paired generator DUID (old-model batteries)
     "dispatch_duid_load": str|None,# paired load DUID (old-model batteries)
@@ -151,6 +154,11 @@ Returns a dict with keys:
 ### `run_dispatch_replay(processed_data, selection, start_date, end_date, region, ...)`
 
 Run N dispatch replay episodes.  Returns `(episode_logs, incident_logs, all_logs_combined)`.
+
+Dispatch replay is region-bound. The requested `region`, the resolved `selection["region"]`,
+and any single-region provenance carried by `processed_data` must agree. If they do not,
+`run_dispatch_replay(...)` raises `ValueError` instead of replaying one station against a
+different market region.
 
 Key parameters:
 
