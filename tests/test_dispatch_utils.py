@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, "src")
 
 from dispatch_utils import (
+    list_dispatch_candidates,
     resolve_dispatch_selection,
     run_dispatch_replay,
     scan_duid_availability,
@@ -170,6 +171,64 @@ def test_resolve_falls_back_to_static_when_active_empty():
         apply_unit_sizing=True,
     )
     assert sel["duid"] == "LBBG1"
+
+
+def test_list_dispatch_candidates_keeps_static_rows_when_dispatch_empty(monkeypatch):
+    import aemo_data as _aemo
+
+    def fake_resolve(name_or_duid, start_date, end_date):
+        assert name_or_duid == "hornsdale"
+        return {
+            "found": True,
+            "key": "hornsdale",
+            "station_name": "Hornsdale Power Reserve",
+            "region": "SA1",
+            "active_duids": [
+                {
+                    "duid": "HPR1",
+                    "type": "bidirectional",
+                    "valid_from": datetime(2022, 10, 1),
+                    "valid_until": None,
+                }
+            ],
+            "all_duids_in_range": ["HPR1"],
+            "gen_duid": None,
+            "load_duid": None,
+            "bidi_duid": "HPR1",
+            "spans_transition": False,
+            "transition_dates": [],
+        }
+
+    monkeypatch.setattr(_aemo, "resolve_battery_duids", fake_resolve)
+    monkeypatch.setattr(
+        _aemo,
+        "fetch_aemo_unit_dispatch",
+        lambda **kwargs: pl.DataFrame(
+            schema={
+                "SETTLEMENTDATE": pl.Datetime,
+                "DUID": pl.Utf8,
+                "TOTALCLEARED": pl.Float64,
+                "RAISE6SEC": pl.Float64,
+                "RAISE60SEC": pl.Float64,
+                "RAISE5MIN": pl.Float64,
+                "RAISEREG": pl.Float64,
+                "LOWER6SEC": pl.Float64,
+                "LOWER60SEC": pl.Float64,
+                "LOWER5MIN": pl.Float64,
+                "LOWERREG": pl.Float64,
+            }
+        ),
+    )
+
+    battery_units, active_units = list_dispatch_candidates(
+        region="SA1",
+        start_date=datetime(2022, 4, 1),
+        end_date=datetime(2022, 4, 2),
+        station_name="hornsdale",
+    )
+
+    assert battery_units.height > 0
+    assert active_units.height == 0
 
 
 def test_resolve_raises_when_no_units():

@@ -222,12 +222,10 @@ def list_dispatch_candidates(
             refresh=refresh,
         )
 
-        # Build a minimal activity summary table matching the normal output format
-        if dispatch_df.height == 0:
-            print(f"No DISPATCHLOAD data found for {duids_in_range} in the requested range.")
-            return pl.DataFrame(), pl.DataFrame()
-
-
+        # Build a minimal activity summary table matching the normal output format.
+        # If no dispatch rows exist for the selected station/window, keep the
+        # registry-backed static table so callers can still resolve sizing and
+        # surface a clearer replay-time error.
         dispatch_numeric_cols = [c for c in dispatch_df.columns if c not in {"SETTLEMENTDATE", "DUID"}]
         activity_df = dispatch_df.with_columns(
             pl.col("SETTLEMENTDATE").cast(pl.Datetime, strict=False)
@@ -475,7 +473,10 @@ def resolve_dispatch_selection(
     source_label = "dispatch-active" if active_battery_units.height > 0 else "static"
 
     if source_table.height == 0:
-        raise ValueError("No battery DUIDs are available for dispatch replay.")
+        raise ValueError(
+            "No battery DUIDs are available for dispatch replay. "
+            "Check the station name / DUID and the requested date range."
+        )
 
     if selected_duid and str(selected_duid).strip():
         query = str(selected_duid).strip()
