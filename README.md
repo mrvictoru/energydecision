@@ -194,6 +194,31 @@ Notes:
 - `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
 - `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
 
+#### 3.3 Train from AEMO trajectories
+
+After running `aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset without keeping the notebook kernel busy:
+
+```bash
+docker exec -it test_energy_container /bin/bash
+
+python3 src/pretrain_aemo_decision_transformer.py \
+    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
+    --epochs 2 \
+    --batch-size 8 \
+    --lr 2e-5 \
+    --val-split 0.1 \
+    --seed 8964 \
+    --save-path ../models/aemo_dt_model.pt \
+    --checkpoint-path ../models/aemo_dt_checkpoint.pt \
+    --loss-csv-path ../models/aemo_dt_loss_history.csv \
+    --amp-mode off \
+    --num-workers 2 \
+    --prefetch-factor 2
+```
+
+This wrapper forwards to `pretrain_decision_transformer.py` with the AEMO dataset stem and AEMO DT model config, so the underlying training loop stays the same while the inputs and defaults are AEMO-specific.
+
 ### 4. Evaluation
 Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
 - Compare all agents (Cost, ROI, Degradation).
