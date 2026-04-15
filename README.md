@@ -212,7 +212,7 @@ python3 src/pretrain_aemo_decision_transformer.py \
     --save-path ../models/aemo_dt_model.pt \
     --checkpoint-path ../models/aemo_dt_checkpoint.pt \
     --loss-csv-path ../models/aemo_dt_loss_history.csv \
-    --amp-mode off \
+    --amp-mode "auto" \
     --num-workers 2 \
     --prefetch-factor 2
 ```
