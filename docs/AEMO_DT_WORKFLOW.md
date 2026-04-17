@@ -139,6 +139,38 @@ If DT training is enabled in the notebook config, it also writes:
 - `<repo_root>/data/aemo_dt/aemo_dt_dt_checkpoint.pt`
 - `<repo_root>/data/aemo_dt/aemo_dt_dt_loss_history.csv`
 
+## Training large AEMO datasets safely
+
+The combined AEMO DT parquet can be too large for the current in-memory `TrajectoryDataset`
+implementation when it is loaded as one file and expanded into all sliding windows at once.
+
+Use `src/pretrain_aemo_decision_transformer.py` subset mode for large runs:
+
+```bash
+python3 pretrain_aemo_decision_transformer.py \
+  --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+  --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
+  --train-in-subsets \
+  --subset-episodes 8 \
+  --epochs-per-subset 1 \
+  --num-workers 0
+```
+
+Subset mode works like this:
+
+1. The combined dataset parquet is split once at the episode level into a global train set and a global validation set.
+2. The train and validation episodes are each written into smaller parquet subset files, while preserving whole episodes.
+3. The generic DT trainer is launched once per train subset file and receives the full validation subset set explicitly.
+4. The first subset starts normally.
+5. Later subset runs add `--resume`, reusing the same checkpoint and optimizer state.
+6. The target epoch value is cumulative across subset stages, so resumed runs continue training instead of stopping immediately at the checkpoint epoch.
+
+This avoids the worst memory spikes from loading the entire AEMO corpus into one `TrajectoryDataset`.
+
+Current tradeoff:
+
+- Validation now comes from one consistent global held-out split, but it is still materialized in memory inside the generic trainer when those validation subset parquet files are loaded.
+
 ## What `aemo_sb3train.ipynb` does
 
 `aemo_sb3train.ipynb` is the online RL notebook for AEMO + SB3.

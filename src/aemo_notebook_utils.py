@@ -753,6 +753,163 @@ def build_dt_dataset_from_logs(
     return dataset, manifest
 
 
+def partition_dt_dataset_by_episode(
+    *,
+    dataset_path: str | Path,
+    output_dir: str | Path,
+    subset_episode_count: int,
+) -> dict[str, Any]:
+    dataset_path = Path(dataset_path)
+    output_dir = Path(output_dir)
+
+    if subset_episode_count < 1:
+        raise ValueError("subset_episode_count must be at least 1.")
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"DT dataset not found: {dataset_path}")
+
+    df = pl.read_parquet(str(dataset_path))
+    if df.height == 0:
+        raise ValueError("DT dataset is empty; cannot partition into subsets.")
+    if "episode_id" not in df.columns:
+        raise ValueError("DT dataset is missing required column 'episode_id'.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    episode_ids = sorted(df["episode_id"].unique().to_list())
+    subsets: list[dict[str, Any]] = []
+
+    for subset_index, start_idx in enumerate(range(0, len(episode_ids), subset_episode_count), start=1):
+        subset_episode_ids = episode_ids[start_idx : start_idx + subset_episode_count]
+        subset_df = df.filter(pl.col("episode_id").is_in(subset_episode_ids))
+        subset_path = output_dir / f"{dataset_path.stem}_subset_{subset_index:03d}.parquet"
+        subset_df.write_parquet(str(subset_path))
+        subsets.append(
+            {
+                "subset_index": subset_index,
+                "path": str(subset_path),
+                "episode_count": len(subset_episode_ids),
+                "row_count": int(subset_df.height),
+                "episode_ids": [int(episode_id) for episode_id in subset_episode_ids],
+            }
+        )
+
+    manifest = {
+        "dataset_path": str(dataset_path),
+        "output_dir": str(output_dir),
+        "subset_episode_count": int(subset_episode_count),
+        "subset_count": len(subsets),
+        "total_episode_count": len(episode_ids),
+        "total_row_count": int(df.height),
+        "subsets": subsets,
+    }
+    manifest_path = output_dir / f"{dataset_path.stem}_subset_manifest.json"
+    write_json(manifest_path, manifest)
+    manifest["manifest_path"] = str(manifest_path)
+    return manifest
+
+
+def _write_episode_subsets(
+    *,
+    df: pl.DataFrame,
+    episode_ids: Sequence[int],
+    subset_episode_count: int,
+    output_dir: Path,
+    stem_prefix: str,
+) -> list[dict[str, Any]]:
+    subsets: list[dict[str, Any]] = []
+    for subset_index, start_idx in enumerate(range(0, len(episode_ids), subset_episode_count), start=1):
+        subset_episode_ids = [int(episode_id) for episode_id in episode_ids[start_idx : start_idx + subset_episode_count]]
+        subset_df = df.filter(pl.col("episode_id").is_in(subset_episode_ids))
+        subset_path = output_dir / f"{stem_prefix}_subset_{subset_index:03d}.parquet"
+        subset_df.write_parquet(str(subset_path))
+        subsets.append(
+            {
+                "subset_index": subset_index,
+                "path": str(subset_path),
+                "episode_count": len(subset_episode_ids),
+                "row_count": int(subset_df.height),
+                "episode_ids": subset_episode_ids,
+            }
+        )
+    return subsets
+
+
+def partition_dt_dataset_for_subset_training(
+    *,
+    dataset_path: str | Path,
+    output_dir: str | Path,
+    subset_episode_count: int,
+    val_split: float,
+    seed: int,
+) -> dict[str, Any]:
+    dataset_path = Path(dataset_path)
+    output_dir = Path(output_dir)
+
+    if subset_episode_count < 1:
+        raise ValueError("subset_episode_count must be at least 1.")
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"DT dataset not found: {dataset_path}")
+
+    df = pl.read_parquet(str(dataset_path))
+    if df.height == 0:
+        raise ValueError("DT dataset is empty; cannot partition into training subsets.")
+    if "episode_id" not in df.columns:
+        raise ValueError("DT dataset is missing required column 'episode_id'.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    episode_ids = sorted(int(episode_id) for episode_id in df["episode_id"].unique().to_list())
+    rng = np.random.default_rng(seed)
+    shuffled_episode_ids = list(episode_ids)
+    rng.shuffle(shuffled_episode_ids)
+
+    n_val = int(len(shuffled_episode_ids) * max(0.0, min(1.0, float(val_split))))
+    val_episode_ids = sorted(shuffled_episode_ids[:n_val])
+    train_episode_ids = sorted(shuffled_episode_ids[n_val:])
+    if not train_episode_ids:
+        raise RuntimeError(
+            f"val_split={val_split!r} is too large; no episodes remain for subset training."
+        )
+
+    train_dir = output_dir / "train"
+    val_dir = output_dir / "val"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    val_dir.mkdir(parents=True, exist_ok=True)
+
+    train_subsets = _write_episode_subsets(
+        df=df,
+        episode_ids=train_episode_ids,
+        subset_episode_count=subset_episode_count,
+        output_dir=train_dir,
+        stem_prefix=f"{dataset_path.stem}_train",
+    )
+    val_subsets = _write_episode_subsets(
+        df=df,
+        episode_ids=val_episode_ids,
+        subset_episode_count=subset_episode_count,
+        output_dir=val_dir,
+        stem_prefix=f"{dataset_path.stem}_val",
+    )
+
+    manifest = {
+        "dataset_path": str(dataset_path),
+        "output_dir": str(output_dir),
+        "subset_episode_count": int(subset_episode_count),
+        "seed": int(seed),
+        "requested_val_split": float(val_split),
+        "total_episode_count": len(episode_ids),
+        "total_row_count": int(df.height),
+        "train_episode_count": len(train_episode_ids),
+        "val_episode_count": len(val_episode_ids),
+        "train_dir": str(train_dir),
+        "val_dir": str(val_dir),
+        "train_subsets": train_subsets,
+        "val_subsets": val_subsets,
+    }
+    manifest_path = output_dir / f"{dataset_path.stem}_subset_training_manifest.json"
+    write_json(manifest_path, manifest)
+    manifest["manifest_path"] = str(manifest_path)
+    return manifest
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

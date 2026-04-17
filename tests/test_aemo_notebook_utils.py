@@ -18,6 +18,8 @@ from aemo_notebook_utils import (  # noqa: E402
     fetch_and_preprocess_aemo_scenarios,
     fit_aemo_global_stats,
     make_multi_scenario_aemo_env_fns,
+    partition_dt_dataset_by_episode,
+    partition_dt_dataset_for_subset_training,
     resolve_dispatch_battery_life_cost,
     resolve_dispatch_replay_runs,
     resolve_dispatch_run_region,
@@ -132,6 +134,76 @@ def test_write_and_load_combined_episode_logs_round_trip(tmp_path: Path):
     assert len(loaded) == 2
     assert loaded[0].height == 2
     assert loaded[1].height == 2
+
+
+def test_partition_dt_dataset_by_episode_preserves_episode_boundaries(tmp_path: Path):
+    dataset, manifest = build_dt_dataset_from_logs(
+        {
+            "rule": [_episode_df(0), _episode_df(10), _episode_df(20)],
+            "dispatch": [_episode_df(30), _episode_df(40)],
+        }
+    )
+    dataset_path = tmp_path / "aemo_dt_dataset.parquet"
+    dataset.write_parquet(str(dataset_path))
+
+    subset_manifest = partition_dt_dataset_by_episode(
+        dataset_path=dataset_path,
+        output_dir=tmp_path / "subsets",
+        subset_episode_count=2,
+    )
+
+    assert subset_manifest["total_episode_count"] == manifest["episode_count"]
+    assert subset_manifest["total_row_count"] == manifest["row_count"]
+    assert subset_manifest["subset_count"] == 3
+
+    combined_subset_rows = 0
+    combined_episode_ids: list[int] = []
+    for subset in subset_manifest["subsets"]:
+        subset_df = pl.read_parquet(subset["path"])
+        subset_episode_ids = sorted(subset_df["episode_id"].unique().to_list())
+        assert subset_episode_ids == subset["episode_ids"]
+        assert len(subset_episode_ids) <= 2
+        combined_subset_rows += subset_df.height
+        combined_episode_ids.extend(subset_episode_ids)
+
+    assert combined_subset_rows == dataset.height
+    assert sorted(combined_episode_ids) == sorted(dataset["episode_id"].unique().to_list())
+
+
+def test_partition_dt_dataset_for_subset_training_creates_global_train_val_split(tmp_path: Path):
+    dataset, manifest = build_dt_dataset_from_logs(
+        {
+            "rule": [_episode_df(0), _episode_df(10), _episode_df(20), _episode_df(30)],
+            "dispatch": [_episode_df(40), _episode_df(50)],
+        }
+    )
+    dataset_path = tmp_path / "aemo_dt_dataset.parquet"
+    dataset.write_parquet(str(dataset_path))
+
+    subset_manifest = partition_dt_dataset_for_subset_training(
+        dataset_path=dataset_path,
+        output_dir=tmp_path / "subset_training",
+        subset_episode_count=2,
+        val_split=0.34,
+        seed=123,
+    )
+
+    assert subset_manifest["total_episode_count"] == manifest["episode_count"]
+    assert subset_manifest["train_episode_count"] + subset_manifest["val_episode_count"] == manifest["episode_count"]
+    assert subset_manifest["train_episode_count"] > 0
+
+    train_ids = sorted(
+        episode_id
+        for subset in subset_manifest["train_subsets"]
+        for episode_id in subset["episode_ids"]
+    )
+    val_ids = sorted(
+        episode_id
+        for subset in subset_manifest["val_subsets"]
+        for episode_id in subset["episode_ids"]
+    )
+    assert not (set(train_ids) & set(val_ids))
+    assert sorted(train_ids + val_ids) == sorted(dataset["episode_id"].unique().to_list())
 
 
 def test_resolve_battery_variants_derives_label_soc_and_cost():

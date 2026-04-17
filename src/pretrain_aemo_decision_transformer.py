@@ -5,6 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import torch
+
+from aemo_notebook_utils import partition_dt_dataset_for_subset_training
+
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -86,28 +90,50 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rope-enabled", action="store_true")
     parser.add_argument("--rope-max-position", type=int, default=None)
     parser.add_argument("--rope-base", type=float, default=None)
+    parser.add_argument(
+        "--train-in-subsets",
+        action="store_true",
+        help="Split the AEMO parquet into episode-based subset files and train across them sequentially.",
+    )
+    parser.add_argument(
+        "--subset-episodes",
+        type=int,
+        default=None,
+        help="Number of full episodes to include in each generated subset parquet when --train-in-subsets is enabled.",
+    )
+    parser.add_argument(
+        "--subset-output-dir",
+        type=Path,
+        default=None,
+        help="Directory where episode-based AEMO subset parquet files will be written.",
+    )
+    parser.add_argument(
+        "--epochs-per-subset",
+        type=int,
+        default=None,
+        help="Epoch count to use for each subset run. Defaults to --epochs when omitted.",
+    )
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    root = repo_root()
-
-    dataset_path = args.dataset_path.resolve()
+def build_training_command(
+    *,
+    root: Path,
+    args: argparse.Namespace,
+    dataset_path: Path,
+    epochs: int,
+    resume: bool,
+    val_data_dir: Path | None = None,
+    val_patterns: list[str] | None = None,
+) -> list[str]:
     model_config_path = args.model_config.resolve()
     save_path = args.save_path.resolve()
     checkpoint_path = args.checkpoint_path.resolve()
     loss_csv_path = args.loss_csv_path.resolve()
 
-    if not dataset_path.is_file():
-        raise FileNotFoundError(f"AEMO dataset not found: {dataset_path}")
-    if not model_config_path.is_file():
-        raise FileNotFoundError(f"AEMO model config not found: {model_config_path}")
-
-    script_path = root / "src" / "pretrain_decision_transformer.py"
     command = [
         sys.executable,
-        str(script_path),
+        str(root / "src" / "pretrain_decision_transformer.py"),
         "--data-dir",
         str(dataset_path.parent),
         "--patterns",
@@ -115,13 +141,13 @@ def main() -> None:
         "--model-config",
         str(model_config_path),
         "--epochs",
-        str(args.epochs),
+        str(epochs),
         "--batch-size",
         str(args.batch_size),
         "--lr",
         str(args.lr),
         "--val-split",
-        str(args.val_split),
+        str(0.0 if val_data_dir is not None else args.val_split),
         "--seed",
         str(args.seed),
         "--save-path",
@@ -152,7 +178,13 @@ def main() -> None:
         str(args.checkpoints_per_epoch),
     ]
 
-    if args.resume:
+    if val_data_dir is not None:
+        command.extend(["--val-data-dir", str(val_data_dir)])
+        if val_patterns:
+            command.append("--val-patterns")
+            command.extend(val_patterns)
+
+    if resume:
         command.append("--resume")
     if args.device is not None:
         command.extend(["--device", args.device])
@@ -164,10 +196,106 @@ def main() -> None:
         command.extend(["--rope-max-position", str(args.rope_max_position)])
     if args.rope_base is not None:
         command.extend(["--rope-base", str(args.rope_base)])
+    return command
 
-    print("Launching AEMO Decision Transformer training via:")
-    print(" ".join(command))
-    subprocess.run(command, check=True)
+
+def build_training_commands(
+    *,
+    root: Path,
+    args: argparse.Namespace,
+    dataset_paths: list[Path],
+    epochs_per_stage: int,
+    initial_epoch_offset: int = 0,
+    val_dataset_paths: list[Path] | None = None,
+) -> list[list[str]]:
+    commands: list[list[str]] = []
+    val_data_dir: Path | None = None
+    val_patterns: list[str] | None = None
+    if val_dataset_paths:
+        val_data_dir = val_dataset_paths[0].parent
+        val_patterns = [path.stem for path in val_dataset_paths]
+    for index, dataset_path in enumerate(dataset_paths):
+        commands.append(
+            build_training_command(
+                root=root,
+                args=args,
+                dataset_path=dataset_path,
+                epochs=initial_epoch_offset + (epochs_per_stage * (index + 1)),
+                resume=bool(args.resume or index > 0),
+                val_data_dir=val_data_dir,
+                val_patterns=val_patterns,
+            )
+        )
+    return commands
+
+
+def get_checkpoint_epoch(checkpoint_path: Path) -> int:
+    if not checkpoint_path.is_file():
+        return 0
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    return int(checkpoint.get("epoch", 0))
+
+
+def main() -> None:
+    args = parse_args()
+    root = repo_root()
+
+    dataset_path = args.dataset_path.resolve()
+    model_config_path = args.model_config.resolve()
+
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"AEMO dataset not found: {dataset_path}")
+    if not model_config_path.is_file():
+        raise FileNotFoundError(f"AEMO model config not found: {model_config_path}")
+
+    dataset_paths = [dataset_path]
+    val_dataset_paths: list[Path] | None = None
+    epochs_per_stage = int(args.epochs)
+    initial_epoch_offset = get_checkpoint_epoch(args.checkpoint_path.resolve()) if args.resume else 0
+
+    if args.train_in_subsets:
+        if args.subset_episodes is None:
+            raise ValueError("--subset-episodes is required when --train-in-subsets is enabled.")
+        subset_output_dir = args.subset_output_dir
+        if subset_output_dir is None:
+            subset_output_dir = dataset_path.parent / f"{dataset_path.stem}_subsets"
+        subset_manifest = partition_dt_dataset_for_subset_training(
+            dataset_path=dataset_path,
+            output_dir=subset_output_dir,
+            subset_episode_count=args.subset_episodes,
+            val_split=args.val_split,
+            seed=args.seed,
+        )
+        dataset_paths = [Path(entry["path"]) for entry in subset_manifest["train_subsets"]]
+        val_dataset_paths = [Path(entry["path"]) for entry in subset_manifest["val_subsets"]]
+        epochs_per_stage = int(args.epochs_per_subset or args.epochs)
+        print(
+            f"Partitioned {dataset_path.name} into {len(dataset_paths)} subset files "
+            f"with up to {args.subset_episodes} episodes each."
+        )
+        print(f"Subset manifest: {subset_manifest['manifest_path']}")
+        print(
+            f"Global split: train episodes={subset_manifest['train_episode_count']}, "
+            f"val episodes={subset_manifest['val_episode_count']}"
+        )
+    elif args.val_split < 0.0 or args.val_split > 1.0:
+        raise ValueError("--val-split must be between 0.0 and 1.0.")
+
+    commands = build_training_commands(
+        root=root,
+        args=args,
+        dataset_paths=dataset_paths,
+        epochs_per_stage=epochs_per_stage,
+        initial_epoch_offset=initial_epoch_offset,
+        val_dataset_paths=val_dataset_paths,
+    )
+    for subset_index, command in enumerate(commands, start=1):
+        if len(commands) > 1:
+            print(f"Launching subset {subset_index}/{len(commands)} via:")
+        else:
+            print("Launching AEMO Decision Transformer training via:")
+        print(" ".join(command))
+        subprocess.run(command, check=True)
 
 
 if __name__ == "__main__":

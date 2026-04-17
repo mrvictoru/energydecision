@@ -36,6 +36,18 @@ def parse_args() -> argparse.Namespace:
         help="Filename substrings to include when collecting parquet logs.",
     )
     parser.add_argument(
+        "--val-data-dir",
+        type=Path,
+        default=None,
+        help="Optional directory that holds parquet trajectory logs reserved for validation.",
+    )
+    parser.add_argument(
+        "--val-patterns",
+        nargs="+",
+        default=None,
+        help="Optional filename substrings to include when collecting validation parquet logs.",
+    )
+    parser.add_argument(
         "--model-config",
         type=Path,
         default=None,
@@ -228,6 +240,47 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict) -> dict:
     return model_kwargs
 
 
+def load_trajectory_datasets(
+    *,
+    parquet_files: Sequence[Path],
+    context_length: int,
+    state_dim: int,
+    act_dim: int,
+    discount: float,
+) -> list[TrajectoryDataset]:
+    datasets: list[TrajectoryDataset] = []
+    for parquet_path in parquet_files:
+        print(f"Loading dataset from {parquet_path}")
+        ds = TrajectoryDataset(
+            data_path=str(parquet_path),
+            context_length=context_length,
+            state_dim=state_dim,
+            act_dim=act_dim,
+            discount_factor=discount,
+        )
+        datasets.append(ds)
+        print(f"  -> collected {len(ds)} sliding windows")
+    return datasets
+
+
+def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDataset:
+    if not datasets:
+        raise ValueError("datasets must be non-empty")
+    first = datasets[0]
+    episodes: list = []
+    for ds in datasets:
+        episodes.extend(ds.episodes)
+    if not episodes:
+        raise ValueError("No episodes found in the provided datasets.")
+    return TrajectoryDataset._from_episodes(
+        episodes,
+        first.context_length,
+        first.state_dim,
+        first.act_dim,
+        first.gamma,
+    )
+
+
 def main() -> None:
     args = parse_args()
     root = repo_root()
@@ -258,18 +311,13 @@ def main() -> None:
     print("Using model kwargs:")
     print(json.dumps(model_kwargs, indent=2))
 
-    datasets: list[TrajectoryDataset] = []
-    for parquet_path in parquet_files:
-        print(f"Loading dataset from {parquet_path}")
-        ds = TrajectoryDataset(
-            data_path=str(parquet_path),
-            context_length=context_length,
-            state_dim=state_dim,
-            act_dim=act_dim,
-            discount_factor=args.discount,
-        )
-        datasets.append(ds)
-        print(f"  -> collected {len(ds)} sliding windows")
+    datasets = load_trajectory_datasets(
+        parquet_files=parquet_files,
+        context_length=context_length,
+        state_dim=state_dim,
+        act_dim=act_dim,
+        discount=args.discount,
+    )
 
     total_episodes = sum(len(ds.episodes) for ds in datasets)
     if total_episodes == 0:
@@ -280,15 +328,36 @@ def main() -> None:
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    # Split at the episode level so that all windows derived from the same
-    # episode stay together in a single split. This prevents the data-leakage
-    # that arises when splitting after window extraction: overlapping windows
-    # from the same episode would otherwise appear in both train and val sets.
-    train_dataset, val_dataset = episode_train_val_split(
-        datasets,
-        val_split=args.val_split,
-        seed=args.seed,
-    )
+    if args.val_data_dir is not None:
+        val_data_dir = args.val_data_dir.resolve()
+        if not val_data_dir.is_dir():
+            raise FileNotFoundError(f"Validation data directory not found: {val_data_dir}")
+        val_patterns = args.val_patterns or args.patterns
+        val_parquet_files = collect_parquet_files(val_data_dir, val_patterns)
+        if not val_parquet_files:
+            raise FileNotFoundError(
+                f"No validation parquet trajectories matched {val_patterns} in {val_data_dir}"
+            )
+        val_datasets = load_trajectory_datasets(
+            parquet_files=val_parquet_files,
+            context_length=context_length,
+            state_dim=state_dim,
+            act_dim=act_dim,
+            discount=args.discount,
+        )
+        train_dataset = merge_trajectory_datasets(datasets)
+        val_dataset = merge_trajectory_datasets(val_datasets)
+        print("Using explicit validation parquet files; bypassing --val-split episode partitioning.")
+    else:
+        # Split at the episode level so that all windows derived from the same
+        # episode stay together in a single split. This prevents the data-leakage
+        # that arises when splitting after window extraction: overlapping windows
+        # from the same episode would otherwise appear in both train and val sets.
+        train_dataset, val_dataset = episode_train_val_split(
+            datasets,
+            val_split=args.val_split,
+            seed=args.seed,
+        )
     print(f"Training samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
 

@@ -201,11 +201,11 @@ After running `aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from t
 ```bash
 docker exec -it test_energy_container /bin/bash
 
-python3 src/pretrain_aemo_decision_transformer.py \
+python3 pretrain_aemo_decision_transformer.py \
     --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
     --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
     --epochs 2 \
-    --batch-size 8 \
+    --batch-size 6 \
     --lr 2e-5 \
     --val-split 0.1 \
     --seed 8964 \
@@ -218,6 +218,30 @@ python3 src/pretrain_aemo_decision_transformer.py \
 ```
 
 This wrapper forwards to `pretrain_decision_transformer.py` with the AEMO dataset stem and AEMO DT model config, so the underlying training loop stays the same while the inputs and defaults are AEMO-specific.
+
+For large AEMO datasets, enable episode-based subset training so the combined parquet is broken into smaller subset files and trained sequentially with checkpoint resume:
+
+```bash
+python3 pretrain_aemo_decision_transformer.py \
+    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
+    --train-in-subsets \
+    --subset-episodes 24 \
+    --epochs-per-subset 1 \
+    --batch-size 24 \
+    --num-workers 0 \
+    --save-path ../models/aemo_dt_model.pt \
+    --checkpoint-path ../models/aemo_dt_checkpoint.pt \
+    --loss-csv-path ../models/aemo_dt_loss_history.csv
+```
+
+Notes:
+
+- `--subset-episodes` controls how many whole episodes are written into each temporary subset parquet.
+- The wrapper now computes one global episode-level train/validation split before writing subset files, so validation stays consistent across all subset stages.
+- The first subset starts fresh; later subsets automatically add `--resume` so optimizer and checkpoint state carry forward.
+- `--epochs-per-subset` is cumulative across subset stages. For example, `--epochs-per-subset 1` means subset 1 trains to epoch 1, subset 2 resumes and trains to epoch 2, subset 3 resumes and trains to epoch 3, and so on.
+- Use conservative settings for the first real run on the large AEMO corpus, especially `--num-workers 0` and a smaller batch size.
 
 ### 4. Evaluation
 Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
