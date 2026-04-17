@@ -248,8 +248,9 @@ def test_validate_aemo_dt_dimensions_rejects_bad_action_dim():
 
 def test_new_notebooks_exist_and_expose_config_cells():
     repo_root = Path(__file__).resolve().parents[1]
-    sim_nb = json.loads((repo_root / "aemo_simrun.ipynb").read_text())
-    sb3_nb = json.loads((repo_root / "aemo_sb3train.ipynb").read_text())
+    notebooks_dir = repo_root / "notebooks"
+    sim_nb = json.loads((notebooks_dir / "aemo_simrun.ipynb").read_text())
+    sb3_nb = json.loads((notebooks_dir / "aemo_sb3train.ipynb").read_text())
 
     sim_code = "\n".join("".join(cell.get("source", [])) for cell in sim_nb["cells"] if cell["cell_type"] == "code")
     sb3_code = "\n".join("".join(cell.get("source", [])) for cell in sb3_nb["cells"] if cell["cell_type"] == "code")
