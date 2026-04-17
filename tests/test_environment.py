@@ -44,22 +44,27 @@ class TestSolarBatteryEnv:
         env.battery_level = env.battery_capacity
         # Set solar high and load low for export
         env.df = env.df.with_columns([
-            pl.lit(10.0).alias("SolarGen"),
+            pl.lit(3.0).alias("SolarGen"),
             pl.lit(1.0).alias("HouseLoad"),
         ])
         action = np.array([0.0])  # no battery flow, all surplus solar should export
         obs, reward, terminated, truncated, info = env.step(action)
-        
+
+        export_price = float(env.df[0, "ExportEnergyPrice"])
+        expected_grid_reward = -(info["grid_energy"] * export_price)
+        expected_reward = expected_grid_reward - (info["step_degradation"] * env.battery_life_cost)
+
         assert info['grid_energy'] < 0, "Should be exporting to grid"
-        assert info['energy_price'] == 0.05, "Should use export price"
+        assert np.isclose(expected_grid_reward, -(info["grid_energy"] * 0.05)), "Should use export price"
+        assert np.isclose(reward, expected_reward), "Reward should reflect export price and degradation cost"
 
     def test_degradation_cost_sensible(self, env):
         """Test that battery degradation cost is positive and reasonable."""
         env.reset()
         action = np.array([-1.0])  # discharge
         obs, reward, terminated, truncated, info = env.step(action)
-        
-        deg_cost = info['deg_cost']
+
+        deg_cost = info['step_degradation'] * env.battery_life_cost
         assert deg_cost >= 0, "Degradation cost should be non-negative"
         assert deg_cost < env.battery_life_cost * 0.01, "Degradation cost should be much less than battery_life_cost per step"
 
@@ -68,10 +73,14 @@ class TestSolarBatteryEnv:
         env.reset()
         action = np.array([1.0])  # charge
         obs, reward, terminated, truncated, info = env.step(action)
-        
-        # Grid cost should typically be negative (cost) or zero
-        assert info['grid_reward'] <= 0, "Grid reward should be non-positive (represents cost)"
-        assert reward <= 0, "Total reward should be non-positive"
+
+        import_price = float(env.df[0, "ImportEnergyPrice"])
+        grid_reward = -(info["grid_energy"] * import_price)
+        expected_reward = grid_reward - (info["step_degradation"] * env.battery_life_cost)
+
+        # Grid reward should typically be negative (cost) or zero
+        assert grid_reward <= 0, "Grid reward should be non-positive (represents cost)"
+        assert np.isclose(reward, expected_reward), "Reward should combine grid cost and degradation cost"
 
     def test_battery_capacity_constraints(self, env):
         """Test that battery level stays within capacity constraints."""

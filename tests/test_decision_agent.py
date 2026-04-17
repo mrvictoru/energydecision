@@ -43,10 +43,6 @@ def _make_env(df: pl.DataFrame) -> SolarBatteryEnv:
         init_battery_level=1.5,
         max_step=len(df),
         battery_life_cost=1000.0,
-        correction_interval=100,
-        init_correction_steps=[50],
-        dynamic_interval_min_ratio=1.0,
-        step_duration=1.0,
     )
 
 

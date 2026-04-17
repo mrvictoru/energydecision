@@ -291,7 +291,7 @@ def static_degradation(Id, Ich, SoC_avg, DoD):
 
     d = model.degradation_per_cycle(T=25.0, Id=Id, Ich=Ich, SOCav=SoC_avg, DOD=DoD)
     print("Degradation per cycle:", d)
-    print("Equivalent cycle life:", 1.0 / d)
+    print("Equivalent cycle life:", np.inf if d == 0 else 1.0 / d)
     return d
 
 
@@ -652,5 +652,4 @@ class RealWorldBESSDegradationModel:
             "alpha_dod": self.alpha_dod,
             "beta_crate": self.beta_crate,
         }
-
 

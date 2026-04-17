@@ -74,8 +74,7 @@ def test_mrdp_solver_initialization():
     
     solver = MRDPSolver(
         env=env,
-        subhorizon_specs=subhorizon_specs,
-        degradation_model='linear'
+        subhorizon_specs=subhorizon_specs
     )
     
     assert len(solver.sub_solvers) == 2
@@ -111,6 +110,7 @@ def test_oracle_solver_initialization():
     solver = OracleSolver(
         env=env,
         horizon=24,
+        soc_resolution=10,
         action_resolution=7
     )
     
