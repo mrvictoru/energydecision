@@ -123,8 +123,8 @@ class SolarBatteryEnv(gym.Env):
         
         # Action space (1D): battery_flow(normalized to [-1,1])
         self.action_space = spaces.Box(
-            low=np.array([-1.0]),
-            high=np.array([1.0]),
+            low=np.array([-1.0], dtype=np.float32),
+            high=np.array([1.0], dtype=np.float32),
             dtype=np.float32
         )
 
@@ -544,4 +544,3 @@ class SolarBatteryEnv(gym.Env):
                     f"Obs: {obs.tolist()}\n"
             )
             """
-

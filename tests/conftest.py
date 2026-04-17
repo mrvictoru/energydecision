@@ -4,13 +4,18 @@ Shared test fixtures and configuration for the energydecision test suite.
 
 import sys
 import os
+import warnings
 import pytest
 import numpy as np
 import polars as pl
 import datetime as dt
 
+from requests.exceptions import RequestsDependencyWarning
+
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+warnings.filterwarnings("ignore", category=RequestsDependencyWarning)
 
 
 @pytest.fixture

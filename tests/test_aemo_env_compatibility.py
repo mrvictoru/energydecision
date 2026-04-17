@@ -12,11 +12,11 @@ SolarBatteryEnv in terms of:
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import numpy as np
 import polars as pl
-import pandas as pd
+import pytest
 from datetime import datetime, timedelta
 
 # Test imports
@@ -30,27 +30,21 @@ def test_imports():
         import gymnasium as gym
         print("✓ gymnasium imported successfully")
     except ImportError as e:
-        print(f"✗ gymnasium import failed: {e}")
-        return False
+        pytest.fail(f"gymnasium import failed: {e}")
     
     try:
         from AEMOBatteryEnv import AEMOBatteryTradingEnv, create_aemo_env_from_data, AEMODataPreprocessor
         print("✓ AEMOBatteryEnv imported successfully")
     except ImportError as e:
-        print(f"✗ AEMOBatteryEnv import failed: {e}")
-        return False
+        pytest.fail(f"AEMOBatteryEnv import failed: {e}")
     
     try:
         from EnergySimEnv import SolarBatteryEnv
         print("✓ SolarBatteryEnv imported successfully")
     except ImportError as e:
-        print(f"✗ SolarBatteryEnv import failed: {e}")
-        return False
+        pytest.fail(f"SolarBatteryEnv import failed: {e}")
     
     print("\n✓ All imports successful\n")
-    return True
-
-
 def test_gymnasium_api():
     """Test that AEMOBatteryTradingEnv follows Gymnasium API."""
     print("=" * 80)
@@ -83,13 +77,8 @@ def test_gymnasium_api():
         
         # Create environment
         preprocessor = AEMODataPreprocessor()
-        # Convert to pandas for the environment
-        test_data_pd = test_data.to_pandas()
-        test_data_pd['Time'] = pd.to_datetime(test_data_pd['Time'])
-        test_data_pd = test_data_pd.set_index('Time')
-        
         env = AEMOBatteryTradingEnv(
-            aemo_data=test_data_pd,
+            aemo_data=test_data,
             battery_capacity=10.0,
             max_battery_flow=5.0,
             action_mode='simple'
@@ -129,13 +118,9 @@ def test_gymnasium_api():
         print(f"  - Std reward: {np.std(episode_rewards):.3f}")
         
         print("\n✓ Gymnasium API compatibility confirmed\n")
-        return True
         
     except Exception as e:
-        print(f"\n✗ Gymnasium API test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        pytest.fail(f"Gymnasium API test failed: {e}")
 
 
 def test_multi_market_mode():
@@ -169,12 +154,8 @@ def test_multi_market_mode():
         })
         
         # Create environment with multi-market mode
-        test_data_pd = test_data.to_pandas()
-        test_data_pd['Time'] = pd.to_datetime(test_data_pd['Time'])
-        test_data_pd = test_data_pd.set_index('Time')
-        
         env = AEMOBatteryTradingEnv(
-            aemo_data=test_data_pd,
+            aemo_data=test_data,
             battery_capacity=10.0,
             max_battery_flow=5.0,
             action_mode='multi_market'
@@ -194,13 +175,9 @@ def test_multi_market_mode():
         print(f"  - FCAS revenue component: {info.get('fcas_revenue', 'N/A')}")
         
         print("\n✓ Multi-market mode compatibility confirmed\n")
-        return True
         
     except Exception as e:
-        print(f"\n✗ Multi-market mode test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        pytest.fail(f"Multi-market mode test failed: {e}")
 
 
 def test_sb3_compatibility():
@@ -234,12 +211,8 @@ def test_sb3_compatibility():
             'wind_pct': np.random.uniform(0, 0.2, num_steps),
         })
         
-        test_data_pd = test_data.to_pandas()
-        test_data_pd['Time'] = pd.to_datetime(test_data_pd['Time'])
-        test_data_pd = test_data_pd.set_index('Time')
-        
         env = AEMOBatteryTradingEnv(
-            aemo_data=test_data_pd,
+            aemo_data=test_data,
             battery_capacity=10.0,
             max_battery_flow=5.0,
             action_mode='simple'
@@ -252,7 +225,7 @@ def test_sb3_compatibility():
         
         # Test PPO
         print("\nTesting PPO algorithm...")
-        model_ppo = PPO("MlpPolicy", env, verbose=0)
+        model_ppo = PPO("MlpPolicy", env, verbose=0, device="cpu")
         model_ppo.learn(total_timesteps=1000)
         print("✓ PPO training works (1000 steps)")
         
@@ -263,27 +236,22 @@ def test_sb3_compatibility():
         
         # Test SAC (continuous action algorithms)
         print("\nTesting SAC algorithm...")
-        model_sac = SAC("MlpPolicy", env, verbose=0)
+        model_sac = SAC("MlpPolicy", env, verbose=0, device="cpu")
         model_sac.learn(total_timesteps=1000)
         print("✓ SAC training works (1000 steps)")
         
         # Test A2C
         print("\nTesting A2C algorithm...")
-        model_a2c = A2C("MlpPolicy", env, verbose=0)
+        model_a2c = A2C("MlpPolicy", env, verbose=0, device="cpu")
         model_a2c.learn(total_timesteps=1000)
         print("✓ A2C training works (1000 steps)")
         
         print("\n✓ Stable-Baselines3 compatibility confirmed\n")
-        return True
         
     except ImportError as e:
-        print(f"\n⚠ Stable-Baselines3 not installed, skipping test: {e}\n")
-        return True  # Don't fail if SB3 not installed
+        pytest.skip(f"Stable-Baselines3 not installed: {e}")
     except Exception as e:
-        print(f"\n✗ SB3 compatibility test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        pytest.fail(f"SB3 compatibility test failed: {e}")
 
 
 def test_observation_space_comparison():
@@ -332,12 +300,8 @@ def test_observation_space_comparison():
             'wind_pct': np.random.uniform(0, 0.2, num_steps),
         })
         
-        aemo_data_pd = aemo_data.to_pandas()
-        aemo_data_pd['Time'] = pd.to_datetime(aemo_data_pd['Time'])
-        aemo_data_pd = aemo_data_pd.set_index('Time')
-        
         aemo_env = AEMOBatteryTradingEnv(
-            aemo_data=aemo_data_pd,
+            aemo_data=aemo_data,
             battery_capacity=10.0,
             max_battery_flow=5.0,
             action_mode='simple'
@@ -365,13 +329,9 @@ def test_observation_space_comparison():
         
         print(f"\n✓ Both environments use Box spaces (compatible with SB3)")
         print(f"✓ Observation space structure comparison complete\n")
-        return True
         
     except Exception as e:
-        print(f"\n✗ Observation space comparison failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        pytest.fail(f"Observation space comparison failed: {e}")
 
 
 def main():
@@ -381,13 +341,22 @@ def main():
     print("=" * 80 + "\n")
     
     results = []
+    test_cases = [
+        ("Module Imports", test_imports),
+        ("Gymnasium API", test_gymnasium_api),
+        ("Multi-Market Mode", test_multi_market_mode),
+        ("Stable-Baselines3", test_sb3_compatibility),
+        ("Observation Space", test_observation_space_comparison),
+    ]
     
-    # Run tests
-    results.append(("Module Imports", test_imports()))
-    results.append(("Gymnasium API", test_gymnasium_api()))
-    results.append(("Multi-Market Mode", test_multi_market_mode()))
-    results.append(("Stable-Baselines3", test_sb3_compatibility()))
-    results.append(("Observation Space", test_observation_space_comparison()))
+    for test_name, test_fn in test_cases:
+        try:
+            test_fn()
+            results.append((test_name, True))
+        except pytest.skip.Exception:
+            results.append((test_name, True))
+        except Exception:
+            results.append((test_name, False))
     
     # Print summary
     print("\n" + "=" * 80)

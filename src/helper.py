@@ -2083,7 +2083,7 @@ def paired_comparison(
 
     w_stat = float("nan")
     w_p = float("nan")
-    if _HAS_SCIPY and wilcoxon is not None and n >= 10:
+    if _HAS_SCIPY and wilcoxon is not None and n >= 10 and not np.allclose(diffs, 0.0):
         try:
             stat, p = wilcoxon(diffs)
             w_stat = float(stat)
@@ -3725,5 +3725,4 @@ def analyze_temporal_actions(
     if return_extra_figures:
         return result.figure, result.stats, result.extra_figures
     return result.figure, result.stats
-
 

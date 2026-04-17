@@ -188,11 +188,11 @@ class AEMODataPreprocessor:
         grouped = (
             fcas_df
             .with_columns(pl.col('PRICE').cast(pl.Float64, strict=False))
-            .group_by_dynamic('SETTLEMENTDATE', every=every, by='SERVICE', label='left', closed='left')
+            .group_by_dynamic('SETTLEMENTDATE', every=every, group_by='SERVICE', label='left', closed='left')
             .agg(pl.col('PRICE').mean().alias('PRICE'))
         )
 
-        wide = grouped.pivot(index='SETTLEMENTDATE', columns='SERVICE', values='PRICE')
+        wide = grouped.pivot(index='SETTLEMENTDATE', on='SERVICE', values='PRICE')
         rename_map = {c: f"FCAS_{c}" for c in wide.columns if c != 'SETTLEMENTDATE'}
         return wide.rename(rename_map)
     
@@ -219,11 +219,11 @@ class AEMODataPreprocessor:
         gen_res = (
             gen_5
             .sort(['FUEL_TYPE', 'SETTLEMENTDATE'])
-            .group_by_dynamic('SETTLEMENTDATE', every=every, by='FUEL_TYPE', label='left', closed='left')
+            .group_by_dynamic('SETTLEMENTDATE', every=every, group_by='FUEL_TYPE', label='left', closed='left')
             .agg(pl.col('GENERATION').mean().alias('GENERATION'))
         )
 
-        wide = gen_res.pivot(index='SETTLEMENTDATE', columns='FUEL_TYPE', values='GENERATION')
+        wide = gen_res.pivot(index='SETTLEMENTDATE', on='FUEL_TYPE', values='GENERATION')
         rename_map = {c: f"GEN_{c}" for c in wide.columns if c != 'SETTLEMENTDATE'}
         return wide.rename(rename_map)
     
@@ -497,8 +497,8 @@ class AEMOBatteryTradingEnv(gym.Env):
             # fcas_raise_bid: [0, 1] (fraction of FCAS MW capability to bid)
             # fcas_lower_bid: [0, 1] (fraction of FCAS MW capability to bid)
             self.action_space = spaces.Box(
-                low=np.array([-1.0, 0.0, 0.0]),
-                high=np.array([1.0, 1.0, 1.0]),
+                low=np.array([-1.0, 0.0, 0.0], dtype=np.float32),
+                high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
                 shape=(3,),
                 dtype=np.float32
             )
