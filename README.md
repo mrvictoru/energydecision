@@ -49,9 +49,17 @@ This project establishes a comprehensive, reproducible benchmark for residential
 Sets up a JupyterLab environment with all dependencies.
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 Access JupyterLab at `http://localhost:8888`.
+
+For shell-based training commands, open another terminal and enter the running container:
+
+```bash
+docker exec -it test_energy_container /bin/bash
+```
+
+Inside the container the working directory is `/code/src`, so repository-relative paths usually start with `../`.
 
 ### Option 2: Local Installation
 
@@ -67,70 +75,111 @@ pip install -r torch_req.txt
 1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place it under `data/household/raw/`.
 2.  **AEMO Data:** Automatically fetched via `src/aemo_data.py` (cached in `data/aemo/`).
 
-## Usage Workflow
+## Reproducing the experiments
 
-The typical workflow moves from simulation to training and finally evaluation.
+The repository now has one canonical notebook location: `notebooks/`. If you are cloning the repo from scratch, the easiest path is:
 
-### 1. Simulation & Data Collection
-Run [test_simrun.ipynb](notebooks/test_simrun.ipynb) to:
-- Execute Rule-based and SDP agents.
-- Generate interaction logs (`.parquet`) for offline training.
+1. start Docker with `docker compose up --build`
+2. open Jupyter at `http://localhost:8888`
+3. run the notebooks from `notebooks/` in the order below
+4. use the CLI training scripts from inside `test_energy_container` when you want long-running DT training outside the notebook UI
 
-AEMO-specific data collection: the repository includes an `AEMOAgent` that can replay real unit dispatch (from `fetch_aemo_unit_dispatch`) into `AEMOBatteryTradingEnv` to generate realistic offline trajectories.
+### Residential workflow
 
-The high-level `dispatch_utils` module (see [docs/AEMO_DISPATCH_UTILS.md](docs/AEMO_DISPATCH_UTILS.md)) simplifies this workflow:
+Use this path to recreate the residential PV + battery experiments.
 
-```python
-from datetime import datetime
-from src.aemo_data import fetch_aemo_data_bundle
-from src.AEMOBatteryEnv import AEMODataPreprocessor, AEMOBatteryTradingEnv
-from src.dispatch_utils import list_dispatch_candidates, resolve_dispatch_selection, run_dispatch_replay
+1. `notebooks/testrun.ipynb`
+   - Quick smoke test for the household environment and agents.
+   - Good first notebook after cloning to confirm the environment works.
 
-# Step 1 – fetch and preprocess market data
-start, end = datetime(2025, 1, 1), datetime(2025, 1, 7)
-bundle = fetch_aemo_data_bundle(start, end, region='SA1')
-pre = AEMODataPreprocessor(step_duration_hours=0.5)
-processed = pre.preprocess_aemo_data(bundle['prices'], bundle['fcas'], bundle['generation'])
+2. `notebooks/test_simrun.ipynb`
+   - Main residential data-generation notebook.
+   - Runs rule-based and SDP policies.
+   - Writes household trajectory logs under `data/household/logs/`.
 
-# Step 2 – discover which batteries were dispatched
-battery_units, active_units = list_dispatch_candidates(region='SA1', start_date=start, end_date=end)
+3. `notebooks/test_sb3train.ipynb`
+   - Main residential online-RL notebook.
+   - Trains SB3 agents and saves models under `models/household/sb3/`.
+   - Can also generate rollouts you may want to compare against the rule/SDP baselines.
 
-# Step 3 – select a DUID and resolve sizing
-selection = resolve_dispatch_selection(
-    battery_units=battery_units,
-    active_battery_units=active_units,
-    selected_duid='HPRG1',
-    start_date=start, end_date=end,
-)
+4. `python3 pretrain_decision_transformer.py ...`
+   - Main residential offline-RL training entrypoint.
+   - Reads logs from `../data/household/logs/`.
+   - Saves DT checkpoints and models under `../models/household/dt/`.
 
-# Step 4 – run replay episodes and save logs
-ep_logs, inc_logs, all_logs = run_dispatch_replay(
-    processed_data=processed,
-    selection=selection,
-    start_date=start, end_date=end,
-    region='SA1', num_episodes=3,
-    output_dir='data/aemo_sim_output',
-)
-```
+5. `notebooks/test_eval.ipynb`
+   - Main residential evaluation notebook.
+   - Compares baselines, SB3 agents, and DT policies.
+   - Writes plots/reports to `eval_output/` as configured in the notebook.
 
-Use [`test_aemo_data.ipynb`](notebooks/test_aemo_data.ipynb) section 5 to interactively explore DUID availability across all NEM regions.
+If you only want to recreate the core residential benchmark, the minimum useful sequence is:
 
-### 2. Online RL Training
-Run [`aemo_sb3train.ipynb`](notebooks/aemo_sb3train.ipynb) to:
-- Train AEMO SB3 agents (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`).
-- Sweep across multiple battery sizes.
-- Save models and export rollout logs for offline DT data collection.
+`testrun.ipynb` -> `test_simrun.ipynb` -> `test_sb3train.ipynb` -> `pretrain_decision_transformer.py` -> `test_eval.ipynb`
 
-### 3. Offline RL Training
-Use [`aemo_simrun.ipynb`](notebooks/aemo_simrun.ipynb) to:
-- Fetch/cache AEMO data.
-- Collect rule, dispatch-replay, and SB3-based trajectories.
-- Sweep multiple battery sizes in one run.
-- Export raw logs plus a DT-ready parquet dataset and manifest.
+### AEMO workflow
 
-Train a Decision Transformer using the collected logs.
+Use this path to recreate the grid-scale AEMO experiments.
 
-#### 3.1 Train from scratch
+1. `notebooks/test_aemo_env.ipynb`
+   - Quick environment sanity check for `AEMOBatteryTradingEnv`.
+   - Useful right after cloning if you want to verify the AEMO environment before long runs.
+
+2. `notebooks/test_aemo_data.ipynb`
+   - Interactive data exploration notebook.
+   - Useful for inspecting regions, DUID coverage, and available dispatched batteries before deciding experiment settings.
+
+3. `notebooks/aemo_sb3train.ipynb`
+   - Main AEMO online-RL notebook.
+   - Trains AEMO SB3 agents (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`).
+   - Saves trained models and rollout logs under `models/aemo_sb3/`.
+
+4. `notebooks/aemo_simrun.ipynb`
+   - Main AEMO offline-data notebook.
+   - Fetches/caches market data, runs rule-based, dispatch-replay, and optional SB3 behavior policies.
+   - Builds the DT dataset at `data/aemo_dt/aemo_dt_dataset.parquet`.
+   - Writes raw logs to `data/aemo_dt/raw_logs/` and the config/manifest needed for DT training.
+
+5. `python3 pretrain_aemo_decision_transformer.py ...`
+   - Main AEMO offline-RL training entrypoint.
+   - Reads the parquet dataset produced by `notebooks/aemo_simrun.ipynb`.
+   - Saves checkpoints and models under `../models/aemo/dt/`.
+
+6. `notebooks/aemo_eval.ipynb`
+   - Main AEMO evaluation notebook.
+   - Use it to compare AEMO baselines, SB3 models, and DT policies after training.
+
+If you only want the main AEMO reproduction path, use:
+
+`test_aemo_env.ipynb` -> `test_aemo_data.ipynb` -> `aemo_sb3train.ipynb` -> `aemo_simrun.ipynb` -> `pretrain_aemo_decision_transformer.py` -> `aemo_eval.ipynb`
+
+### Notebook-to-artifact map
+
+- `notebooks/test_simrun.ipynb` -> `data/household/logs/`
+- `notebooks/test_sb3train.ipynb` -> `models/household/sb3/`
+- `python3 pretrain_decision_transformer.py` -> `models/household/dt/`
+- `notebooks/aemo_sb3train.ipynb` -> `models/aemo_sb3/`
+- `notebooks/aemo_simrun.ipynb` -> `data/aemo_dt/`
+- `python3 pretrain_aemo_decision_transformer.py` -> `models/aemo/dt/`
+- evaluation notebooks -> `eval_output/` (depending on notebook settings)
+
+### Recreating experiments from code instead of notebooks
+
+If you prefer scripting over notebooks:
+
+- Household environment and agents start from `src/EnergySimEnv.py` and `src/decision.py`
+- Residential DT training starts from `src/pretrain_decision_transformer.py`
+- AEMO data access starts from `src/aemo_data.py`
+- AEMO environment starts from `src/AEMOBatteryEnv.py`
+- AEMO notebook helpers live in `src/aemo_notebook_utils.py`
+- AEMO DT training starts from `src/pretrain_aemo_decision_transformer.py`
+
+The `COMPONENTS.md` file is the best code-oriented reference once you want to move beyond the notebook-first workflow.
+
+## Training Decision Transformers from the CLI
+
+### Residential DT training
+
+#### Train from scratch
 
 This starts a new model with a context length of 60 and saves checkpoints in `models/household/dt/`:
 
@@ -170,7 +219,7 @@ Notes:
 - **Best model weights** are saved alongside your `--save-path` as `*_best.pt` when validation improves without obvious divergence.
 - **Ensure your** `return_scale` matches the typical magnitude of returns; very large returns can cause instability.
 
-#### 3.2 Resume from an existing checkpoint
+#### Resume from an existing checkpoint
 
 If you already have a compatible checkpoint (same model config, especially `context_len`), you can resume:
 
@@ -194,7 +243,9 @@ Notes:
 - `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
 - `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
 
-#### 3.3 Train from AEMO trajectories
+### AEMO DT training
+
+#### Train from AEMO trajectories
 
 After running `notebooks/aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset without keeping the notebook kernel busy:
 
@@ -243,13 +294,6 @@ Notes:
 - `--epochs-per-subset` is cumulative across subset stages. For example, `--epochs-per-subset 1` means subset 1 trains to epoch 1, subset 2 resumes and trains to epoch 2, subset 3 resumes and trains to epoch 3, and so on.
 - Use conservative settings for the first real run on the large AEMO corpus, especially `--num-workers 0` and a smaller batch size.
 
-### 4. Evaluation
-Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
-- Compare all agents (Cost, ROI, Degradation).
-- Generate Risk-Return plots.
-- Inspect tail-risk metrics (VaR, CVaR at 5%).
-- Compute bootstrap confidence intervals and paired statistical comparisons.
-
 Helper evaluations are environment-agnostic and also compute AEMO trading metrics
 (revenue, degradation cost, dispatch energy) when those keys exist in `info`.
 See [docs/HELPER_README.md](docs/HELPER_README.md) for details.
@@ -275,7 +319,6 @@ energydecision/
 │   ├── decision.py          # Agent Classes (Rule, RL, SDP)
 │   ├── batterydeg.py        # Degradation Models
 │   └── ...
-├── *.ipynb                  # Compatibility symlinks to notebooks/
 ├── data/                    # Local datasets, caches, and generated logs (gitignored)
 │   ├── household/raw/
 │   ├── household/splits/
