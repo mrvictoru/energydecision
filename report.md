@@ -163,7 +163,7 @@ Workflows:
 - SDP/MRDP: configure horizons/resolutions; evaluate single or parallel episodes via `run_episodes_parallel`.
 
 DT hyperparameters:
-- Default DT model kwargs are stored in `models/decision_transformer_model_kwargs.json` (e.g., `state_dim=12`, `act_dim=1`, `context_len=60`, `h_dim=128`, `n_block=2`, `n_heads=8`).
+- Default DT model kwargs are stored in `models/household/dt/decision_transformer_model_kwargs.json` (e.g., `state_dim=12`, `act_dim=1`, `context_len=60`, `h_dim=128`, `n_block=2`, `n_heads=8`).
 - Training-time `return_scale` is stored in checkpoints and also written to `*.meta.json` sidecars for consistent inference.
 
 Compute and reproducibility:
@@ -428,8 +428,8 @@ Appendix A: Minimal Experiment Recipes
 
 RL
 - Train: `ppo_model, _ = train_model(PPO, DummyVecEnv([make_env(ds) for ds in train_ds]), eval_env_fn=test_env_fns[0], default_model=True)`.
-- Rollout and save: `flatten_episode_data(run_sb3_model_on_vec_env(ppo_model, SubprocVecEnv(test_env_fns))).write_parquet("data/ppo_test_episode_logs.parquet")`.
+- Rollout and save: `flatten_episode_data(run_sb3_model_on_vec_env(ppo_model, SubprocVecEnv(test_env_fns))).write_parquet("data/household/logs/ppo_test_episode_logs.parquet")`.
 
 DT
-- Train (CLI): `python -m src.pretrain_decision_transformer --data-dir data --model-config models/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
+- Train (CLI): `python -m src.pretrain_decision_transformer --data-dir data/household/logs --model-config models/household/dt/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
 - Dataset (Python): `TrajectoryDataset(data_path=..., context_length=..., state_dim=..., act_dim=..., discount_factor=0.99)` → train with `train_decision_transformer` and evaluate via `Agent(algorithm='dt', rtg_value=...)`.

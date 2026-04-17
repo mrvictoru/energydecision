@@ -33,19 +33,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save-path",
         type=Path,
-        default=repo_root() / "models" / "aemo_dt_model.pt",
+        default=repo_root() / "models" / "aemo" / "dt" / "aemo_dt_model.pt",
         help="Where to store the trained AEMO DT weights.",
     )
     parser.add_argument(
         "--checkpoint-path",
         type=Path,
-        default=repo_root() / "models" / "aemo_dt_checkpoint.pt",
+        default=repo_root() / "models" / "aemo" / "dt" / "aemo_dt_checkpoint.pt",
         help="Optional checkpoint path for intermediate saves.",
     )
     parser.add_argument(
         "--loss-csv-path",
         type=Path,
-        default=repo_root() / "models" / "aemo_dt_loss_history.csv",
+        default=repo_root() / "models" / "aemo" / "dt" / "aemo_dt_loss_history.csv",
         help="Optional path to save AEMO DT loss history as CSV.",
     )
     parser.add_argument("--epochs", type=int, default=2)

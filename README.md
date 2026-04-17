@@ -64,7 +64,7 @@ pip install -r torch_req.txt
 
 ## Data Setup
 
-1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place in `data/`.
+1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place it under `data/household/raw/`.
 2.  **AEMO Data:** Automatically fetched via `src/aemo_data.py` (cached in `data/aemo/`).
 
 ## Usage Workflow
@@ -132,13 +132,13 @@ Train a Decision Transformer using the collected logs.
 
 #### 3.1 Train from scratch
 
-This starts a new model with a context length of 60 and saves checkpoints in `models/`:
+This starts a new model with a context length of 60 and saves checkpoints in `models/household/dt/`:
 
 ```bash
 docker exec -it test_energy_container /bin/bash
 
 python3 pretrain_decision_transformer.py \
-    --data-dir ../data \
+    --data-dir ../data/household/logs \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 6 \
@@ -148,9 +148,9 @@ python3 pretrain_decision_transformer.py \
     --weight-decay 1e-4 \
     --return-scale 1000.0 \
     --return-loss-weight 0.0005 \
-    --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ../models/dt_model_new.pt \
-    --loss-csv-path ../models/dt_model_loss_history.csv \
+    --checkpoint-path ../models/household/dt/dt_model_checkpoint.pt \
+    --save-path ../models/household/dt/dt_model_new.pt \
+    --loss-csv-path ../models/household/dt/dt_model_loss_history.csv \
     --rope-enabled \
     --amp-mode "auto" \
     --num-workers 2 \
@@ -176,14 +176,14 @@ If you already have a compatible checkpoint (same model config, especially `cont
 
 ```bash
 python3 pretrain_decision_transformer.py \
-    --data-dir ../data \
+    --data-dir ../data/household/logs \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 8 \
     --checkpoints-per-epoch 10 \
     --context-length 60 \
-    --checkpoint-path ../models/dt_model_checkpoint.pt \
-    --save-path ../models/dt_model.pt \
+    --checkpoint-path ../models/household/dt/dt_model_checkpoint.pt \
+    --save-path ../models/household/dt/dt_model.pt \
     --resume \
     --num-workers 2 \
     --prefetch-factor 1
@@ -209,9 +209,9 @@ python3 pretrain_aemo_decision_transformer.py \
     --lr 2e-5 \
     --val-split 0.1 \
     --seed 8964 \
-    --save-path ../models/aemo_dt_model.pt \
-    --checkpoint-path ../models/aemo_dt_checkpoint.pt \
-    --loss-csv-path ../models/aemo_dt_loss_history.csv \
+    --save-path ../models/aemo/dt/aemo_dt_model.pt \
+    --checkpoint-path ../models/aemo/dt/aemo_dt_checkpoint.pt \
+    --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv \
     --amp-mode "auto" \
     --num-workers 2 \
     --prefetch-factor 2
@@ -230,9 +230,9 @@ python3 pretrain_aemo_decision_transformer.py \
     --epochs-per-subset 1 \
     --batch-size 24 \
     --num-workers 0 \
-    --save-path ../models/aemo_dt_model.pt \
-    --checkpoint-path ../models/aemo_dt_checkpoint.pt \
-    --loss-csv-path ../models/aemo_dt_loss_history.csv
+    --save-path ../models/aemo/dt/aemo_dt_model.pt \
+    --checkpoint-path ../models/aemo/dt/aemo_dt_checkpoint.pt \
+    --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv
 ```
 
 Notes:
@@ -276,8 +276,17 @@ energydecision/
 │   ├── batterydeg.py        # Degradation Models
 │   └── ...
 ├── *.ipynb                  # Compatibility symlinks to notebooks/
-├── data/                    # Local datasets and generated logs (gitignored)
+├── data/                    # Local datasets, caches, and generated logs (gitignored)
+│   ├── household/raw/
+│   ├── household/splits/
+│   ├── household/logs/
+│   ├── aemo/
+│   └── aemo_dt/
 ├── models/                  # Local checkpoints and trained models (gitignored)
+│   ├── household/sb3/
+│   ├── household/dt/
+│   ├── aemo_sb3/
+│   └── aemo/dt/
 ├── eval_output/             # Saved evaluation reports/plots
 └── tests/                   # Pytest suite
 ```
@@ -297,7 +306,7 @@ from src.EnergySimEnv import SolarBatteryEnv
 from src.decision import Agent
 
 # Example usage
-df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+df = pl.read_csv("data/household/raw/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
 customer_df = df.filter(pl.col("Customer") == df["Customer"][0])
 dataset = transform_polars_df(
     customer_df,
@@ -321,7 +330,7 @@ print(episode_log.head())
     from src.helper import make_env, transform_polars_df
     from src.decision import Agent, run_episodes_parallel
 
-    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    df = pl.read_csv("data/household/raw/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
     customers = df["Customer"].unique()
     rng = np.random.default_rng(seed=42)
     sample_ids = rng.choice(customers, size=4, replace=False)
@@ -368,7 +377,7 @@ print(episode_log.head())
     from src.sb3train import train_model
     from src.decision import run_sb3_model_on_vec_env
 
-    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    df = pl.read_csv("data/household/raw/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
     customers = df["Customer"].unique()
     rng = np.random.default_rng(seed=0)
     train_ids = rng.choice(customers, size=int(0.8 * len(customers)), replace=False)
@@ -409,7 +418,7 @@ print(episode_log.head())
     ppo_episode_data = run_sb3_model_on_vec_env(ppo_model, test_vec_env, deterministic=True)
 
     trajectories = flatten_episode_data(ppo_episode_data)
-    trajectories.write_parquet("data/ppo_test_episode_logs.parquet")
+    trajectories.write_parquet("data/household/logs/ppo_test_episode_logs.parquet")
 ```
 
 *   **Training the Decision Transformer with offline interaction data:** [`train_decision_transformer`](src/transformer_training.py) consumes a [`TrajectoryDataset`](src/transformer_training.py) built from logged trajectories.
@@ -422,7 +431,7 @@ print(episode_log.head())
     from src.transformer_training import TrajectoryDataset, train_decision_transformer
     from src.decision_transformer import DecisionTransformer
 
-    df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+    df = pl.read_csv("data/household/raw/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
     customer_df = df.filter(pl.col("Customer") == df["Customer"][0])
     dataset = transform_polars_df(
         customer_df,
@@ -438,7 +447,7 @@ print(episode_log.head())
     action_dim = env.action_space.shape[0]
 
     train_ds = TrajectoryDataset(
-        data_path="data/rule_train_episode_01_logs.parquet",
+        data_path="data/household/logs/rule_train_episode_01_logs.parquet",
         context_length=36,
         state_dim=state_dim,
         act_dim=action_dim,
@@ -463,8 +472,8 @@ print(episode_log.head())
         lr=1e-4,
         epochs=5,
         device="cuda" if torch.cuda.is_available() else "cpu",
-        save_path="models/dt_model.pt",
-        checkpoint_path="models/dt_checkpoint.pt",
+        save_path="models/household/dt/dt_model.pt",
+        checkpoint_path="models/household/dt/dt_model_checkpoint.pt",
     )
     ```
 
@@ -475,12 +484,12 @@ print(episode_log.head())
     from src.helper import evaluate_experiment_logs, evaluate_experiments
 
     ppo_logs = [
-        pl.read_parquet("data/ppo_test_episode_01_logs.parquet"),
-        pl.read_parquet("data/ppo_test_episode_02_logs.parquet"),
+        pl.read_parquet("data/household/logs/ppo_test_episode_01_logs.parquet"),
+        pl.read_parquet("data/household/logs/ppo_test_episode_02_logs.parquet"),
     ]
     rule_logs = [
-        pl.read_parquet("data/rule_test_episode_01_logs.parquet"),
-        pl.read_parquet("data/rule_test_episode_02_logs.parquet"),
+        pl.read_parquet("data/household/logs/rule_test_episode_01_logs.parquet"),
+        pl.read_parquet("data/household/logs/rule_test_episode_02_logs.parquet"),
     ]
 
     baseline_metrics = evaluate_experiment_logs(rule_logs, target_return=0.0)

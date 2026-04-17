@@ -310,8 +310,8 @@ import polars as pl
 from src.helper import evaluate_experiment_logs, evaluate_experiments, evaluate_by_conditions
 
 ppo_logs = [
-    pl.read_parquet("data/ppo_test_episode_01_logs.parquet"),
-    pl.read_parquet("data/ppo_test_episode_02_logs.parquet"),
+    pl.read_parquet("data/household/logs/ppo_test_episode_01_logs.parquet"),
+    pl.read_parquet("data/household/logs/ppo_test_episode_02_logs.parquet"),
 ]
 
 metrics = evaluate_experiment_logs(ppo_logs)

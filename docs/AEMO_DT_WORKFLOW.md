@@ -72,7 +72,7 @@ BEHAVIOR_RUNS = [
         "episodes": 2,
         "battery_variants": ["small", "medium"],
         "algorithm": "PPO",
-        "model_path": <repo_root>/models/aemo_ppo_model.zip,
+        "model_path": <repo_root>/models/aemo_sb3/ppo_aemo_model.zip,
     },
 ]
 ```
@@ -186,7 +186,7 @@ It covers:
 
 Default rollout outputs go under:
 
-- `<repo_root>/data/aemo_sb3/raw_logs/`
+- `<repo_root>/models/aemo_sb3/raw_logs/`
 
 ## Recommended usage
 

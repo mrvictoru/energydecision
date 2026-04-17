@@ -285,12 +285,16 @@ def main() -> None:
     args = parse_args()
     root = repo_root()
 
-    data_dir = (args.data_dir or (root / "data")).resolve()
-    model_dir = (root / "models")
+    data_dir = (args.data_dir or (root / "data" / "household" / "logs")).resolve()
+    model_dir = (root / "models" / "household" / "dt")
     config_path = (args.model_config or (model_dir / "decision_transformer_model_kwargs.json")).resolve()
     save_path = (args.save_path or (model_dir / "dt_model.pt")).resolve()
     checkpoint_path = (args.checkpoint_path or (model_dir / "dt_model_checkpoint.pt")).resolve()
     loss_csv_path = (args.loss_csv_path or (model_dir / "dt_model_loss_history.csv")).resolve()
+
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    loss_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not data_dir.is_dir():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")

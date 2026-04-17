@@ -210,10 +210,10 @@ def train_decision_transformer(
     lr: float = 1e-4,
     epochs: int = 10,
     device: Optional[str] = None,
-    save_path: str = "../models/dt_model.pt",
+    save_path: str = "../models/household/dt/dt_model.pt",
     best_model_path: Optional[str] = None,
     best_metrics_path: Optional[str] = None,
-    checkpoint_path: Optional[str] = "../models/dt_checkpoint.pt",
+    checkpoint_path: Optional[str] = "../models/household/dt/dt_model_checkpoint.pt",
     resume: bool = False,
     checkpoint_interval: int = 1,
     checkpoints_per_epoch: int = 0,
@@ -1077,4 +1077,3 @@ def episode_train_val_split(
         first.gamma,
     )
     return train_ds, val_ds
-

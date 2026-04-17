@@ -43,7 +43,7 @@ from src.EnergySimEnv import SolarBatteryEnv
 from src.helper import transform_polars_df
 
 # Load and transform data
-df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+df = pl.read_csv("data/household/raw/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
 customer_df = df.filter(pl.col("Customer") == df["Customer"][0])
 dataset = transform_polars_df(
     customer_df,
@@ -233,7 +233,7 @@ from src.helper import make_env, transform_polars_df
 from src.decision import Agent, run_episodes_parallel
 
 # Load data
-df = pl.read_csv("data/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
+df = pl.read_csv("data/household/raw/2011-2012 Solar home electricity data v2.csv", skip_rows=1)
 customers = df["Customer"].unique()
 rng = np.random.default_rng(seed=42)
 sample_ids = rng.choice(customers, size=4, replace=False)
@@ -540,7 +540,7 @@ env = env_fn()  # Creates SolarBatteryEnv instance
 
 # Flatten episode data for analysis
 flattened = flatten_episode_data(episode_logs)
-flattened.write_parquet("data/episode_logs.parquet")
+flattened.write_parquet("data/household/logs/episode_logs.parquet")
 ```
 
 ### Evaluation Functions
@@ -550,8 +550,8 @@ from src.helper import evaluate_experiment_logs, evaluate_experiments, evaluate_
 
 # Evaluate single experiment
 ppo_logs = [
-    pl.read_parquet("data/ppo_test_episode_01_logs.parquet"),
-    pl.read_parquet("data/ppo_test_episode_02_logs.parquet"),
+    pl.read_parquet("data/household/logs/ppo_test_episode_01_logs.parquet"),
+    pl.read_parquet("data/household/logs/ppo_test_episode_02_logs.parquet"),
 ]
 metrics = evaluate_experiment_logs(ppo_logs, target_return=0.0)
 print(metrics)
@@ -629,7 +629,7 @@ from src.decision import Agent
 
 # Load pre-trained model
 model = DecisionTransformer(...)
-model.load_state_dict(torch.load("models/dt_model.pt"))
+model.load_state_dict(torch.load("models/household/dt/dt_model.pt"))
 
 # Create agent with Decision Transformer
 agent = Agent(
@@ -658,7 +658,7 @@ from src.transformer_training import TrajectoryDataset
 
 # Create dataset from logged trajectories
 train_ds = TrajectoryDataset(
-    data_path="data/rule_train_episode_01_logs.parquet",
+    data_path="data/household/logs/rule_train_episode_01_logs.parquet",
     context_length=36,
     state_dim=10,
     act_dim=1,
@@ -691,8 +691,8 @@ trained_model, train_losses, val_losses = train_decision_transformer(
     lr=1e-4,
     epochs=5,
     device="cuda",
-    save_path="models/dt_model.pt",
-    checkpoint_path="models/dt_checkpoint.pt",
+    save_path="models/household/dt/dt_model.pt",
+    checkpoint_path="models/household/dt/dt_model_checkpoint.pt",
 )
 ```
 
@@ -700,16 +700,16 @@ trained_model, train_losses, val_losses = train_decision_transformer(
 
 ```bash
 python src/train_decision_transformer.py \
-    --data-dir ./data \
+    --data-dir ./data/household/logs \
     --patterns train test_episodes_01 \
     --epochs 2 \
     --batch-size 8 \
     --context-length 60 \
     --lr 5e-6 \
     --weight-decay 1e-4 \
-    --checkpoint-path ./models/dt_model_checkpoint.pt \
-    --save-path ./models/dt_model.pt \
-    --loss-csv-path ./models/dt_model_loss_history.csv \
+    --checkpoint-path ./models/household/dt/dt_model_checkpoint.pt \
+    --save-path ./models/household/dt/dt_model.pt \
+    --loss-csv-path ./models/household/dt/dt_model_loss_history.csv \
     --rope-enabled \
     --amp-mode "auto" \
     --num-workers 6 \
@@ -769,7 +769,7 @@ episode_data = run_sb3_model_on_vec_env(model, test_vec_env, deterministic=True)
 
 # Save for offline training
 trajectories = flatten_episode_data(episode_data)
-trajectories.write_parquet("data/ppo_test_episode_logs.parquet")
+trajectories.write_parquet("data/household/logs/ppo_test_episode_logs.parquet")
 ```
 
 ---
