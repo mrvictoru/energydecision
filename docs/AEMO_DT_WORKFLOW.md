@@ -4,14 +4,14 @@ The AEMO offline RL workflow is now centered on notebooks so you can inspect int
 
 ## Main files
 
-- `<repo_root>/aemo_simrun.ipynb`
-- `<repo_root>/aemo_sb3train.ipynb`
+- `<repo_root>/notebooks/aemo_simrun.ipynb`
+- `<repo_root>/notebooks/aemo_sb3train.ipynb`
 - `<repo_root>/src/aemo_notebook_utils.py`
 - `<repo_root>/configs/aemo_decision_transformer_model_kwargs.json`
 
-## What `aemo_simrun.ipynb` does
+## What `notebooks/aemo_simrun.ipynb` does
 
-`aemo_simrun.ipynb` is the main offline-data notebook. It is structured so you can stop after any stage and inspect the objects in memory.
+`notebooks/aemo_simrun.ipynb` is the main offline-data notebook. It is structured so you can stop after any stage and inspect the objects in memory.
 
 It covers:
 
@@ -29,7 +29,7 @@ It covers:
 
 ## Notebook configuration points
 
-Inside `aemo_simrun.ipynb`, edit these cells first:
+Inside `notebooks/aemo_simrun.ipynb`, edit these cells first:
 
 - `REGION`, `START_DATE`, `END_DATE`
 - `STEP_DURATION`, `EPISODE_HOURS`
@@ -120,7 +120,7 @@ The helper validates the AEMO dimensions before writing the final DT dataset:
 - `multi_market` → `act_dim=3`
 - `simple` → `act_dim=1`
 
-## Output artifacts from `aemo_simrun.ipynb`
+## Output artifacts from `notebooks/aemo_simrun.ipynb`
 
 By default the notebook writes:
 
@@ -171,9 +171,9 @@ Current tradeoff:
 
 - Validation now comes from one consistent global held-out split, but it is still materialized in memory inside the generic trainer when those validation subset parquet files are loaded.
 
-## What `aemo_sb3train.ipynb` does
+## What `notebooks/aemo_sb3train.ipynb` does
 
-`aemo_sb3train.ipynb` is the online RL notebook for AEMO + SB3.
+`notebooks/aemo_sb3train.ipynb` is the online RL notebook for AEMO + SB3.
 
 It covers:
 
@@ -190,9 +190,9 @@ Default rollout outputs go under:
 
 ## Recommended usage
 
-1. Open `<repo_root>/aemo_sb3train.ipynb` if you need a fresh SB3 policy.
+1. Open `<repo_root>/notebooks/aemo_sb3train.ipynb` if you need a fresh SB3 policy.
 2. Save the trained model.
-3. Open `<repo_root>/aemo_simrun.ipynb`.
+3. Open `<repo_root>/notebooks/aemo_simrun.ipynb`.
 4. Add that SB3 model to `BEHAVIOR_RUNS`.
 5. Collect rule + dispatch + SB3 trajectories across your battery variants.
 6. Build the DT dataset and manifest.

@@ -832,8 +832,8 @@ ep_logs, inc_logs, all_logs = run_dispatch_replay(
 
 ### Notebooks
 
-- `aemo_simrun.ipynb` — full dispatch replay workflow inside the notebook-based AEMO offline RL pipeline
-- `test_aemo_data.ipynb` section 5 — DUID availability exploration
+- `notebooks/aemo_simrun.ipynb` — full dispatch replay workflow inside the notebook-based AEMO offline RL pipeline
+- `notebooks/test_aemo_data.ipynb` section 5 — DUID availability exploration
 
 ---
 

@@ -208,7 +208,7 @@ Exported artifacts:
 - `eval_output/pairwise_summary.csv` — Wilcoxon signed-rank test results for all algorithm pairs.
 - `eval_output/pairwise_significance_heatmap.svg` — visual summary of head-to-head significance.
 
-> **NOTE:** These statistical analyses are available in `src/helper.py` and demonstrated in `test_eval.ipynb`, but are not plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts.
+> **NOTE:** These statistical analyses are available in `src/helper.py` and demonstrated in `notebooks/test_eval.ipynb`, but are not plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts.
 
 ### 7.4 Visualization
 
@@ -433,4 +433,3 @@ RL
 DT
 - Train (CLI): `python -m src.pretrain_decision_transformer --data-dir data --model-config models/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
 - Dataset (Python): `TrajectoryDataset(data_path=..., context_length=..., state_dim=..., act_dim=..., discount_factor=0.99)` → train with `train_decision_transformer` and evaluate via `Agent(algorithm='dt', rtg_value=...)`.
-

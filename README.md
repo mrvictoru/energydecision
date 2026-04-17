@@ -113,16 +113,16 @@ ep_logs, inc_logs, all_logs = run_dispatch_replay(
 )
 ```
 
-Use `test_aemo_data.ipynb` section 5 to interactively explore DUID availability across all NEM regions.
+Use [`test_aemo_data.ipynb`](notebooks/test_aemo_data.ipynb) section 5 to interactively explore DUID availability across all NEM regions.
 
 ### 2. Online RL Training
-Run [`aemo_sb3train.ipynb`](aemo_sb3train.ipynb) to:
+Run [`aemo_sb3train.ipynb`](notebooks/aemo_sb3train.ipynb) to:
 - Train AEMO SB3 agents (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`).
 - Sweep across multiple battery sizes.
 - Save models and export rollout logs for offline DT data collection.
 
 ### 3. Offline RL Training
-Use [`aemo_simrun.ipynb`](aemo_simrun.ipynb) to:
+Use [`aemo_simrun.ipynb`](notebooks/aemo_simrun.ipynb) to:
 - Fetch/cache AEMO data.
 - Collect rule, dispatch-replay, and SB3-based trajectories.
 - Sweep multiple battery sizes in one run.
@@ -196,7 +196,7 @@ Notes:
 
 #### 3.3 Train from AEMO trajectories
 
-After running `aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset without keeping the notebook kernel busy:
+After running `notebooks/aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset without keeping the notebook kernel busy:
 
 ```bash
 docker exec -it test_energy_container /bin/bash
@@ -259,19 +259,26 @@ See [docs/HELPER_README.md](docs/HELPER_README.md) for details.
 ```
 energydecision/
 ├── COMPONENTS.md            # Usage guide for scripts
-├── docs/                    # Deep dive documentation
+├── configs/                 # JSON model/training configs
+├── docs/                    # Deep dive documentation, assets, and references
+│   ├── assets/
+│   ├── references/
 │   ├── HOUSEHOLD_ENV_README.md
 │   ├── AEMO_ENV_README.md
 │   ├── DP_ALGORITHM_README.md
 │   ├── BATTERY_DEGRADATION_DETAILS.md
 │   └── HELPER_README.md
-├── notebooks/               # Example notebooks
+├── notebooks/               # Canonical workflow/demo notebooks
 ├── src/                     # Source code
 │   ├── EnergySimEnv.py      # Household Gym Environment
 │   ├── AEMOBatteryEnv.py    # AEMO Market Environment
 │   ├── decision.py          # Agent Classes (Rule, RL, SDP)
 │   ├── batterydeg.py        # Degradation Models
 │   └── ...
+├── *.ipynb                  # Compatibility symlinks to notebooks/
+├── data/                    # Local datasets and generated logs (gitignored)
+├── models/                  # Local checkpoints and trained models (gitignored)
+├── eval_output/             # Saved evaluation reports/plots
 └── tests/                   # Pytest suite
 ```
 
@@ -279,8 +286,8 @@ energydecision/
 
 ## Usage
 
-- Explore the simulation and agent interactions in the [`testrun.ipynb`](testrun.ipynb) notebook.
-- See demo notebooks [`DemoEnv.ipynb`](DemoEnv.ipynb) and [`Demosb3.ipynb`](Demosb3.ipynb) for example usage of the gym and stable-baselines3 library.
+- Explore the simulation and agent interactions in the [`testrun.ipynb`](notebooks/testrun.ipynb) notebook.
+- See demo notebooks [`DemoEnv.ipynb`](notebooks/DemoEnv.ipynb) and [`Demosb3.ipynb`](notebooks/Demosb3.ipynb) for example usage of the gym and stable-baselines3 library.
 - **Using the environment class from code:** Instantiate [`SolarBatteryEnv`](src/EnergySimEnv.py) and [`Agent`](src/decision.py) directly to run a single episode and capture step-level logs.
 
 ```python

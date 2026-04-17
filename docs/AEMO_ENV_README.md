@@ -338,7 +338,7 @@ create_aemo_env_from_data(
 Run the test notebook:
 
 ```bash
-jupyter notebook test_aemo_env.ipynb
+jupyter notebook notebooks/test_aemo_env.ipynb
 ```
 
 Or use the provided test script:
