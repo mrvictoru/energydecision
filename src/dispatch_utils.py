@@ -222,12 +222,10 @@ def list_dispatch_candidates(
             refresh=refresh,
         )
 
-        # Build a minimal activity summary table matching the normal output format
-        if dispatch_df.height == 0:
-            print(f"No DISPATCHLOAD data found for {duids_in_range} in the requested range.")
-            return pl.DataFrame(), pl.DataFrame()
-
-
+        # Build a minimal activity summary table matching the normal output format.
+        # If no dispatch rows exist for the selected station/window, keep the
+        # registry-backed static table so callers can still resolve sizing and
+        # surface a clearer replay-time error.
         dispatch_numeric_cols = [c for c in dispatch_df.columns if c not in {"SETTLEMENTDATE", "DUID"}]
         activity_df = dispatch_df.with_columns(
             pl.col("SETTLEMENTDATE").cast(pl.Datetime, strict=False)
@@ -404,6 +402,7 @@ def resolve_dispatch_selection(
     battery_capacity: float = 10.0,
     max_battery_flow: float = 5.0,
     init_soc: float = 5.0,
+    init_soc_ratio: Optional[float] = None,
     apply_unit_sizing: bool = True,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -427,6 +426,9 @@ def resolve_dispatch_selection(
             *apply_unit_sizing* is ``False``.
         max_battery_flow: Default max discharge/charge rate (MW).
         init_soc: Default initial state-of-charge (MWh).
+        init_soc_ratio: Optional initial state-of-charge ratio applied after
+            unit sizing is resolved. When provided, this takes precedence over
+            the legacy ``init_soc`` / ``battery_capacity`` ratio fallback.
         apply_unit_sizing: When ``True``, override *battery_capacity* and
             *max_battery_flow* with values from the static table (if available
             and finite).
@@ -448,6 +450,12 @@ def resolve_dispatch_selection(
             batteries, or ``None`` for bidirectional units.
         ``dispatch_duid_load`` (str | None)
             The paired load DUID (charge direction), or ``None``.
+        ``region`` (str | None)
+            Resolved NEM region for the selected unit / station.
+        ``station_name`` (str | None)
+            Registry station name when the DUID could be resolved.
+        ``station_key`` (str | None)
+            Registry station key when the DUID could be resolved.
         ``battery_capacity`` (float)
             Resolved battery capacity (MWh).
         ``max_battery_flow`` (float)
@@ -465,7 +473,10 @@ def resolve_dispatch_selection(
     source_label = "dispatch-active" if active_battery_units.height > 0 else "static"
 
     if source_table.height == 0:
-        raise ValueError("No battery DUIDs are available for dispatch replay.")
+        raise ValueError(
+            "No battery DUIDs are available for dispatch replay. "
+            "Check the station name / DUID and the requested date range."
+        )
 
     if selected_duid and str(selected_duid).strip():
         query = str(selected_duid).strip()
@@ -509,6 +520,10 @@ def resolve_dispatch_selection(
                 stacklevel=2,
             )
 
+    selected_region: Optional[str] = None
+    selected_station_name: Optional[str] = None
+    selected_station_key: Optional[str] = None
+
     # Resolve paired gen/load DUIDs and check for DUID transitions
     dispatch_type: Optional[str] = None
     dispatch_duid_gen: Optional[str] = None
@@ -521,6 +536,10 @@ def resolve_dispatch_selection(
     _registry_bidi_duid: Optional[str] = None
 
     if chosen.height > 0:
+        if "Region" in chosen.columns:
+            val = chosen["Region"][0]
+            if val is not None and str(val).strip():
+                selected_region = str(val)
         if "DispatchType" in chosen.columns:
             dispatch_type = chosen["DispatchType"][0]
         if "PairedGenDUID" in chosen.columns:
@@ -539,6 +558,9 @@ def resolve_dispatch_selection(
     if start_date and end_date:
         _res = resolve_battery_duids(duid, start_date, end_date)
         if _res["found"]:
+            selected_region = _res["region"] or selected_region
+            selected_station_name = _res["station_name"]
+            selected_station_key = _res["key"]
             spans_transition = _res["spans_transition"]
             transition_dates = _res["transition_dates"]
             _registry_gen_duid = _res["gen_duid"]
@@ -680,8 +702,13 @@ def resolve_dispatch_selection(
         if suggested_mw is not None and np.isfinite(float(suggested_mw)) and float(suggested_mw) > 0:
             resolved_max_flow = float(suggested_mw)
 
-    init_soc_ratio = (init_soc / battery_capacity) if battery_capacity > 0 else _DEFAULT_SOC_RATIO
-    resolved_init_soc = float(np.clip(resolved_capacity * init_soc_ratio, 0.0, resolved_capacity))
+    if init_soc_ratio is None:
+        resolved_init_soc_ratio = (init_soc / battery_capacity) if battery_capacity > 0 else _DEFAULT_SOC_RATIO
+    else:
+        resolved_init_soc_ratio = float(np.clip(init_soc_ratio, 0.0, 1.0))
+    resolved_init_soc = float(
+        np.clip(resolved_capacity * resolved_init_soc_ratio, 0.0, resolved_capacity)
+    )
     print(
         f"Dispatch replay env params → capacity={resolved_capacity:.3f} MWh, "
         f"max_flow={resolved_max_flow:.3f} MW, init_soc={resolved_init_soc:.3f} MWh"
@@ -689,6 +716,9 @@ def resolve_dispatch_selection(
 
     return {
         "duid": duid,
+        "region": selected_region,
+        "station_name": selected_station_name,
+        "station_key": selected_station_key,
         "dispatch_type": dispatch_type,
         "dispatch_duid_gen": dispatch_duid_gen,
         "dispatch_duid_load": dispatch_duid_load,
@@ -832,6 +862,8 @@ def run_dispatch_replay(
     run_tag: str = "dispatch",
     action_mode: str = "multi_market",
     degradation_mode: str = "rainflow",
+    degradation_chemistry: str = "NMC",
+    degradation_temperature: float = 25.0,
 ) -> Tuple[List[pl.DataFrame], List[pl.DataFrame], pl.DataFrame]:
     """Run dispatch replay episodes and save logs to parquet.
 
@@ -857,6 +889,10 @@ def run_dispatch_replay(
         run_tag: Prefix for output file names.
         action_mode: Environment action mode (default ``"multi_market"``).
         degradation_mode: Battery degradation model (default ``"rainflow"``).
+        degradation_chemistry: Cell chemistry preset for the ``'real_world'``
+            degradation model.  One of ``'NMC'`` or ``'LFP'``.
+        degradation_temperature: Ambient / cell temperature in °C for
+            degradation calculations.
 
     Returns:
         ``(episode_logs, incident_logs, all_logs_combined)``
@@ -871,12 +907,38 @@ def run_dispatch_replay(
     from decision import AEMOAgent, run_single
 
     duid = selection["duid"]
+    selection_region = selection.get("region")
     dispatch_duid_gen = selection.get("dispatch_duid_gen")
     dispatch_duid_load = selection.get("dispatch_duid_load")
     dispatch_type = selection.get("dispatch_type")
     spans_transition = selection.get("spans_transition", False)
     all_dispatch_duids = selection.get("all_dispatch_duids") or [duid]
     transition_dates = selection.get("transition_dates") or []
+
+    if selection_region and selection_region != region:
+        raise ValueError(
+            f"Dispatch replay region mismatch for {duid!r}: "
+            f"selection region={selection_region!r}, replay region={region!r}."
+        )
+
+    if "REGIONID" in processed_data.columns:
+        processed_regions = sorted(
+            {
+                str(value)
+                for value in processed_data.get_column("REGIONID").drop_nulls().unique().to_list()
+                if str(value).strip()
+            }
+        )
+        if len(processed_regions) == 1 and processed_regions[0] != region:
+            raise ValueError(
+                f"Processed market data region mismatch for {duid!r}: "
+                f"processed_data region={processed_regions[0]!r}, replay region={region!r}."
+            )
+        if selection_region and processed_regions and selection_region not in processed_regions:
+            raise ValueError(
+                f"Dispatch replay selection region mismatch for {duid!r}: "
+                f"selection region={selection_region!r}, processed_data regions={processed_regions!r}."
+            )
 
     # Create independent env instances
     dispatch_envs = [
@@ -890,6 +952,8 @@ def run_dispatch_replay(
             battery_life_cost=battery_life_cost,
             action_mode=action_mode,
             degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
         )
         for _ in range(num_episodes)
     ]

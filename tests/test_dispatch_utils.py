@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, "src")
 
 from dispatch_utils import (
+    list_dispatch_candidates,
     resolve_dispatch_selection,
     run_dispatch_replay,
     scan_duid_availability,
@@ -123,6 +124,23 @@ def test_resolve_apply_unit_sizing_false():
     assert sel["max_battery_flow"] == 5.0
 
 
+def test_resolve_init_soc_ratio_applies_after_unit_sizing():
+    battery_units, active = _make_battery_tables()
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active,
+        selected_duid="HPRG1",
+        battery_capacity=10.0,
+        max_battery_flow=5.0,
+        init_soc=5.0,
+        init_soc_ratio=0.25,
+        apply_unit_sizing=True,
+    )
+
+    assert sel["battery_capacity"] == 193.5
+    assert sel["init_battery_level"] == pytest.approx(193.5 * 0.25)
+
+
 def test_resolve_paired_duid():
     battery_units, active = _make_battery_tables(has_paired=True)
     sel = resolve_dispatch_selection(
@@ -153,6 +171,64 @@ def test_resolve_falls_back_to_static_when_active_empty():
         apply_unit_sizing=True,
     )
     assert sel["duid"] == "LBBG1"
+
+
+def test_list_dispatch_candidates_keeps_static_rows_when_dispatch_empty(monkeypatch):
+    import aemo_data as _aemo
+
+    def fake_resolve(name_or_duid, start_date, end_date):
+        assert name_or_duid == "hornsdale"
+        return {
+            "found": True,
+            "key": "hornsdale",
+            "station_name": "Hornsdale Power Reserve",
+            "region": "SA1",
+            "active_duids": [
+                {
+                    "duid": "HPR1",
+                    "type": "bidirectional",
+                    "valid_from": datetime(2022, 10, 1),
+                    "valid_until": None,
+                }
+            ],
+            "all_duids_in_range": ["HPR1"],
+            "gen_duid": None,
+            "load_duid": None,
+            "bidi_duid": "HPR1",
+            "spans_transition": False,
+            "transition_dates": [],
+        }
+
+    monkeypatch.setattr(_aemo, "resolve_battery_duids", fake_resolve)
+    monkeypatch.setattr(
+        _aemo,
+        "fetch_aemo_unit_dispatch",
+        lambda **kwargs: pl.DataFrame(
+            schema={
+                "SETTLEMENTDATE": pl.Datetime,
+                "DUID": pl.Utf8,
+                "TOTALCLEARED": pl.Float64,
+                "RAISE6SEC": pl.Float64,
+                "RAISE60SEC": pl.Float64,
+                "RAISE5MIN": pl.Float64,
+                "RAISEREG": pl.Float64,
+                "LOWER6SEC": pl.Float64,
+                "LOWER60SEC": pl.Float64,
+                "LOWER5MIN": pl.Float64,
+                "LOWERREG": pl.Float64,
+            }
+        ),
+    )
+
+    battery_units, active_units = list_dispatch_candidates(
+        region="SA1",
+        start_date=datetime(2022, 4, 1),
+        end_date=datetime(2022, 4, 2),
+        station_name="hornsdale",
+    )
+
+    assert battery_units.height > 0
+    assert active_units.height == 0
 
 
 def test_resolve_raises_when_no_units():
@@ -361,6 +437,22 @@ def test_resolve_bidi_includes_all_duids_in_transition_selection():
     assert "HPR1" in sel["all_dispatch_duids"]
     assert sel["_registry_gen_duid"] == "HPRG1"
     assert sel["_registry_bidi_duid"] == "HPR1"
+
+
+def test_resolve_selection_returns_region_metadata():
+    battery_units, active = _make_battery_tables()
+
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active,
+        selected_duid="HPRG1",
+        start_date=datetime(2021, 1, 1),
+        end_date=datetime(2021, 1, 7),
+    )
+
+    assert sel["region"] == "SA1"
+    assert sel["station_name"] == "Hornsdale Power Reserve"
+    assert sel["station_key"] == "hornsdale"
 
 
 def test_merge_transition_dispatch_gen_load_to_bidi():
@@ -660,6 +752,39 @@ def test_run_dispatch_replay_historical_duids_not_filtered_by_region(monkeypatch
     # Must have passed the paired DUIDs directly
     assert "duids" in call_kwargs
     assert set(call_kwargs["duids"]) == {"HPRG1", "HPRL1"}
+
+
+def test_run_dispatch_replay_rejects_selection_region_mismatch(monkeypatch):
+    import dispatch_utils as du
+
+    processed_data = pl.DataFrame({
+        "SETTLEMENTDATE": [datetime(2025, 1, 1, 0, 0)],
+        "REGIONID": ["NSW1"],
+        "RRP": [50.0],
+    })
+
+    selection = {
+        "duid": "HPR1",
+        "region": "SA1",
+        "dispatch_type": "Bidirectional Unit",
+        "dispatch_duid_gen": None,
+        "dispatch_duid_load": None,
+        "battery_capacity": 193.5,
+        "max_battery_flow": 150.0,
+        "init_battery_level": 96.75,
+        "availability": None,
+    }
+
+    with pytest.raises(ValueError, match="selection region='SA1'.*replay region='NSW1'"):
+        du.run_dispatch_replay(
+            processed_data=processed_data,
+            selection=selection,
+            start_date=datetime(2025, 1, 1),
+            end_date=datetime(2025, 1, 7),
+            region="NSW1",
+            cache_dir="data/aemo",
+            num_episodes=1,
+        )
 
 
 # ---------------------------------------------------------------------------

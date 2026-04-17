@@ -19,7 +19,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
-[![Tests](https://img.shields.io/badge/tests-104%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-132%20passing-brightgreen)]()
 
 ### Roadmap
 *   [x] **Core:** Gymnasium environment & Rule-based agents.
@@ -29,6 +29,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Evaluation:** Metrics for return, risk proxies (Sharpe/Sortino), and degradation.
 *   [x] **Grid Market:** AEMO Environment Implementation.
 *   [x] **Grid battery degradation modelling:** Rainflow-based degradation and capacity fade in `AEMOBatteryTradingEnv`.
+*   [x] **Real-world BESS degradation model:** Combined calendar + cycle aging model (`RealWorldBESSDegradationModel`) for utility-scale BESS, with Arrhenius temperature dependency and NMC/LFP chemistry presets, adapted from the framework in Kampker et al. (2025, doi:10.3390/batteries11110392).
 *   [x] **Risk-sensitive evaluation:** CVaR/VaR tail-risk metrics (`var_5`, `cvar_5`) computed by `evaluate_experiment_logs`.
 *   [x] **Statistical comparisons:** Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired Wilcoxon signed-rank tests (`paired_comparison`) across customers/seeds.
 *   [ ] **Conduct data gathering and training on AEMO env:** Run dispatch replay and RL-agent in `AEMOBatteryTradingEnv` to collect trajectories for offline training for DT and evaluation.
@@ -115,11 +116,18 @@ ep_logs, inc_logs, all_logs = run_dispatch_replay(
 Use `test_aemo_data.ipynb` section 5 to interactively explore DUID availability across all NEM regions.
 
 ### 2. Online RL Training
-Run [test_sb3train.ipynb](notebooks/test_sb3train.ipynb) to:
-- Train PPO/SAC agents.
-- Save models and log additional trajectories.
+Run [`aemo_sb3train.ipynb`](aemo_sb3train.ipynb) to:
+- Train AEMO SB3 agents (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`).
+- Sweep across multiple battery sizes.
+- Save models and export rollout logs for offline DT data collection.
 
 ### 3. Offline RL Training
+Use [`aemo_simrun.ipynb`](aemo_simrun.ipynb) to:
+- Fetch/cache AEMO data.
+- Collect rule, dispatch-replay, and SB3-based trajectories.
+- Sweep multiple battery sizes in one run.
+- Export raw logs plus a DT-ready parquet dataset and manifest.
+
 Train a Decision Transformer using the collected logs.
 
 #### 3.1 Train from scratch
@@ -185,6 +193,55 @@ Notes:
 
 - `--epochs` is the **total** target epoch count; resuming will continue from the last saved epoch.
 - `--context-length` must match the value used to create the checkpoint, otherwise `load_state_dict` will fail (e.g. attention mask shape mismatch).
+
+#### 3.3 Train from AEMO trajectories
+
+After running `aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset without keeping the notebook kernel busy:
+
+```bash
+docker exec -it test_energy_container /bin/bash
+
+python3 pretrain_aemo_decision_transformer.py \
+    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
+    --epochs 2 \
+    --batch-size 6 \
+    --lr 2e-5 \
+    --val-split 0.1 \
+    --seed 8964 \
+    --save-path ../models/aemo_dt_model.pt \
+    --checkpoint-path ../models/aemo_dt_checkpoint.pt \
+    --loss-csv-path ../models/aemo_dt_loss_history.csv \
+    --amp-mode "auto" \
+    --num-workers 2 \
+    --prefetch-factor 2
+```
+
+This wrapper forwards to `pretrain_decision_transformer.py` with the AEMO dataset stem and AEMO DT model config, so the underlying training loop stays the same while the inputs and defaults are AEMO-specific.
+
+For large AEMO datasets, enable episode-based subset training so the combined parquet is broken into smaller subset files and trained sequentially with checkpoint resume:
+
+```bash
+python3 pretrain_aemo_decision_transformer.py \
+    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
+    --train-in-subsets \
+    --subset-episodes 24 \
+    --epochs-per-subset 1 \
+    --batch-size 24 \
+    --num-workers 0 \
+    --save-path ../models/aemo_dt_model.pt \
+    --checkpoint-path ../models/aemo_dt_checkpoint.pt \
+    --loss-csv-path ../models/aemo_dt_loss_history.csv
+```
+
+Notes:
+
+- `--subset-episodes` controls how many whole episodes are written into each temporary subset parquet.
+- The wrapper now computes one global episode-level train/validation split before writing subset files, so validation stays consistent across all subset stages.
+- The first subset starts fresh; later subsets automatically add `--resume` so optimizer and checkpoint state carry forward.
+- `--epochs-per-subset` is cumulative across subset stages. For example, `--epochs-per-subset 1` means subset 1 trains to epoch 1, subset 2 resumes and trains to epoch 2, subset 3 resumes and trains to epoch 3, and so on.
+- Use conservative settings for the first real run on the large AEMO corpus, especially `--num-workers 0` and a smaller batch size.
 
 ### 4. Evaluation
 Run [test_eval.ipynb](notebooks/test_eval.ipynb) to:
@@ -465,12 +522,13 @@ pytest tests/ -v --durations=10
 | `test_performance.py` | Performance benchmarks and optimization validation | 6 |
 | `test_quantile_scenarios.py` | Quantile scenario generation | 22 |
 | `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking | 12 |
+| `test_real_world_degradation.py` | RealWorldBESSDegradationModel unit tests, AEMO env integration, mode switching | 28 |
 | `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases | 16 |
 | `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init | 5 |
 | `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space | 5 |
 | `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons | 22 |
 
-**Total: 104 tests**
+**Total: 132 tests**
 
 ---
 
@@ -493,3 +551,4 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 *   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
 *   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
+*   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.

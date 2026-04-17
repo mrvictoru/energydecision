@@ -87,17 +87,60 @@ env = AEMOBatteryTradingEnv(
 
 ---
 
-## 4. Future Work
+## 4. Real-World BESS Degradation Model (Implemented)
 
-1. **Calendar aging**: Add time-based degradation component (e.g., SEI growth model) that accumulates independently of cycling.
-2. **Temperature dynamics**: Model battery temperature as a function of power throughput and ambient conditions, rather than using a fixed temperature.
-3. **Cell-level heterogeneity**: For large BESS, model variation across cell modules.
-4. **Warranty-aligned cycle counting**: Align degradation thresholds with manufacturer warranty terms (e.g., 80% capacity at 10 years or N equivalent cycles).
+The `RealWorldBESSDegradationModel` addresses the calendar aging gap and other limitations listed above. It is adapted from the framework presented in Kampker et al. (2025, doi:10.3390/batteries11110392).
+
+### 4.1 What's New
+
+- **Calendar aging**: Time- and temperature-dependent capacity loss using Arrhenius kinetics and SOC stress, applied every simulation timestep regardless of cycling.
+- **Arrhenius temperature model**: Physically grounded `exp(-Ea/(R·T))` for both calendar and cycle aging, replacing the Muenzel cubic polynomial.
+- **Chemistry presets**: NMC and LFP parameter sets, with LFP recommended for modern utility-scale BESS (e.g., Tesla Megapack, BYD).
+- **Separate tracking**: `calendar_degradation` and `cycle_degradation` are independently accumulated and reported in the `info` dict.
+
+### 4.2 Usage
+
+```python
+# Real-world BESS degradation (recommended for AEMO grid-scale)
+env = AEMOBatteryTradingEnv(
+    aemo_data=data,
+    degradation_mode='real_world',
+    degradation_chemistry='LFP',       # or 'NMC'
+    degradation_temperature=30.0,      # Australian summer
+)
+
+# Physics-based rainflow only (Muenzel et al., no calendar aging)
+env = AEMOBatteryTradingEnv(
+    aemo_data=data,
+    degradation_mode='rainflow',
+    degradation_temperature=25.0,
+)
+
+# Simplified linear model (backward compatible)
+env = AEMOBatteryTradingEnv(
+    aemo_data=data,
+    degradation_mode='simple',
+)
+```
+
+See [docs/BATTERY_DEGRADATION_DETAILS.md](BATTERY_DEGRADATION_DETAILS.md) Section 7 for the full mathematical formulation and parameter tables.
 
 ---
 
-## 5. References
+## 5. Future Work
+
+1. **Temperature dynamics**: Model battery temperature as a function of power throughput and ambient conditions (as done in the paper's thermal module), rather than using a fixed temperature.
+2. **Throughput-based cycling model**: Optionally implement the continuous Ah-throughput form (paper Eq. 5) as an alternative to the per-cycle formulation, for users who prefer rate-equation integration.
+3. **Cell-level heterogeneity**: For large BESS, model variation across cell modules (as explored in the paper's pack-level simulations).
+4. **Warranty-aligned cycle counting**: Align degradation thresholds with manufacturer warranty terms (e.g., 80% capacity at 10 years or N equivalent cycles).
+5. **Resistance growth**: Add internal resistance increase tracking (R₀ growth) alongside capacity fade, as modeled in the paper.
+
+---
+
+## 6. References
 
 - Muenzel, V., et al. (2015). "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management."
+- Kampker, A.; Späth, B.; Song, X.; Wang, D. (2025). "Modelling of Battery Energy Storage Systems Under Real-World Applications and Conditions." *Batteries* 11(11):392. doi:10.3390/batteries11110392.
+- Wang, J.; Liu, P.; Hicks-Garner, J.; et al. (2011). "Cycle-life model for graphite-LiFePO4 cells." *Journal of Power Sources*, 196(8):3942–3948.
 - ASTM E1049-85, "Standard Practices for Cycle Counting in Fatigue Analysis."
 - AEMO (2024). "Battery Energy Storage System Registration and Compliance Guide."

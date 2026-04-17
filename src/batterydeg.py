@@ -1,4 +1,6 @@
 import math
+from typing import Optional
+
 import numpy as np
 
 # Parameters (example values, adjust as needed)
@@ -400,5 +402,255 @@ def rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6):
     for soc in soc_profile:
         closed_cycles.extend(counter.update(soc))
     return closed_cycles
+
+
+# =============================================================================
+# Real-World BESS Degradation Model
+# =============================================================================
+#
+# Based on the modeling framework presented in:
+#   "Modelling of Battery Energy Storage Systems Under Real-World Applications
+#    and Conditions", MDPI Batteries 11(11):392, 2025
+#   doi: 10.3390/batteries11110392
+#
+# Key differences from Muenzel et al. (2015) / current DegradationModel:
+#
+#   1. CALENDAR AGING — not present in Muenzel (2015).
+#      Grid-scale BESS sits idle for many hours (overnight, weekends).
+#      Calendar aging from SEI growth is a major degradation pathway that is
+#      completely absent in the existing model, making it unsuitable for
+#      utility-scale long-run simulations.
+#
+#   2. ARRHENIUS TEMPERATURE DEPENDENCY — physically grounded.
+#      Muenzel (2015) uses an empirical cubic polynomial CL(T) fitted to
+#      small lab cells.  The paper uses the Arrhenius equation:
+#          rate(T) ∝ exp(−Ea / (R·T))
+#      which is valid over a wide temperature range and is standard for
+#      electrochemical aging models.
+#
+#   3. POWER-LAW DOD / C-RATE FOR CYCLE AGING — more compact and
+#      interpretable than the two-dimensional constrained polynomial in
+#      Muenzel (2015) and better calibrated to grid-scale NMC/LFP cells.
+#
+#   4. CELL-CHEMISTRY PRESETS — NMC (default) and LFP, the two dominant
+#      chemistries in utility-scale BESS deployments (e.g., Tesla Megapack,
+#      BYD Battery Box).
+#
+# Model equations
+# ---------------
+# Total capacity loss (fraction of nominal capacity):
+#   Q_loss = Q_cal + Q_cyc  (capped at 1.0)
+#
+# Calendar aging per timestep Δt (hours):
+#   ΔQ_cal = k_cal · exp(−Ea_cal/(R·T_K)) / exp(−Ea_cal/(R·T_ref_K))
+#            · [1 + k_soc · (soc_frac − 0.5)] · Δt
+#   where soc_frac ∈ [0, 1] is the current state of charge / capacity.
+#
+# Cycle aging per detected cycle (from rainflow counting):
+#   ΔQ_cyc = k_cyc · (DOD/100)^α · (1 + β_c · C_rate)
+#            · exp(−Ea_cyc/(R·T_K)) / exp(−Ea_cyc/(R·T_ref_K))
+#
+# Battery capacity:
+#   C(t) = C_nom · (1 − Q_loss)
+#
+# =============================================================================
+
+#: Universal gas constant (J mol⁻¹ K⁻¹)
+_R_GAS = 8.314
+#: Reference temperature (K) — 25 °C
+_T_REF_K = 298.15
+
+
+def _arrhenius(Ea_J_per_mol: float, T_K: float) -> float:
+    """Normalised Arrhenius factor (= 1.0 at T_ref = 25 °C)."""
+    return math.exp(-Ea_J_per_mol / (_R_GAS * T_K)) / math.exp(
+        -Ea_J_per_mol / (_R_GAS * _T_REF_K)
+    )
+
+
+#: Chemistry preset parameter dictionaries.
+#: Each entry defines the five parameters used by RealWorldBESSDegradationModel.
+BESS_CHEMISTRY_PRESETS: dict = {
+    # NMC (Nickel-Manganese-Cobalt) — common in early utility deployments.
+    # Calendar life (calendar-only, 25 °C, 50 % SOC): EOL ~12–15 years
+    # Cycle life (100 % DoD, 1C, 25 °C): ~2 000 cycles
+    # Sources: Wang et al. (2011), Petit et al. (2016), Hesse et al. (2017).
+    "NMC": dict(
+        k_cal_rate=2.85e-6,   # capacity loss fraction per hour at T_ref, SOC=50 %
+        Ea_cal=28_500.0,      # J/mol  — calendar aging activation energy
+        k_soc=0.5,            # SOC stress coefficient (linear)
+        k_cyc=3.5e-4,         # capacity loss fraction per full-DoD cycle at T_ref
+        Ea_cyc=17_100.0,      # J/mol  — cycle aging activation energy
+        alpha_dod=1.2,        # DoD power-law exponent
+        beta_crate=0.5,       # C-rate linear sensitivity factor
+    ),
+    # LFP (Lithium-Iron-Phosphate) — preferred for current utility BESS
+    # (e.g., Tesla Megapack Gen 3, BYD).  Very cycle-stable, moderate calendar.
+    # Calendar life (25 °C, 50 % SOC): EOL ~20+ years
+    # Cycle life (100 % DoD, 1C, 25 °C): ~4 000–6 000 cycles
+    # Sources: Naumann et al. (2017), Xu et al. (2016).
+    "LFP": dict(
+        k_cal_rate=1.20e-6,   # slower calendar aging
+        Ea_cal=17_500.0,      # J/mol  — LFP less temperature-sensitive
+        k_soc=0.2,            # LFP nearly SOC-insensitive for calendar aging
+        k_cyc=1.95e-4,        # capacity loss per full-DoD cycle at T_ref
+        Ea_cyc=10_000.0,      # J/mol  — very low temp sensitivity for cycling
+        alpha_dod=0.5,        # shallower power-law: LFP tolerates partial cycling
+        beta_crate=0.3,       # lower C-rate sensitivity
+    ),
+}
+
+
+class RealWorldBESSDegradationModel:
+    """
+    Combined calendar + cycle aging model for utility-scale BESS.
+
+    Designed for the AEMO environment where:
+    - Episodes may span many idle hours (calendar aging matters).
+    - Australian outdoor temperatures can deviate significantly from 25 °C.
+    - Dominant chemistries are NMC and LFP.
+
+    Parameters
+    ----------
+    chemistry : str
+        One of ``'NMC'`` or ``'LFP'`` (case-insensitive).  Selects the
+        corresponding parameter preset from ``BESS_CHEMISTRY_PRESETS``.
+        Ignored when any explicit parameter is supplied.
+    k_cal_rate : float
+        Calendar aging rate [capacity loss fraction per hour] at the
+        reference temperature (25 °C) and 50 % SOC.
+    Ea_cal : float
+        Activation energy for calendar aging [J/mol].
+    k_soc : float
+        SOC stress coefficient for calendar aging.  The SOC multiplier is
+        ``1 + k_soc × (soc_frac − 0.5)`` so values > 0 increase degradation
+        at high SOC and decrease it at low SOC.
+    k_cyc : float
+        Cycle aging coefficient [capacity loss fraction per full-DoD cycle]
+        at the reference temperature (25 °C) and 1C charge/discharge rate.
+    Ea_cyc : float
+        Activation energy for cycle aging [J/mol].
+    alpha_dod : float
+        Power-law exponent for DoD in cycle aging (``≥ 0``).
+    beta_crate : float
+        Linear C-rate sensitivity factor for cycle aging (``≥ 0``).
+
+    Examples
+    --------
+    >>> model = RealWorldBESSDegradationModel(chemistry='LFP')
+    >>> # Calendar aging: 30-minute step at 35 °C, 80 % SOC
+    >>> model.calendar_aging_per_step(T_celsius=35.0, soc_frac=0.8, dt_hours=0.5)
+    >>> # Cycle aging: one cycle at 80 % DoD, 0.5C, 25 °C
+    >>> model.cycle_aging_per_cycle(T_celsius=25.0, dod_pct=80.0, c_rate=0.5)
+    """
+
+    def __init__(
+        self,
+        chemistry: str = "NMC",
+        *,
+        k_cal_rate: Optional[float] = None,
+        Ea_cal: Optional[float] = None,
+        k_soc: Optional[float] = None,
+        k_cyc: Optional[float] = None,
+        Ea_cyc: Optional[float] = None,
+        alpha_dod: Optional[float] = None,
+        beta_crate: Optional[float] = None,
+    ):
+        key = chemistry.upper()
+        if key not in BESS_CHEMISTRY_PRESETS:
+            raise ValueError(
+                f"Unknown chemistry '{chemistry}'. "
+                f"Choose from: {list(BESS_CHEMISTRY_PRESETS.keys())}"
+            )
+        preset = BESS_CHEMISTRY_PRESETS[key]
+
+        self.chemistry = key
+        self.k_cal_rate: float = float(k_cal_rate if k_cal_rate is not None else preset["k_cal_rate"])
+        self.Ea_cal: float = float(Ea_cal if Ea_cal is not None else preset["Ea_cal"])
+        self.k_soc: float = float(k_soc if k_soc is not None else preset["k_soc"])
+        self.k_cyc: float = float(k_cyc if k_cyc is not None else preset["k_cyc"])
+        self.Ea_cyc: float = float(Ea_cyc if Ea_cyc is not None else preset["Ea_cyc"])
+        self.alpha_dod: float = float(alpha_dod if alpha_dod is not None else preset["alpha_dod"])
+        self.beta_crate: float = float(beta_crate if beta_crate is not None else preset["beta_crate"])
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def calendar_aging_per_step(
+        self, T_celsius: float, soc_frac: float, dt_hours: float
+    ) -> float:
+        """
+        Incremental calendar capacity loss for one simulation timestep.
+
+        Parameters
+        ----------
+        T_celsius : float
+            Ambient / cell temperature in degrees Celsius.
+        soc_frac : float
+            State of charge as a fraction of nominal capacity in [0, 1].
+        dt_hours : float
+            Timestep duration in hours.
+
+        Returns
+        -------
+        float
+            Fractional capacity loss (≥ 0).  Add to running ``Q_cal``.
+        """
+        T_K = T_celsius + 273.15
+        arr = _arrhenius(self.Ea_cal, T_K)
+
+        soc_frac_clipped = float(np.clip(soc_frac, 0.0, 1.0))
+        soc_stress = max(0.0, 1.0 + self.k_soc * (soc_frac_clipped - 0.5))
+
+        return self.k_cal_rate * arr * soc_stress * max(0.0, dt_hours)
+
+    def cycle_aging_per_cycle(
+        self, T_celsius: float, dod_pct: float, c_rate: float
+    ) -> float:
+        """
+        Capacity loss for one detected charge/discharge cycle.
+
+        Parameters
+        ----------
+        T_celsius : float
+            Temperature in degrees Celsius during the cycle.
+        dod_pct : float
+            Depth of discharge of the cycle in percent [0, 100].
+        c_rate : float
+            Equivalent C-rate of the cycle (≥ 0).
+
+        Returns
+        -------
+        float
+            Fractional capacity loss per cycle (≥ 0).
+        """
+        if dod_pct <= 0.0:
+            return 0.0
+
+        T_K = T_celsius + 273.15
+        arr = _arrhenius(self.Ea_cyc, T_K)
+
+        dod_frac = float(np.clip(dod_pct, 0.0, 100.0)) / 100.0
+        dod_factor = dod_frac ** self.alpha_dod
+
+        c_rate_clamped = float(max(0.0, c_rate))
+        c_rate_factor = 1.0 + self.beta_crate * c_rate_clamped
+
+        return self.k_cyc * arr * dod_factor * c_rate_factor
+
+    def describe(self) -> dict:
+        """Return a dict summarising the model parameters."""
+        return {
+            "model": "RealWorldBESSDegradationModel",
+            "chemistry": self.chemistry,
+            "k_cal_rate_per_h": self.k_cal_rate,
+            "Ea_cal_J_per_mol": self.Ea_cal,
+            "k_soc": self.k_soc,
+            "k_cyc_per_cycle": self.k_cyc,
+            "Ea_cyc_J_per_mol": self.Ea_cyc,
+            "alpha_dod": self.alpha_dod,
+            "beta_crate": self.beta_crate,
+        }
 
 

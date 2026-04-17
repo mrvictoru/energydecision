@@ -1,0 +1,13 @@
+{
+  "act_dim": 3,
+  "context_len": 1152,
+  "drop_p": 0.1,
+  "h_dim": 128,
+  "max_timestep": 157680,
+  "n_block": 4,
+  "n_heads": 8,
+  "rope_base": 10000.0,
+  "rope_enabled": true,
+  "rope_max_position": 3456,
+  "state_dim": 18
+}

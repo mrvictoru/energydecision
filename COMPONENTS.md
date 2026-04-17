@@ -419,30 +419,41 @@ scenarios_df = generator.generate_scenarios(
 
 ### Overview
 
-Implements semi-empirical battery degradation models (Muenzel et al., 2015). The primary interface is the **class-based** `DegradationModel`, which encapsulates nominal parameters and exposes methods for normalized cycle-life factors, combined cycle-life, and per-cycle degradation. Helper functions and a rainflow-based dynamic counting implementation are also provided for convenience and compatibility.
+Implements semi-empirical battery degradation models. The module provides three model classes:
 
-For a detailed explanation of the math, the factors, and the Rainflow implementation, see **[docs/BATTERY_DEGRADATION_DETAILS.md](docs/BATTERY_DEGRADATION_DETAILS.md)**.
+1. **`DegradationModel`** — Muenzel et al. (2015) multi-factor cycle-life model with rainflow cycle counting. Best for cell-level research and the household environment.
+2. **`RealWorldBESSDegradationModel`** — Combined calendar + cycle aging model for utility-scale BESS, adapted from the framework in Kampker et al. (2025, doi:10.3390/batteries11110392). Uses Arrhenius temperature dependency and NMC/LFP chemistry presets. **Recommended for AEMO grid-scale simulations.**
+3. **`RainflowCounter`** — ASTM E1049-85 rainflow cycle counting, used by both degradation models.
+
+For a detailed explanation of the math, the factors, the Rainflow implementation, and the real-world BESS model, see **[docs/BATTERY_DEGRADATION_DETAILS.md](docs/BATTERY_DEGRADATION_DETAILS.md)**.
 
 ### Available Models
 
-1. **DegradationModel (class)** — Recommended API. Provides:
+1. **DegradationModel (class)** — Muenzel et al. (2015) API. Provides:
    - `nCL_T(T)`, `nCL_Id(Id)`, `nCL_Ich(Ich)`, `nCL_SOCav_DOD(SOCav, DOD)` — normalized cycle-life factors
    - `cycle_life(T, Id, Ich, SOCav, DOD)` — combined cycle life (CL)
    - `degradation_per_cycle(T, Id, Ich, SOCav, DOD)` — fractional degradation per cycle (1 / CL)
-2. **Static helper** — `static_degradation(Id, Ich, SoC_avg, DoD)` (convenience wrapper using a default `DegradationModel`)
-3. **Dynamic / Rainflow** — `RainflowCounter`, `rainflow_counting(...)`, `dynamic_degradation(...)` for extracting closed cycles and computing cumulative aging from SoC time series
+2. **RealWorldBESSDegradationModel (class)** — Kampker et al. (2025) adaptation. Provides:
+   - `calendar_aging_per_step(T_celsius, soc_frac, dt_hours)` — fractional calendar capacity loss per timestep
+   - `cycle_aging_per_cycle(T_celsius, dod_pct, c_rate)` — fractional cycle capacity loss per rainflow cycle
+   - `describe()` — parameter introspection dict
+   - Chemistry presets: `BESS_CHEMISTRY_PRESETS['NMC']` and `BESS_CHEMISTRY_PRESETS['LFP']`
+3. **Static helper** — `static_degradation(Id, Ich, SoC_avg, DoD)` (convenience wrapper using a default `DegradationModel`)
+4. **Dynamic / Rainflow** — `RainflowCounter`, `rainflow_counting(...)`, `dynamic_degradation(...)` for extracting closed cycles and computing cumulative aging from SoC time series
 
 ### Basic Usage
 
 ```python
 from src.batterydeg import (
     DegradationModel,
+    RealWorldBESSDegradationModel,
+    BESS_CHEMISTRY_PRESETS,
     static_degradation,
     rainflow_counting,
     dynamic_degradation,
 )
 
-# Create a model (use defaults or pass custom nominal parameters)
+# --- Muenzel et al. (2015) model ---
 model = DegradationModel(CL_nom=3650.0, T_nom=25.0, Id_nom=0.25, Ich_nom=0.125, SOCav_nom=50.0, DOD_nom=90.0)
 
 # Normalized factors
@@ -461,13 +472,43 @@ deg_cost = static_degradation(Id=0.3, Ich=0.15, SoC_avg=50.0, DoD=80.0)
 soc_profile = [20, 40, 60, 40, 20]  # example SoC time series
 cycles = rainflow_counting(soc_profile, step_duration=0.5)
 total_deg, n_cycles = dynamic_degradation(soc_profile, step_duration=0.5)
+
+# --- Real-World BESS model (Kampker et al. 2025) ---
+rw_model = RealWorldBESSDegradationModel(chemistry='LFP')
+
+# Calendar aging: 30-minute idle step at 35°C, 80% SOC
+cal_loss = rw_model.calendar_aging_per_step(T_celsius=35.0, soc_frac=0.8, dt_hours=0.5)
+
+# Cycle aging: one cycle at 80% DoD, 0.5C, 25°C
+cyc_loss = rw_model.cycle_aging_per_cycle(T_celsius=25.0, dod_pct=80.0, c_rate=0.5)
+
+# Inspect model parameters
+print(rw_model.describe())
 ```
 
 > **Note:** Former top-level helper names (e.g. `nCL_Id`) are now instance methods on `DegradationModel` (e.g. `model.nCL_Id(...)`). Update tests or call sites accordingly.
 
 ### Integration with Environment
 
-`SolarBatteryEnv` creates and uses a `DegradationModel` by default (so per-step degradation costs are computed automatically and exposed via `info['deg_cost']`). If you need custom nominal parameters or deterministic behaviour for analysis, create your own `DegradationModel` instance and attach it to the environment before running episodes.
+**Household environment** (`SolarBatteryEnv`): Creates and uses a `DegradationModel` by default (per-step degradation costs via `info['deg_cost']`).
+
+**AEMO environment** (`AEMOBatteryTradingEnv`): Supports three degradation modes:
+
+```python
+# Real-world BESS (recommended for grid-scale — includes calendar aging)
+env = AEMOBatteryTradingEnv(
+    aemo_data=data,
+    degradation_mode='real_world',
+    degradation_chemistry='LFP',
+    degradation_temperature=30.0,
+)
+
+# Muenzel et al. rainflow (cycle aging only)
+env = AEMOBatteryTradingEnv(aemo_data=data, degradation_mode='rainflow')
+
+# Simple linear (backward compatible)
+env = AEMOBatteryTradingEnv(aemo_data=data, degradation_mode='simple')
+```
 
 
 ---
@@ -791,7 +832,7 @@ ep_logs, inc_logs, all_logs = run_dispatch_replay(
 
 ### Notebooks
 
-- `test_aemo_simrun.ipynb` section 2.2 — full dispatch replay workflow
+- `aemo_simrun.ipynb` — full dispatch replay workflow inside the notebook-based AEMO offline RL pipeline
 - `test_aemo_data.ipynb` section 5 — DUID availability exploration
 
 ---
@@ -863,12 +904,13 @@ pytest tests/ -v --durations=10
 | `test_performance.py` | Performance benchmarks | 6 |
 | `test_quantile_scenarios.py` | Scenario generation | 22 |
 | `test_aemo_degradation.py` | Rainflow counter, capacity fade | 12 |
+| `test_real_world_degradation.py` | RealWorldBESSDegradationModel, AEMO env integration | 28 |
 | `test_episode_visualizer.py` | Env detection, plotting, edge cases | 16 |
 | `test_algorithm_classes.py` | SDP/MRDP/Oracle class init | 5 |
 | `test_aemo_env_compatibility.py` | Gymnasium/SB3 compatibility | 5 |
 | `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired tests | 22 |
 
-**Total: 104 tests**
+**Total: 132 tests**
 
 ---
 
