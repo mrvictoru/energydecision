@@ -16,5 +16,17 @@ services:
               count: all
               capabilities: [gpu]
 
+  autoresearch-train:
+    build: .
+    working_dir: /code/src
+    volumes:
+      - .:/code
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    entrypoint: ["python"]
+
 volumes:
   stonkapp:
