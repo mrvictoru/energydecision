@@ -375,6 +375,258 @@ Concretely, in this single-agent benchmark we report this as a **planner gap / r
 $$\Delta J(\pi;\pi^\star)=\mathbb{E}[G(\pi^\star)]-\mathbb{E}[G(\pi)],$$
 where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally report a relative gap $\Delta J/|\mathbb{E}[G(\pi^\star)]|$ for comparability across datasets.
 
+### Phase 1.5: LLM-Driven Autoresearch Loop (Near-Term)
+
+The existing pipeline (environment → training CLI → evaluation → metrics) provides the **laboratory** but lacks the **scientist**: an automated agent that proposes hyperparameter/config mutations, runs experiments, interprets results, and iterates. This phase adds an LLM-driven autoresearch loop following the Karpathy-style autoresearch pattern, with first-class support for locally hosted LLMs via llama.cpp.
+
+#### 9.1.1 Motivation and Gap Analysis
+
+The current workflow requires a human to manually:
+1. Write a candidate config JSON (DT hyperparameters, RTG values, training data mix, etc.).
+2. Launch training via `pretrain_decision_transformer.py` or `pretrain_aemo_decision_transformer.py`.
+3. Run evaluation episodes via `Agent` / `AEMOAgent`.
+4. Inspect metrics in `eval_output/` and decide whether the change was beneficial.
+
+An autoresearch agent automates steps 1–4 in a closed loop: it reads the current best config and experiment history (ledger), proposes a mutation, triggers the training/evaluation pipeline, records the outcome, and repeats. The LLM is the **mutation proposer** — it produces structured JSON configs, not code.
+
+#### 9.1.2 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AutoresearchAgent (agent.py)                  │
+│  ┌───────────┐   ┌──────────────┐   ┌────────────────────────┐ │
+│  │  Ledger   │──▶│  Prompt      │──▶│  LLM Backend           │ │
+│  │ (history) │   │  Builder     │   │  (llm_backend.py)      │ │
+│  └───────────┘   │ (prompts.py) │   │                        │ │
+│       ▲          └──────────────┘   │  ┌──────────────────┐  │ │
+│       │                             │  │ LlamaCppBackend  │  │ │
+│       │          ┌──────────────┐   │  │ (local, default) │  │ │
+│       │          │  JSON Parse  │◀──│  ├──────────────────┤  │ │
+│       │          │  + Validate  │   │  │ OpenAIBackend    │  │ │
+│       │          └──────┬───────┘   │  │ (cloud, optional)│  │ │
+│       │                 │           │  └──────────────────┘  │ │
+│       │                 ▼           └────────────────────────┘ │
+│       │          ┌──────────────┐                               │
+│       └──────────│   Runner     │                               │
+│      (keep/      │ (runner.py)  │                               │
+│       discard)   └──────┬───────┘                               │
+│                         │                                       │
+└─────────────────────────┼───────────────────────────────────────┘
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+   ┌────────────┐  ┌────────────┐  ┌────────────┐
+   │  DT Train  │  │  Episode   │  │  Eval +    │
+   │  Pipeline  │  │  Rollout   │  │  Metrics   │
+   └────────────┘  └────────────┘  └────────────┘
+   (pretrain_*.py)  (decision.py)   (helper.py)
+```
+
+#### 9.1.3 LLM Backend Abstraction (`src/autoresearch/llm_backend.py`)
+
+The LLM interface is deliberately minimal — a single `complete(system_prompt, user_prompt) → str` method — and communicates via HTTP POST to an OpenAI-compatible `/v1/chat/completions` endpoint. This design means:
+
+- **No LLM library dependency** is added to the repo. The backend uses only `requests` (already in `requirements.txt`).
+- **llama.cpp server** is the default and recommended backend: run `./llama-server -m <model.gguf> --port 8080` and the agent connects to `http://localhost:8080/v1/chat/completions`. Any model up to ~30B parameters works well for this task.
+- **Ollama, vLLM, LM Studio** also expose the same OpenAI-compatible endpoint and work without code changes.
+- **OpenAI/Anthropic cloud APIs** can be used by changing the endpoint URL and providing an API key, but are entirely optional.
+
+```
+LLMBackend (base)
+├── LlamaCppBackend    ← default; POST to http://localhost:8080/v1
+├── OllamaBackend      ← POST to http://localhost:11434/v1
+└── OpenAIBackend      ← POST to https://api.openai.com/v1 (optional)
+```
+
+**Why this works for local ≤30B models:** The prompts are tiny (~200 token system prompt + ~800 token user prompt with ledger history). The expected output is ~100 tokens of JSON. A 30B model via llama.cpp handles this comfortably with fast inference. The LLM only produces structured config JSON, never code — so even smaller models (7B–13B) can work.
+
+#### 9.1.4 Mutable Configuration Surface
+
+The autoresearch agent can only modify a controlled set of hyperparameters. This keeps the search space narrow enough for a local LLM while preventing invalid configurations.
+
+**DT hyperparameters (mutable):**
+
+| Key | Type | Range | Default |
+|-----|------|-------|---------|
+| `context_len` | int | [10, 120] | 60 |
+| `h_dim` | int | {64, 128, 256, 512} | 128 |
+| `n_blocks` | int | [1, 6] | 2 |
+| `n_heads` | int | {2, 4, 8} | 8 |
+| `lr` | float | [1e-6, 1e-3] | 2e-5 |
+| `batch_size` | int | {4, 6, 8, 16, 32} | 6 |
+| `return_scale` | float | [0.1, 100.0] | 1.0 |
+| `discount_factor` | float | [0.9, 1.0] | 0.99 |
+| `epochs` | int | [1, 10] | 2 |
+| `rtg_value` | float | [-5000, -1] | -1500 |
+| `use_rope` | bool | {true, false} | false |
+
+**Environment parameters (mutable for AEMO):**
+
+| Key | Type | Range | Default |
+|-----|------|-------|---------|
+| `action_mode` | str | {simple, multi_market} | simple |
+| `degradation_mode` | str | {none, rainflow, real_world} | none |
+| `degradation_chemistry` | str | {NMC, LFP} | LFP |
+| `step_duration_hours` | float | {0.25, 0.5, 1.0} | 0.5 |
+
+**Immutable (fixed across experiments):** `state_dim`, `act_dim` (derived from env), data paths, evaluation episode count, random seeds.
+
+#### 9.1.5 Prompt Design (`src/autoresearch/prompts.py`)
+
+The system prompt constrains the LLM to output only valid JSON configs:
+
+```
+System: You are a hyperparameter optimization agent for a Decision Transformer
+applied to battery energy storage control. You can ONLY modify the following
+parameters: {mutable_keys_with_types_and_ranges}. Respond with a JSON object
+containing your proposed configuration. Do not include any explanation — only
+the JSON object.
+```
+
+The user prompt provides experimental context:
+
+```
+User:
+Current best config: {json}
+Current best metric (mean episode return): {value}
+Experiment history (last N attempts):
+  - Attempt 3: {config_diff} → mean_return={x}, degradation={y}, KEPT
+  - Attempt 2: {config_diff} → mean_return={x}, Stage A FAILED (diverged)
+  - Attempt 1: {config_diff} → mean_return={x}, degradation={y}, DISCARDED
+
+Propose a new configuration that improves mean episode return while keeping
+degradation below {threshold}.
+```
+
+**Output parsing:** Extract the first JSON object from the LLM response, validate all keys against `ALLOWED_MUTABLE_KEYS`, clamp numeric values to valid ranges, and reject unknown keys. On parse failure, retry up to 3 times with a simplified prompt.
+
+#### 9.1.6 Experiment Runner (`src/autoresearch/runner.py`)
+
+The runner supports two modes:
+
+```bash
+# Agent mode: LLM proposes candidates in an automated loop
+python -m src.autoresearch.runner \
+    --mode agent \
+    --llm-endpoint http://localhost:8080/v1 \
+    --iterations 20 \
+    --benchmark household_dt_v1
+
+# Manual mode: human provides a single candidate config
+python -m src.autoresearch.runner \
+    --mode manual \
+    --candidate-config candidate.json \
+    --benchmark household_dt_v1
+```
+
+**Agent-mode CLI arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--mode` | `manual` | `manual` (one config) or `agent` (LLM loop) |
+| `--llm-endpoint` | `http://localhost:8080/v1` | OpenAI-compatible API URL |
+| `--llm-model` | `""` | Model name (llama.cpp ignores this) |
+| `--iterations` | 20 | Number of propose-train-eval cycles |
+| `--temperature` | 0.7 | LLM sampling temperature |
+| `--max-tokens` | 512 | Max LLM response tokens |
+| `--benchmark` | required | Benchmark config name |
+| `--primary-metric` | `mean_reward` | Metric to optimize |
+| `--ledger-path` | `eval_output/autoresearch/ledger.jsonl` | Experiment history |
+
+#### 9.1.7 Two-Stage Evaluation Gate
+
+Each candidate goes through a lightweight screening before full evaluation:
+
+- **Stage A (Quick Screen):** Train for 1 epoch on a small data subset. If the training loss diverges (NaN, >10× baseline) or the model produces constant actions, reject immediately. Cost: ~2–5 minutes on GPU.
+- **Stage B (Full Evaluation):** Train for the full epoch count, run evaluation episodes, compute metrics. Compare primary metric against the current best. Cost: ~10–30 minutes depending on config.
+
+**Keep/Discard rule:** A candidate is kept if `metric_new > metric_best - tolerance` (tolerance accounts for evaluation noise). The ledger records the full config, all metrics, and the keep/discard decision for every attempt.
+
+#### 9.1.8 Ledger (`src/autoresearch/ledger.py`)
+
+The ledger is a simple JSONL file where each line records one experiment attempt:
+
+```json
+{
+  "attempt_id": 7,
+  "timestamp": "2026-04-19T12:34:56Z",
+  "config": {"context_len": 80, "h_dim": 256, "lr": 5e-5},
+  "config_diff": {"context_len": "60→80", "h_dim": "128→256"},
+  "stage_a": {"passed": true, "train_loss": 0.042},
+  "stage_b": {"mean_reward": -2380.5, "degradation": 0.008, "sharpe": -0.75},
+  "decision": "keep",
+  "primary_metric": -2380.5,
+  "best_so_far": true
+}
+```
+
+The agent reads the last N entries to build its prompt context, enabling it to learn from prior successes and failures within the current run.
+
+#### 9.1.9 File Manifest
+
+| # | File | Purpose |
+|---|------|---------|
+| 1 | `src/autoresearch/__init__.py` | Package init; exports `AutoresearchAgent`, `LlamaCppBackend` |
+| 2 | `src/autoresearch/llm_backend.py` | `LLMBackend` base + `LlamaCppBackend` + `OpenAIBackend` |
+| 3 | `src/autoresearch/prompts.py` | System/user prompt templates + JSON response parsing |
+| 4 | `src/autoresearch/agent.py` | `AutoresearchAgent` — the LLM-driven outer loop |
+| 5 | `src/autoresearch/runner.py` | CLI entrypoint with `--mode agent` and `--mode manual` |
+| 6 | `src/autoresearch/ledger.py` | JSONL ledger read/write + history formatting |
+| 7 | `src/autoresearch/benchmarks.py` | Benchmark config definitions (mutable surface, metrics, thresholds) |
+| 8 | `configs/autoresearch_default.json` | Default benchmark config for household DT |
+| 9 | `configs/autoresearch_aemo.json` | Default benchmark config for AEMO DT |
+| 10 | `tests/test_autoresearch.py` | Unit tests for prompt building, JSON parsing, ledger, backend |
+
+#### 9.1.10 Local LLM Setup Guide
+
+**Prerequisites:** A machine with llama.cpp compiled and a GGUF model file (e.g., Qwen2.5-32B-Q4, Llama-3.1-8B-Q8, Mistral-7B-Q6).
+
+**Step 1 — Start the LLM server:**
+```bash
+# llama.cpp server (recommended)
+./llama-server -m models/qwen2.5-32b-q4_k_m.gguf \
+    --port 8080 --ctx-size 2048 --n-gpu-layers 99
+
+# OR Ollama (alternative)
+ollama serve  # listens on :11434 by default
+ollama run qwen2.5:32b
+```
+
+**Step 2 — Run the autoresearch agent:**
+```bash
+python -m src.autoresearch.runner \
+    --mode agent \
+    --llm-endpoint http://localhost:8080/v1 \
+    --benchmark household_dt_v1 \
+    --iterations 20
+```
+
+**Step 3 — Monitor progress:**
+```bash
+# Watch the ledger
+tail -f eval_output/autoresearch/ledger.jsonl | python -m json.tool
+
+# Or use the built-in summary
+python -m src.autoresearch.ledger --summary eval_output/autoresearch/ledger.jsonl
+```
+
+The LLM server runs independently of the autoresearch agent. The agent only makes HTTP calls when it needs a new candidate config proposal (~once per 10–30 minute cycle), so the LLM server is idle most of the time and can be shared with other tasks.
+
+#### 9.1.11 Integration with Existing Codebase
+
+The autoresearch loop reuses existing components without modification:
+
+| Existing Component | How Autoresearch Uses It |
+|--------------------|--------------------------|
+| `pretrain_decision_transformer.py` | Called by runner to train DT with candidate config |
+| `pretrain_aemo_decision_transformer.py` | Called by runner for AEMO DT training |
+| `Agent` / `AEMOAgent` (decision.py) | Called by runner to run evaluation episodes |
+| `evaluate_experiment_logs` (helper.py) | Called by runner to compute metrics for keep/discard |
+| `TrajectoryDataset` (transformer_training.py) | Used by training pipeline (unchanged) |
+| `configs/*.json` | Baseline model kwargs; autoresearch writes candidate configs to temp files |
+
+No existing source files need modification. The autoresearch package is entirely additive.
+
 ### Phase 2: Robustness and Generalization (Year 1-2)
 - **Distributional Shift:** Investigate how Offline RL (Decision Transformers) generalizes to unseen weather patterns or customer load profiles compared to Online RL.
 - **Risk-Sensitive Control:** Integrate CVaR-style objectives/constraints into the training loop (evaluation-side tail-risk metrics are already implemented; the next step is CVaR-constrained or multi-objective training).
@@ -406,7 +658,11 @@ DT-centric near-term extensions (repo-aligned):
 
 ## 11. Conclusion
 
-This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior. This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
+This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior.
+
+The planned autoresearch extension (Phase 1.5) will close the automation gap by adding an LLM-driven experiment loop that proposes, trains, evaluates, and iterates on Decision Transformer hyperparameters without manual intervention. The LLM backend is designed around the OpenAI-compatible API standard, making locally hosted models via llama.cpp (up to ~30B parameters) the default and recommended option — no cloud API dependency is required. This positions the framework to support fully automated hyperparameter exploration using only local compute resources.
+
+This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
 ## References
 
