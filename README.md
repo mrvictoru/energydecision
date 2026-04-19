@@ -280,7 +280,9 @@ python3 pretrain_aemo_decision_transformer.py \
     --subset-episodes 24 \
     --epochs-per-subset 1 \
     --batch-size 24 \
-    --num-workers 0 \
+    --num-workers 4 \
+    --prefetch-factor 2 \
+    --amp-mode "auto" \
     --save-path ../models/aemo/dt/aemo_dt_model.pt \
     --checkpoint-path ../models/aemo/dt/aemo_dt_checkpoint.pt \
     --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv
