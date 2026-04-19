@@ -379,7 +379,7 @@ where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally 
 
 The existing pipeline (environment → training CLI → evaluation → metrics) provides the **laboratory** but lacks the **scientist**: an automated agent that proposes hyperparameter/config mutations, runs experiments, interprets results, and iterates. This phase adds an LLM-driven autoresearch loop following the Karpathy-style autoresearch pattern, with first-class support for locally hosted LLMs via llama.cpp.
 
-#### 9.1.1 Motivation and Gap Analysis
+#### Motivation and Gap Analysis
 
 The current workflow requires a human to manually:
 1. Write a candidate config JSON (DT hyperparameters, RTG values, training data mix, etc.).
@@ -389,7 +389,7 @@ The current workflow requires a human to manually:
 
 An autoresearch agent automates steps 1–4 in a closed loop: it reads the current best config and experiment history (ledger), proposes a mutation, triggers the training/evaluation pipeline, records the outcome, and repeats. The LLM is the **mutation proposer** — it produces structured JSON configs, not code.
 
-#### 9.1.2 Architecture Overview
+#### Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -422,7 +422,7 @@ An autoresearch agent automates steps 1–4 in a closed loop: it reads the curre
    (pretrain_*.py)  (decision.py)   (helper.py)
 ```
 
-#### 9.1.3 LLM Backend Abstraction (`src/autoresearch/llm_backend.py`)
+#### LLM Backend Abstraction (`src/autoresearch/llm_backend.py`)
 
 The LLM interface is deliberately minimal — a single `complete(system_prompt, user_prompt) → str` method — and communicates via HTTP POST to an OpenAI-compatible `/v1/chat/completions` endpoint. This design means:
 
@@ -440,7 +440,7 @@ LLMBackend (base)
 
 **Why this works for local ≤30B models:** The prompts are tiny (~200 token system prompt + ~800 token user prompt with ledger history). The expected output is ~100 tokens of JSON. A 30B model via llama.cpp handles this comfortably with fast inference. The LLM only produces structured config JSON, never code — so even smaller models (7B–13B) can work.
 
-#### 9.1.4 Mutable Configuration Surface
+#### Mutable Configuration Surface
 
 The autoresearch agent can only modify a controlled set of hyperparameters. This keeps the search space narrow enough for a local LLM while preventing invalid configurations.
 
@@ -471,7 +471,7 @@ The autoresearch agent can only modify a controlled set of hyperparameters. This
 
 **Immutable (fixed across experiments):** `state_dim`, `act_dim` (derived from env), data paths, evaluation episode count, random seeds.
 
-#### 9.1.5 Prompt Design (`src/autoresearch/prompts.py`)
+#### Prompt Design (`src/autoresearch/prompts.py`)
 
 The system prompt constrains the LLM to output only valid JSON configs:
 
@@ -500,7 +500,7 @@ degradation below {threshold}.
 
 **Output parsing:** Extract the first JSON object from the LLM response, validate all keys against `ALLOWED_MUTABLE_KEYS`, clamp numeric values to valid ranges, and reject unknown keys. On parse failure, retry up to 3 times with a simplified prompt.
 
-#### 9.1.6 Experiment Runner (`src/autoresearch/runner.py`)
+#### Experiment Runner (`src/autoresearch/runner.py`)
 
 The runner supports two modes:
 
@@ -533,7 +533,7 @@ python -m src.autoresearch.runner \
 | `--primary-metric` | `mean_reward` | Metric to optimize |
 | `--ledger-path` | `eval_output/autoresearch/ledger.jsonl` | Experiment history |
 
-#### 9.1.7 Two-Stage Evaluation Gate
+#### Two-Stage Evaluation Gate
 
 Each candidate goes through a lightweight screening before full evaluation:
 
@@ -542,7 +542,7 @@ Each candidate goes through a lightweight screening before full evaluation:
 
 **Keep/Discard rule:** A candidate is kept if `metric_new > metric_best - tolerance` (tolerance accounts for evaluation noise). The ledger records the full config, all metrics, and the keep/discard decision for every attempt.
 
-#### 9.1.8 Ledger (`src/autoresearch/ledger.py`)
+#### Ledger (`src/autoresearch/ledger.py`)
 
 The ledger is a simple JSONL file where each line records one experiment attempt:
 
@@ -562,7 +562,7 @@ The ledger is a simple JSONL file where each line records one experiment attempt
 
 The agent reads the last N entries to build its prompt context, enabling it to learn from prior successes and failures within the current run.
 
-#### 9.1.9 File Manifest
+#### File Manifest
 
 | # | File | Purpose |
 |---|------|---------|
@@ -577,7 +577,7 @@ The agent reads the last N entries to build its prompt context, enabling it to l
 | 9 | `configs/autoresearch_aemo.json` | Default benchmark config for AEMO DT |
 | 10 | `tests/test_autoresearch.py` | Unit tests for prompt building, JSON parsing, ledger, backend |
 
-#### 9.1.10 Local LLM Setup Guide
+#### Local LLM Setup Guide
 
 **Prerequisites:** A machine with llama.cpp compiled and a GGUF model file (e.g., Qwen2.5-32B-Q4, Llama-3.1-8B-Q8, Mistral-7B-Q6).
 
@@ -612,7 +612,7 @@ python -m src.autoresearch.ledger --summary eval_output/autoresearch/ledger.json
 
 The LLM server runs independently of the autoresearch agent. The agent only makes HTTP calls when it needs a new candidate config proposal (~once per 10–30 minute cycle), so the LLM server is idle most of the time and can be shared with other tasks.
 
-#### 9.1.11 Integration with Existing Codebase
+#### Integration with Existing Codebase
 
 The autoresearch loop reuses existing components without modification:
 
