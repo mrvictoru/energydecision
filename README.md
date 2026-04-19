@@ -615,8 +615,31 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 
 ## Autoresearch
 
-This repo includes a constrained autoresearch loop for Decision Transformer tuning.
+This repository includes a constrained autoresearch loop for Decision Transformer tuning across household and AEMO benchmarks.
 
-- Docs: `docs/AUTORESEARCH.md`
-- Manual run: `python -m src.autoresearch.cli --mode manual ...`
-- Agent run: `python -m src.autoresearch.cli --mode agent ...`
+- Full guide: [`docs/AUTORESEARCH.md`](docs/AUTORESEARCH.md)
+- Entrypoint: `python -m src.autoresearch`
+
+Quick manual cycle:
+
+```bash
+python -m src.autoresearch \
+  --mode manual \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --candidate-config configs/candidate_household.json
+```
+
+Quick agent cycle (local llama.cpp):
+
+```bash
+python -m src.autoresearch \
+  --mode agent \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --llm-backend llamacpp \
+  --llm-endpoint http://localhost:8080/v1 \
+  --iterations 5
+```

@@ -1,36 +1,180 @@
-# Autoresearch
+# Autoresearch for Decision Transformer Tuning
 
-Autoresearch in this repository is a constrained optimization loop over Decision Transformer training configurations.
+Autoresearch in this repository is a **constrained experiment loop** for improving DT configs while keeping benchmark/evaluation fixed.
 
-## What it does
+It is designed to answer: _"Did this config change improve held-out performance under guardrails?"_
 
-- Runs reproducible training/evaluation cycles for household and AEMO DT setups.
-- Applies Stage A screening before expensive full evaluation.
-- Applies Stage B keep/discard decisions from held-out metrics.
-- Stores every run in an append-only JSONL ledger.
+## What Autoresearch Does
 
-## Architecture
+- Trains a DT candidate config.
+- Applies **Stage A** screening (cheap artifact sanity checks).
+- If Stage A passes, runs full training + **Stage B** held-out evaluation.
+- Compares candidate against current baseline/best.
+- Records full evidence in a JSONL ledger.
 
-- Benchmarks: `configs/benchmark_household.json`, `configs/benchmark_aemo.json`
-- Eval harness: `src/eval_common.py`, `src/eval_household.py`, `src/eval_aemo.py`
-- Core loop: `src/autoresearch/runner.py`, `stage_a.py`, `stage_b.py`, `ledger.py`, `config_utils.py`
-- LLM loop: `llm_backend.py`, `prompts.py`, `agent.py`
+## What It Does **Not** Do
 
-## Manual mode
+- It does not mutate notebooks.
+- It does not regenerate datasets/splits automatically.
+- It does not change environment reward logic.
+- It should only mutate approved config keys.
+
+---
+
+## Key Files
+
+- Frozen benchmarks:
+  - `configs/benchmark_household.json`
+  - `configs/benchmark_aemo.json`
+- Evaluation CLIs:
+  - `src/eval_household.py`
+  - `src/eval_aemo.py`
+  - shared helpers in `src/eval_common.py`
+- Autoresearch core:
+  - `src/autoresearch/config_utils.py`
+  - `src/autoresearch/stage_a.py`
+  - `src/autoresearch/stage_b.py`
+  - `src/autoresearch/runner.py`
+  - `src/autoresearch/ledger.py`
+- LLM loop:
+  - `src/autoresearch/llm_backend.py`
+  - `src/autoresearch/prompts.py`
+  - `src/autoresearch/agent.py`
+  - `src/autoresearch/cli.py`
+
+---
+
+## Prerequisites
+
+1. Data and benchmark artifacts are prepared (household logs or AEMO dataset).
+2. Docker service is available if using `--docker` (`autoresearch-train` in `docker-compose.yml`).
+3. You have baseline/candidate config JSON files.
+4. For agent mode, your LLM backend is reachable.
+
+---
+
+## Mutable Surface (v1)
+
+Autoresearch is intentionally narrow. Mutations should stay in config surface such as:
+
+- Architecture: `n_block`, `h_dim`, `n_heads`, `drop_p`, `context_len`, `rope_*`
+- Training: `batch_size`, `lr`, `epochs`, `return_scale`, `*_loss_weight`, `weight_decay`
+- Prompting: `rtg_value`, `recommended_rtg_percentile`
+- AEMO-only knobs: `action_mode`, `degradation_mode`, `degradation_chemistry`, `step_duration_hours`
+
+Frozen benchmark keys (dataset paths, eval setup, guardrails, state/action dims) should not be mutated.
+
+---
+
+## End-to-End Walkthrough (Manual Mode)
+
+Manual mode is the safest way to start.
+
+### 1) Prepare a baseline config
+
+Create a JSON config (example path: `configs/baseline_household.json`) containing your current DT settings.
+
+### 2) Prepare a candidate config
+
+Create `configs/candidate_household.json` by copying baseline and changing only intended mutable keys.
+
+### Example config templates
+
+Use these as starting points and adjust to your environment.
+
+`configs/baseline_household.json`
+
+```json
+{
+  "n_block": 2,
+  "h_dim": 128,
+  "n_heads": 8,
+  "drop_p": 0.1,
+  "context_len": 60,
+  "rope_enabled": false,
+  "rope_base": 10000.0,
+  "rope_max_position": 180,
+  "batch_size": 6,
+  "lr": 2e-5,
+  "epochs": 2,
+  "return_scale": 1000.0,
+  "action_loss_weight": 1.0,
+  "state_loss_weight": 0.01,
+  "return_loss_weight": 0.002,
+  "weight_decay": 0.0001,
+  "rtg_value": 0.0,
+  "recommended_rtg_percentile": 95
+}
+```
+
+`configs/candidate_household.json` (single-change example)
+
+```json
+{
+  "n_block": 2,
+  "h_dim": 128,
+  "n_heads": 8,
+  "drop_p": 0.1,
+  "context_len": 80,
+  "rope_enabled": false,
+  "rope_base": 10000.0,
+  "rope_max_position": 240,
+  "batch_size": 6,
+  "lr": 2e-5,
+  "epochs": 2,
+  "return_scale": 1000.0,
+  "action_loss_weight": 1.0,
+  "state_loss_weight": 0.01,
+  "return_loss_weight": 0.002,
+  "weight_decay": 0.0001,
+  "rtg_value": 0.0,
+  "recommended_rtg_percentile": 95
+}
+```
+
+Tip: start with one or two mutations per candidate so keep/discard outcomes are easier to interpret.
+
+### 3) Run one candidate cycle
 
 ```bash
-python -m src.autoresearch.cli \
+python -m src.autoresearch \
   --mode manual \
   --environment household \
   --benchmark configs/benchmark_household.json \
   --baseline-config configs/baseline_household.json \
-  --candidate-config configs/candidate_household.json
+  --candidate-config configs/candidate_household.json \
+  --output-dir eval_output/autoresearch \
+  --ledger-path eval_output/autoresearch/ledger.jsonl
 ```
 
-## Agent mode
+Use `--docker` to execute training through `docker compose run autoresearch-train ...`.
+
+### 4) Inspect artifacts
+
+For each run, artifacts are saved under:
+
+- `eval_output/autoresearch/<run_id>/stage_a/`
+- `eval_output/autoresearch/<run_id>/stage_b/`
+- `eval_output/autoresearch/<run_id>/run_summary.json`
+
+### 5) Inspect ledger
 
 ```bash
-python -m src.autoresearch.cli \
+python -m src.autoresearch.ledger --summary eval_output/autoresearch/ledger.jsonl
+```
+
+The ledger is append-only and keeps decision provenance (`keep`, `discard`, `crash`, `stage_a_reject`).
+
+---
+
+## End-to-End Walkthrough (Agent Mode)
+
+Agent mode proposes config diffs with an LLM and runs repeated cycles.
+
+### Option A: llama.cpp (default local)
+
+```bash
+python -m src.autoresearch \
   --mode agent \
   --environment household \
   --benchmark configs/benchmark_household.json \
@@ -40,11 +184,90 @@ python -m src.autoresearch.cli \
   --iterations 5
 ```
 
-## Mutable surface
+### Option B: Ollama
 
-The mutable key surface is defined in `ALLOWED_MUTABLE_KEYS_V1` in `src/autoresearch/config_utils.py`.
+```bash
+python -m src.autoresearch \
+  --mode agent \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --llm-backend ollama \
+  --llm-endpoint http://localhost:11434/v1 \
+  --llm-model qwen2.5:32b \
+  --iterations 5
+```
 
-## Ledger
+### Option C: OpenAI-compatible cloud
 
-Ledger path defaults to `eval_output/autoresearch/ledger.jsonl`.
-Each line is one run with decision and artifact pointers.
+```bash
+export OPENAI_API_KEY=...
+
+python -m src.autoresearch \
+  --mode agent \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --llm-backend openai \
+  --llm-model gpt-4o \
+  --iterations 5
+```
+
+---
+
+## Using Eval CLIs Directly
+
+Useful when validating checkpoints independently of autoresearch:
+
+```bash
+python -m src.eval_household \
+  --benchmark configs/benchmark_household.json \
+  --model-path models/household/dt/dt_model.pt \
+  --output-dir eval_output/household_eval
+
+python -m src.eval_aemo \
+  --benchmark configs/benchmark_aemo.json \
+  --model-path models/aemo/dt/aemo_dt_model.pt \
+  --output-dir eval_output/aemo_eval
+```
+
+Both write:
+
+- `eval_metrics.json`
+- `eval_summary.json`
+
+---
+
+## Keep/Discard Logic Summary
+
+- **Stage A reject**: crashed training, missing artifacts, divergence, invalid losses.
+- **Stage B discard**: guardrail failures or no primary metric improvement.
+- **Keep**: candidate improves primary metric while passing guardrails.
+
+---
+
+## Practical Tuning Strategy
+
+1. Start with manual mode for 3-5 controlled candidates.
+2. Confirm Stage A/Stage B and ledger behavior are sensible.
+3. Run short agent loops (`iterations=3..10`) before long loops.
+4. Keep mutation surface narrow; avoid changing too many knobs at once.
+5. Promote only stable improvements to baseline config.
+
+---
+
+## Troubleshooting
+
+- LLM connection failures: check endpoint and model server process.
+- Empty/invalid LLM JSON: prompts parser retries, then raises explicit error.
+- Import path issues: use `python -m src.autoresearch ...` from repo root.
+- Missing training artifacts: inspect `stage_a/loss.csv` and run summary.
+
+---
+
+## Recommended Validation Checklist
+
+- Manual household run completes and appends ledger entry.
+- Manual AEMO run completes and appends ledger entry.
+- Agent loop runs for multiple iterations with your chosen backend.
+- `python -m src.autoresearch.ledger --summary ...` shows expected rows.
