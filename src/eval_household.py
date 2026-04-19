@@ -1,26 +1,47 @@
 from __future__ import annotations
 
-import argparse
-import json
+import sys
 from pathlib import Path
 
+_SRC_DIR = Path(__file__).resolve().parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
+import argparse
+import json
 import numpy as np
 import polars as pl
 
-from EnergySimEnv import SolarBatteryEnv
-from decision import Agent, run_episodes_parallel
-from helper import evaluate_experiment_logs
-from eval_common import (
-    EvalSummary,
-    check_guardrails,
-    collect_parquet_by_patterns,
-    iso_timestamp,
-    load_benchmark,
-    load_dt_model,
-    read_return_scale,
-    split_episode_logs,
-    write_eval_outputs,
-)
+try:
+    from .EnergySimEnv import SolarBatteryEnv
+    from .decision import Agent, run_episodes_parallel
+    from .helper import evaluate_experiment_logs
+    from .eval_common import (
+        EvalSummary,
+        check_guardrails,
+        collect_parquet_by_patterns,
+        iso_timestamp,
+        load_benchmark,
+        load_dt_model,
+        read_return_scale,
+        split_episode_logs,
+        write_eval_outputs,
+    )
+except ImportError:
+    from EnergySimEnv import SolarBatteryEnv
+    from decision import Agent, run_episodes_parallel
+    from helper import evaluate_experiment_logs
+    from eval_common import (
+        EvalSummary,
+        check_guardrails,
+        collect_parquet_by_patterns,
+        iso_timestamp,
+        load_benchmark,
+        load_dt_model,
+        read_return_scale,
+        split_episode_logs,
+        write_eval_outputs,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

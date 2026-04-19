@@ -67,6 +67,7 @@ def test_stage_b_evaluate_reads_written_outputs(tmp_path: Path):
         return 0
 
     fake.main = _main
+    sys.modules["src.eval_household"] = fake
     sys.modules["eval_household"] = fake
 
     ev = StageBEvaluator(str(bench_path), "household")

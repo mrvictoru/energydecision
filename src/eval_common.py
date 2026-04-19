@@ -9,7 +9,10 @@ from typing import Any
 import polars as pl
 import torch
 
-from decision_transformer import DecisionTransformer
+try:
+    from .decision_transformer import DecisionTransformer
+except ImportError:
+    from decision_transformer import DecisionTransformer
 
 
 @dataclass

@@ -4,11 +4,11 @@ import argparse
 import os
 from pathlib import Path
 
-from autoresearch.agent import AutoresearchAgent
-from autoresearch.config_utils import load_config
-from autoresearch.ledger import ExperimentLedger, LedgerEntry
-from autoresearch.llm_backend import LlamaCppBackend, OllamaBackend, OpenAIBackend
-from autoresearch.runner import AutoresearchRunner
+from .agent import AutoresearchAgent
+from .config_utils import load_config
+from .ledger import ExperimentLedger, LedgerEntry
+from .llm_backend import LlamaCppBackend, OllamaBackend, OpenAIBackend
+from .runner import AutoresearchRunner
 
 
 def _build_backend(args: argparse.Namespace):

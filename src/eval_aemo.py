@@ -1,25 +1,47 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_SRC_DIR = Path(__file__).resolve().parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 import argparse
 import json
 from datetime import datetime
-from pathlib import Path
-
-from aemo_notebook_utils import (
-    fetch_and_preprocess_aemo_data,
-    make_aemo_env_fns,
-)
-from decision import AEMOAgent
-from helper import evaluate_experiment_logs
-from eval_common import (
-    EvalSummary,
-    check_guardrails,
-    iso_timestamp,
-    load_benchmark,
-    load_dt_model,
-    read_return_scale,
-    write_eval_outputs,
-)
+try:
+    from .aemo_notebook_utils import (
+        fetch_and_preprocess_aemo_data,
+        make_aemo_env_fns,
+    )
+    from .decision import AEMOAgent
+    from .helper import evaluate_experiment_logs
+    from .eval_common import (
+        EvalSummary,
+        check_guardrails,
+        iso_timestamp,
+        load_benchmark,
+        load_dt_model,
+        read_return_scale,
+        write_eval_outputs,
+    )
+except ImportError:
+    from aemo_notebook_utils import (
+        fetch_and_preprocess_aemo_data,
+        make_aemo_env_fns,
+    )
+    from decision import AEMOAgent
+    from helper import evaluate_experiment_logs
+    from eval_common import (
+        EvalSummary,
+        check_guardrails,
+        iso_timestamp,
+        load_benchmark,
+        load_dt_model,
+        read_return_scale,
+        write_eval_outputs,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

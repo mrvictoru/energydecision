@@ -9,17 +9,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from eval_common import load_benchmark
-from autoresearch.config_utils import (
+try:
+    from ..eval_common import load_benchmark
+except ImportError:
+    from eval_common import load_benchmark
+from .config_utils import (
     build_training_cli_args,
     diff_configs,
     load_config,
     validate_mutable_surface,
     write_model_kwargs,
 )
-from autoresearch.ledger import ExperimentLedger, LedgerEntry
-from autoresearch.stage_a import StageAScreen
-from autoresearch.stage_b import StageBEvaluator
+from .ledger import ExperimentLedger, LedgerEntry
+from .stage_a import StageAScreen
+from .stage_b import StageBEvaluator
 
 
 class AutoresearchRunner:

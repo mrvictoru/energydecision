@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from autoresearch.config_utils import ALLOWED_MUTABLE_KEYS_V1, diff_configs
-from autoresearch.ledger import ExperimentLedger, LedgerEntry
-from autoresearch.llm_backend import LLMBackend
-from autoresearch.prompts import ParseError, build_system_prompt, build_user_prompt, parse_llm_response
-from autoresearch.runner import AutoresearchRunner
+from .config_utils import ALLOWED_MUTABLE_KEYS_V1, diff_configs
+from .ledger import ExperimentLedger, LedgerEntry
+from .llm_backend import LLMBackend
+from .prompts import ParseError, build_system_prompt, build_user_prompt, parse_llm_response
+from .runner import AutoresearchRunner
 
 
 class AutoresearchError(RuntimeError):

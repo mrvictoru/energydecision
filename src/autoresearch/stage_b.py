@@ -5,7 +5,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from eval_common import load_benchmark
+try:
+    from ..eval_common import load_benchmark
+except ImportError:
+    from eval_common import load_benchmark
 
 
 class StageBEvaluator:
@@ -47,7 +50,7 @@ class StageBEvaluator:
             str(device),
         ]
 
-        module_name = "eval_household" if self.environment == "household" else "eval_aemo"
+        module_name = "src.eval_household" if self.environment == "household" else "src.eval_aemo"
         eval_module = importlib.import_module(module_name)
         exit_code = eval_module.main(argv)
         if exit_code != 0:
