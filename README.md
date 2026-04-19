@@ -611,3 +611,12 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
 *   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
 *   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.
+
+
+## Autoresearch
+
+This repo includes a constrained autoresearch loop for Decision Transformer tuning.
+
+- Docs: `docs/AUTORESEARCH.md`
+- Manual run: `python -m src.autoresearch.cli --mode manual ...`
+- Agent run: `python -m src.autoresearch.cli --mode agent ...`
