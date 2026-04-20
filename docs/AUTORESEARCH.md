@@ -149,6 +149,36 @@ python -m src.autoresearch \
 
 Use `--docker` to execute training through `docker compose run autoresearch-train ...`.
 
+### 3b) Evaluate an existing checkpoint without retraining
+
+If you already trained a checkpoint and only want to run Stage B evaluation, use
+`--skip-training` together with `--model-path`.
+
+```bash
+python -m src.autoresearch \
+  --mode manual \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --candidate-config configs/candidate_household.json \
+  --skip-training \
+  --model-path models/household/dt/dt_model.pt \
+  --output-dir eval_output/autoresearch
+```
+
+This is useful when:
+
+- you want to validate an existing DT checkpoint against the frozen benchmark,
+- Stage A training is not needed,
+- or you want to iterate on eval-side changes without re-running training.
+
+When `--skip-training` is enabled:
+
+- `--model-path` is required,
+- Stage A is treated as passed with `stage_a_reason = "skipped training"`,
+- the run still writes a ledger entry and evaluation outputs,
+- and the runner compares the candidate against the current kept baseline as usual.
+
 ### 4) Inspect artifacts
 
 For each run, artifacts are saved under:
@@ -235,6 +265,29 @@ Both write:
 
 - `eval_metrics.json`
 - `eval_summary.json`
+
+## Docker + Local LLM Access
+
+If you later connect autoresearch to a local LLM server running on the host
+machine, remember that the container needs a host mapping on Linux.
+
+In `docker-compose.yml`, add:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+The current repository Docker compose file already includes this mapping for
+both `app` and `autoresearch-train`.
+
+Then point the LLM backend at the host from inside the container:
+
+- llama.cpp: `http://host.docker.internal:8080/v1`
+- Ollama: `http://host.docker.internal:11434/v1`
+
+This is not required for manual or skip-training runs, but it is needed for
+agent mode when the backend runs outside the container.
 
 ---
 

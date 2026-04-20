@@ -631,6 +631,9 @@ python -m src.autoresearch \
   --candidate-config configs/candidate_household.json
 ```
 
+If you already have a trained checkpoint and only want to evaluate it, add
+`--skip-training --model-path <checkpoint.pt>` to the manual command.
+
 Quick agent cycle (local llama.cpp):
 
 ```bash
@@ -643,3 +646,7 @@ python -m src.autoresearch \
   --llm-endpoint http://localhost:8080/v1 \
   --iterations 5
 ```
+
+When running from Docker on Linux, the compose file already maps
+`host.docker.internal` to the host gateway so the container can reach a local
+LLM server started on the host machine.
