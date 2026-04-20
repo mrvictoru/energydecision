@@ -266,6 +266,42 @@ Both write:
 - `eval_metrics.json`
 - `eval_summary.json`
 
+## Using the Runner Directly
+
+The runner is the lowest-level entrypoint if you want to run a single candidate
+cycle without the LLM wrapper.
+
+### Full train + evaluate
+
+```bash
+python -m src.autoresearch.runner \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --candidate-config configs/candidate_household.json \
+  --output-dir eval_output/autoresearch
+```
+
+### Evaluate an existing checkpoint
+
+If you already have a trained checkpoint, skip retraining and run Stage B only:
+
+```bash
+python -m src.autoresearch.runner \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --candidate-config configs/candidate_household.json \
+  --skip-training \
+  --model-path models/household/dt/dt_model.pt
+```
+
+This path is useful for:
+
+- quick checkpoint validation,
+- comparing eval-side changes without re-running training,
+- and reproducing the upstream `skip-training` runner tests.
+
 ## Docker + Local LLM Access
 
 If you later connect autoresearch to a local LLM server running on the host
