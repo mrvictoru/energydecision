@@ -122,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     model = load_dt_model(args.model_path, model_config, args.device)
 
     return_scale = read_return_scale(args.model_path, args.return_scale)
-    _ = return_scale  # kept for compatibility with training sidecar conventions
+    if return_scale != 1.0:
+        model.return_scale = return_scale
 
     test_files = collect_parquet_by_patterns(benchmark["data_dir"], benchmark.get("test_patterns", []))
     if not test_files:

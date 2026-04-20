@@ -18,9 +18,7 @@
     "max_deg_incident_rate": 0.1
   },
   "env_kwargs": {
-    "battery_capacity": 13.5,
-    "solar_panel_size": 5.0,
-    "degradation_mode": "rainflow"
+    "battery_capacity": 13.5
   },
   "stage_a_timeout": 600,
   "stage_b_timeout": 3600

@@ -57,3 +57,9 @@ def test_ledger_summary_dataframe_not_empty(tmp_path: Path):
     df = ledger.summary_dataframe()
     assert df.height == 1
     assert "decision" in df.columns
+
+
+def test_ledger_current_best_none_when_empty(tmp_path: Path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = ExperimentLedger(path)
+    assert ledger.current_best("household") is None

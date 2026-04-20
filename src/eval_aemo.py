@@ -15,7 +15,7 @@ try:
         fetch_and_preprocess_aemo_data,
         make_aemo_env_fns,
     )
-    from .decision import AEMOAgent
+    from .decision import AEMOAgent, run_episodes_parallel
     from .helper import evaluate_experiment_logs
     from .eval_common import (
         EvalSummary,
@@ -31,7 +31,7 @@ except ImportError:
         fetch_and_preprocess_aemo_data,
         make_aemo_env_fns,
     )
-    from decision import AEMOAgent
+    from decision import AEMOAgent, run_episodes_parallel
     from helper import evaluate_experiment_logs
     from eval_common import (
         EvalSummary,
@@ -87,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     model = load_dt_model(args.model_path, model_config, args.device)
 
     return_scale = read_return_scale(args.model_path, args.return_scale)
-    _ = return_scale
+    if return_scale != 1.0:
+        model.return_scale = return_scale
 
     cache_dir = args.cache_dir
     if cache_dir is None:
@@ -135,19 +136,36 @@ def main(argv: list[str] | None = None) -> int:
     if rtg_value is None:
         rtg_value = float(benchmark.get("rtg_value", 0.0))
 
-    episode_logs = []
-    for idx, fn in enumerate(env_fns):
-        env = fn()
-        agent = AEMOAgent(
-            env,
-            algorithm="dt",
-            model=model,
-            rtg_value=float(rtg_value),
-            dt_gamma=float(benchmark.get("discount", 0.99)),
-            reset_seed=int(benchmark.get("eval_seed", 42)) + idx,
+    envs = [fn() for fn in env_fns]
+    if int(args.num_workers) <= 1:
+        episode_logs = []
+        for idx, env in enumerate(envs):
+            agent = AEMOAgent(
+                env,
+                algorithm="dt",
+                model=model,
+                rtg_value=float(rtg_value),
+                dt_gamma=float(benchmark.get("discount", 0.99)),
+                reset_seed=int(benchmark.get("eval_seed", 42)) + idx,
+            )
+            ep_df, _ = agent.run_episode(render=False, display_progress=False)
+            episode_logs.append(ep_df)
+    else:
+        episode_logs, _ = run_episodes_parallel(
+            AEMOAgent,
+            envs,
+            agent_kwargs={
+                "algorithm": "dt",
+                "model": model,
+                "rtg_value": float(rtg_value),
+                "dt_gamma": float(benchmark.get("discount", 0.99)),
+                "reset_seed": int(benchmark.get("eval_seed", 42)),
+            },
+            render=False,
+            max_workers=int(args.num_workers),
+            use_notebook_tqdm=False,
+            display_indi_prog=False,
         )
-        ep_df, _ = agent.run_episode(render=False, display_progress=False)
-        episode_logs.append(ep_df)
 
     metrics = evaluate_experiment_logs(episode_logs)
     guardrail_result = check_guardrails(metrics, benchmark.get("guardrails", {}))

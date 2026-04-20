@@ -127,6 +127,8 @@ class AutoresearchRunner:
         self,
         candidate_config: dict[str, Any],
         baseline_config: dict[str, Any],
+        skip_training: bool = False,
+        model_path: str | None = None,
     ) -> LedgerEntry:
         diff = diff_configs(baseline_config, candidate_config)
         validate_mutable_surface({k: v["new"] for k, v in diff.items()})
@@ -137,6 +139,68 @@ class AutoresearchRunner:
 
         with (artifact_dir / "candidate_config.json").open("w", encoding="utf-8") as fh:
             json.dump(candidate_config, fh, indent=2)
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        benchmark_sha256 = self._sha256_file(self.benchmark_path)
+
+        if skip_training:
+            if not model_path:
+                raise ValueError("model_path is required when skip_training=True")
+            model_file = Path(model_path).resolve()
+            if not model_file.is_file():
+                raise FileNotFoundError(f"Model file not found: {model_file}")
+
+            stage_b_dir = artifact_dir / "stage_b"
+            stage_b_dir.mkdir(parents=True, exist_ok=True)
+            write_model_kwargs(candidate_config, self.benchmark, stage_b_dir)
+
+            eval_result = self.stage_b.evaluate(
+                model_path=str(model_file),
+                model_config=self._build_eval_model_config(candidate_config),
+                rtg_value=float(candidate_config.get("rtg_value", 0.0)),
+                return_scale=float(candidate_config.get("return_scale", 1.0)),
+                output_dir=str(stage_b_dir),
+                device=self.device,
+            )
+
+            best_kept = self.ledger.current_best(self.environment)
+            baseline_eval_summary = best_kept.eval_summary if best_kept else None
+            decision, reason = self.stage_b.compare(eval_result["eval_summary"], baseline_eval_summary)
+
+            entry = LedgerEntry(
+                run_id=run_id,
+                timestamp=timestamp,
+                environment=self.environment,
+                benchmark_path=self.benchmark_path,
+                benchmark_sha256=benchmark_sha256,
+                candidate_config=candidate_config,
+                baseline_config=baseline_config,
+                diff_from_baseline=diff,
+                training_summary={
+                    "crashed": False,
+                    "epochs_completed": 0,
+                    "initial_train_loss": None,
+                    "final_train_loss": None,
+                    "final_val_loss": None,
+                    "divergence_ratio": None,
+                    "checkpoint_path": None,
+                    "model_path": str(model_file),
+                    "loss_csv_path": None,
+                    "skipped_training": True,
+                },
+                stage_a_passed=True,
+                stage_a_reason="skipped training",
+                evaluation_summary=eval_result["evaluation_summary"],
+                eval_summary=eval_result["eval_summary"],
+                stage_b_passed=(decision == "keep"),
+                stage_b_reason=reason,
+                decision=decision,
+                artifact_dir=str(artifact_dir),
+            )
+            self.ledger.append(entry)
+            with (artifact_dir / "run_summary.json").open("w", encoding="utf-8") as fh:
+                json.dump(entry.__dict__, fh, indent=2)
+            return entry
 
         script_path = self._training_script()
 
@@ -154,15 +218,13 @@ class AutoresearchRunner:
         stage_a_summary = self._parse_training_summary(stage_a_dir, stage_a_crashed)
         stage_a_passed, stage_a_reason = self.stage_a_screen.screen(stage_a_summary)
 
-        timestamp = datetime.now(timezone.utc).isoformat()
-
         if not stage_a_passed:
             entry = LedgerEntry(
                 run_id=run_id,
                 timestamp=timestamp,
                 environment=self.environment,
                 benchmark_path=self.benchmark_path,
-                benchmark_sha256=self._sha256_file(self.benchmark_path),
+                benchmark_sha256=benchmark_sha256,
                 candidate_config=candidate_config,
                 baseline_config=baseline_config,
                 diff_from_baseline=diff,
@@ -199,7 +261,7 @@ class AutoresearchRunner:
                 timestamp=timestamp,
                 environment=self.environment,
                 benchmark_path=self.benchmark_path,
-                benchmark_sha256=self._sha256_file(self.benchmark_path),
+                benchmark_sha256=benchmark_sha256,
                 candidate_config=candidate_config,
                 baseline_config=baseline_config,
                 diff_from_baseline=diff,
@@ -236,7 +298,7 @@ class AutoresearchRunner:
             timestamp=timestamp,
             environment=self.environment,
             benchmark_path=self.benchmark_path,
-            benchmark_sha256=self._sha256_file(self.benchmark_path),
+            benchmark_sha256=benchmark_sha256,
             candidate_config=candidate_config,
             baseline_config=baseline_config,
             diff_from_baseline=diff,
@@ -268,7 +330,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ledger-path", default="eval_output/autoresearch/ledger.jsonl")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--docker", action="store_true")
+    parser.add_argument("--skip-training", action="store_true")
+    parser.add_argument("--model-path", default=None)
+    parser.add_argument("--stage-a-max-divergence", type=float, default=4.0)
     args = parser.parse_args(argv)
+
+    if args.skip_training and not args.model_path:
+        raise ValueError("--model-path is required when using --skip-training")
 
     baseline_config = load_config(args.baseline_config)
     candidate_config = load_config(args.candidate_config)
@@ -280,9 +348,15 @@ def main(argv: list[str] | None = None) -> int:
         ledger_path=args.ledger_path,
         device=args.device,
         use_docker=args.docker,
+        stage_a_screen=StageAScreen(max_divergence_ratio=float(args.stage_a_max_divergence)),
     )
 
-    entry = runner.run_candidate(candidate_config=candidate_config, baseline_config=baseline_config)
+    entry = runner.run_candidate(
+        candidate_config=candidate_config,
+        baseline_config=baseline_config,
+        skip_training=bool(args.skip_training),
+        model_path=args.model_path,
+    )
     print(json.dumps(entry.__dict__, indent=2))
     return 0
 

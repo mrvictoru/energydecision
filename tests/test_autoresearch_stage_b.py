@@ -35,6 +35,50 @@ def test_stage_b_compare_keep_and_discard(tmp_path: Path):
     assert discard == "discard"
 
 
+def test_compare_no_baseline_returns_keep(tmp_path: Path):
+    benchmark = {
+        "environment": "household",
+        "data_dir": "data/household/logs",
+        "state_dim": 12,
+        "act_dim": 1,
+        "max_timestep": 100,
+        "primary_metric": "mean_reward",
+        "higher_is_better": True,
+    }
+    path = tmp_path / "bench.json"
+    path.write_text(json.dumps(benchmark), encoding="utf-8")
+
+    ev = StageBEvaluator(str(path), "household")
+    decision, reason = ev.compare(
+        {"guardrails_passed": True, "primary_metric_name": "mean_reward", "primary_metric_value": 1.0},
+        None,
+    )
+    assert decision == "keep"
+    assert "no baseline" in reason
+
+
+def test_compare_no_improvement_returns_discard(tmp_path: Path):
+    benchmark = {
+        "environment": "household",
+        "data_dir": "data/household/logs",
+        "state_dim": 12,
+        "act_dim": 1,
+        "max_timestep": 100,
+        "primary_metric": "mean_reward",
+        "higher_is_better": True,
+    }
+    path = tmp_path / "bench.json"
+    path.write_text(json.dumps(benchmark), encoding="utf-8")
+
+    ev = StageBEvaluator(str(path), "household")
+    decision, reason = ev.compare(
+        {"guardrails_passed": True, "primary_metric_name": "mean_reward", "primary_metric_value": 0.8},
+        {"primary_metric_name": "mean_reward", "primary_metric_value": 1.0},
+    )
+    assert decision == "discard"
+    assert "no improvement" in reason
+
+
 def test_stage_b_evaluate_reads_written_outputs(tmp_path: Path):
     benchmark = {
         "environment": "household",

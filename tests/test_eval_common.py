@@ -57,6 +57,18 @@ def test_check_guardrails_marks_missing_metrics_as_failure():
     assert result["details"]["max_avg_degradation_per_episode"]["passed"] is False
 
 
+def test_check_guardrails_passes_when_all_ok():
+    metrics = {"mean_reward": 10.0, "var_5": -1200.0}
+    guardrails = {
+        "max_var_5": -1000.0,
+        "min_mean_reward": 9.0,
+    }
+    result = check_guardrails(metrics, guardrails)
+    assert result["passed"] is True
+    assert result["details"]["max_var_5"]["passed"] is True
+    assert result["details"]["min_mean_reward"]["passed"] is True
+
+
 def test_write_eval_outputs_creates_json_files(tmp_path: Path):
     summary = EvalSummary(
         primary_metric_name="mean_reward",
