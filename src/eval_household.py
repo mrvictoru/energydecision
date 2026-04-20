@@ -140,6 +140,9 @@ def main(argv: list[str] | None = None) -> int:
                 break
             env_df = _build_household_df(episode_df)
             env_kwargs = dict(benchmark.get("env_kwargs", {}))
+            # Keep this list aligned with SolarBatteryEnv.__init__ accepted kwargs.
+            # Keys not accepted by the constructor (for example "solar_panel_size"
+            # and "degradation_mode") are intentionally ignored here.
             allowed_env_kwargs = {
                 "battery_capacity",
                 "max_battery_flow",
