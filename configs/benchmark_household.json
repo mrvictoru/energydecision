@@ -1,0 +1,25 @@
+{
+  "environment": "household",
+  "data_dir": "data/household/logs",
+  "train_patterns": ["train_ep_*.parquet"],
+  "val_patterns": ["val_ep_*.parquet"],
+  "test_patterns": ["test_ep_*.parquet"],
+  "state_dim": 12,
+  "act_dim": 1,
+  "discount": 0.99,
+  "max_timestep": 17567,
+  "eval_episodes": 10,
+  "eval_seed": 42,
+  "primary_metric": "mean_reward",
+  "higher_is_better": true,
+  "guardrails": {
+    "max_avg_degradation_per_episode": 0.05,
+    "max_var_5": -9500.0,
+    "max_deg_incident_rate": 0.1
+  },
+  "env_kwargs": {
+    "battery_capacity": 13.5
+  },
+  "stage_a_timeout": 600,
+  "stage_b_timeout": 3600
+}

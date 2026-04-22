@@ -6,6 +6,8 @@ services:
     command: ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
     volumes:
       - .:/code
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8888:8888"
     deploy:
@@ -15,6 +17,20 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  autoresearch-train:
+    build: .
+    working_dir: /code/src
+    volumes:
+      - .:/code
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    entrypoint: ["python"]
 
 volumes:
   stonkapp:

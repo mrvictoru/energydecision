@@ -613,3 +613,42 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
 *   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
 *   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.
+
+
+## Autoresearch
+
+This repository includes a constrained autoresearch loop for Decision Transformer tuning across household and AEMO benchmarks.
+
+- Full guide: [`docs/AUTORESEARCH.md`](docs/AUTORESEARCH.md)
+- Entrypoint: `python -m src.autoresearch`
+
+Quick manual cycle:
+
+```bash
+python -m src.autoresearch \
+  --mode manual \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --candidate-config configs/candidate_household.json
+```
+
+If you already have a trained checkpoint and only want to evaluate it, add
+`--skip-training --model-path <checkpoint.pt>` to the manual command.
+
+Quick agent cycle (local llama.cpp):
+
+```bash
+python -m src.autoresearch \
+  --mode agent \
+  --environment household \
+  --benchmark configs/benchmark_household.json \
+  --baseline-config configs/baseline_household.json \
+  --llm-backend llamacpp \
+  --llm-endpoint http://localhost:8080/v1 \
+  --iterations 5
+```
+
+When running from Docker on Linux, the compose file already maps
+`host.docker.internal` to the host gateway so the container can reach a local
+LLM server started on the host machine.
