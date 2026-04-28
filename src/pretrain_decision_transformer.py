@@ -641,13 +641,13 @@ def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDa
     if not datasets:
         raise ValueError("datasets must be non-empty")
     first = datasets[0]
-    episodes: list[dict[str, Any]] = []
+    merged_episodes: list[dict[str, Any]] = []
     for ds in datasets:
-        episodes.extend(ds.episodes)
-    if not episodes:
+        merged_episodes.extend(ds.episodes)
+    if not merged_episodes:
         raise ValueError("No episodes found in the provided datasets.")
     return TrajectoryDataset._from_episodes(
-        episodes,
+        merged_episodes,
         first.context_length,
         first.state_dim,
         first.act_dim,
