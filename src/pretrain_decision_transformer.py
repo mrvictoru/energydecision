@@ -39,6 +39,7 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
 APPROVED_OPTIMIZERS = ("adamw",)
 APPROVED_SCHEDULERS = ("steplr",)
 ACTION_MODE_TO_ACT_DIM = {"simple": 1, "multi_market": 3}
+VALID_AEMO_ACT_DIMS = frozenset(ACTION_MODE_TO_ACT_DIM.values())
 AEMO_STATE_DIM = 18
 SEARCHABLE_KNOBS = (
     "surface_preset",
@@ -578,7 +579,7 @@ def resolve_training_surface(
                 f"action_mode={action_mode!r} requires act_dim={expected_act_dim}, "
                 f"received act_dim={model_kwargs['act_dim']}."
             )
-    if model_kwargs["state_dim"] == AEMO_STATE_DIM and model_kwargs["act_dim"] not in set(ACTION_MODE_TO_ACT_DIM.values()):
+    if model_kwargs["state_dim"] == AEMO_STATE_DIM and model_kwargs["act_dim"] not in VALID_AEMO_ACT_DIMS:
         raise ValueError(
             "AEMO DT configs must use act_dim=1 for simple mode or act_dim=3 for multi_market mode."
         )
@@ -698,7 +699,7 @@ def validate_dataset_dimensions(
                 f"{label} datasets are incompatible with action_mode={action_mode!r}: "
                 f"expected act_dim={expected_action_dim}, found {expected_act_dim}."
             )
-    if expected_state_dim == AEMO_STATE_DIM and expected_act_dim not in set(ACTION_MODE_TO_ACT_DIM.values()):
+    if expected_state_dim == AEMO_STATE_DIM and expected_act_dim not in VALID_AEMO_ACT_DIMS:
         raise ValueError(
             f"{label} datasets look AEMO-shaped but expose unsupported act_dim={expected_act_dim}."
         )
