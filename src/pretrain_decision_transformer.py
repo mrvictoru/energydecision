@@ -894,7 +894,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     write_json(surface_manifest_path, surface_manifest)
 
     model = DecisionTransformer(**model_kwargs)
-    trained_model, train_losses, val_losses, history = train_decision_transformer(
+    _, train_losses, val_losses, history = train_decision_transformer(
         ds=train_dataset,
         model=model,
         batch_size=surface.training_kwargs["batch_size"],
@@ -918,7 +918,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         prefetch_factor=surface.training_kwargs["prefetch_factor"],
         return_history=True,
     )
-    _ = trained_model
 
     with open(loss_csv_path, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
