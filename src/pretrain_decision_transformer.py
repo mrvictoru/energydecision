@@ -86,6 +86,9 @@ FROZEN_INVARIANTS = (
     "optimizer_impl=adamw",
     "scheduler_impl=steplr",
 )
+SURFACE_CONSTRAINTS = (
+    "h_dim must be divisible by n_heads",
+)
 SAFE_NUMERIC_RANGES: dict[str, tuple[float, float]] = {
     "state_dim": (1, 256),
     "act_dim": (1, 16),
@@ -730,6 +733,7 @@ def build_surface_manifest(
         "action_mode": surface.action_mode,
         "searchable_knobs": list(SEARCHABLE_KNOBS),
         "frozen_invariants": list(FROZEN_INVARIANTS),
+        "surface_constraints": list(SURFACE_CONSTRAINTS),
         "model_kwargs": surface.model_kwargs,
         "training_kwargs": surface.training_kwargs,
         "paths": {
@@ -810,6 +814,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "action_mode": surface.action_mode,
                 "model_kwargs": model_kwargs,
                 "training_kwargs": surface.training_kwargs,
+                "surface_constraints": list(SURFACE_CONSTRAINTS),
             },
             indent=2,
         )

@@ -305,6 +305,7 @@ The editable surface exposes only approved, validated knobs:
 Safety and compatibility rules enforced by the shared entrypoint:
 
 - AEMO-shaped DT runs must keep `act_dim` aligned with the action mode (`simple -> 1`, `multi_market -> 3`).
+- Transformer width settings must remain internally consistent (`h_dim` divisible by `n_heads`).
 - Unknown model-config keys and unsupported preset/variant names are rejected early.
 - The editable surface logs a resolved training-surface manifest next to the loss CSV so autoresearch runs are explicit and reproducible.
 - Output artifact paths remain inside the repository root so the harness cannot redirect writes to arbitrary filesystem locations.
