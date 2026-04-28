@@ -86,9 +86,9 @@ FROZEN_INVARIANTS = (
     "optimizer_impl=adamw",
     "scheduler_impl=steplr",
 )
-SURFACE_CONSTRAINTS = (
-    "h_dim must be divisible by n_heads",
-)
+SURFACE_CONSTRAINTS = {
+    "h_dim_divisible_by_n_heads": "h_dim must be divisible by n_heads",
+}
 SAFE_NUMERIC_RANGES: dict[str, tuple[float, float]] = {
     "state_dim": (1, 256),
     "act_dim": (1, 16),
@@ -412,8 +412,12 @@ def collect_parquet_files(data_dir: Path, patterns: Sequence[str]) -> list[Path]
 
 
 def write_json(output_path: Path, payload: dict[str, Any]) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        serialized = json.dumps(payload, indent=2, sort_keys=True)
+        output_path.write_text(serialized, encoding="utf-8")
+    except (OSError, TypeError, ValueError) as exc:
+        raise ValueError(f"Failed to write JSON payload to {output_path}: {exc}") from exc
 
 
 def validate_supported_model_kwargs(model_kwargs: dict[str, Any], *, source: str) -> None:
@@ -440,6 +444,14 @@ def validate_numeric_range(name: str, value: float | int | None) -> None:
     lower, upper = SAFE_NUMERIC_RANGES[name]
     if not (lower <= float(value) <= upper):
         raise ValueError(f"{name} must be between {lower} and {upper}, received {value}.")
+
+
+def validate_surface_constraints(model_kwargs: dict[str, Any]) -> None:
+    if model_kwargs["h_dim"] % model_kwargs["n_heads"] != 0:
+        raise ValueError(
+            f"{SURFACE_CONSTRAINTS['h_dim_divisible_by_n_heads']}: "
+            f"h_dim={model_kwargs['h_dim']}, n_heads={model_kwargs['n_heads']}."
+        )
 
 
 def resolve_model_variant(args: argparse.Namespace) -> str:
@@ -528,10 +540,7 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict[str, Any])
         "drop_p",
     ):
         validate_numeric_range(key, model_kwargs[key])
-    if model_kwargs["h_dim"] % model_kwargs["n_heads"] != 0:
-        raise ValueError(
-            f"h_dim={model_kwargs['h_dim']} must be divisible by n_heads={model_kwargs['n_heads']}."
-        )
+    validate_surface_constraints(model_kwargs)
     return model_kwargs
 
 
@@ -601,9 +610,12 @@ def resolve_training_surface(
 
 
 def ensure_safe_output_path(root: Path, path: Path, *, name: str) -> Path:
+    canonical_root = root.resolve(strict=True)
     resolved = path.resolve()
+    resolved_parent = resolved.parent.resolve(strict=True)
+    resolved = resolved_parent / resolved.name
     try:
-        resolved.relative_to(root)
+        resolved.relative_to(canonical_root)
     except ValueError as exc:
         raise ValueError(
             f"{name} must remain inside the repository root for the editable training surface: {resolved}"
@@ -733,7 +745,7 @@ def build_surface_manifest(
         "action_mode": surface.action_mode,
         "searchable_knobs": list(SEARCHABLE_KNOBS),
         "frozen_invariants": list(FROZEN_INVARIANTS),
-        "surface_constraints": list(SURFACE_CONSTRAINTS),
+        "surface_constraints": SURFACE_CONSTRAINTS,
         "model_kwargs": surface.model_kwargs,
         "training_kwargs": surface.training_kwargs,
         "paths": {
@@ -814,7 +826,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "action_mode": surface.action_mode,
                 "model_kwargs": model_kwargs,
                 "training_kwargs": surface.training_kwargs,
-                "surface_constraints": list(SURFACE_CONSTRAINTS),
+                "surface_constraints": SURFACE_CONSTRAINTS,
             },
             indent=2,
         )
