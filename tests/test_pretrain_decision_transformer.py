@@ -1,0 +1,228 @@
+import csv
+import json
+import os
+import sys
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+import pretrain_decision_transformer as pretrain_dt  # noqa: E402
+
+
+def _write_dataset(path: Path, *, state_dim: int = 12, act_dim: int = 1) -> None:
+    rows = {
+        "episode_id": [0, 0, 1, 1],
+        "step": [0, 1, 0, 1],
+        "norm_observation": [
+            [float(i) for i in range(state_dim)],
+            [float(i + 1) for i in range(state_dim)],
+            [float(i + 2) for i in range(state_dim)],
+            [float(i + 3) for i in range(state_dim)],
+        ],
+        "action": [
+            [0.1] * act_dim,
+            [0.2] * act_dim,
+            [0.3] * act_dim,
+            [0.4] * act_dim,
+        ],
+        "reward": [1.0, 0.5, 0.25, -0.5],
+    }
+    pl.DataFrame(rows).write_parquet(path)
+
+
+def test_parse_args_accepts_legacy_cli_contract():
+    args = pretrain_dt.parse_args(
+        [
+            "--data-dir",
+            "/tmp/data",
+            "--patterns",
+            "train_episode_01",
+            "train_episode_02",
+            "--model-config",
+            "/tmp/config.json",
+            "--epochs",
+            "3",
+            "--batch-size",
+            "8",
+            "--lr",
+            "0.0002",
+            "--val-split",
+            "0.2",
+            "--save-path",
+            "/tmp/model.pt",
+            "--checkpoint-path",
+            "/tmp/checkpoint.pt",
+            "--loss-csv-path",
+            "/tmp/loss.csv",
+            "--amp-mode",
+            "off",
+        ]
+    )
+
+    assert args.data_dir == Path("/tmp/data")
+    assert args.patterns == ["train_episode_01", "train_episode_02"]
+    assert args.model_config == Path("/tmp/config.json")
+    assert args.epochs == 3
+    assert args.batch_size == 8
+    assert args.lr == pytest.approx(0.0002)
+    assert args.surface_preset == "legacy"
+    assert args.optimizer == "adamw"
+    assert args.scheduler == "steplr"
+
+
+def test_load_model_kwargs_rejects_unknown_keys(tmp_path: Path):
+    config_path = tmp_path / "bad_config.json"
+    config_path.write_text(json.dumps({"state_dim": 12, "unsupported_knob": 7}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported model config keys"):
+        pretrain_dt.load_model_kwargs(config_path)
+
+
+def test_resolve_training_surface_rejects_action_mode_mismatch():
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "legacy",
+            "--state-dim",
+            "18",
+            "--act-dim",
+            "3",
+            "--action-mode",
+            "simple",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="requires act_dim=1"):
+        pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+
+def test_validate_dataset_dimensions_rejects_mismatch(tmp_path: Path):
+    dataset_path = tmp_path / "episodes.parquet"
+    _write_dataset(dataset_path, state_dim=18, act_dim=3)
+    datasets = pretrain_dt.load_trajectory_datasets(
+        parquet_files=[dataset_path],
+        context_length=4,
+        state_dim=18,
+        act_dim=3,
+        discount=0.99,
+    )
+
+    with pytest.raises(ValueError, match="action_mode='simple'"):
+        pretrain_dt.validate_dataset_dimensions(
+            datasets=datasets,
+            expected_state_dim=18,
+            expected_act_dim=3,
+            action_mode="simple",
+            label="Training",
+        )
+
+
+def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    data_dir = tmp_path / "data"
+    output_dir = tmp_path / "outputs"
+    config_path = tmp_path / "config.json"
+    save_path = output_dir / "model.pt"
+    checkpoint_path = output_dir / "checkpoint.pt"
+    loss_csv_path = output_dir / "loss.csv"
+    data_dir.mkdir()
+    output_dir.mkdir()
+    _write_dataset(data_dir / "train_episode_01.parquet")
+    config_path.write_text(json.dumps({"state_dim": 12, "act_dim": 1}), encoding="utf-8")
+
+    monkeypatch.setattr(pretrain_dt, "repo_root", lambda: tmp_path)
+
+    def fake_train_decision_transformer(**kwargs):
+        Path(kwargs["save_path"]).write_bytes(b"weights")
+        Path(kwargs["checkpoint_path"]).write_bytes(b"checkpoint")
+        return (
+            kwargs["model"],
+            [1.0, 0.5],
+            [0.8, 0.4],
+            {
+                "train_action_losses": [0.9, 0.4],
+                "train_state_losses": [0.08, 0.04],
+                "train_return_losses": [0.02, 0.01],
+                "val_action_losses": [0.7, 0.35],
+                "val_state_losses": [0.07, 0.03],
+                "val_return_losses": [0.01, 0.01],
+                "loss_history": [
+                    {
+                        "timestamp": "2026-04-28T16:00:00",
+                        "epoch": 1,
+                        "segment": 1,
+                        "batch_idx": 1,
+                        "train_total_avg": 1.0,
+                        "train_total_ema": 1.0,
+                        "train_action_avg": 0.9,
+                        "train_state_avg": 0.08,
+                        "train_return_avg": 0.02,
+                        "train_valid": True,
+                        "val_total": 0.8,
+                        "val_action": 0.7,
+                        "val_state": 0.07,
+                        "val_return": 0.01,
+                        "val_valid": True,
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(pretrain_dt, "train_decision_transformer", fake_train_decision_transformer)
+
+    pretrain_dt.main(
+        [
+            "--data-dir",
+            str(data_dir),
+            "--patterns",
+            "train_episode_01",
+            "--model-config",
+            str(config_path),
+            "--save-path",
+            str(save_path),
+            "--checkpoint-path",
+            str(checkpoint_path),
+            "--loss-csv-path",
+            str(loss_csv_path),
+            "--epochs",
+            "2",
+            "--batch-size",
+            "2",
+            "--num-workers",
+            "0",
+            "--val-split",
+            "0.5",
+        ]
+    )
+
+    with loss_csv_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.reader(fh))
+    assert rows[0] == [
+        "epoch",
+        "train_total",
+        "train_action",
+        "train_state",
+        "train_return",
+        "val_total",
+        "val_action",
+        "val_state",
+        "val_return",
+    ]
+    assert rows[1][0] == "1"
+    assert rows[2][0] == "2"
+
+    checkpoints_csv = loss_csv_path.with_name("loss_checkpoints.csv")
+    assert checkpoints_csv.exists()
+    manifest_path = loss_csv_path.with_name("loss_surface_manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["editable_training_surface_file"].endswith("src/pretrain_decision_transformer.py")
+    assert manifest["surface_preset"] == "legacy"
+    assert manifest["optimizer"] == "adamw"
+    assert manifest["scheduler"] == "steplr"
+    assert "searchable_knobs" in manifest
+    assert "frozen_invariants" in manifest

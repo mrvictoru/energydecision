@@ -288,6 +288,42 @@ python3 pretrain_aemo_decision_transformer.py \
     --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv
 ```
 
+### PR#27 editable DT training surface
+
+PR#27 makes `src/pretrain_decision_transformer.py` the single sanctioned Decision Transformer experiment surface for agent-driven autoresearch.
+
+- **Editable surface**: `src/pretrain_decision_transformer.py`
+- **Stable implementation layers**: `src/decision_transformer.py` and `src/transformer_training.py`
+- **Adapters that should stay compatible**: `src/pretrain_aemo_decision_transformer.py` and `src/aemo_notebook_utils.py`
+- **Read-only areas for this workflow**: evaluation logic, environment dynamics, dataset schema, and notebooks
+
+The editable surface exposes only approved, validated knobs:
+
+- Searchable knobs include presets, model variants, DT dimensions, dropout, RoPE settings, batch size, epochs, learning rate, loss weights, AMP mode, and DataLoader worker settings.
+- Frozen invariants include the parquet trajectory schema, the shared DT training engine, the shared model implementation, adapter invocation contracts, and the existing artifact layout (`*.pt`, checkpoint, loss CSVs, metadata sidecars).
+
+Safety and compatibility rules enforced by the shared entrypoint:
+
+- AEMO-shaped DT runs must keep `act_dim` aligned with the action mode (`simple -> 1`, `multi_market -> 3`).
+- Unknown model-config keys and unsupported preset/variant names are rejected early.
+- The editable surface logs a resolved training-surface manifest next to the loss CSV so autoresearch runs are explicit and reproducible.
+- Output artifact paths remain inside the repository root so the harness cannot redirect writes to arbitrary filesystem locations.
+
+Canonical command for the editable surface:
+
+```bash
+python3 src/pretrain_decision_transformer.py \
+    --surface-preset autoresearch_safe \
+    --data-dir data/household/logs \
+    --patterns train_episode_01 train_episode_02 \
+    --epochs 2 \
+    --batch-size 6 \
+    --lr 2e-5 \
+    --save-path models/household/dt/dt_model.pt \
+    --checkpoint-path models/household/dt/dt_model_checkpoint.pt \
+    --loss-csv-path models/household/dt/dt_model_loss_history.csv
+```
+
 Notes:
 
 - `--subset-episodes` controls how many whole episodes are written into each temporary subset parquet.
