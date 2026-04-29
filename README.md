@@ -19,7 +19,6 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
-[![Tests](https://img.shields.io/badge/tests-132%20passing-brightgreen)]()
 
 ### Roadmap
 *   [x] **Core:** Gymnasium environment & Rule-based agents.
@@ -103,9 +102,10 @@ Use this path to recreate the residential PV + battery experiments.
    - Can also generate rollouts you may want to compare against the rule/SDP baselines.
 
 4. `python3 pretrain_decision_transformer.py ...`
-   - Main residential offline-RL training entrypoint.
-   - Reads logs from `../data/household/logs/`.
-   - Saves DT checkpoints and models under `../models/household/dt/`.
+    - Main residential offline-RL training entrypoint.
+    - Run this from `/code/src` inside `test_energy_container`; from the repo root use `python3 src/pretrain_decision_transformer.py ...`.
+    - Reads logs from `../data/household/logs/`.
+    - Saves DT checkpoints and models under `../models/household/dt/`.
 
 5. `notebooks/test_eval.ipynb`
    - Main residential evaluation notebook.
@@ -140,9 +140,10 @@ Use this path to recreate the grid-scale AEMO experiments.
    - Writes raw logs to `data/aemo_dt/raw_logs/` and the config/manifest needed for DT training.
 
 5. `python3 pretrain_aemo_decision_transformer.py ...`
-   - Main AEMO offline-RL training entrypoint.
-   - Reads the parquet dataset produced by `notebooks/aemo_simrun.ipynb`.
-   - Saves checkpoints and models under `../models/aemo/dt/`.
+    - Main AEMO offline-RL training entrypoint.
+    - Run this from `/code/src` inside `test_energy_container`; from the repo root use `python3 src/pretrain_aemo_decision_transformer.py ...`.
+    - Reads the parquet dataset produced by `notebooks/aemo_simrun.ipynb`.
+    - Saves checkpoints and models under `../models/aemo/dt/`.
 
 6. `notebooks/aemo_eval.ipynb`
    - Main AEMO evaluation notebook.
@@ -176,6 +177,10 @@ If you prefer scripting over notebooks:
 The `COMPONENTS.md` file is the best code-oriented reference once you want to move beyond the notebook-first workflow.
 
 ## Training Decision Transformers from the CLI
+
+Unless noted otherwise, the command blocks in this section assume you are already inside `/code/src`
+after `docker exec -it test_energy_container /bin/bash`. If you run them from the repository root
+instead, prefix the script path with `src/` and drop the leading `../` from data/model paths.
 
 ### Residential DT training
 
@@ -288,9 +293,9 @@ python3 pretrain_aemo_decision_transformer.py \
     --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv
 ```
 
-### PR#27 editable DT training surface
+### Editable DT training surface
 
-PR#27 makes `src/pretrain_decision_transformer.py` the single sanctioned Decision Transformer experiment surface for agent-driven autoresearch.
+`src/pretrain_decision_transformer.py` is the single sanctioned Decision Transformer experiment surface for constrained DT training changes in the current codebase.
 
 - **Editable surface**: `src/pretrain_decision_transformer.py`
 - **Stable implementation layers**: `src/decision_transformer.py` and `src/transformer_training.py`
@@ -307,7 +312,7 @@ Safety and compatibility rules enforced by the shared entrypoint:
 - AEMO-shaped DT runs must keep `act_dim` aligned with the action mode (`simple -> 1`, `multi_market -> 3`).
 - Transformer width settings must remain internally consistent (`h_dim` divisible by `n_heads`).
 - Unknown model-config keys and unsupported preset/variant names are rejected early.
-- The editable surface logs a resolved training-surface manifest next to the loss CSV so autoresearch runs are explicit and reproducible.
+- The editable surface logs a resolved training-surface manifest next to the loss CSV so each run is explicit and reproducible.
 - Output artifact paths remain inside the repository root so the harness cannot redirect writes to arbitrary filesystem locations.
 
 Canonical command for the editable surface:
@@ -613,20 +618,20 @@ pytest tests/ -v --durations=10
 
 ### Test Categories
 
-| Test File | Purpose | Test Count |
-|-----------|---------|------------|
-| `test_environment.py` | SolarBatteryEnv functionality, observation handling | 8 |
-| `test_decision_agent.py` | SDP solver, Oracle agent, policy computation | 8 |
-| `test_performance.py` | Performance benchmarks and optimization validation | 6 |
-| `test_quantile_scenarios.py` | Quantile scenario generation | 22 |
-| `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking | 12 |
-| `test_real_world_degradation.py` | RealWorldBESSDegradationModel unit tests, AEMO env integration, mode switching | 28 |
-| `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases | 16 |
-| `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init | 5 |
-| `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space | 5 |
-| `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons | 22 |
+| Test File | Purpose |
+|-----------|---------|
+| `test_environment.py` | SolarBatteryEnv functionality, observation handling |
+| `test_decision_agent.py` | SDP solver, Oracle agent, policy computation |
+| `test_performance.py` | Performance benchmarks and optimization validation |
+| `test_quantile_scenarios.py` | Quantile scenario generation |
+| `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking |
+| `test_real_world_degradation.py` | RealWorldBESSDegradationModel unit tests, AEMO env integration, mode switching |
+| `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases |
+| `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init |
+| `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space |
+| `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons |
 
-**Total: 132 tests**
+Run `pytest tests/ -v` to see the current test total for your checkout and environment.
 
 ---
 

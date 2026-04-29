@@ -147,14 +147,17 @@ implementation when it is loaded as one file and expanded into all sliding windo
 Use `src/pretrain_aemo_decision_transformer.py` subset mode for large runs:
 
 ```bash
-python3 pretrain_aemo_decision_transformer.py \
-  --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
-  --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
+python3 src/pretrain_aemo_decision_transformer.py \
+  --dataset-path data/aemo_dt/aemo_dt_dataset.parquet \
+  --model-config configs/aemo_decision_transformer_model_kwargs.json \
   --train-in-subsets \
   --subset-episodes 8 \
   --epochs-per-subset 1 \
   --num-workers 0
 ```
+
+If you are already inside `/code/src` in the Docker container, run the same command as
+`python3 pretrain_aemo_decision_transformer.py` and keep the `../`-prefixed paths instead.
 
 Subset mode works like this:
 
