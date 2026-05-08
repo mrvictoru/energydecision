@@ -5,11 +5,195 @@ from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from typing import Optional, Any
 import json
 import os
+import subprocess
+import time
 import torch.nn.functional as F
 from decision_transformer import DecisionTransformer
 import datetime
 import math
 from tqdm.auto import tqdm
+
+
+def _bytes_to_gib(value: float | int) -> float:
+    return float(value) / float(1024**3)
+
+
+class TrainingResourceMonitor:
+    """Collect lightweight system metrics for live DT terminal progress displays."""
+
+    def __init__(self, refresh_seconds: float = 1.0):
+        self.refresh_seconds = max(0.0, float(refresh_seconds))
+        self._last_snapshot: dict[str, str] = {}
+        self._last_sample_time = 0.0
+        self._prev_cpu_sample: tuple[int, int] | None = None
+        self._nvidia_smi_supported: bool | None = None
+
+    def snapshot(self, *, device: str) -> dict[str, str]:
+        now = time.monotonic()
+        if (
+            self._last_snapshot
+            and self.refresh_seconds > 0.0
+            and (now - self._last_sample_time) < self.refresh_seconds
+        ):
+            return dict(self._last_snapshot)
+
+        metrics: dict[str, str] = {}
+
+        cpu_percent = self._sample_cpu_percent()
+        if cpu_percent is not None:
+            metrics["cpu"] = f"{cpu_percent:.0f}%"
+
+        ram_stats = self._sample_ram_usage()
+        if ram_stats is not None:
+            ram_used_bytes, ram_total_bytes = ram_stats
+            metrics["ram"] = f"{_bytes_to_gib(ram_used_bytes):.1f}/{_bytes_to_gib(ram_total_bytes):.1f}G"
+
+        gpu_stats = self._sample_gpu_stats(device)
+        if gpu_stats is not None:
+            gpu_util = gpu_stats.get("utilization_percent")
+            if gpu_util is not None:
+                metrics["gpu"] = f"{gpu_util:.0f}%"
+
+            vram_used_bytes = gpu_stats.get("vram_used_bytes")
+            vram_total_bytes = gpu_stats.get("vram_total_bytes")
+            peak_vram_bytes = gpu_stats.get("peak_vram_bytes")
+            if vram_used_bytes is not None and vram_total_bytes is not None:
+                metrics["vram"] = f"{_bytes_to_gib(vram_used_bytes):.1f}/{_bytes_to_gib(vram_total_bytes):.1f}G"
+            if peak_vram_bytes is not None:
+                metrics["vpeak"] = f"{_bytes_to_gib(peak_vram_bytes):.1f}G"
+
+        self._last_snapshot = metrics
+        self._last_sample_time = now
+        return dict(metrics)
+
+    def _sample_cpu_percent(self) -> float | None:
+        try:
+            with open("/proc/stat", "r", encoding="utf-8") as fh:
+                first_line = fh.readline().strip()
+        except OSError:
+            return None
+
+        parts = first_line.split()
+        if len(parts) < 6 or parts[0] != "cpu":
+            return None
+
+        try:
+            values = [int(value) for value in parts[1:]]
+        except ValueError:
+            return None
+
+        total = sum(values)
+        idle = values[3] + (values[4] if len(values) > 4 else 0)
+        current = (total, idle)
+        if self._prev_cpu_sample is None:
+            self._prev_cpu_sample = current
+            return None
+
+        prev_total, prev_idle = self._prev_cpu_sample
+        self._prev_cpu_sample = current
+        total_delta = total - prev_total
+        idle_delta = idle - prev_idle
+        if total_delta <= 0:
+            return None
+        busy_delta = max(0, total_delta - idle_delta)
+        return 100.0 * busy_delta / total_delta
+
+    def _sample_ram_usage(self) -> tuple[int, int] | None:
+        meminfo: dict[str, int] = {}
+        try:
+            with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+                for line in fh:
+                    key, _, raw_value = line.partition(":")
+                    parts = raw_value.strip().split()
+                    if not parts:
+                        continue
+                    meminfo[key] = int(parts[0]) * 1024
+        except (OSError, ValueError):
+            return None
+
+        total = meminfo.get("MemTotal")
+        available = meminfo.get("MemAvailable")
+        if total is None or available is None or total <= 0:
+            return None
+        used = max(0, total - available)
+        return used, total
+
+    def _sample_gpu_stats(self, device: str) -> dict[str, float] | None:
+        if not device.startswith("cuda") or not torch.cuda.is_available():
+            return None
+
+        device_index = self._resolve_cuda_device_index(device)
+        total_vram_bytes = float(torch.cuda.get_device_properties(device_index).total_memory)
+        allocated_bytes = float(torch.cuda.memory_allocated(device_index))
+        reserved_bytes = float(torch.cuda.memory_reserved(device_index))
+        peak_vram_bytes = float(torch.cuda.max_memory_allocated(device_index))
+
+        metrics: dict[str, float] = {
+            "vram_total_bytes": total_vram_bytes,
+            "vram_used_bytes": max(allocated_bytes, reserved_bytes),
+            "peak_vram_bytes": peak_vram_bytes,
+        }
+
+        nvidia_stats = self._query_nvidia_smi(device_index)
+        if nvidia_stats is not None:
+            metrics.update(nvidia_stats)
+        return metrics
+
+    def _resolve_cuda_device_index(self, device: str) -> int:
+        if ":" not in device:
+            return int(torch.cuda.current_device())
+        try:
+            return int(device.split(":", 1)[1])
+        except (TypeError, ValueError):
+            return int(torch.cuda.current_device())
+
+    def _query_nvidia_smi(self, device_index: int) -> dict[str, float] | None:
+        if self._nvidia_smi_supported is False:
+            return None
+
+        command = [
+            "nvidia-smi",
+            f"--id={device_index}",
+            "--query-gpu=utilization.gpu,memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+            )
+        except (FileNotFoundError, OSError, subprocess.SubprocessError):
+            self._nvidia_smi_supported = False
+            return None
+
+        first_line = completed.stdout.strip().splitlines()
+        if not first_line:
+            self._nvidia_smi_supported = False
+            return None
+
+        parts = [part.strip() for part in first_line[0].split(",")]
+        if len(parts) != 3:
+            self._nvidia_smi_supported = False
+            return None
+
+        try:
+            utilization_percent = float(parts[0])
+            used_mib = float(parts[1])
+            total_mib = float(parts[2])
+        except ValueError:
+            self._nvidia_smi_supported = False
+            return None
+
+        self._nvidia_smi_supported = True
+        mib = float(1024**2)
+        return {
+            "utilization_percent": utilization_percent,
+            "vram_used_bytes": used_mib * mib,
+            "vram_total_bytes": total_mib * mib,
+        }
 
 
 
@@ -230,6 +414,7 @@ def train_decision_transformer(
     num_workers: int = 2,
     persistent_workers: bool = True,
     prefetch_factor: int = 2,
+    terminal_monitor_refresh_seconds: float = 1.0,
     return_history: bool = False,
 ) -> tuple:
     
@@ -664,6 +849,8 @@ def train_decision_transformer(
     if amp_allowed:
         print("[INFO] AMP is enabled once the first checkpoint exists. Set --amp-mode=off to disable.")
 
+    terminal_monitor = TrainingResourceMonitor(refresh_seconds=terminal_monitor_refresh_seconds)
+
     # Initialize training state    
     start_epoch = 1
     last_epoch_saved = 0
@@ -771,6 +958,7 @@ def train_decision_transformer(
                     desc=f"Epoch {epoch}/{epochs}",
                     leave=False,
                     unit="batch",
+                    dynamic_ncols=True,
                 )
                 batch_count = 0
                 train_loss_ema: Optional[float] = None
@@ -837,7 +1025,17 @@ def train_decision_transformer(
 
                     denom = max(1.0, train_valid_count_sum)
                     avg_total_so_far = train_total_loss_sum / denom
-                    progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "avg": f"{avg_total_so_far:.4f}", "skipped": skipped_batches})
+                    postfix: dict[str, str | int] = {
+                        "loss": f"{loss_value:.4f}",
+                        "avg": f"{avg_total_so_far:.4f}",
+                        "ema": f"{float(train_loss_ema):.4f}" if train_loss_ema is not None else "n/a",
+                        "lr": f"{optimizer.param_groups[0]['lr']:.2e}",
+                        "skip": skipped_batches,
+                    }
+                    if checkpoints_per_epoch > 0:
+                        postfix["seg"] = f"{min(segment_idx + 1, checkpoints_per_epoch)}/{checkpoints_per_epoch}"
+                    postfix.update(terminal_monitor.snapshot(device=device))
+                    progress_bar.set_postfix(postfix)
                     # Checkpointing within epoch
                     if checkpoints_per_epoch > 0 and segment_boundaries:
                         while segment_idx < checkpoints_per_epoch and batch_idx + 1 >= segment_boundaries[segment_idx]:
@@ -856,6 +1054,7 @@ def train_decision_transformer(
                                 )
                                 _save_checkpoint(epoch, segment_idx, train_loss_est=train_loss_ema)
                             segment_idx += 1
+                progress_bar.close()
                 # End of epoch logging
                 denom = max(1.0, train_valid_count_sum)
                 avg_total = train_total_loss_sum / denom

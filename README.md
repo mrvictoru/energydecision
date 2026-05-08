@@ -332,6 +332,8 @@ python3 src/pretrain_decision_transformer.py \
 
 Notes:
 
+- Interactive DT runs now show a built-in live terminal monitor with epoch/batch progress, loss, LR, skipped batches, CPU usage, RAM usage, and GPU/VRAM stats when available.
+- The same live monitor works from the repo root and from the Docker shell under `/code/src` because it is built into the shared DT trainer.
 - `--subset-episodes` controls how many whole episodes are written into each temporary subset parquet.
 - The wrapper now computes one global episode-level train/validation split before writing subset files, so validation stays consistent across all subset stages.
 - The first subset starts fresh; later subsets automatically add `--resume` so optimizer and checkpoint state carry forward.

@@ -136,6 +136,8 @@ python3 src/pretrain_aemo_decision_transformer.py \
 
 Inside the Docker container the working directory is `/code/src`. If you run there, drop the `src/` prefix from script paths and use `../`-prefixed data/model paths.
 
+The DT trainer includes a live terminal monitor for epoch/batch progress plus CPU, RAM, GPU, and VRAM stats. It works from the repo root and from interactive Docker shells opened with `docker exec -it ... /bin/bash`.
+
 ## Primary metric
 
 Use one metric consistently for the whole run:
@@ -170,7 +172,7 @@ Once setup is complete, loop autonomously:
 1. Check git state and confirm you are on the intended autoresearch branch.
 2. Make one focused change in `src/pretrain_decision_transformer.py`.
 3. Commit the change.
-4. Run the fixed training command, redirecting output to a log file.
+4. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
 5. Read the final validation metric from the loss CSV or log.
 6. Record the result in `results.tsv`.
 7. If the metric improved, keep the commit and continue from there.
