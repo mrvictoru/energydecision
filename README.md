@@ -69,6 +69,20 @@ pip install -r requirements.txt
 pip install -r torch_req.txt
 ```
 
+### Option 3: Distrobox (Linux local development)
+
+If you want a containerized local-dev shell without Docker Compose, use the Distrobox guide:
+
+1. Build the existing image with Podman from the repo root.
+2. Create a Distrobox container from that image.
+3. Enter the container and work from the real repo path.
+
+See `toolbx_guide.md` for the full command sequence, including the repo-root path rule:
+
+- run scripts as `src/...`
+- use normal `data/...` and `models/...` paths
+- keep Docker Compose for CI and non-Linux users
+
 ## Data Setup
 
 1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place it under `data/household/raw/`.
