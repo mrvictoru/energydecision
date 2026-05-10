@@ -11,7 +11,7 @@ developer shell that lives inside an OCI container — without any of the fricti
 
 | Concept | Detail |
 |---|---|
-| **Engine** | Podman (rootless/daemonless) **or** Docker — your choice. |
+| **Engine** | Podman (rootless/daemonless) is recommended; Docker also works. |
 | **Container image** | Any OCI image (Docker Hub, local build, etc.). |
 | **Home directory** | Your real `$HOME` is bind-mounted automatically — dotfiles, SSH keys, git config, all present. |
 | **Other mounts** | `/tmp`, `/media`, `/run/media`, Wayland/X11 sockets, D-Bus, USB devices, audio. |
@@ -24,6 +24,18 @@ developer shell that lives inside an OCI container — without any of the fricti
 The big ergonomic win: once you are inside a Distrobox shell your editor, IDE (VS Code,
 PyCharm, Cursor, etc.), and the container's Python environment all see files at the same
 host paths — no mount-mapping required.
+
+---
+
+## 1a · Adoption Plan for This Repo
+
+This repo should adopt Distrobox the same way it adopted Toolbx:
+
+- **Keep Docker** for CI, shared docs, and non-Linux contributors.
+- **Add Distrobox** as an optional Linux local-development workflow.
+- **Prefer Podman** so the workflow stays rootless and close to the Toolbx setup.
+- **Reuse the current `Dockerfile`** instead of creating a separate Distrobox image definition.
+- **Work from the real repo root** on the host filesystem, so commands use `src/...` and do not use Docker-only `../` path adjustments from `/code/src`.
 
 ---
 
@@ -82,7 +94,7 @@ sudo apt install distrobox
 sudo pacman -S distrobox
 ```
 
-You also need **Podman or Docker** installed. Podman (rootless) is recommended:
+You also need **Podman or Docker** installed. For this repo, **Podman is the preferred backend** because it matches the Toolbx-style rootless workflow:
 
 ```bash
 # Ubuntu
@@ -128,10 +140,11 @@ podman run --rm --device nvidia.com/gpu=all \
 ```bash
 cd ~/path/to/energydecision
 
-# Works with either Docker or Podman
-docker build -t energydecision:latest .
-# or
+# Preferred: Podman
 podman build -t energydecision:latest .
+
+# Docker backend also works
+docker build -t energydecision:latest .
 ```
 
 > The `Dockerfile` uses `nvidia/cuda:13.0.2-runtime-ubuntu22.04` as the base and installs
@@ -145,22 +158,22 @@ podman build -t energydecision:latest .
 distrobox create --name energydecision --image energydecision:latest
 ```
 
-**With GPU via Docker (`--gpus all`):**
-
-```bash
-distrobox create \
-  --name energydecision-gpu \
-  --image energydecision:latest \
-  --additional-flags "--gpus all"
-```
-
-**With GPU via Podman (CDI):**
+**With GPU via Podman (recommended, CDI):**
 
 ```bash
 distrobox create \
   --name energydecision-gpu \
   --image energydecision:latest \
   --additional-flags "--device nvidia.com/gpu=all"
+```
+
+**With GPU via Docker backend (`--gpus all`):**
+
+```bash
+distrobox create \
+  --name energydecision-gpu \
+  --image energydecision:latest \
+  --additional-flags "--gpus all"
 ```
 
 ### Step 3 — Enter the container
@@ -187,6 +200,18 @@ python3 src/pretrain_decision_transformer.py \
 
 Note: you are at the **repo root**, not `/code/src` as in the Docker Compose setup, so
 scripts are referenced with a `src/` prefix and relative data/model paths work as-is.
+
+### Step 3a — Translate Docker commands to repo-root Distrobox commands
+
+For this repository, the important migration rule is:
+
+| Docker Compose shell (`/code/src`) | Distrobox shell (repo root) |
+|---|---|
+| `python3 pretrain_decision_transformer.py --data-dir ../data/...` | `python3 src/pretrain_decision_transformer.py --data-dir data/...` |
+| `python3 pretrain_aemo_decision_transformer.py --dataset-path ../data/...` | `python3 src/pretrain_aemo_decision_transformer.py --dataset-path data/...` |
+| save to `../models/...` | save to `models/...` |
+
+If you are moving from the old Docker shell workflow, the rule is simple: **add `src/` to script paths and remove leading `../` from repo-relative data/model paths**.
 
 ### Step 4 — Run Jupyter Notebook
 
@@ -219,7 +244,7 @@ python -m pytest tests/ -v
 | Working directory | `/code/src` (set in compose) | Your real repo path |
 | Port mapping for Jupyter | `8888:8888` in compose | None (host network) |
 | GPU (Docker) | compose `deploy.resources` | `--additional-flags "--gpus all"` |
-| GPU (Podman) | N/A | `--additional-flags "--device nvidia.com/gpu=all"` |
+| GPU (Podman, recommended) | N/A | `--additional-flags "--device nvidia.com/gpu=all"` |
 | Root required | Docker daemon (root) | No — rootless Podman supported |
 | Edit files with your IDE | Needs container-aware IDE config | Just open files normally |
 | Stop container | `docker compose down` | Just `exit` the shell |
@@ -262,7 +287,12 @@ The existing `Dockerfile` and `docker-compose.yml` are unchanged and still work 
 - Production isolation scenarios
 
 Distrobox is an **additional local development option**, not a replacement for the shared
-Docker setup. Both can coexist on the same machine without conflict.
+Docker setup. In this repo, the intended adoption model is:
+
+- Docker remains the shared baseline for CI and for contributors on macOS or Windows.
+- Distrobox is the preferred Linux local-dev alternative.
+- Podman is the default Distrobox backend; Docker remains a supported fallback.
+- The existing `Dockerfile` and `docker-compose.yml` stay intact.
 
 ---
 
