@@ -167,7 +167,7 @@ DT hyperparameters:
 - Training-time `return_scale` is stored in checkpoints and also written to `*.meta.json` sidecars for consistent inference.
 
 Compute and reproducibility:
-- Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for running a consistent environment.
+- Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for shared Docker workflows, plus a Distrobox guide for lower-friction local development.
 - Figures: `evaluate_experiments(..., save_dir=..., save_format=...)` can save plots (default `save_format='svg'`).
 
 ## 7. Metrics and Analysis

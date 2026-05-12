@@ -44,7 +44,25 @@ This project establishes a comprehensive, reproducible benchmark for residential
 
 ## Installation
 
-### Option 1: Docker (Recommended)
+### Option 1: Distrobox (Recommended for Linux development)
+Sets up a low-friction local-dev shell that works from the repo root.
+
+```bash
+podman build -t energydecision:latest .
+distrobox create --name energydecision --image energydecision:latest
+distrobox enter energydecision
+```
+
+From inside the box, work from the repository root:
+
+```bash
+cd /path/to/energydecision
+python3 src/pretrain_decision_transformer.py ...
+```
+
+Use normal `data/...` and `models/...` paths from the repo root.
+
+### Option 2: Docker (shared / CI workflow)
 Sets up a JupyterLab environment with all dependencies.
 
 ```bash
@@ -60,7 +78,7 @@ docker exec -it test_energy_container /bin/bash
 
 Inside the container the working directory is `/code/src`, so repository-relative paths usually start with `../`.
 
-### Option 2: Local Installation
+### Option 3: Local Installation
 
 ```bash
 git clone <repository-url>
@@ -69,19 +87,7 @@ pip install -r requirements.txt
 pip install -r torch_req.txt
 ```
 
-### Option 3: Distrobox (Linux local development)
-
-If you want a containerized local-dev shell without Docker Compose, use the Distrobox guide:
-
-1. Build the existing image with Podman from the repo root.
-2. Create a Distrobox container from that image.
-3. Enter the container and work from the real repo path.
-
-See `toolbx_guide.md` for the full command sequence, including the repo-root path rule:
-
-- run scripts as `src/...`
-- use normal `data/...` and `models/...` paths
-- keep Docker Compose for CI and non-Linux users
+See `toolbx_guide.md` for the full command sequence and the repo-root path rule.
 
 ## Data Setup
 
@@ -92,10 +98,10 @@ See `toolbx_guide.md` for the full command sequence, including the repo-root pat
 
 The repository now has one canonical notebook location: `notebooks/`. If you are cloning the repo from scratch, the easiest path is:
 
-1. start Docker with `docker compose up --build`
+1. start Distrobox with `distrobox enter energydecision`
 2. open Jupyter at `http://localhost:8888`
 3. run the notebooks from `notebooks/` in the order below
-4. use the CLI training scripts from inside `test_energy_container` when you want long-running DT training outside the notebook UI
+4. use the CLI training scripts from inside the Distrobox shell when you want long-running DT training outside the notebook UI
 
 ### Residential workflow
 
@@ -117,9 +123,9 @@ Use this path to recreate the residential PV + battery experiments.
 
 4. `python3 pretrain_decision_transformer.py ...`
     - Main residential offline-RL training entrypoint.
-    - Run this from `/code/src` inside `test_energy_container`; from the repo root use `python3 src/pretrain_decision_transformer.py ...`.
-    - Reads logs from `../data/household/logs/`.
-    - Saves DT checkpoints and models under `../models/household/dt/`.
+    - Run this from the repo root as `python3 src/pretrain_decision_transformer.py ...`.
+    - Reads logs from `data/household/logs/`.
+    - Saves DT checkpoints and models under `models/household/dt/`.
 
 5. `notebooks/test_eval.ipynb`
    - Main residential evaluation notebook.

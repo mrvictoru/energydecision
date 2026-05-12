@@ -132,11 +132,11 @@ python3 src/pretrain_aemo_decision_transformer.py \
   --loss-csv-path models/aemo/dt/aemo_dt_loss_history.csv
 ```
 
-### Docker note
+### Distrobox note
 
-Inside the Docker container the working directory is `/code/src`. If you run there, drop the `src/` prefix from script paths and use `../`-prefixed data/model paths.
+Run the autoresearch agent inside the `energydecision` Distrobox container rather than the Docker Compose shell. From the repo root, the agent should keep using `src/...` script paths and normal `data/...` and `models/...` paths.
 
-The DT trainer includes a live terminal monitor for epoch/batch progress plus CPU, RAM, GPU, and VRAM stats. It works from the repo root and from interactive Docker shells opened with `docker exec -it ... /bin/bash`.
+The DT trainer includes a live terminal monitor for epoch/batch progress plus CPU, RAM, GPU, and VRAM stats. It works from the repo root and from interactive Distrobox shells opened with `distrobox enter energydecision`.
 
 ## Primary metric
 

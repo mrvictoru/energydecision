@@ -156,8 +156,8 @@ python3 src/pretrain_aemo_decision_transformer.py \
   --num-workers 0
 ```
 
-If you are already inside `/code/src` in the Docker container, run the same command as
-`python3 pretrain_aemo_decision_transformer.py` and keep the `../`-prefixed paths instead.
+If you are already inside the `energydecision` Distrobox shell at the repo root, run the same
+command as `python3 src/pretrain_aemo_decision_transformer.py` and keep normal `data/...` paths.
 
 Subset mode works like this:
 
