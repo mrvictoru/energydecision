@@ -53,6 +53,14 @@ distrobox create --name energydecision --image energydecision:latest
 distrobox enter energydecision
 ```
 
+If you want CUDA access for DT training, create a second box with NVIDIA passthrough enabled:
+
+```bash
+distrobox create --name energydecision-gpu --image energydecision:latest --nvidia
+distrobox enter energydecision-gpu
+python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
 From inside the box, work from the repository root:
 
 ```bash

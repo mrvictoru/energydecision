@@ -28,6 +28,7 @@ Before starting an autoresearch run, work with the human to:
    - Household track requires parquet logs under `data/household/logs/`.
    - AEMO track requires `data/aemo_dt/aemo_dt_dataset.parquet` and `configs/aemo_decision_transformer_model_kwargs.json`.
    - Model outputs must stay under the repository root, typically under `models/household/dt/` or `models/aemo/dt/`.
+   - Before running experiments, define which episodes/date ranges/regions are training data, which are validation-only, and which are held out for simulator evaluation.
 
 5. **Create an untracked results file**
    - Create `results.tsv` in the repo root if it does not exist.
@@ -41,6 +42,11 @@ commit	track	metric	status	description
 6. **Establish a baseline**
    - The first run must be the current code with no experiment changes.
    - Record that result as `baseline`.
+
+7. **Define the evaluation ladder**
+   - Use validation loss as the fast inner-loop ranking metric during search.
+   - Also reserve held-out simulator scenarios that differ from the training distribution, such as different date ranges, regions, or operating regimes.
+   - Decide up front which policy baseline or existing controller the held-out simulator rollouts should be compared against.
 
 ## In-scope files
 
@@ -138,17 +144,68 @@ Run the autoresearch agent inside the `energydecision` Distrobox container rathe
 
 The DT trainer includes a live terminal monitor for epoch/batch progress plus CPU, RAM, GPU, and VRAM stats. It works from the repo root and from interactive Distrobox shells opened with `distrobox enter energydecision`.
 
+If the host has an NVIDIA GPU, create and use a GPU-enabled box for training:
+
+```bash
+distrobox create --name energydecision-gpu --image energydecision:latest --nvidia
+distrobox enter energydecision-gpu
+python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+Use the GPU box for DT training commands so the trainer can see CUDA and use `device=cuda` automatically when available.
+
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
 ## Primary metric
 
-Use one metric consistently for the whole run:
+Use one fast proxy metric consistently for the inner loop:
 
 - **Primary metric**: final validation total loss from the DT run (`lower is better`)
 
 Read it from the loss CSV written by `--loss-csv-path`, or from the final console summary if needed.
 
 If a run has no validation set, record that explicitly and treat comparisons as weak evidence. Prefer runs with validation enabled.
+
+Validation loss is only a search proxy. It is useful for ranking many training-surface ideas quickly, but it is not the final success criterion for the project.
+
+## Required evaluation beyond validation loss
+
+For any promising checkpoint, also evaluate policy behavior in held-out simulator rollouts that were not used for training or validation.
+
+At minimum, report:
+
+1. **Held-out return / objective**
+   - Run the policy on unseen simulator scenarios and compare total return or the project-relevant objective against the baseline controller.
+
+2. **Generalization split**
+   - Use holdouts that differ from the training distribution, such as different date ranges, regions, weather patterns, or market regimes.
+   - Prefer multiple holdout slices over a single lucky test set.
+
+3. **Safety / constraint metrics**
+   - Record invalid actions, dispatch-limit violations, infeasible transitions, clipped actions, or any simulator-defined rule breaches.
+
+4. **Stability metrics**
+   - Check variance across random seeds or repeated rollouts.
+   - Track catastrophic failures, very short episodes, or episodes with extremely poor return.
+
+5. **Baseline-relative regret**
+   - Compare against the current heuristic/controller, not just against other DT checkpoints.
+   - A lower validation loss is not enough if held-out simulator performance regresses.
+
+If validation loss improves but held-out simulator behavior gets worse, prefer the simpler/safer checkpoint or reject the change entirely.
+
+## Data coverage expectations
+
+Small fixed pilot slices are acceptable for fast iteration, but they are not enough to establish robust simulator performance.
+
+When planning or extending autoresearch datasets:
+
+- collect more full episodes if the current run uses only a narrow slice of behavior
+- add episodes from different date ranges and regions instead of only sampling more from the same regime
+- preserve a strict held-out evaluation set that is never used for training or validation tuning
+- include rare and difficult operating conditions so the agent does not only learn common easy cases
+
+More simulated episodes usually help when they increase coverage of the target deployment distribution. More of the same narrow regime is less useful than broader regime coverage.
 
 ## Logging results
 
@@ -177,12 +234,14 @@ Once setup is complete, loop autonomously:
 4. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
 5. Read the final validation metric from the loss CSV or log.
 6. Record the result in `results.tsv`.
-7. If the metric improved, keep the commit and continue from there.
-8. If the metric was worse or the idea added complexity without clear benefit, revert to the previous kept commit.
+7. Periodically evaluate the strongest checkpoints in held-out simulator rollouts rather than waiting until the very end.
+8. If validation loss improved, but the held-out simulator objective, safety metrics, or stability metrics got worse, do not automatically keep the change.
+9. If both the proxy metric and the held-out simulator evidence improved, keep the commit and continue from there.
+10. If the metric was worse, or the idea added complexity without clear held-out benefit, revert to the previous kept commit.
 
 ## Simplicity rule
 
-Prefer the smallest change that improves validation loss.
+Prefer the smallest change that improves validation loss without hurting held-out simulator behavior.
 
 If two changes perform about the same:
 
