@@ -349,6 +349,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional path to save training/validation loss history as CSV.",
     )
+    parser.add_argument(
+        "--progress-snapshot-path",
+        type=Path,
+        default=None,
+        help="Optional path for a live JSON progress snapshot that the progress runner can watch.",
+    )
     parser.add_argument("--checkpoint-interval", type=int, default=1)
     parser.add_argument("--checkpoints-per-epoch", type=int, default=6)
     parser.add_argument("--resume", action="store_true")
@@ -730,6 +736,7 @@ def build_surface_manifest(
     save_path: Path,
     checkpoint_path: Path,
     loss_csv_path: Path,
+    progress_snapshot_path: Path,
     val_data_dir: Path | None,
     val_parquet_files: Sequence[Path] | None = None,
 ) -> dict[str, Any]:
@@ -754,6 +761,7 @@ def build_surface_manifest(
             "save_path": str(save_path),
             "checkpoint_path": str(checkpoint_path),
             "loss_csv_path": str(loss_csv_path),
+            "progress_snapshot_path": str(progress_snapshot_path),
             "val_data_dir": str(val_data_dir) if val_data_dir is not None else None,
         },
         "datasets": {
@@ -792,6 +800,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         root,
         (args.loss_csv_path or (model_dir / "dt_model_loss_history.csv")),
         name="loss_csv_path",
+    )
+    progress_snapshot_path = ensure_safe_output_path(
+        root,
+        (
+            args.progress_snapshot_path
+            or loss_csv_path.with_name(loss_csv_path.stem + "_progress.json")
+        ),
+        name="progress_snapshot_path",
     )
     surface_manifest_path = loss_csv_path.with_name(loss_csv_path.stem + "_surface_manifest.json")
 
@@ -905,6 +921,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         save_path=save_path,
         checkpoint_path=checkpoint_path,
         loss_csv_path=loss_csv_path,
+        progress_snapshot_path=progress_snapshot_path,
         val_data_dir=val_data_dir,
         val_parquet_files=val_parquet_files,
     )
@@ -933,6 +950,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         num_workers=surface.training_kwargs["num_workers"],
         persistent_workers=surface.training_kwargs["persistent_workers"],
         prefetch_factor=surface.training_kwargs["prefetch_factor"],
+        progress_snapshot_path=str(progress_snapshot_path),
         return_history=True,
     )
 

@@ -130,6 +130,7 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     save_path = output_dir / "model.pt"
     checkpoint_path = output_dir / "checkpoint.pt"
     loss_csv_path = output_dir / "loss.csv"
+    progress_snapshot_path = output_dir / "loss_progress.json"
     data_dir.mkdir()
     output_dir.mkdir()
     _write_dataset(data_dir / "train_episode_01.parquet")
@@ -140,6 +141,18 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     def fake_train_decision_transformer(**kwargs):
         Path(kwargs["save_path"]).write_bytes(b"weights")
         Path(kwargs["checkpoint_path"]).write_bytes(b"checkpoint")
+        Path(kwargs["progress_snapshot_path"]).write_text(
+            json.dumps(
+                {
+                    "schema": "energydecision.dt_progress_snapshot.v1",
+                    "status": "finished",
+                    "epoch": 2,
+                    "epochs": 2,
+                    "progress_fraction": 1.0,
+                }
+            ),
+            encoding="utf-8",
+        )
         return (
             kwargs["model"],
             [1.0, 0.5],
@@ -218,6 +231,7 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
 
     checkpoints_csv = loss_csv_path.with_name("loss_checkpoints.csv")
     assert checkpoints_csv.exists()
+    assert progress_snapshot_path.exists()
     manifest_path = loss_csv_path.with_name("loss_surface_manifest.json")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["editable_training_surface_file"].endswith("src/pretrain_decision_transformer.py")
@@ -226,3 +240,4 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     assert manifest["scheduler"] == "steplr"
     assert "searchable_knobs" in manifest
     assert "frozen_invariants" in manifest
+    assert manifest["paths"]["progress_snapshot_path"] == str(progress_snapshot_path)

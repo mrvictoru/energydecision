@@ -138,6 +138,8 @@ Run the autoresearch agent inside the `energydecision` Distrobox container rathe
 
 The DT trainer includes a live terminal monitor for epoch/batch progress plus CPU, RAM, GPU, and VRAM stats. It works from the repo root and from interactive Distrobox shells opened with `distrobox enter energydecision`.
 
+For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
+
 ## Primary metric
 
 Use one metric consistently for the whole run:

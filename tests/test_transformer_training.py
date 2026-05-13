@@ -24,6 +24,16 @@ def test_training_resource_monitor_formats_resource_snapshot(monkeypatch):
             "peak_vram_bytes": 3 * GIB,
         },
     )
+    monkeypatch.setattr(
+        monitor,
+        "_sample_process_stats",
+        lambda: {
+            "pcpu": "18%",
+            "prss": "1.5G",
+            "pvms": "3.0G",
+            "pth": "12",
+        },
+    )
 
     snapshot = monitor.snapshot(device="cuda:0")
 
@@ -33,6 +43,10 @@ def test_training_resource_monitor_formats_resource_snapshot(monkeypatch):
         "gpu": "77%",
         "vram": "2.0/10.0G",
         "vpeak": "3.0G",
+        "pcpu": "18%",
+        "prss": "1.5G",
+        "pvms": "3.0G",
+        "pth": "12",
     }
 
 
@@ -47,6 +61,7 @@ def test_training_resource_monitor_reuses_cached_snapshot(monkeypatch):
     monkeypatch.setattr(monitor, "_sample_cpu_percent", fake_cpu)
     monkeypatch.setattr(monitor, "_sample_ram_usage", lambda: (6 * GIB, 12 * GIB))
     monkeypatch.setattr(monitor, "_sample_gpu_stats", lambda device: None)
+    monkeypatch.setattr(monitor, "_sample_process_stats", lambda: {"pcpu": "21%"})
 
     first = monitor.snapshot(device="cpu")
     second = monitor.snapshot(device="cpu")
@@ -54,4 +69,5 @@ def test_training_resource_monitor_reuses_cached_snapshot(monkeypatch):
     assert first == second
     assert first["cpu"] == "55%"
     assert first["ram"] == "6.0/12.0G"
+    assert first["pcpu"] == "21%"
     assert call_count["cpu"] == 1

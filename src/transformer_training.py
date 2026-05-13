@@ -21,11 +21,13 @@ def _bytes_to_gib(value: float | int) -> float:
 class TrainingResourceMonitor:
     """Collect lightweight system metrics for live DT terminal progress displays."""
 
-    def __init__(self, refresh_seconds: float = 1.0):
+    def __init__(self, refresh_seconds: float = 1.0, pid: int | None = None):
         self.refresh_seconds = max(0.0, float(refresh_seconds))
+        self.pid = os.getpid() if pid is None else int(pid)
         self._last_snapshot: dict[str, str] = {}
         self._last_sample_time = 0.0
         self._prev_cpu_sample: tuple[int, int] | None = None
+        self._prev_proc_cpu_sample: tuple[float, float] | None = None
         self._nvidia_smi_supported: bool | None = None
 
     def snapshot(self, *, device: str) -> dict[str, str]:
@@ -61,6 +63,10 @@ class TrainingResourceMonitor:
                 metrics["vram"] = f"{_bytes_to_gib(vram_used_bytes):.1f}/{_bytes_to_gib(vram_total_bytes):.1f}G"
             if peak_vram_bytes is not None:
                 metrics["vpeak"] = f"{_bytes_to_gib(peak_vram_bytes):.1f}G"
+
+        proc_stats = self._sample_process_stats()
+        if proc_stats is not None:
+            metrics.update(proc_stats)
 
         self._last_snapshot = metrics
         self._last_sample_time = now
@@ -138,6 +144,57 @@ class TrainingResourceMonitor:
         if nvidia_stats is not None:
             metrics.update(nvidia_stats)
         return metrics
+
+    def _sample_process_stats(self) -> dict[str, str] | None:
+        status_path = f"/proc/{self.pid}/status"
+        try:
+            with open(status_path, "r", encoding="utf-8") as fh:
+                status_rows: dict[str, str] = {}
+                for line in fh:
+                    key, _, raw_value = line.partition(":")
+                    if not key:
+                        continue
+                    status_rows[key] = raw_value.strip()
+        except OSError:
+            return None
+
+        def _parse_kib(key: str) -> int | None:
+            raw_value = status_rows.get(key)
+            if not raw_value:
+                return None
+            parts = raw_value.split()
+            if not parts:
+                return None
+            try:
+                return int(float(parts[0])) * 1024
+            except ValueError:
+                return None
+
+        rss_bytes = _parse_kib("VmRSS")
+        vms_bytes = _parse_kib("VmSize")
+        threads = status_rows.get("Threads")
+
+        cpu_times = os.times()
+        proc_cpu_seconds = float(cpu_times.user + cpu_times.system)
+        now = time.monotonic()
+        proc_cpu_percent: float | None = None
+        if self._prev_proc_cpu_sample is not None:
+            prev_cpu_seconds, prev_sample_time = self._prev_proc_cpu_sample
+            elapsed_seconds = now - prev_sample_time
+            if elapsed_seconds > 0:
+                proc_cpu_percent = max(0.0, 100.0 * (proc_cpu_seconds - prev_cpu_seconds) / elapsed_seconds)
+        self._prev_proc_cpu_sample = (proc_cpu_seconds, now)
+
+        metrics: dict[str, str] = {}
+        if proc_cpu_percent is not None:
+            metrics["pcpu"] = f"{proc_cpu_percent:.0f}%"
+        if rss_bytes is not None:
+            metrics["prss"] = f"{_bytes_to_gib(rss_bytes):.1f}G"
+        if vms_bytes is not None:
+            metrics["pvms"] = f"{_bytes_to_gib(vms_bytes):.1f}G"
+        if threads is not None:
+            metrics["pth"] = threads
+        return metrics or None
 
     def _resolve_cuda_device_index(self, device: str) -> int:
         if ":" not in device:
@@ -415,6 +472,7 @@ def train_decision_transformer(
     persistent_workers: bool = True,
     prefetch_factor: int = 2,
     terminal_monitor_refresh_seconds: float = 1.0,
+    progress_snapshot_path: Optional[str] = None,
     return_history: bool = False,
 ) -> tuple:
     
@@ -684,8 +742,73 @@ def train_decision_transformer(
         extra_str = (" (" + ", ".join(extra) + ")") if extra else ""
         print(f"[BEST] Saved best model weights to {best_model_path} at {tag}{extra_str}")
 
+    def _write_progress_snapshot(
+        *,
+        status: str,
+        epoch: int,
+        segment: int,
+        train_loss_est: Optional[float],
+        val_stats: Optional[dict[str, float]],
+    ) -> None:
+        if not progress_snapshot_path:
+            return
+
+        progress_dir = os.path.dirname(progress_snapshot_path)
+        if progress_dir:
+            os.makedirs(progress_dir, exist_ok=True)
+
+        latest_history = loss_history[-5:]
+        current_train = dict(current_train_snapshot)
+        if train_loss_est is not None:
+            current_train.setdefault("train_total_ema", float(train_loss_est))
+
+        if status == "finished":
+            progress_fraction = 1.0
+        else:
+            completed_epochs = max(0.0, float(epoch - 1))
+            if segment >= 0 and checkpoints_per_epoch > 0:
+                completed_epochs += float(segment + 1) / float(checkpoints_per_epoch)
+            progress_fraction = max(0.0, min(1.0, completed_epochs / float(max(1, epochs))))
+
+        progress_payload = {
+            "schema": "energydecision.dt_progress_snapshot.v1",
+            "status": status,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "elapsed_seconds": round(time.perf_counter() - training_start_monotonic, 3),
+            "progress_fraction": progress_fraction,
+            "epoch": int(epoch),
+            "segment": int(segment),
+            "epochs": int(epochs),
+            "checkpoints_per_epoch": int(checkpoints_per_epoch),
+            "batch_size": int(batch_size),
+            "lr": float(optimizer.param_groups[0]["lr"]),
+            "device": device,
+            "current_train": current_train,
+            "validation": val_stats or {},
+            "best": {
+                "score": float(best_score),
+                "val_loss": float(best_val_loss),
+                "train_loss_est": float(best_train_loss_est),
+            },
+            "resources": terminal_monitor.snapshot(device=device),
+            "checkpoint_path": checkpoint_path,
+            "save_path": save_path,
+            "latest_history": latest_history,
+        }
+        try:
+            with open(progress_snapshot_path, "w", encoding="utf-8") as fh:
+                json.dump(progress_payload, fh, indent=2, sort_keys=True)
+        except OSError as exc:
+            print(f"[WARN] Could not write progress snapshot to {progress_snapshot_path}: {exc}")
+
     # Checkpoint saving function
-    def _save_checkpoint(epoch: int, segment: int = -1, train_loss_est: Optional[float] = None) -> None:
+    def _save_checkpoint(
+        epoch: int,
+        segment: int = -1,
+        train_loss_est: Optional[float] = None,
+        *,
+        status: str = "running",
+    ) -> None:
         if not checkpoint_path:
             return
         nonlocal amp_enabled, first_checkpoint_saved
@@ -753,6 +876,13 @@ def train_decision_transformer(
             print(f"Checkpoint saved to {checkpoint_path} — epoch {epoch}, segment {segment+1}")
         else:
             print(f"Checkpoint saved to {checkpoint_path} at epoch {epoch}")
+        _write_progress_snapshot(
+            status=status,
+            epoch=epoch,
+            segment=segment,
+            train_loss_est=train_loss_est,
+            val_stats=val_stats,
+        )
 
         # Compact progress print that aligns stored + displayed values.
         msg = f"[PROGRESS] epoch {epoch}"
@@ -850,6 +980,7 @@ def train_decision_transformer(
         print("[INFO] AMP is enabled once the first checkpoint exists. Set --amp-mode=off to disable.")
 
     terminal_monitor = TrainingResourceMonitor(refresh_seconds=terminal_monitor_refresh_seconds)
+    training_start_monotonic = time.perf_counter()
 
     # Initialize training state    
     start_epoch = 1
@@ -1052,7 +1183,12 @@ def train_decision_transformer(
                                         "batch_idx": float(batch_idx + 1),
                                     }
                                 )
-                                _save_checkpoint(epoch, segment_idx, train_loss_est=train_loss_ema)
+                                _save_checkpoint(
+                                    epoch,
+                                    segment_idx,
+                                    train_loss_est=train_loss_ema,
+                                    status="running",
+                                )
                             segment_idx += 1
                 progress_bar.close()
                 # End of epoch logging
@@ -1091,7 +1227,7 @@ def train_decision_transformer(
                             "batch_idx": float(total_batches),
                         }
                     )
-                    _save_checkpoint(epoch, train_loss_est=train_loss_ema)
+                    _save_checkpoint(epoch, train_loss_est=train_loss_ema, status="running")
 
             training_finished = True
 
@@ -1168,7 +1304,7 @@ def train_decision_transformer(
     # Final checkpoint to capture finished state
     if checkpoint_path:
         # Use a distinct segment id so we don't append a duplicate "epoch validation" entry.
-        _save_checkpoint(epochs, segment=-2)
+        _save_checkpoint(epochs, segment=-2, status="finished")
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(model.state_dict(), save_path)
