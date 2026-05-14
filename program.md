@@ -22,6 +22,8 @@ Before starting an autoresearch run, work with the human to:
    - `program.md`
    - `src/pretrain_decision_transformer.py`
    - `src/pretrain_aemo_decision_transformer.py`
+   - `src/autoresearch_evaluator.py`
+   - the evaluator config chosen for the run
    - `docs/AEMO_DT_WORKFLOW.md` if you are using the AEMO track
 
 4. **Verify data and paths exist**
@@ -62,6 +64,8 @@ This is the single sanctioned experiment surface for autoresearch in this reposi
 - `src/transformer_training.py`
 - `src/pretrain_aemo_decision_transformer.py`
 - `src/aemo_notebook_utils.py`
+- `src/autoresearch_evaluator.py`
+- the evaluator config fixed for the run
 - notebooks
 - environment dynamics
 - evaluation helpers
@@ -156,6 +160,23 @@ Use the GPU box for DT training commands so the trainer can see CUDA and use `de
 
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
+## Immutable evaluator
+
+Use `src/autoresearch_evaluator.py` as the fixed evaluation entrypoint for autoresearch checkpoints. The autoresearch agent must treat the evaluator script and the chosen evaluator config as read-only for the duration of a run.
+
+For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, copy it to a run-specific config outside the editable DT training surface, and fix the held-out scenarios, battery variants, baseline policies, and DT `rtg_value` before the search loop begins.
+
+Typical command:
+
+```bash
+python3 src/autoresearch_evaluator.py \
+  --surface-manifest-path models/aemo/dt/aemo_dt_loss_history_surface_manifest.json \
+  --evaluation-config <path-to-fixed-evaluator-config.json> \
+  --output-dir eval_output/autoresearch/<run-tag>/<commit>
+```
+
+The evaluator always reports training-loss summaries from the DT loss CSV and, for AEMO, also runs held-out simulator rollouts plus baseline-relative comparisons, safety counts, stability/risk metrics, and condition-sliced summaries.
+
 ## Primary metric
 
 Use one fast proxy metric consistently for the inner loop:
@@ -234,10 +255,11 @@ Once setup is complete, loop autonomously:
 4. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
 5. Read the final validation metric from the loss CSV or log.
 6. Record the result in `results.tsv`.
-7. Periodically evaluate the strongest checkpoints in held-out simulator rollouts rather than waiting until the very end.
-8. If validation loss improved, but the held-out simulator objective, safety metrics, or stability metrics got worse, do not automatically keep the change.
-9. If both the proxy metric and the held-out simulator evidence improved, keep the commit and continue from there.
-10. If the metric was worse, or the idea added complexity without clear held-out benefit, revert to the previous kept commit.
+7. Run `src/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
+8. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
+9. If validation loss improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
+10. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.
+11. If the metric was worse, or the idea added complexity without clear evaluator benefit, revert to the previous kept commit.
 
 ## Simplicity rule
 

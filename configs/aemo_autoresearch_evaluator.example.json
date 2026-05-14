@@ -1,0 +1,72 @@
+{
+  "track": "aemo",
+  "target_return": 0.0,
+  "bootstrap_iterations": 1000,
+  "bootstrap_seed": 42,
+  "reference_policy": "rule",
+  "condition_thresholds": {
+    "negative_price_threshold": 0.0,
+    "price_spike_threshold": 150.0,
+    "low_soc_ratio": 0.2,
+    "high_soc_ratio": 0.8
+  },
+  "heldout": {
+    "cache_dir": "data/aemo",
+    "step_duration": 0.5,
+    "episode_hours": 144.0,
+    "action_mode": "multi_market",
+    "degradation_mode": "real_world",
+    "degradation_chemistry": "LFP",
+    "degradation_temperature": 30.0,
+    "episodes_per_variant": 2,
+    "random_episode_start": false,
+    "fit_global_stats": true,
+    "battery_variants": [
+      {
+        "name": "medium",
+        "capacity_mwh": 10.0,
+        "max_power_mw": 5.0,
+        "init_soc_ratio": 0.5
+      }
+    ],
+    "scenarios": [
+      {
+        "label": "nsw1_jan_2024",
+        "region": "NSW1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "sa1_winter_2024",
+        "region": "SA1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      }
+    ]
+  },
+  "policies": [
+    {
+      "name": "candidate_dt",
+      "kind": "dt",
+      "rtg_value": 0.0
+    },
+    {
+      "name": "rule",
+      "kind": "rule"
+    },
+    {
+      "name": "dispatch_hornsdale",
+      "kind": "dispatch",
+      "station_name": "hornsdale",
+      "dispatch_index": 0
+    },
+    {
+      "name": "ppo_reference",
+      "kind": "sb3",
+      "algorithm": "PPO",
+      "model_path": "models/aemo_sb3/ppo_aemo_model.zip",
+      "deterministic": true,
+      "device": "auto"
+    }
+  ]
+}
