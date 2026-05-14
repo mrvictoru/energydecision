@@ -71,7 +71,7 @@ This is the single sanctioned experiment surface for autoresearch in this reposi
 - evaluation helpers
 - dataset schema
 
-## What you can change
+## What the harness may change
 
 Only change knobs already exposed by `src/pretrain_decision_transformer.py`, including:
 
@@ -82,9 +82,9 @@ Only change knobs already exposed by `src/pretrain_decision_transformer.py`, inc
 - DataLoader settings (`num_workers`, `persistent_workers`, `prefetch_factor`)
 - split-policy handling already supported by the file
 
-You may also improve the code inside the editable surface if the change still preserves the existing adapter contract and artifact contract.
+The harness may also improve the code inside the editable surface if the change still preserves the existing adapter contract and artifact contract.
 
-## What you must not change
+## What the harness must not change
 
 - Do not modify dataset columns or parquet schema.
 - Do not modify notebook workflows just to make the harness easier.
@@ -159,6 +159,23 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 Use the GPU box for DT training commands so the trainer can see CUDA and use `device=cuda` automatically when available.
 
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
+
+When the harness is launched from an SSH session, it must start the autoresearch run inside the GPU box/container and keep the progress tracker visible to the human in a separate tmux pane or terminal in that same box/container. The harness should not hide the tracker behind a detached-only process.
+
+Example layout:
+
+```bash
+tmux new -s autoresearch
+# pane 1: enter the GPU box/container and run the trainer with --progress-snapshot-path models/aemo/dt/<run-tag>/aemo_dt_loss_history_progress.json
+
+# split pane
+Ctrl-b %
+
+# pane 2: enter the same GPU box/container and run
+python3 src/dt_progress_runner.py --progress-snapshot-path models/aemo/dt/<run-tag>/aemo_dt_loss_history_progress.json
+```
+
+Replace `<run-tag>` with the actual run directory (for example `restart_20260514_pilot/baseline`). Keep the tracker pointed at the same progress snapshot file that the trainer writes so the human can watch the live dashboard while autoresearch is running.
 
 ## Immutable evaluator
 
