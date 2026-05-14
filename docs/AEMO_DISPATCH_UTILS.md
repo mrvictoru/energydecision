@@ -1,4 +1,15 @@
-# AEMO Dispatch Utilities (`dispatch_utils`)
+# AEMO dispatch replay guide and API reference (`dispatch_utils`)
+
+This is the **dispatch replay guide and API reference** for `src/dispatch_utils.py`.
+
+Use this document when you need:
+
+- to find candidate battery DUIDs
+- to resolve station sizing and dispatch metadata
+- to run replay episodes from real AEMO dispatch schedules
+- the `dispatch_utils` function reference
+
+If you want the broader notebook workflow, read [AEMO_DT_WORKFLOW.md](AEMO_DT_WORKFLOW.md). If you want the full AEMO docs map, start with [AEMO_README.md](AEMO_README.md).
 
 The `dispatch_utils` module (``src/dispatch_utils.py``) provides high-level
 helpers for **dispatch replay** simulations.  It bridges the raw data-fetching

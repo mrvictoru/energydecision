@@ -1,4 +1,14 @@
-# AEMO Decision Transformer: Short-Term Progress Suggestions
+# AEMO Decision Transformer short-term roadmap note
+
+This is a **roadmap note** for near-term AEMO DT research priorities.
+
+Use this document when you need:
+
+- a quick summary of what is still missing in AEMO DT work
+- suggested near-term milestones
+- guidance on what to prioritize next
+
+This is not the main operating workflow for running AEMO experiments. For the actual notebook and training flow, read [AEMO_DT_WORKFLOW.md](AEMO_DT_WORKFLOW.md). For the full AEMO docs map, start with [AEMO_README.md](AEMO_README.md).
 
 ## Purpose
 This note focuses on the **next short-term steps** needed to evaluate whether Decision Transformers (DTs) are competitive in the **AEMO battery trading environment**, which is currently behind the household benchmark in experimental maturity.

@@ -1,5 +1,16 @@
 # AEMO Battery Trading Environment
 
+This is the **environment reference** for the AEMO grid-scale battery simulator.
+
+Use this document when you need:
+
+- the environment overview
+- observation and action space details
+- reward mechanics
+- market-data and battery-model behavior
+
+If you want a map of all AEMO docs first, start with [AEMO_README.md](AEMO_README.md).
+
 A Gymnasium environment for simulating battery energy storage systems (BESS) participating in the Australian National Electricity Market (NEM), including both energy spot market and Frequency Control Ancillary Services (FCAS) markets.
 
 ## Overview

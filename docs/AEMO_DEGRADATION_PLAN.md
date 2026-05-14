@@ -1,4 +1,14 @@
-# AEMO Battery Degradation Integration Plan
+# AEMO battery degradation design note
+
+This is the **design note** for how battery degradation modeling is handled in the AEMO environment.
+
+Use this document when you need:
+
+- the rationale behind the degradation models
+- the implementation summary for `AEMOBatteryTradingEnv`
+- model limitations and future extension ideas
+
+This is primarily a background/design document rather than an operational workflow guide. For the full AEMO docs map, start with [AEMO_README.md](AEMO_README.md).
 
 ## Summary
 

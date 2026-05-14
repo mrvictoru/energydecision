@@ -1,4 +1,15 @@
-# AEMO notebook-first offline RL workflow
+# AEMO notebook-first offline RL and DT workflow
+
+This is the **workflow guide** for AEMO data generation, notebook-based experiments, and Decision Transformer training.
+
+Use this document when you need:
+
+- the end-to-end notebook flow
+- dataset generation steps
+- SB3 training entrypoints
+- AEMO DT dataset and training artifacts
+
+If you only need environment mechanics, read [AEMO_ENV_README.md](AEMO_ENV_README.md). If you want the full AEMO docs map, start with [AEMO_README.md](AEMO_README.md).
 
 The AEMO offline RL workflow is now centered on notebooks so you can inspect intermediate tables, debug trajectories, and change configs without leaving the notebook UI.
 

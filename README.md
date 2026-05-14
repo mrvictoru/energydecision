@@ -10,6 +10,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 1.  **Simulation Environments:**
     *   **Household:** [SolarBatteryEnv](docs/HOUSEHOLD_ENV_README.md) - Residential PV + Battery with ToU tariffs.
     *   **Grid:** [AEMOBatteryTradingEnv](docs/AEMO_ENV_README.md) - Arbitrage & FCAS in the Australian National Electricity Market.
+    *   **AEMO docs guide:** [docs/AEMO_README.md](docs/AEMO_README.md) - Start here to find the right AEMO environment, workflow, replay, degradation, or roadmap document.
 
 2.  **Algorithms ([COMPONENTS.md](COMPONENTS.md)):**
     *   **Optimization:** Stochastic Dynamic Programming (SDP) & Multi-Resolution DP (MRDP).
@@ -682,6 +683,7 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 ## Documentation
 *   **[COMPONENTS.md](COMPONENTS.md)**: Detailed usage guide for key scripts (`decision.py`, `batterydeg.py`, etc.).
 *   **[program.md](program.md)**: Repository-specific instructions for an autonomous autoresearch harness operating on the constrained DT training surface.
+*   **[AEMO docs guide](docs/AEMO_README.md)**: Entry point for the AEMO documentation set, with a quick “which doc should I read?” map.
 *   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
 *   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
 *   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
