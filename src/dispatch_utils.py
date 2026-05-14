@@ -30,7 +30,7 @@ Public API
   paired gen–load metadata
 - :func:`run_dispatch_replay` — run dispatch replay episodes and save logs
 
-See ``docs/AEMO_DISPATCH_UTILS.md`` for a detailed usage guide.
+See ``docs/aemo/dispatch-replay.md`` for a detailed usage guide.
 """
 
 from __future__ import annotations
@@ -1314,4 +1314,3 @@ def scan_duid_historical_availability(
         descending=[False, False, False],
         nulls_last=True,
     )
-

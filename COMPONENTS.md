@@ -26,7 +26,7 @@ This document provides comprehensive documentation for all key components in the
 
 ### Overview
 
-`SolarBatteryEnv` is a Gymnasium-compatible environment simulating a household with solar PV, battery storage, and grid connection. For a detailed description of the physics, logic, and reward function, see **[docs/HOUSEHOLD_ENV_README.md](docs/HOUSEHOLD_ENV_README.md)**. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.
+`SolarBatteryEnv` is a Gymnasium-compatible environment simulating a household with solar PV, battery storage, and grid connection. For a detailed description of the physics, logic, and reward function, see **[docs/household/environment.md](docs/household/environment.md)**. It features realistic constraints, time-of-use tariffs, and degradation-aware rewards.
 
 ### Key Features
 
@@ -91,7 +91,7 @@ for _ in range(100):
 
 ### Overview
 
-`AEMOBatteryTradingEnv` is a Gymnasium-compatible environment that simulates a grid-scale battery participating in AEMO energy and FCAS markets. For a detailed description of the market mechanics and observation space, see **[docs/AEMO_ENV_README.md](docs/AEMO_ENV_README.md)**. It consumes preprocessed AEMO data (Polars) and supports single-market (energy-only) or multi-market (energy + FCAS) action modes.
+`AEMOBatteryTradingEnv` is a Gymnasium-compatible environment that simulates a grid-scale battery participating in AEMO energy and FCAS markets. For a detailed description of the market mechanics and observation space, see **[docs/aemo/environment.md](docs/aemo/environment.md)**. It consumes preprocessed AEMO data (Polars) and supports single-market (energy-only) or multi-market (energy + FCAS) action modes.
 
 ### Key Components
 
@@ -425,7 +425,7 @@ Implements semi-empirical battery degradation models. The module provides three 
 2. **`RealWorldBESSDegradationModel`** — Combined calendar + cycle aging model for utility-scale BESS, adapted from the framework in Kampker et al. (2025, doi:10.3390/batteries11110392). Uses Arrhenius temperature dependency and NMC/LFP chemistry presets. **Recommended for AEMO grid-scale simulations.**
 3. **`RainflowCounter`** — ASTM E1049-85 rainflow cycle counting, used by both degradation models.
 
-For a detailed explanation of the math, the factors, the Rainflow implementation, and the real-world BESS model, see **[docs/BATTERY_DEGRADATION_DETAILS.md](docs/BATTERY_DEGRADATION_DETAILS.md)**.
+For a detailed explanation of the math, the factors, the Rainflow implementation, and the real-world BESS model, see **[docs/household/degradation.md](docs/household/degradation.md)**.
 
 ### Available Models
 
@@ -784,7 +784,7 @@ using real AEMO DISPATCHLOAD data.  It bridges the raw data-fetching functions i
 and readable.
 
 For a full description of the module, see
-**[docs/AEMO_DISPATCH_UTILS.md](docs/AEMO_DISPATCH_UTILS.md)**.
+**[docs/aemo/dispatch-replay.md](docs/aemo/dispatch-replay.md)**.
 
 ### Key Functions
 

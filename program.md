@@ -24,7 +24,7 @@ Before starting an autoresearch run, work with the human to:
    - `src/pretrain_aemo_decision_transformer.py`
    - `src/autoresearch_evaluator.py`
    - the evaluator config chosen for the run
-   - `docs/AEMO_DT_WORKFLOW.md` if you are using the AEMO track
+   - `docs/aemo/workflow.md` if you are using the AEMO track
 
 4. **Verify data and paths exist**
    - Household track requires parquet logs under `data/household/logs/`.

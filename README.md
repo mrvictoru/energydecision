@@ -8,9 +8,8 @@ This project establishes a comprehensive, reproducible benchmark for residential
 ## Key Components
 
 1.  **Simulation Environments:**
-    *   **Household:** [SolarBatteryEnv](docs/HOUSEHOLD_ENV_README.md) - Residential PV + Battery with ToU tariffs.
-    *   **Grid:** [AEMOBatteryTradingEnv](docs/AEMO_ENV_README.md) - Arbitrage & FCAS in the Australian National Electricity Market.
-    *   **AEMO docs guide:** [docs/AEMO_README.md](docs/AEMO_README.md) - Start here to find the right AEMO environment, workflow, replay, degradation, or roadmap document.
+    *   **Household:** [Household docs guide](docs/household/README.md) - Start here to find the household environment or degradation deep dive.
+    *   **Grid:** [AEMO docs guide](docs/aemo/README.md) - Start here to find the right AEMO environment, workflow, replay, degradation, or roadmap document.
 
 2.  **Algorithms ([COMPONENTS.md](COMPONENTS.md)):**
     *   **Optimization:** Stochastic Dynamic Programming (SDP) & Multi-Resolution DP (MRDP).
@@ -382,10 +381,9 @@ energydecision/
 ├── docs/                    # Deep dive documentation, assets, and references
 │   ├── assets/
 │   ├── references/
-│   ├── HOUSEHOLD_ENV_README.md
-│   ├── AEMO_ENV_README.md
+│   ├── aemo/
+│   ├── household/
 │   ├── DP_ALGORITHM_README.md
-│   ├── BATTERY_DEGRADATION_DETAILS.md
 │   └── HELPER_README.md
 ├── notebooks/               # Canonical workflow/demo notebooks
 ├── src/                     # Source code
@@ -683,8 +681,9 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 ## Documentation
 *   **[COMPONENTS.md](COMPONENTS.md)**: Detailed usage guide for key scripts (`decision.py`, `batterydeg.py`, etc.).
 *   **[program.md](program.md)**: Repository-specific instructions for an autonomous autoresearch harness operating on the constrained DT training surface.
-*   **[AEMO docs guide](docs/AEMO_README.md)**: Entry point for the AEMO documentation set, with a quick “which doc should I read?” map.
-*   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
-*   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
-*   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
-*   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.
+*   **[Household docs guide](docs/household/README.md)**: Entry point for the household documentation set.
+*   **[AEMO docs guide](docs/aemo/README.md)**: Entry point for the AEMO documentation set.
+*   **[Household Environment](docs/household/environment.md)**: Physics, reward function, and observation space.
+*   **[AEMO Environment](docs/aemo/environment.md)**: Market dynamics, FCAS, and data pipeline.
+*   **[Dispatch Replay Utilities](docs/aemo/dispatch-replay.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
+*   **[AEMO DT Workflow](docs/aemo/workflow.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.
