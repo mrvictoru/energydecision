@@ -13,6 +13,8 @@ from pretrain_aemo_decision_transformer import build_training_commands, get_chec
 def _args(tmp_path: Path) -> Namespace:
     return Namespace(
         model_config=tmp_path / "config.json",
+        surface_preset="aemo_learning_baseline",
+        model_variant=None,
         save_path=tmp_path / "model.pt",
         checkpoint_path=tmp_path / "checkpoint.pt",
         loss_csv_path=tmp_path / "loss.csv",
@@ -65,6 +67,7 @@ def test_build_training_commands_resumes_after_first_subset(tmp_path: Path):
     assert commands[2][commands[2].index("--epochs") + 1] == "6"
     assert commands[0][0] == sys.executable
     assert commands[0][1] == str(root / "src" / "pretrain_decision_transformer.py")
+    assert commands[0][commands[0].index("--surface-preset") + 1] == "aemo_learning_baseline"
     assert commands[0][commands[0].index("--patterns") + 1] == "subset_001"
     assert commands[1][commands[1].index("--patterns") + 1] == "subset_002"
 
@@ -107,6 +110,24 @@ def test_build_training_commands_adds_explicit_validation_inputs(tmp_path: Path)
     assert commands[0][commands[0].index("--val-data-dir") + 1] == str(tmp_path)
     patterns_index = commands[0].index("--val-patterns") + 1
     assert commands[0][patterns_index : patterns_index + 2] == ["val_subset_001", "val_subset_002"]
+
+
+def test_build_training_command_passes_model_variant(tmp_path: Path):
+    args = _args(tmp_path)
+    args.surface_preset = "aemo_proxy"
+    args.model_variant = "compact"
+    root = tmp_path / "repo"
+    root.mkdir()
+
+    command = build_training_commands(
+        root=root,
+        args=args,
+        dataset_paths=[tmp_path / "subset_001.parquet"],
+        epochs_per_stage=1,
+    )[0]
+
+    assert command[command.index("--surface-preset") + 1] == "aemo_proxy"
+    assert command[command.index("--model-variant") + 1] == "compact"
 
 
 def test_get_checkpoint_epoch_reads_saved_epoch(tmp_path: Path):

@@ -76,8 +76,12 @@ from dispatch_utils import (
        num_episodes=3,
        output_dir="data/aemo_sim_output",
        run_tag="aemo_mm",
-   )
-   ```
+    )
+    ```
+
+For evaluator baselines, pick stations that actually have `DISPATCHLOAD` coverage in the
+chosen window. In the SA1 `2024-07-01` → `2024-07-14` window, `dalrymple_north` and
+`torrens_island` both replay successfully, while `hornsdale` and `lake_bonney` do not.
 
 ---
 

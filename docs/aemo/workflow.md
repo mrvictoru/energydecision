@@ -98,9 +98,15 @@ Example shape:
 ```python
 DISPATCH_RUNS = [
     {
-        "label": "hornsdale_replay",
+        "label": "dalrymple_north_replay",
         "episodes": 1,
-        "station_name": "hornsdale",
+        "station_name": "dalrymple_north",
+        "init_soc_ratio": 0.5,
+    },
+    {
+        "label": "torrens_island_replay",
+        "episodes": 1,
+        "station_name": "torrens_island",
         "init_soc_ratio": 0.5,
     },
 ]
@@ -114,6 +120,9 @@ Notes:
 - `init_soc_ratio` is applied after station sizing is resolved.
 - `battery_life_cost` or `battery_cost_per_kwh` can be supplied if you want to override the
   degradation economics for dispatch replay.
+- When you want multiple replay baselines in the evaluator, prefer two stations from the same
+  window that both have `DISPATCHLOAD` coverage. For the SA1 winter 2024 window, `dalrymple_north`
+  and `torrens_island` both work while `hornsdale` does not.
 
 ## DT dataset expectations
 
@@ -155,20 +164,38 @@ If DT training is enabled in the notebook config, it also writes:
 The combined AEMO DT parquet can be too large for the current in-memory `TrajectoryDataset`
 implementation when it is loaded as one file and expanded into all sliding windows at once.
 
+### Training tiers
+
+Use two distinct DT training tiers for AEMO:
+
+- **`aemo_proxy`** — compact, cheap, and intended for quick idea ranking only
+- **`aemo_learning_baseline`** — broader baseline training with explicit held-out validation and a longer context
+
+Do not treat the narrow proxy slice (`aemo_dt_dataset_train_subset_007`) as the main learning baseline. It is useful for smoke tests and cheap sweeps, but not for establishing the branch point that future AEMO experiments should build on.
+
 Use `src/pretrain_aemo_decision_transformer.py` subset mode for large runs:
 
 ```bash
 python3 src/pretrain_aemo_decision_transformer.py \
   --dataset-path data/aemo_dt/aemo_dt_dataset.parquet \
+  --surface-preset aemo_learning_baseline \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
   --train-in-subsets \
-  --subset-episodes 8 \
+  --subset-episodes 24 \
   --epochs-per-subset 1 \
   --num-workers 0
 ```
 
 If you are already inside the `energydecision` Distrobox shell at the repo root, run the same
 command as `python3 src/pretrain_aemo_decision_transformer.py` and keep normal `data/...` paths.
+
+Practical guidance:
+
+- start serious baseline refreshes from `aemo_learning_baseline`
+- use explicit validation subsets/files rather than tiny episode splits
+- start with `lr=3e-5`
+- prefer `context_len=288` for learning baselines; `120` is a reasonable fallback if runtime is too high
+- keep `aemo_proxy` for rapid triage only
 
 Subset mode works like this:
 

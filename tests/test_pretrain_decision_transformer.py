@@ -99,6 +99,83 @@ def test_resolve_training_surface_rejects_action_mode_mismatch():
         pretrain_dt.resolve_training_surface(args, base_kwargs={})
 
 
+def test_resolve_training_surface_exposes_aemo_learning_baseline_defaults():
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "aemo_learning_baseline",
+        ]
+    )
+
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+    assert surface.model_variant == "aemo_multimarket"
+    assert surface.model_kwargs["context_len"] == 288
+    assert surface.model_kwargs["act_dim"] == 3
+    assert surface.training_kwargs["lr"] == pytest.approx(3e-5)
+    assert surface.training_kwargs["batch_size"] == 32
+
+
+def test_validate_preset_dataset_policy_requires_explicit_validation_for_learning_baseline(tmp_path: Path):
+    args = pretrain_dt.parse_args(["--surface-preset", "aemo_learning_baseline"])
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+    train_file = tmp_path / "aemo_dt_dataset_train_subset_001.parquet"
+    train_file.write_bytes(b"")
+
+    with pytest.raises(ValueError, match="requires explicit validation parquet files"):
+        pretrain_dt.validate_preset_dataset_policy(
+            surface=surface,
+            parquet_files=[train_file],
+            train_episode_count=24,
+        )
+
+
+def test_validate_preset_dataset_policy_rejects_narrow_proxy_subset_for_learning_baseline(tmp_path: Path):
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "aemo_learning_baseline",
+            "--split-policy",
+            "explicit_validation",
+            "--val-data-dir",
+            str(tmp_path),
+        ]
+    )
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+    train_file = tmp_path / "aemo_dt_dataset_train_subset_007.parquet"
+    train_file.write_bytes(b"")
+
+    with pytest.raises(ValueError, match="cannot use the narrow proxy slice"):
+        pretrain_dt.validate_preset_dataset_policy(
+            surface=surface,
+            parquet_files=[train_file],
+            train_episode_count=24,
+        )
+
+
+def test_validate_preset_dataset_policy_rejects_too_few_learning_baseline_episodes(tmp_path: Path):
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "aemo_learning_baseline",
+            "--split-policy",
+            "explicit_validation",
+            "--val-data-dir",
+            str(tmp_path),
+        ]
+    )
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+    train_file = tmp_path / "aemo_dt_dataset_train_subset_001.parquet"
+    train_file.write_bytes(b"")
+
+    with pytest.raises(ValueError, match="requires at least 8 training episodes"):
+        pretrain_dt.validate_preset_dataset_policy(
+            surface=surface,
+            parquet_files=[train_file],
+            train_episode_count=2,
+        )
+
+
 def test_validate_dataset_dimensions_rejects_mismatch(tmp_path: Path):
     dataset_path = tmp_path / "episodes.parquet"
     _write_dataset(dataset_path, state_dim=18, act_dim=3)

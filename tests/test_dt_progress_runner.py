@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from dt_progress_runner import render_dashboard  # noqa: E402
+import dt_progress_runner as progress_runner  # noqa: E402
 
 
 def test_render_dashboard_includes_high_signal_progress_fields(tmp_path: Path):
@@ -45,7 +45,7 @@ def test_render_dashboard_includes_high_signal_progress_fields(tmp_path: Path):
         "scheduler": "steplr",
     }
 
-    dashboard = render_dashboard(
+    dashboard = progress_runner.render_dashboard(
         snapshot=snapshot,
         manifest=manifest,
         log_path=log_path,
@@ -62,3 +62,70 @@ def test_render_dashboard_includes_high_signal_progress_fields(tmp_path: Path):
     assert "val_total=0.456" in dashboard
     assert "pcpu=77%" in dashboard
     assert "line two" in dashboard
+
+
+def test_build_dashboard_state_preserves_structured_fields(tmp_path: Path):
+    log_path = tmp_path / "training.log"
+    state = progress_runner.build_dashboard_state(
+        snapshot={
+            "status": "running",
+            "progress_fraction": 0.25,
+            "current_train": {"train_total_avg": 0.2},
+            "validation": {"val_total": 0.4},
+            "best": {"val_loss": 0.4},
+            "resources": {"cpu": "50%"},
+        },
+        manifest={"surface_preset": "aemo_proxy", "model_variant": "compact"},
+        log_path=log_path,
+        log_tail=["hello"],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+    )
+
+    assert state.status == "running"
+    assert state.progress_percent == 25.0
+    assert "preset=aemo_proxy" in (state.surface_text or "")
+    assert state.log_tail == ["hello"]
+
+
+def test_resolve_ui_mode_falls_back_to_plain_without_tty(monkeypatch):
+    monkeypatch.setattr(progress_runner, "RICH_AVAILABLE", True)
+    assert progress_runner.resolve_ui_mode("auto", is_tty=False) == "plain"
+    assert progress_runner.resolve_ui_mode("rich", is_tty=False) == "plain"
+
+
+def test_resolve_ui_mode_prefers_rich_when_available():
+    assert progress_runner.resolve_ui_mode("plain", is_tty=True) == "plain"
+    assert progress_runner.resolve_ui_mode("auto", is_tty=True) == ("rich" if progress_runner.RICH_AVAILABLE else "plain")
+
+
+def test_build_rich_dashboard_contains_high_signal_labels(tmp_path: Path):
+    if not progress_runner.RICH_AVAILABLE:
+        return
+
+    state = progress_runner.build_dashboard_state(
+        snapshot={
+            "status": "running",
+            "progress_fraction": 0.5,
+            "current_train": {"train_total_avg": 0.123},
+            "validation": {"val_total": 0.456},
+            "best": {"val_loss": 0.456},
+            "resources": {"cpu": "42%", "pcpu": "77%"},
+        },
+        manifest={"surface_preset": "autoresearch_safe", "model_variant": "baseline"},
+        log_path=tmp_path / "monitor.log",
+        log_tail=["line one", "line two"],
+        command=["python3", "src/pretrain_decision_transformer.py"],
+        child=None,
+        started_at=0.0,
+    )
+
+    console = progress_runner.Console(record=True, force_terminal=False, width=120)
+    console.print(progress_runner.build_rich_dashboard(state))
+    rendered = console.export_text()
+
+    assert "DT progress runner" in rendered
+    assert "metrics" in rendered
+    assert "resources" in rendered
+    assert "line two" in rendered

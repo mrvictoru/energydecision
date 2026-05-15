@@ -7,8 +7,51 @@ import subprocess
 import sys
 import time
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+try:
+    from rich.console import Console, Group
+    from rich.layout import Layout
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.progress_bar import ProgressBar
+    from rich.table import Table
+    from rich.text import Text
+
+    RICH_IMPORT_ERROR: Exception | None = None
+    RICH_AVAILABLE = True
+except ImportError as exc:  # pragma: no cover - exercised via fallback tests
+    Console = None  # type: ignore[assignment]
+    Group = None  # type: ignore[assignment]
+    Layout = None  # type: ignore[assignment]
+    Live = None  # type: ignore[assignment]
+    Panel = None  # type: ignore[assignment]
+    ProgressBar = None  # type: ignore[assignment]
+    Table = None  # type: ignore[assignment]
+    Text = None  # type: ignore[assignment]
+    RICH_IMPORT_ERROR = exc
+    RICH_AVAILABLE = False
+
+
+@dataclass(frozen=True)
+class DashboardState:
+    command_text: str
+    elapsed_text: str
+    log_path_text: str
+    surface_text: str | None
+    status: str
+    child_state: str | None
+    exit_code: int | None
+    progress_text: str
+    progress_percent: float | None
+    train_text: str
+    val_text: str
+    best_text: str
+    resources_text: str
+    last_checkpoint_text: str | None
+    log_tail: list[str]
 
 
 def repo_root() -> Path:
@@ -48,6 +91,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=8,
         help="How many lines of log tail to display.",
+    )
+    parser.add_argument(
+        "--ui",
+        choices=["auto", "plain", "rich"],
+        default="auto",
+        help="Terminal UI mode. 'auto' prefers Rich on TTYs and falls back to plain text elsewhere.",
     )
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to execute after --.")
     return parser.parse_args()
@@ -114,6 +163,118 @@ def progress_percent(snapshot: dict[str, Any]) -> float | None:
     return max(0.0, min(100.0, (completed / epochs) * 100.0))
 
 
+def build_dashboard_state(
+    *,
+    snapshot: dict[str, Any] | None,
+    manifest: dict[str, Any] | None,
+    log_path: Path,
+    log_tail: list[str],
+    command: list[str],
+    child: subprocess.Popen[Any] | None,
+    started_at: float,
+    return_code: int | None = None,
+) -> DashboardState:
+    surface_text: str | None = None
+    if manifest:
+        surface = {
+            "preset": manifest.get("surface_preset"),
+            "variant": manifest.get("model_variant"),
+            "optimizer": manifest.get("optimizer"),
+            "scheduler": manifest.get("scheduler"),
+        }
+        surface_text = format_row(surface, ["preset", "variant", "optimizer", "scheduler"])
+
+    child_state: str | None = None
+    if child is not None:
+        child_state = "running" if child.poll() is None else "stopped"
+
+    if snapshot is None:
+        return DashboardState(
+            command_text=" ".join(command),
+            elapsed_text=format_seconds(time.monotonic() - started_at),
+            log_path_text=str(log_path),
+            surface_text=surface_text,
+            status="waiting for progress snapshot",
+            child_state=child_state,
+            exit_code=return_code,
+            progress_text="progress: waiting for snapshot",
+            progress_percent=None,
+            train_text="n/a",
+            val_text="n/a",
+            best_text="n/a",
+            resources_text="n/a",
+            last_checkpoint_text=None,
+            log_tail=[line.rstrip() for line in log_tail] or ["(no log output yet)"],
+        )
+
+    progress = progress_percent(snapshot)
+    current_train = snapshot.get("current_train") or {}
+    validation = snapshot.get("validation") or {}
+    best = snapshot.get("best") or {}
+    resources = snapshot.get("resources") or {}
+    latest_history = snapshot.get("latest_history") or []
+    epoch = snapshot.get("epoch", "?")
+    epochs = snapshot.get("epochs", "?")
+    segment = snapshot.get("segment", "?")
+    last_checkpoint_text: str | None = None
+    if latest_history:
+        last_checkpoint_text = format_row(
+            latest_history[-1],
+            ["epoch", "segment", "train_total_avg", "val_total", "train_total_ema"],
+        )
+
+    return DashboardState(
+        command_text=" ".join(command),
+        elapsed_text=format_seconds(time.monotonic() - started_at),
+        log_path_text=str(log_path),
+        surface_text=surface_text,
+        status=str(snapshot.get("status", "unknown")),
+        child_state=child_state,
+        exit_code=return_code,
+        progress_text=(
+            f"progress: {progress:.1f}%"
+            if progress is not None
+            else f"progress: epoch {epoch}/{epochs} seg {segment}"
+        ),
+        progress_percent=progress,
+        train_text=format_row(
+            current_train,
+            ["train_total_avg", "train_action_avg", "train_state_avg", "train_return_avg", "train_total_ema"],
+        ),
+        val_text=format_row(validation, ["val_total", "val_action", "val_state", "val_return", "val_valid"]),
+        best_text=format_row(best, ["score", "val_loss", "train_loss_est"]),
+        resources_text=format_row(resources, ["cpu", "ram", "gpu", "vram", "vpeak", "pcpu", "prss", "pvms", "pth"]),
+        last_checkpoint_text=last_checkpoint_text,
+        log_tail=[line.rstrip() for line in log_tail] or ["(no log output yet)"],
+    )
+
+
+def render_plain_dashboard(state: DashboardState) -> str:
+    lines: list[str] = []
+    lines.append("DT progress runner")
+    lines.append(f"command: {state.command_text}")
+    lines.append(f"elapsed: {state.elapsed_text}")
+    lines.append(f"log: {state.log_path_text}")
+    if state.surface_text:
+        lines.append(f"surface: {state.surface_text}")
+    status_line = f"status: {state.status}"
+    if state.child_state:
+        status_line += f" | child={state.child_state}"
+    if state.exit_code is not None:
+        status_line += f" | exit={state.exit_code}"
+    lines.append(status_line)
+    lines.append(state.progress_text)
+    lines.append(f"train: {state.train_text}")
+    lines.append(f"val: {state.val_text}")
+    lines.append(f"best: {state.best_text}")
+    lines.append(f"resources: {state.resources_text}")
+    if state.last_checkpoint_text is not None:
+        lines.append(f"last checkpoint: {state.last_checkpoint_text}")
+    lines.append("log tail:")
+    lines.extend(f"  {line}" for line in state.log_tail)
+    return "\n".join(lines)
+
+
 def render_dashboard(
     *,
     snapshot: dict[str, Any] | None,
@@ -125,68 +286,222 @@ def render_dashboard(
     started_at: float,
     return_code: int | None = None,
 ) -> str:
-    lines: list[str] = []
-    lines.append("DT progress runner")
-    lines.append(f"command: {' '.join(command)}")
-    lines.append(f"elapsed: {format_seconds(time.monotonic() - started_at)}")
-    lines.append(f"log: {log_path}")
+    state = build_dashboard_state(
+        snapshot=snapshot,
+        manifest=manifest,
+        log_path=log_path,
+        log_tail=log_tail,
+        command=command,
+        child=child,
+        started_at=started_at,
+        return_code=return_code,
+    )
+    return render_plain_dashboard(state)
 
-    if manifest:
-        surface = {
-            "preset": manifest.get("surface_preset"),
-            "variant": manifest.get("model_variant"),
-            "optimizer": manifest.get("optimizer"),
-            "scheduler": manifest.get("scheduler"),
-        }
-        lines.append(f"surface: {format_row(surface, ['preset', 'variant', 'optimizer', 'scheduler'])}")
 
-    if snapshot is None:
-        lines.append("status: waiting for progress snapshot")
-    else:
-        progress = progress_percent(snapshot)
-        status = snapshot.get("status", "unknown")
-        epoch = snapshot.get("epoch", "?")
-        epochs = snapshot.get("epochs", "?")
-        segment = snapshot.get("segment", "?")
-        current_train = snapshot.get("current_train") or {}
-        validation = snapshot.get("validation") or {}
-        best = snapshot.get("best") or {}
-        resources = snapshot.get("resources") or {}
-        latest_history = snapshot.get("latest_history") or []
-        lines.append(
-            f"status: {status}"
-            + (f" | child={'running' if child and child.poll() is None else 'stopped'}" if child else "")
-            + (f" | exit={return_code}" if return_code is not None else "")
+def resolve_ui_mode(ui: str, *, is_tty: bool) -> str:
+    if ui == "plain":
+        return "plain"
+    if ui == "rich":
+        return "rich" if RICH_AVAILABLE and is_tty else "plain"
+    return "rich" if RICH_AVAILABLE and is_tty else "plain"
+
+
+def rich_status_style(status: str) -> str:
+    normalized = status.lower()
+    if normalized == "finished":
+        return "bold green"
+    if normalized in {"running", "starting"}:
+        return "bold cyan"
+    if normalized in {"failed", "error", "crash"}:
+        return "bold red"
+    return "bold yellow"
+
+
+def build_rich_dashboard(state: DashboardState) -> Any:
+    if not RICH_AVAILABLE:
+        raise RuntimeError(f"Rich rendering requested but unavailable: {RICH_IMPORT_ERROR}")
+
+    header = Table.grid(expand=True)
+    header.add_column(ratio=3)
+    header.add_column(ratio=2, justify="right")
+    status_text = Text.assemble(("DT progress runner", "bold"), "  ", (state.status, rich_status_style(state.status)))
+    right_bits = [f"elapsed {state.elapsed_text}"]
+    if state.child_state:
+        right_bits.append(f"child {state.child_state}")
+    if state.exit_code is not None:
+        right_bits.append(f"exit {state.exit_code}")
+    header.add_row(status_text, Text(" | ".join(right_bits), style="dim"))
+
+    summary = Table.grid(padding=(0, 1))
+    summary.add_column(style="bold cyan", no_wrap=True)
+    summary.add_column()
+    summary.add_row("command", state.command_text)
+    summary.add_row("log", state.log_path_text)
+    if state.surface_text:
+        summary.add_row("surface", state.surface_text)
+
+    metrics = Table.grid(padding=(0, 1))
+    metrics.add_column(style="bold cyan", no_wrap=True)
+    metrics.add_column()
+    metrics.add_row("progress", state.progress_text)
+    metrics.add_row("train", state.train_text)
+    metrics.add_row("val", state.val_text)
+    metrics.add_row("best", state.best_text)
+    if state.last_checkpoint_text:
+        metrics.add_row("last", state.last_checkpoint_text)
+
+    progress_group_items: list[Any] = [summary]
+    if state.progress_percent is not None:
+        progress_group_items.extend(
+            [
+                Text("training progress", style="bold"),
+                ProgressBar(total=100, completed=state.progress_percent, width=None),
+            ]
         )
-        lines.append(
-            f"progress: {progress:.1f}%" if progress is not None else f"progress: epoch {epoch}/{epochs} seg {segment}"
-        )
-        lines.append(
-            "train: "
-            + format_row(
-                current_train,
-                ["train_total_avg", "train_action_avg", "train_state_avg", "train_return_avg", "train_total_ema"],
+    progress_group_items.append(metrics)
+
+    resources = Table.grid(padding=(0, 1))
+    resources.add_column(style="bold cyan", no_wrap=True)
+    resources.add_column()
+    resources.add_row("resources", state.resources_text)
+    resources.add_row("ui", "rich" if RICH_AVAILABLE else "plain")
+
+    history_lines: list[Any] = [Text(state.last_checkpoint_text or "n/a")]
+    history_group = Group(*history_lines)
+
+    log_text = Text("\n".join(state.log_tail))
+
+    layout = Layout()
+    layout.split_column(
+        Layout(Panel(header, title="status", border_style="bright_blue"), size=3),
+        Layout(name="body", ratio=1),
+        Layout(Panel(Text("q: ctrl-c / stop process | --ui plain for fallback", style="dim"), border_style="grey50"), size=3),
+    )
+    layout["body"].split_row(
+        Layout(name="left", ratio=3),
+        Layout(name="right", ratio=2),
+    )
+    layout["left"].split_column(
+        Layout(Panel(Group(*progress_group_items), title="metrics", border_style="green"), ratio=2),
+        Layout(Panel(log_text, title="log tail", border_style="yellow"), ratio=3),
+    )
+    layout["right"].split_column(
+        Layout(Panel(resources, title="resources", border_style="magenta"), ratio=1),
+        Layout(Panel(history_group, title="history", border_style="cyan"), ratio=1),
+    )
+    return layout
+
+
+def maybe_warn_plain_fallback(*, requested_ui: str, resolved_ui: str) -> None:
+    if resolved_ui != "plain":
+        return
+    if requested_ui == "rich" and not RICH_AVAILABLE:
+        print(f"[dt_progress_runner] Falling back to plain UI because rich is unavailable: {RICH_IMPORT_ERROR}", file=sys.stderr)
+    elif requested_ui == "rich" and not sys.stdout.isatty():
+        print("[dt_progress_runner] Falling back to plain UI because stdout is not a TTY.", file=sys.stderr)
+    elif requested_ui == "auto" and not RICH_AVAILABLE:
+        print("[dt_progress_runner] rich not installed; using plain UI.", file=sys.stderr)
+
+
+def run_plain_loop(
+    *,
+    snapshot_path: Path,
+    manifest_path: Path,
+    log_path: Path,
+    command: list[str],
+    child: subprocess.Popen[Any],
+    started_at: float,
+    poll_seconds: float,
+    tail_limit: int,
+) -> int:
+    last_render: str | None = None
+    try:
+        while True:
+            snapshot = load_json(snapshot_path)
+            manifest = load_json(manifest_path)
+            log_tail = tail_lines(log_path, tail_limit)
+            render = render_dashboard(
+                snapshot=snapshot,
+                manifest=manifest,
+                log_path=log_path,
+                log_tail=log_tail,
+                command=command,
+                child=child,
+                started_at=started_at,
             )
-        )
-        lines.append(
-            "val: "
-            + format_row(validation, ["val_total", "val_action", "val_state", "val_return", "val_valid"])
-        )
-        lines.append("best: " + format_row(best, ["score", "val_loss", "train_loss_est"]))
-        lines.append("resources: " + format_row(resources, ["cpu", "ram", "gpu", "vram", "vpeak", "pcpu", "prss", "pvms", "pth"]))
-        if latest_history:
-            last = latest_history[-1]
-            lines.append(
-                "last checkpoint: "
-                + format_row(last, ["epoch", "segment", "train_total_avg", "val_total", "train_total_ema"])
-            )
+            if render != last_render:
+                if sys.stdout.isatty():
+                    sys.stdout.write("\033[2J\033[H")
+                print(render, flush=True)
+                last_render = render
+            if child.poll() is not None:
+                break
+            time.sleep(max(0.2, poll_seconds))
+    finally:
+        return_code = child.wait()
 
-    lines.append("log tail:")
-    if log_tail:
-        lines.extend(f"  {line.rstrip()}" for line in log_tail)
-    else:
-        lines.append("  (no log output yet)")
-    return "\n".join(lines)
+    final_snapshot = load_json(snapshot_path)
+    final_manifest = load_json(manifest_path)
+    final_render = render_dashboard(
+        snapshot=final_snapshot,
+        manifest=final_manifest,
+        log_path=log_path,
+        log_tail=tail_lines(log_path, tail_limit),
+        command=command,
+        child=child,
+        started_at=started_at,
+        return_code=return_code,
+    )
+    if sys.stdout.isatty():
+        sys.stdout.write("\033[2J\033[H")
+    print(final_render, flush=True)
+    return return_code
+
+
+def run_rich_loop(
+    *,
+    snapshot_path: Path,
+    manifest_path: Path,
+    log_path: Path,
+    command: list[str],
+    child: subprocess.Popen[Any],
+    started_at: float,
+    poll_seconds: float,
+    tail_limit: int,
+) -> int:
+    console = Console()
+    with Live(console=console, screen=True, auto_refresh=False) as live:
+        try:
+            while True:
+                state = build_dashboard_state(
+                    snapshot=load_json(snapshot_path),
+                    manifest=load_json(manifest_path),
+                    log_path=log_path,
+                    log_tail=tail_lines(log_path, tail_limit),
+                    command=command,
+                    child=child,
+                    started_at=started_at,
+                )
+                live.update(build_rich_dashboard(state), refresh=True)
+                if child.poll() is not None:
+                    break
+                time.sleep(max(0.2, poll_seconds))
+        finally:
+            return_code = child.wait()
+
+        final_state = build_dashboard_state(
+            snapshot=load_json(snapshot_path),
+            manifest=load_json(manifest_path),
+            log_path=log_path,
+            log_tail=tail_lines(log_path, tail_limit),
+            command=command,
+            child=child,
+            started_at=started_at,
+            return_code=return_code,
+        )
+        live.update(build_rich_dashboard(final_state), refresh=True)
+    return return_code
 
 
 def main() -> int:
@@ -211,6 +526,9 @@ def main() -> int:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
 
+    resolved_ui = resolve_ui_mode(args.ui, is_tty=sys.stdout.isatty())
+    maybe_warn_plain_fallback(requested_ui=args.ui, resolved_ui=resolved_ui)
+
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
@@ -225,48 +543,27 @@ def main() -> int:
         )
 
         started_at = time.monotonic()
-        last_render: str | None = None
-        try:
-            while True:
-                snapshot = load_json(snapshot_path)
-                manifest = load_json(manifest_path)
-                log_tail = tail_lines(log_path, args.tail_lines)
-                render = render_dashboard(
-                    snapshot=snapshot,
-                    manifest=manifest,
-                    log_path=log_path,
-                    log_tail=log_tail,
-                    command=command,
-                    child=child,
-                    started_at=started_at,
-                )
-                if render != last_render:
-                    if sys.stdout.isatty():
-                        sys.stdout.write("\033[2J\033[H")
-                    print(render, flush=True)
-                    last_render = render
-                if child.poll() is not None:
-                    break
-                time.sleep(max(0.2, float(args.poll_seconds)))
-        finally:
-            return_code = child.wait()
-
-    final_snapshot = load_json(snapshot_path)
-    final_manifest = load_json(manifest_path)
-    final_render = render_dashboard(
-        snapshot=final_snapshot,
-        manifest=final_manifest,
-        log_path=log_path,
-        log_tail=tail_lines(log_path, args.tail_lines),
-        command=command,
-        child=child,
-        started_at=started_at,
-        return_code=return_code,
-    )
-    if sys.stdout.isatty():
-        sys.stdout.write("\033[2J\033[H")
-    print(final_render, flush=True)
-    return return_code
+        if resolved_ui == "rich":
+            return run_rich_loop(
+                snapshot_path=snapshot_path,
+                manifest_path=manifest_path,
+                log_path=log_path,
+                command=command,
+                child=child,
+                started_at=started_at,
+                poll_seconds=float(args.poll_seconds),
+                tail_limit=args.tail_lines,
+            )
+        return run_plain_loop(
+            snapshot_path=snapshot_path,
+            manifest_path=manifest_path,
+            log_path=log_path,
+            command=command,
+            child=child,
+            started_at=started_at,
+            poll_seconds=float(args.poll_seconds),
+            tail_limit=args.tail_lines,
+        )
 
 
 if __name__ == "__main__":

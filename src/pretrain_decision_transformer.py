@@ -124,6 +124,9 @@ class SurfacePreset:
     model_variant: str = "baseline"
     model_overrides: dict[str, Any] = field(default_factory=dict)
     train_overrides: dict[str, Any] = field(default_factory=dict)
+    requires_explicit_validation: bool = False
+    min_train_episodes: int | None = None
+    disallowed_train_patterns: tuple[str, ...] = ()
 
 
 MODEL_VARIANTS: dict[str, dict[str, Any]] = {
@@ -163,6 +166,48 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "aemo_multimarket": SurfacePreset(
         description="AEMO multi-market preset aligned with the shared notebook and wrapper defaults.",
         model_variant="aemo_multimarket",
+    ),
+    "aemo_proxy": SurfacePreset(
+        description=(
+            "Fast compact AEMO proxy loop for cheap triage. Use this for quick ranking, not as the "
+            "primary learning baseline."
+        ),
+        model_variant="compact",
+        model_overrides={
+            "state_dim": 18,
+            "act_dim": 3,
+            "context_len": 60,
+            "max_timestep": 2016,
+            "rope_enabled": True,
+            "rope_max_position": 180,
+        },
+        train_overrides={
+            "batch_size": 128,
+            "epochs": 1,
+            "lr": 3e-5,
+            "amp_mode": "auto",
+            "num_workers": 0,
+            "checkpoint_interval": 1,
+            "checkpoints_per_epoch": 1,
+        },
+    ),
+    "aemo_learning_baseline": SurfacePreset(
+        description=(
+            "Broader AEMO learning baseline with explicit validation, longer context, and evaluator-backed "
+            "optimizer defaults."
+        ),
+        model_variant="aemo_multimarket",
+        train_overrides={
+            "batch_size": 32,
+            "epochs": 1,
+            "lr": 3e-5,
+            "amp_mode": "auto",
+            "checkpoint_interval": 1,
+            "checkpoints_per_epoch": 1,
+        },
+        requires_explicit_validation=True,
+        min_train_episodes=8,
+        disallowed_train_patterns=("aemo_dt_dataset_train_subset_007",),
     ),
     "autoresearch_safe": SurfacePreset(
         description="General-purpose preset for constrained autoresearch over approved knobs.",
@@ -615,6 +660,34 @@ def resolve_training_surface(
     )
 
 
+def validate_preset_dataset_policy(
+    *,
+    surface: ResolvedTrainingSurface,
+    parquet_files: Sequence[Path],
+    train_episode_count: int,
+) -> None:
+    preset = SURFACE_PRESETS[surface.preset_name]
+    if preset.requires_explicit_validation and surface.split_policy != "explicit_validation":
+        raise ValueError(
+            f"surface_preset={surface.preset_name!r} requires explicit validation parquet files. "
+            "Pass --val-data-dir/--val-patterns or choose a proxy preset for cheap triage."
+        )
+    if (
+        preset.disallowed_train_patterns
+        and len(parquet_files) == 1
+        and any(pattern in parquet_files[0].name for pattern in preset.disallowed_train_patterns)
+    ):
+        raise ValueError(
+            f"surface_preset={surface.preset_name!r} cannot use the narrow proxy slice "
+            f"{parquet_files[0].name!r} as its training baseline."
+        )
+    if preset.min_train_episodes is not None and train_episode_count < preset.min_train_episodes:
+        raise ValueError(
+            f"surface_preset={surface.preset_name!r} requires at least {preset.min_train_episodes} "
+            f"training episodes, received {train_episode_count}."
+        )
+
+
 def ensure_safe_output_path(root: Path, path: Path, *, name: str) -> Path:
     canonical_root = root.resolve(strict=True)
     resolved = path.resolve()
@@ -909,6 +982,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             val_split=surface.training_kwargs["val_split"],
             seed=surface.training_kwargs["seed"],
         )
+    validate_preset_dataset_policy(
+        surface=surface,
+        parquet_files=parquet_files,
+        train_episode_count=len(train_dataset.episodes),
+    )
     print(f"Training samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
 

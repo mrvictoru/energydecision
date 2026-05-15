@@ -31,6 +31,21 @@ def parse_args() -> argparse.Namespace:
         help="Path to the AEMO DT model kwargs JSON.",
     )
     parser.add_argument(
+        "--surface-preset",
+        type=str,
+        default="aemo_learning_baseline",
+        help=(
+            "DT training surface preset forwarded to src/pretrain_decision_transformer.py. "
+            "Use aemo_learning_baseline for broader baseline training or aemo_proxy for cheap triage."
+        ),
+    )
+    parser.add_argument(
+        "--model-variant",
+        type=str,
+        default=None,
+        help="Optional DT model variant forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
         "--save-path",
         type=Path,
         default=repo_root() / "models" / "aemo" / "dt" / "aemo_dt_model.pt",
@@ -134,6 +149,8 @@ def build_training_command(
     command = [
         sys.executable,
         str(root / "src" / "pretrain_decision_transformer.py"),
+        "--surface-preset",
+        args.surface_preset,
         "--data-dir",
         str(dataset_path.parent),
         "--patterns",
@@ -183,6 +200,8 @@ def build_training_command(
         if val_patterns:
             command.append("--val-patterns")
             command.extend(val_patterns)
+    if args.model_variant is not None:
+        command.extend(["--model-variant", args.model_variant])
 
     if resume:
         command.append("--resume")
@@ -252,6 +271,15 @@ def main() -> None:
     val_dataset_paths: list[Path] | None = None
     epochs_per_stage = int(args.epochs)
     initial_epoch_offset = get_checkpoint_epoch(args.checkpoint_path.resolve()) if args.resume else 0
+
+    if args.surface_preset == "aemo_learning_baseline":
+        if not args.train_in_subsets:
+            raise ValueError(
+                "--surface-preset=aemo_learning_baseline requires --train-in-subsets so the wrapper can "
+                "create explicit held-out validation subsets."
+            )
+        if args.subset_episodes is None:
+            args.subset_episodes = 24
 
     if args.train_in_subsets:
         if args.subset_episodes is None:

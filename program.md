@@ -160,6 +160,8 @@ Use the GPU box for DT training commands so the trainer can see CUDA and use `de
 
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
+The tracker now prefers a **Rich** full-screen terminal dashboard when stdout is a TTY and `rich` is installed. Keep `rich` available in the runtime environment for the nicer color dashboard. If Rich is unavailable or stdout is not a TTY, the tracker falls back to the plain text monitor automatically. Use `--ui plain` if you explicitly want the old plain-text mode.
+
 When the harness is launched from an SSH session, it must start the autoresearch run inside the GPU box/container and keep the progress tracker visible to the human in a separate tmux pane or terminal in that same box/container. The harness should not hide the tracker behind a detached-only process.
 
 Example layout:
@@ -181,7 +183,9 @@ Replace `<run-tag>` with the actual run directory (for example `restart_20260514
 
 Use `src/autoresearch_evaluator.py` as the fixed evaluation entrypoint for autoresearch checkpoints. The autoresearch agent must treat the evaluator script and the chosen evaluator config as read-only for the duration of a run.
 
-For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, copy it to a run-specific config outside the editable DT training surface, and fix the held-out scenarios, battery variants, baseline policies, and DT `rtg_value` before the search loop begins.
+For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, copy it to a run-specific config outside the editable DT training surface, and fix the held-out scenarios, battery variants, dispatch replay stations, baseline policies, and DT `rtg_value` before the search loop begins.
+
+When the evaluator includes dispatch replay baselines, choose at least two stations from the same held-out time window and confirm they both have `DISPATCHLOAD` coverage before freezing the config. If one station is missing data in that window, replace it with another station from the same region/window rather than leaving a brittle default in place.
 
 Typical command:
 
@@ -193,6 +197,27 @@ python3 src/autoresearch_evaluator.py \
 ```
 
 The evaluator always reports training-loss summaries from the DT loss CSV and, for AEMO, also runs held-out simulator rollouts plus baseline-relative comparisons, safety counts, stability/risk metrics, and condition-sliced summaries.
+
+## AEMO baseline tiers
+
+For AEMO autoresearch, treat the training loop as two separate tiers:
+
+1. **Fast proxy loop**
+   - use this to rank cheap ideas quickly
+   - compact models and narrow slices are acceptable here
+   - do not treat the result as the project baseline without evaluator confirmation
+
+2. **Learning baseline**
+   - use this when establishing the actual baseline checkpoint that future experiments should branch from
+   - prefer broader train subsets, explicit held-out validation parquet files, and a materially longer context window
+   - this is the baseline that should be compared with the immutable evaluator before broad sweeps continue
+
+For the current AEMO dataset layout:
+
+- treat `aemo_dt_dataset_train_subset_007` as a **proxy-only** slice, not the main learning baseline
+- prefer one of the normal 24-episode train subsets plus explicit validation subsets/files for learning baselines
+- prefer `context_len=288` for learning baselines; `120` is an acceptable runtime fallback, but `60` is primarily a proxy-loop setting
+- prefer `lr=3e-5` over `2e-5` as the starting learning-baseline LR unless new evaluator evidence contradicts it
 
 ## Primary metric
 
@@ -267,16 +292,24 @@ Status must be one of:
 Once setup is complete, loop autonomously:
 
 1. Check git state and confirm you are on the intended autoresearch branch.
-2. Make one focused change in `src/pretrain_decision_transformer.py`.
-3. Commit the change.
-4. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
-5. Read the final validation metric from the loss CSV or log.
-6. Record the result in `results.tsv`.
-7. Run `src/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
-8. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
-9. If validation loss improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
-10. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.
-11. If the metric was worse, or the idea added complexity without clear evaluator benefit, revert to the previous kept commit.
+2. Re-establish whether the current branch point is a **proxy loop** checkpoint or the **learning baseline** checkpoint.
+3. Make one focused change in `src/pretrain_decision_transformer.py`.
+4. Commit the change.
+5. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
+6. Read the final validation metric from the loss CSV or log.
+7. Record the result in `results.tsv`.
+8. Run `src/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
+9. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
+10. If validation loss improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
+11. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.
+12. If the metric was worse, or the idea added complexity without clear evaluator benefit, revert to the previous kept commit.
+
+For AEMO learning-baseline refreshes, prefer this low-hanging-fruit order:
+
+1. broaden the data slice / explicit validation setup first
+2. move baseline LR to `3e-5`
+3. compare longer contexts (`120` vs `288`)
+4. only then test extra epochs or larger models
 
 ## Simplicity rule
 
