@@ -116,6 +116,27 @@ def test_resolve_training_surface_exposes_aemo_learning_baseline_defaults():
     assert surface.training_kwargs["batch_size"] == 32
 
 
+def test_resolve_training_surface_respects_explicit_learning_baseline_overrides():
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "aemo_learning_baseline",
+            "--epochs",
+            "4",
+            "--lr",
+            "4e-5",
+            "--batch-size",
+            "16",
+        ]
+    )
+
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+    assert surface.training_kwargs["epochs"] == 4
+    assert surface.training_kwargs["lr"] == pytest.approx(4e-5)
+    assert surface.training_kwargs["batch_size"] == 16
+
+
 def test_validate_preset_dataset_policy_requires_explicit_validation_for_learning_baseline(tmp_path: Path):
     args = pretrain_dt.parse_args(["--surface-preset", "aemo_learning_baseline"])
     surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})

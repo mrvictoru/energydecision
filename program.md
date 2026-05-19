@@ -160,9 +160,21 @@ Use the GPU box for DT training commands so the trainer can see CUDA and use `de
 
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
+If the training process is already running, use `--attach` with the same `--progress-snapshot-path` and no child command:
+
+```bash
+python3 src/dt_progress_runner.py \
+  --attach \
+  --progress-snapshot-path models/aemo/dt/<run-tag>/aemo_dt_loss_history_progress.json
+```
+
 The tracker now prefers a **Rich** full-screen terminal dashboard when stdout is a TTY and `rich` is installed. Keep `rich` available in the runtime environment for the nicer color dashboard. If Rich is unavailable or stdout is not a TTY, the tracker falls back to the plain text monitor automatically. Use `--ui plain` if you explicitly want the old plain-text mode.
 
-When the harness is launched from an SSH session, it must start the autoresearch run inside the GPU box/container and keep the progress tracker visible to the human in a separate tmux pane or terminal in that same box/container. The harness should not hide the tracker behind a detached-only process.
+For long AEMO subset runs, the dashboard only refreshes when the trainer writes a checkpoint snapshot. If you
+need mid-epoch visibility during long subset stages, prefer `--checkpoints-per-epoch` values above `1`
+instead of waiting until the end of a single huge epoch.
+
+When the harness is launched from an SSH session, it must start the autoresearch run inside the GPU box/container and keep the progress tracker visible to the human in a separate tmux pane or terminal in that same box/container. If the run was started elsewhere, the human can still attach with `--attach` as long as the snapshot file is reachable. The harness should not hide the tracker behind a detached-only process.
 
 Example layout:
 
@@ -185,6 +197,10 @@ Use `src/autoresearch_evaluator.py` as the fixed evaluation entrypoint for autor
 
 For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, copy it to a run-specific config outside the editable DT training surface, and fix the held-out scenarios, battery variants, dispatch replay stations, baseline policies, and DT `rtg_value` before the search loop begins.
 
+Before the search loop begins, ensure the evaluator `cache_dir` is writable by the same user who will run
+autoresearch. Prewarming the fixed held-out scenario windows in that cache directory is recommended so
+evaluator reruns do not spend the inner loop fetching and preprocessing the same AEMO data repeatedly.
+
 When the evaluator includes dispatch replay baselines, choose at least two stations from the same held-out time window and confirm they both have `DISPATCHLOAD` coverage before freezing the config. If one station is missing data in that window, replace it with another station from the same region/window rather than leaving a brittle default in place.
 
 Typical command:
@@ -206,6 +222,7 @@ For AEMO autoresearch, treat the training loop as two separate tiers:
    - use this to rank cheap ideas quickly
    - compact models and narrow slices are acceptable here
    - do not treat the result as the project baseline without evaluator confirmation
+   - for interactive loops, it is acceptable to pin a small fixed pilot train parquet plus a fixed explicit validation parquet (for example under `data/aemo_dt/autoresearch_pilot/`) as long as every proxy comparison uses the same split
 
 2. **Learning baseline**
    - use this when establishing the actual baseline checkpoint that future experiments should branch from

@@ -89,6 +89,41 @@ def test_build_dashboard_state_preserves_structured_fields(tmp_path: Path):
     assert state.log_tail == ["hello"]
 
 
+def test_normalize_command_supports_attach_mode_without_child_command():
+    assert progress_runner.normalize_command([], attach=True) == []
+    assert progress_runner.normalize_command(["--"], attach=True) == []
+
+
+def test_normalize_command_rejects_invalid_combinations():
+    try:
+        progress_runner.normalize_command([], attach=False)
+    except ValueError as exc:
+        assert "must be provided" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected normalize_command to reject missing command")
+
+    try:
+        progress_runner.normalize_command(["python3"], attach=True)
+    except ValueError as exc:
+        assert "No command" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected normalize_command to reject attach commands")
+
+
+def test_build_dashboard_state_marks_attach_mode(tmp_path: Path):
+    state = progress_runner.build_dashboard_state(
+        snapshot=None,
+        manifest=None,
+        log_path=tmp_path / "monitor.log",
+        log_tail=[],
+        command=[],
+        child=None,
+        started_at=0.0,
+    )
+
+    assert state.command_text == "(attach mode)"
+
+
 def test_resolve_ui_mode_falls_back_to_plain_without_tty(monkeypatch):
     monkeypatch.setattr(progress_runner, "RICH_AVAILABLE", True)
     assert progress_runner.resolve_ui_mode("auto", is_tty=False) == "plain"

@@ -197,6 +197,29 @@ Practical guidance:
 - prefer `context_len=288` for learning baselines; `120` is a reasonable fallback if runtime is too high
 - keep `aemo_proxy` for rapid triage only
 
+For interactive autoresearch loops, it is often better to pin a small **fixed pilot train/val split**
+for the proxy tier than to repeatedly launch the full learning-baseline subset pipeline. The wrapper now
+accepts an explicit validation parquet via `--val-dataset-path`, so you can keep the AEMO entrypoint while
+holding the train/validation pair constant:
+
+```bash
+python3 src/pretrain_aemo_decision_transformer.py \
+  --dataset-path data/aemo_dt/autoresearch_pilot/aemo_dt_train_pilot.parquet \
+  --val-dataset-path data/aemo_dt/autoresearch_pilot/aemo_dt_val_pilot.parquet \
+  --surface-preset aemo_proxy \
+  --model-config configs/aemo_decision_transformer_model_kwargs.json \
+  --epochs 1 \
+  --batch-size 128 \
+  --lr 3e-5 \
+  --num-workers 0
+```
+
+Use that fixed pilot split only for cheap inner-loop ranking. Once a proxy change looks promising, rerun it
+on the heavier learning-baseline path before treating it as a serious branch point.
+
+If you want the live progress dashboard to update during a long subset epoch instead of only at the end,
+set `--checkpoints-per-epoch` above `1` so the trainer writes intermediate snapshot updates.
+
 Subset mode works like this:
 
 1. The combined dataset parquet is split once at the episode level into a global train set and a global validation set.
@@ -211,6 +234,13 @@ This avoids the worst memory spikes from loading the entire AEMO corpus into one
 Current tradeoff:
 
 - Validation now comes from one consistent global held-out split, but it is still materialized in memory inside the generic trainer when those validation subset parquet files are loaded.
+
+### Prewarming evaluator caches
+
+Held-out evaluator runs reuse cached processed scenario files under `data/aemo/`. Precomputing those
+scenario windows before a long autoresearch session can reduce evaluator turnaround and avoid mixing
+cache generation work with DT training runs. Make sure that cache directory is writable by the user
+running autoresearch; stale root-owned processed parquet files can block later evaluator reruns.
 
 ## What `notebooks/aemo_sb3train.ipynb` does
 

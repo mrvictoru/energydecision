@@ -130,6 +130,46 @@ def test_build_training_command_passes_model_variant(tmp_path: Path):
     assert command[command.index("--model-variant") + 1] == "compact"
 
 
+def test_main_forwards_explicit_validation_dataset(tmp_path: Path, monkeypatch):
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    dataset_path = tmp_path / "train.parquet"
+    val_dataset_path = tmp_path / "val.parquet"
+    model_config = tmp_path / "config.json"
+    dataset_path.write_bytes(b"")
+    val_dataset_path.write_bytes(b"")
+    model_config.write_text("{}", encoding="utf-8")
+
+    args = _args(tmp_path)
+    args.surface_preset = "aemo_proxy"
+    args.dataset_path = dataset_path
+    args.val_dataset_path = val_dataset_path
+    args.train_in_subsets = False
+    args.subset_episodes = None
+    args.subset_output_dir = None
+    args.epochs = 1
+    args.epochs_per_subset = None
+
+    captured: list[list[str]] = []
+
+    monkeypatch.setattr("pretrain_aemo_decision_transformer.parse_args", lambda: args)
+    monkeypatch.setattr("pretrain_aemo_decision_transformer.repo_root", lambda: root)
+    monkeypatch.setattr(
+        "pretrain_aemo_decision_transformer.subprocess.run",
+        lambda command, check: captured.append(command),
+    )
+
+    from pretrain_aemo_decision_transformer import main  # noqa: WPS433
+
+    main()
+
+    assert len(captured) == 1
+    command = captured[0]
+    assert command[command.index("--val-data-dir") + 1] == str(tmp_path)
+    patterns_index = command.index("--val-patterns") + 1
+    assert command[patterns_index] == "val"
+
+
 def test_get_checkpoint_epoch_reads_saved_epoch(tmp_path: Path):
     checkpoint_path = tmp_path / "checkpoint.pt"
     torch.save({"epoch": 7}, checkpoint_path)

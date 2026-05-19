@@ -74,6 +74,29 @@ SEARCHABLE_KNOBS = (
     "seed",
     "device",
 )
+TRAINING_KNOB_TO_ARG_DEST = {
+    "batch_size": "batch_size",
+    "lr": "lr",
+    "epochs": "epochs",
+    "discount": "discount",
+    "val_split": "val_split",
+    "seed": "seed",
+    "device": "device",
+    "amp_mode": "amp_mode",
+    "checkpoint_interval": "checkpoint_interval",
+    "checkpoints_per_epoch": "checkpoints_per_epoch",
+    "resume": "resume",
+    "return_scale": "return_scale",
+    "action_loss_weight": "action_loss_weight",
+    "state_loss_weight": "state_loss_weight",
+    "return_loss_weight": "return_loss_weight",
+    "weight_decay": "weight_decay",
+    "num_workers": "num_workers",
+    "persistent_workers": "persistent_workers",
+    "prefetch_factor": "prefetch_factor",
+    "optimizer": "optimizer",
+    "scheduler": "scheduler",
+}
 FROZEN_INVARIANTS = (
     "editable_training_surface_file",
     "decision_transformer_module=decision_transformer.py",
@@ -445,7 +468,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Override the RoPE frequency base (defaults to 10000.0).",
     )
-    return parser.parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    namespace = parser.parse_args(argv)
+    option_to_dest = {
+        option: action.dest
+        for action in parser._actions
+        for option in action.option_strings
+    }
+    explicit_cli_args: set[str] = set()
+    for token in raw_argv:
+        if not token.startswith("-") or token == "-":
+            continue
+        option = token.split("=", 1)[0]
+        dest = option_to_dest.get(option)
+        if dest:
+            explicit_cli_args.add(dest)
+    namespace.explicit_cli_args = explicit_cli_args
+    return namespace
 
 
 def repo_root() -> Path:
@@ -597,6 +636,7 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict[str, Any])
 
 def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     preset = SURFACE_PRESETS[args.surface_preset]
+    explicit_cli_args = set(getattr(args, "explicit_cli_args", set()))
     training_kwargs = {
         "batch_size": args.batch_size,
         "lr": args.lr,
@@ -620,7 +660,11 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "optimizer": args.optimizer,
         "scheduler": args.scheduler,
     }
-    training_kwargs.update(preset.train_overrides)
+    for key, value in preset.train_overrides.items():
+        arg_dest = TRAINING_KNOB_TO_ARG_DEST.get(key)
+        if arg_dest is not None and arg_dest in explicit_cli_args:
+            continue
+        training_kwargs[key] = value
     for key, value in training_kwargs.items():
         validate_numeric_range(key, value)
     return training_kwargs

@@ -60,7 +60,7 @@ def repo_root() -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a DT training command and render a live progress dashboard from its snapshot file.",
+        description="Run or attach to a DT training dashboard from its snapshot file.",
     )
     parser.add_argument(
         "--progress-snapshot-path",
@@ -81,6 +81,11 @@ def parse_args() -> argparse.Namespace:
         help="Where to tee the child process output. Defaults next to the progress snapshot.",
     )
     parser.add_argument(
+        "--attach",
+        action="store_true",
+        help="Attach to an already-running training process instead of launching a child command.",
+    )
+    parser.add_argument(
         "--poll-seconds",
         type=float,
         default=2.0,
@@ -98,7 +103,7 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help="Terminal UI mode. 'auto' prefers Rich on TTYs and falls back to plain text elsewhere.",
     )
-    parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to execute after --.")
+    parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to execute after -- (omit in --attach mode).")
     return parser.parse_args()
 
 
@@ -140,6 +145,19 @@ def format_row(mapping: dict[str, Any], keys: list[str]) -> str:
             continue
         parts.append(f"{key}={value}")
     return " | ".join(parts) if parts else "n/a"
+
+
+def normalize_command(command: list[str], *, attach: bool) -> list[str]:
+    normalized = list(command)
+    if normalized and normalized[0] == "--":
+        normalized = normalized[1:]
+    if attach:
+        if normalized:
+            raise ValueError("No command may be provided when using --attach.")
+        return []
+    if not normalized:
+        raise ValueError("A command must be provided after --.")
+    return normalized
 
 
 def progress_percent(snapshot: dict[str, Any]) -> float | None:
@@ -190,7 +208,7 @@ def build_dashboard_state(
 
     if snapshot is None:
         return DashboardState(
-            command_text=" ".join(command),
+            command_text=" ".join(command) if command else "(attach mode)",
             elapsed_text=format_seconds(time.monotonic() - started_at),
             log_path_text=str(log_path),
             surface_text=surface_text,
@@ -224,7 +242,7 @@ def build_dashboard_state(
         )
 
     return DashboardState(
-        command_text=" ".join(command),
+        command_text=" ".join(command) if command else "(attach mode)",
         elapsed_text=format_seconds(time.monotonic() - started_at),
         log_path_text=str(log_path),
         surface_text=surface_text,
@@ -410,12 +428,13 @@ def run_plain_loop(
     manifest_path: Path,
     log_path: Path,
     command: list[str],
-    child: subprocess.Popen[Any],
+    child: subprocess.Popen[Any] | None,
     started_at: float,
     poll_seconds: float,
     tail_limit: int,
 ) -> int:
     last_render: str | None = None
+    return_code: int | None = None
     try:
         while True:
             snapshot = load_json(snapshot_path)
@@ -435,11 +454,12 @@ def run_plain_loop(
                     sys.stdout.write("\033[2J\033[H")
                 print(render, flush=True)
                 last_render = render
-            if child.poll() is not None:
+            if child is not None and child.poll() is not None:
                 break
             time.sleep(max(0.2, poll_seconds))
     finally:
-        return_code = child.wait()
+        if child is not None:
+            return_code = child.wait()
 
     final_snapshot = load_json(snapshot_path)
     final_manifest = load_json(manifest_path)
@@ -456,7 +476,7 @@ def run_plain_loop(
     if sys.stdout.isatty():
         sys.stdout.write("\033[2J\033[H")
     print(final_render, flush=True)
-    return return_code
+    return return_code or 0
 
 
 def run_rich_loop(
@@ -465,12 +485,13 @@ def run_rich_loop(
     manifest_path: Path,
     log_path: Path,
     command: list[str],
-    child: subprocess.Popen[Any],
+    child: subprocess.Popen[Any] | None,
     started_at: float,
     poll_seconds: float,
     tail_limit: int,
 ) -> int:
     console = Console()
+    return_code: int | None = None
     with Live(console=console, screen=True, auto_refresh=False) as live:
         try:
             while True:
@@ -484,11 +505,12 @@ def run_rich_loop(
                     started_at=started_at,
                 )
                 live.update(build_rich_dashboard(state), refresh=True)
-                if child.poll() is not None:
+                if child is not None and child.poll() is not None:
                     break
                 time.sleep(max(0.2, poll_seconds))
         finally:
-            return_code = child.wait()
+            if child is not None:
+                return_code = child.wait()
 
         final_state = build_dashboard_state(
             snapshot=load_json(snapshot_path),
@@ -501,16 +523,12 @@ def run_rich_loop(
             return_code=return_code,
         )
         live.update(build_rich_dashboard(final_state), refresh=True)
-    return return_code
+    return return_code or 0
 
 
 def main() -> int:
     args = parse_args()
-    command = list(args.command)
-    if command and command[0] == "--":
-        command = command[1:]
-    if not command:
-        raise ValueError("A command must be provided after --.")
+    command = normalize_command(list(args.command), attach=bool(args.attach))
 
     snapshot_path = args.progress_snapshot_path.resolve()
     manifest_path = (
@@ -523,8 +541,9 @@ def main() -> int:
         if args.log_path is not None
         else snapshot_path.with_name(snapshot_path.stem.replace("_progress", "_monitor") + ".log")
     )
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    if not args.attach:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved_ui = resolve_ui_mode(args.ui, is_tty=sys.stdout.isatty())
     maybe_warn_plain_fallback(requested_ui=args.ui, resolved_ui=resolved_ui)
@@ -532,19 +551,31 @@ def main() -> int:
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
-    with log_path.open("w", encoding="utf-8") as log_file:
-        child = subprocess.Popen(
-            command,
-            cwd=repo_root(),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env=env,
-            text=True,
-        )
+    started_at = time.monotonic()
+    child: subprocess.Popen[Any] | None = None
+    if not args.attach:
+        with log_path.open("w", encoding="utf-8") as log_file:
+            child = subprocess.Popen(
+                command,
+                cwd=repo_root(),
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
+                text=True,
+            )
 
-        started_at = time.monotonic()
-        if resolved_ui == "rich":
-            return run_rich_loop(
+            if resolved_ui == "rich":
+                return run_rich_loop(
+                    snapshot_path=snapshot_path,
+                    manifest_path=manifest_path,
+                    log_path=log_path,
+                    command=command,
+                    child=child,
+                    started_at=started_at,
+                    poll_seconds=float(args.poll_seconds),
+                    tail_limit=args.tail_lines,
+                )
+            return run_plain_loop(
                 snapshot_path=snapshot_path,
                 manifest_path=manifest_path,
                 log_path=log_path,
@@ -554,7 +585,9 @@ def main() -> int:
                 poll_seconds=float(args.poll_seconds),
                 tail_limit=args.tail_lines,
             )
-        return run_plain_loop(
+
+    if resolved_ui == "rich":
+        return run_rich_loop(
             snapshot_path=snapshot_path,
             manifest_path=manifest_path,
             log_path=log_path,
@@ -564,6 +597,16 @@ def main() -> int:
             poll_seconds=float(args.poll_seconds),
             tail_limit=args.tail_lines,
         )
+    return run_plain_loop(
+        snapshot_path=snapshot_path,
+        manifest_path=manifest_path,
+        log_path=log_path,
+        command=command,
+        child=child,
+        started_at=started_at,
+        poll_seconds=float(args.poll_seconds),
+        tail_limit=args.tail_lines,
+    )
 
 
 if __name__ == "__main__":
