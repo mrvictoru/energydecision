@@ -339,3 +339,7 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     assert "searchable_knobs" in manifest
     assert "frozen_invariants" in manifest
     assert manifest["paths"]["progress_snapshot_path"] == str(progress_snapshot_path)
+    assert manifest["dataset_summary"]["train"]["file_count"] == 1
+    assert manifest["dataset_summary"]["train"]["window_count"] >= 1
+    assert manifest["run_summary"]["checkpoint_count"] == 1
+    assert manifest["run_summary"]["total_windows_processed"] >= 1

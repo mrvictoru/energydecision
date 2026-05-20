@@ -158,6 +158,15 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 
 Use the GPU box for DT training commands so the trainer can see CUDA and use `device=cuda` automatically when available.
 
+For AEMO CLI runs, prefer `src/launch_aemo_training.py` over calling the wrapper by hand. The launcher
+derives tier defaults (`proxy-smoke`, `proxy-baseline`, `learning-baseline`), writes a launch plan under
+the run directory, and re-enters the preferred Distrobox automatically when invoked from the host.
+
+```bash
+python3 src/launch_aemo_training.py --run-tier proxy-baseline
+python3 src/launch_aemo_training.py --run-tier learning-baseline
+```
+
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
 If the training process is already running, use `--attach` with the same `--progress-snapshot-path` and no child command:
@@ -200,6 +209,16 @@ For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, co
 Before the search loop begins, ensure the evaluator `cache_dir` is writable by the same user who will run
 autoresearch. Prewarming the fixed held-out scenario windows in that cache directory is recommended so
 evaluator reruns do not spend the inner loop fetching and preprocessing the same AEMO data repeatedly.
+
+The repo now includes a dedicated cache-prewarm helper:
+
+```bash
+python3 src/prewarm_aemo_cache.py \
+  --evaluation-config configs/aemo_autoresearch_evaluator.example.json
+```
+
+It validates processed-cache permissions up front and writes a manifest describing which held-out windows
+were warmed.
 
 When the evaluator includes dispatch replay baselines, choose at least two stations from the same held-out time window and confirm they both have `DISPATCHLOAD` coverage before freezing the config. If one station is missing data in that window, replace it with another station from the same region/window rather than leaving a brittle default in place.
 

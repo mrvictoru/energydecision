@@ -16,6 +16,7 @@ from aemo_notebook_utils import (
     create_aemo_env,
     fetch_and_preprocess_aemo_scenarios,
     fit_aemo_global_stats,
+    preflight_processed_cache_paths,
     resolve_battery_variants,
     resolve_dispatch_battery_life_cost,
     run_rule_episodes,
@@ -527,6 +528,14 @@ def evaluate_aemo_heldout(
             refresh=refresh,
         )
 
+    cache_preflight = preflight_processed_cache_paths(
+        scenarios=scenarios,
+        cache_dir=cache_dir,
+        step_duration=step_duration,
+        refresh=refresh,
+        fixed_stats=fixed_stats,
+    )
+
     processed_by_label, scenario_manifest = fetch_and_preprocess_aemo_scenarios(
         scenarios=scenarios,
         cache_dir=cache_dir,
@@ -657,6 +666,7 @@ def evaluate_aemo_heldout(
             }
             for scenario in scenario_manifest
         ],
+        "cache_preflight": cache_preflight,
         "battery_variants": battery_variants,
         "aggregate_metrics": aggregate_metrics_df.to_dicts(),
         "metrics_by_scenario": by_cohort_df.to_dicts(),

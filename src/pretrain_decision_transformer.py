@@ -5,6 +5,7 @@ import csv
 import json
 import random
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
@@ -251,6 +252,14 @@ class ResolvedTrainingSurface:
     action_mode: str | None
     model_kwargs: dict[str, Any]
     training_kwargs: dict[str, Any]
+
+
+def summarize_dataset_shape(dataset: TrajectoryDataset, *, file_count: int) -> dict[str, int]:
+    return {
+        "file_count": int(file_count),
+        "episode_count": int(len(dataset.episodes)),
+        "window_count": int(len(dataset)),
+    }
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -855,6 +864,8 @@ def build_surface_manifest(
     loss_csv_path: Path,
     progress_snapshot_path: Path,
     val_data_dir: Path | None,
+    train_dataset: TrajectoryDataset,
+    val_dataset: TrajectoryDataset,
     val_parquet_files: Sequence[Path] | None = None,
 ) -> dict[str, Any]:
     return {
@@ -886,6 +897,10 @@ def build_surface_manifest(
             "val_files": [str(path) for path in (val_parquet_files or [])],
             "patterns": list(args.patterns),
             "val_patterns": list(args.val_patterns) if args.val_patterns is not None else None,
+        },
+        "dataset_summary": {
+            "train": summarize_dataset_shape(train_dataset, file_count=len(parquet_files)),
+            "val": summarize_dataset_shape(val_dataset, file_count=len(val_parquet_files or [])),
         },
         "canonical_command": [
             sys.executable,
@@ -1045,11 +1060,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         loss_csv_path=loss_csv_path,
         progress_snapshot_path=progress_snapshot_path,
         val_data_dir=val_data_dir,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
         val_parquet_files=val_parquet_files,
     )
     write_json(surface_manifest_path, surface_manifest)
 
     model = DecisionTransformer(**model_kwargs)
+    started_at = time.monotonic()
     _, train_losses, val_losses, history = train_decision_transformer(
         ds=train_dataset,
         model=model,
@@ -1156,6 +1174,21 @@ def main(argv: Sequence[str] | None = None) -> None:
                     snap.get("val_valid", ""),
                 ]
             )
+
+    elapsed_seconds = max(0.0, time.monotonic() - started_at)
+    total_windows_processed = int(len(train_dataset) * len(train_losses))
+    surface_manifest["run_summary"] = {
+        "elapsed_seconds": elapsed_seconds,
+        "checkpoint_count": int(len(history.get("loss_history", []))),
+        "total_windows_processed": total_windows_processed,
+        "effective_windows_per_second": (
+            total_windows_processed / elapsed_seconds if elapsed_seconds > 0 else None
+        ),
+        "final_train_total_loss": float(train_losses[-1]),
+        "final_val_total_loss": float(val_losses[-1]) if val_losses else None,
+        "best_val_total_loss": float(min(val_losses)) if val_losses else None,
+    }
+    write_json(surface_manifest_path, surface_manifest)
 
     print(f"Training finished; final train total loss {train_losses[-1]:.6f}")
     if val_losses:

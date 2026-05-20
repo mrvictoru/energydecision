@@ -189,6 +189,17 @@ python3 src/pretrain_aemo_decision_transformer.py \
 If you are already inside the `energydecision` Distrobox shell at the repo root, run the same
 command as `python3 src/pretrain_aemo_decision_transformer.py` and keep normal `data/...` paths.
 
+For most CLI training runs, prefer the higher-level launcher instead:
+
+```bash
+python3 src/launch_aemo_training.py --run-tier proxy-baseline
+python3 src/launch_aemo_training.py --run-tier learning-baseline
+```
+
+It makes the intended run tier explicit, writes `aemo_training_launch_plan.json` next to the run
+artifacts, starts the live progress dashboard automatically, and re-enters the preferred Distrobox
+when launched from the host shell.
+
 Practical guidance:
 
 - start serious baseline refreshes from `aemo_learning_baseline`
@@ -241,6 +252,13 @@ Held-out evaluator runs reuse cached processed scenario files under `data/aemo/`
 scenario windows before a long autoresearch session can reduce evaluator turnaround and avoid mixing
 cache generation work with DT training runs. Make sure that cache directory is writable by the user
 running autoresearch; stale root-owned processed parquet files can block later evaluator reruns.
+
+Use the helper below to preflight permissions and warm the fixed evaluator windows before a search session:
+
+```bash
+python3 src/prewarm_aemo_cache.py \
+  --evaluation-config configs/aemo_autoresearch_evaluator.example.json
+```
 
 ## What `notebooks/aemo_sb3train.ipynb` does
 

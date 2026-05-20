@@ -70,6 +70,14 @@ python3 src/pretrain_decision_transformer.py ...
 
 Use normal `data/...` and `models/...` paths from the repo root.
 
+For AEMO DT training, prefer the launcher below instead of calling the wrapper directly. It derives tier
+defaults, writes a launch plan JSON, and re-enters the preferred Distrobox automatically when invoked from
+the host:
+
+```bash
+python3 src/launch_aemo_training.py --run-tier proxy-baseline
+```
+
 ### Option 2: Docker (shared / CI workflow)
 Sets up a JupyterLab environment with all dependencies.
 
@@ -167,11 +175,12 @@ Use this path to recreate the grid-scale AEMO experiments.
    - Builds the DT dataset at `data/aemo_dt/aemo_dt_dataset.parquet`.
    - Writes raw logs to `data/aemo_dt/raw_logs/` and the config/manifest needed for DT training.
 
-5. `python3 pretrain_aemo_decision_transformer.py ...`
-    - Main AEMO offline-RL training entrypoint.
-    - Run this from `/code/src` inside `test_energy_container`; from the repo root use `python3 src/pretrain_aemo_decision_transformer.py ...`.
-    - Reads the parquet dataset produced by `notebooks/aemo_simrun.ipynb`.
-    - Saves checkpoints and models under `../models/aemo/dt/`.
+5. `python3 src/launch_aemo_training.py --run-tier ...`
+    - Canonical AEMO offline-RL launcher for CLI runs.
+    - Derives safe defaults from `proxy-smoke`, `proxy-baseline`, or `learning-baseline`.
+    - Re-enters `energydecision-gpu` automatically when available, writes `aemo_training_launch_plan.json`,
+      and launches the live dashboard through `src/dt_progress_runner.py`.
+    - Uses `src/pretrain_aemo_decision_transformer.py` underneath for the actual training job.
 
 6. `notebooks/aemo_eval.ipynb`
    - Main AEMO evaluation notebook.
@@ -188,7 +197,7 @@ If you only want the main AEMO reproduction path, use:
 - `python3 pretrain_decision_transformer.py` -> `models/household/dt/`
 - `notebooks/aemo_sb3train.ipynb` -> `models/aemo_sb3/`
 - `notebooks/aemo_simrun.ipynb` -> `data/aemo_dt/`
-- `python3 pretrain_aemo_decision_transformer.py` -> `models/aemo/dt/`
+- `python3 src/launch_aemo_training.py` -> `models/aemo/dt/`
 - evaluation notebooks -> `eval_output/` (depending on notebook settings)
 
 ### Recreating experiments from code instead of notebooks
@@ -201,6 +210,7 @@ If you prefer scripting over notebooks:
 - AEMO environment starts from `src/AEMOBatteryEnv.py`
 - AEMO notebook helpers live in `src/aemo_notebook_utils.py`
 - AEMO DT training starts from `src/pretrain_aemo_decision_transformer.py`
+- The robust AEMO training harness starts from `src/launch_aemo_training.py`
 
 The `COMPONENTS.md` file is the best code-oriented reference once you want to move beyond the notebook-first workflow.
 

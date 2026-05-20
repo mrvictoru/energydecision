@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -111,6 +112,42 @@ def _processed_cache_path(
     )
 
 
+def ensure_processed_cache_writable(
+    *,
+    cache_dir: Path,
+    region: str,
+    start_date: datetime,
+    end_date: datetime,
+    step_duration: float,
+    needs_write: bool,
+) -> Path:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    processed_cache = _processed_cache_path(
+        cache_dir=cache_dir,
+        region=region,
+        start_date=start_date,
+        end_date=end_date,
+        step_duration=step_duration,
+    )
+    if not os.access(cache_dir, os.W_OK):
+        raise PermissionError(
+            f"AEMO cache directory is not writable: {cache_dir}. "
+            "Fix permissions or run inside the recommended Distrobox/container runtime."
+        )
+    if processed_cache.exists():
+        if not os.access(processed_cache, os.R_OK):
+            raise PermissionError(
+                f"AEMO processed cache is not readable: {processed_cache}. "
+                "Fix file ownership before rerunning training or evaluation."
+            )
+        if needs_write and not os.access(processed_cache, os.W_OK):
+            raise PermissionError(
+                f"AEMO processed cache is not writable: {processed_cache}. "
+                "Delete or chown the stale cache file before rerunning with refresh or fixed stats."
+            )
+    return processed_cache
+
+
 def _scenario_label(scenario: dict[str, Any], index: int) -> str:
     label = scenario.get("label") or scenario.get("name")
     if label:
@@ -217,13 +254,19 @@ def fetch_and_preprocess_aemo_data(
     refresh: bool = False,
     fixed_stats: dict[str, dict[str, float]] | None = None,
 ) -> tuple[pl.DataFrame, Path]:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    processed_cache = _processed_cache_path(
+    processed_cache = ensure_processed_cache_writable(
         cache_dir=cache_dir,
         region=region,
         start_date=start_date,
         end_date=end_date,
         step_duration=step_duration,
+        needs_write=bool(refresh or fixed_stats is not None or not _processed_cache_path(
+            cache_dir=cache_dir,
+            region=region,
+            start_date=start_date,
+            end_date=end_date,
+            step_duration=step_duration,
+        ).exists()),
     )
     if processed_cache.exists() and not refresh and fixed_stats is None:
         return pl.read_parquet(str(processed_cache)), processed_cache
@@ -247,6 +290,35 @@ def fetch_and_preprocess_aemo_data(
     )
     processed_data.write_parquet(str(processed_cache))
     return processed_data, processed_cache
+
+
+def preflight_processed_cache_paths(
+    *,
+    scenarios: Sequence[dict[str, Any]],
+    cache_dir: Path,
+    step_duration: float,
+    refresh: bool = False,
+    fixed_stats: dict[str, dict[str, float]] | None = None,
+) -> list[dict[str, Any]]:
+    manifest: list[dict[str, Any]] = []
+    for index, scenario in enumerate(scenarios):
+        entry = _scenario_entry(scenario, index)
+        cache_path = ensure_processed_cache_writable(
+            cache_dir=cache_dir,
+            region=entry["region"],
+            start_date=entry["start_date"],
+            end_date=entry["end_date"],
+            step_duration=step_duration,
+            needs_write=bool(refresh or fixed_stats is not None),
+        )
+        manifest.append(
+            {
+                **entry,
+                "cache_path": str(cache_path),
+                "cache_exists": cache_path.exists(),
+            }
+        )
+    return manifest
 
 
 def fit_aemo_global_stats(

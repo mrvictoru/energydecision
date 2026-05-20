@@ -72,8 +72,14 @@ def test_evaluate_aemo_heldout_writes_metrics_outputs(tmp_path: Path, monkeypatc
         }
     ]
     processed = {'heldout_nsw1': pl.DataFrame({'RRP': [10.0, 20.0]})}
+    cache_preflight_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(evaluator, 'fetch_and_preprocess_aemo_scenarios', lambda **kwargs: (processed, scenario_manifest))
+    monkeypatch.setattr(
+        evaluator,
+        'preflight_processed_cache_paths',
+        lambda **kwargs: cache_preflight_calls.append(kwargs) or [{'label': 'heldout_nsw1', 'cache_exists': False}],
+    )
     monkeypatch.setattr(
         evaluator,
         'resolve_battery_variants',
@@ -136,3 +142,5 @@ def test_evaluate_aemo_heldout_writes_metrics_outputs(tmp_path: Path, monkeypatc
     assert summary['reference_policy'] == 'rule'
     assert len(summary['aggregate_metrics']) == 2
     assert 'candidate_dt' in summary['paired_comparisons_vs_reference']
+    assert summary['cache_preflight'][0]['label'] == 'heldout_nsw1'
+    assert cache_preflight_calls[0]['step_duration'] == pytest.approx(0.5)

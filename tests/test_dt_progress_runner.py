@@ -43,6 +43,11 @@ def test_render_dashboard_includes_high_signal_progress_fields(tmp_path: Path):
         "model_variant": "baseline",
         "optimizer": "adamw",
         "scheduler": "steplr",
+        "dataset_summary": {
+            "train": {"file_count": 1, "episode_count": 2, "window_count": 32},
+            "val": {"file_count": 1, "episode_count": 1, "window_count": 16},
+        },
+        "run_summary": {"effective_windows_per_second": 12.5, "checkpoint_count": 1},
     }
 
     dashboard = progress_runner.render_dashboard(
@@ -57,9 +62,11 @@ def test_render_dashboard_includes_high_signal_progress_fields(tmp_path: Path):
 
     assert "progress: 50.0%" in dashboard
     assert "surface: preset=autoresearch_safe" in dashboard
+    assert "datasets: train_files=1" in dashboard
     assert "variant=baseline" in dashboard
     assert "train_total_avg=0.123" in dashboard
     assert "val_total=0.456" in dashboard
+    assert "run summary: wins_per_s=12.5" in dashboard
     assert "pcpu=77%" in dashboard
     assert "line two" in dashboard
 
@@ -86,6 +93,7 @@ def test_build_dashboard_state_preserves_structured_fields(tmp_path: Path):
     assert state.status == "running"
     assert state.progress_percent == 25.0
     assert "preset=aemo_proxy" in (state.surface_text or "")
+    assert state.dataset_text is None
     assert state.log_tail == ["hello"]
 
 

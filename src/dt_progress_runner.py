@@ -41,6 +41,8 @@ class DashboardState:
     elapsed_text: str
     log_path_text: str
     surface_text: str | None
+    dataset_text: str | None
+    run_summary_text: str | None
     status: str
     child_state: str | None
     exit_code: int | None
@@ -193,6 +195,8 @@ def build_dashboard_state(
     return_code: int | None = None,
 ) -> DashboardState:
     surface_text: str | None = None
+    dataset_text: str | None = None
+    run_summary_text: str | None = None
     if manifest:
         surface = {
             "preset": manifest.get("surface_preset"),
@@ -201,6 +205,29 @@ def build_dashboard_state(
             "scheduler": manifest.get("scheduler"),
         }
         surface_text = format_row(surface, ["preset", "variant", "optimizer", "scheduler"])
+        dataset_summary = manifest.get("dataset_summary") or {}
+        train_dataset = dataset_summary.get("train") or {}
+        val_dataset = dataset_summary.get("val") or {}
+        dataset_text = format_row(
+            {
+                "train_files": train_dataset.get("file_count"),
+                "train_eps": train_dataset.get("episode_count"),
+                "train_windows": train_dataset.get("window_count"),
+                "val_files": val_dataset.get("file_count"),
+                "val_eps": val_dataset.get("episode_count"),
+                "val_windows": val_dataset.get("window_count"),
+            },
+            ["train_files", "train_eps", "train_windows", "val_files", "val_eps", "val_windows"],
+        )
+        run_summary = manifest.get("run_summary") or {}
+        run_summary_text = format_row(
+            {
+                "wins_per_s": run_summary.get("effective_windows_per_second"),
+                "elapsed_s": run_summary.get("elapsed_seconds"),
+                "checkpoints": run_summary.get("checkpoint_count"),
+            },
+            ["wins_per_s", "elapsed_s", "checkpoints"],
+        )
 
     child_state: str | None = None
     if child is not None:
@@ -212,6 +239,8 @@ def build_dashboard_state(
             elapsed_text=format_seconds(time.monotonic() - started_at),
             log_path_text=str(log_path),
             surface_text=surface_text,
+            dataset_text=dataset_text,
+            run_summary_text=run_summary_text,
             status="waiting for progress snapshot",
             child_state=child_state,
             exit_code=return_code,
@@ -246,6 +275,8 @@ def build_dashboard_state(
         elapsed_text=format_seconds(time.monotonic() - started_at),
         log_path_text=str(log_path),
         surface_text=surface_text,
+        dataset_text=dataset_text,
+        run_summary_text=run_summary_text,
         status=str(snapshot.get("status", "unknown")),
         child_state=child_state,
         exit_code=return_code,
@@ -275,6 +306,8 @@ def render_plain_dashboard(state: DashboardState) -> str:
     lines.append(f"log: {state.log_path_text}")
     if state.surface_text:
         lines.append(f"surface: {state.surface_text}")
+    if state.dataset_text:
+        lines.append(f"datasets: {state.dataset_text}")
     status_line = f"status: {state.status}"
     if state.child_state:
         status_line += f" | child={state.child_state}"
@@ -286,6 +319,8 @@ def render_plain_dashboard(state: DashboardState) -> str:
     lines.append(f"val: {state.val_text}")
     lines.append(f"best: {state.best_text}")
     lines.append(f"resources: {state.resources_text}")
+    if state.run_summary_text:
+        lines.append(f"run summary: {state.run_summary_text}")
     if state.last_checkpoint_text is not None:
         lines.append(f"last checkpoint: {state.last_checkpoint_text}")
     lines.append("log tail:")
@@ -358,6 +393,8 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     summary.add_row("log", state.log_path_text)
     if state.surface_text:
         summary.add_row("surface", state.surface_text)
+    if state.dataset_text:
+        summary.add_row("datasets", state.dataset_text)
 
     metrics = Table.grid(padding=(0, 1))
     metrics.add_column(style="bold cyan", no_wrap=True)
@@ -366,6 +403,8 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     metrics.add_row("train", state.train_text)
     metrics.add_row("val", state.val_text)
     metrics.add_row("best", state.best_text)
+    if state.run_summary_text:
+        metrics.add_row("run", state.run_summary_text)
     if state.last_checkpoint_text:
         metrics.add_row("last", state.last_checkpoint_text)
 
