@@ -106,6 +106,73 @@ def show_dispatch_table(
 
 # ---------------------------------------------------------------------------
 
+def _dispatch_type_priority(value: Any) -> int:
+    text = str(value or "").strip().lower()
+    if text in {"generator", "generating unit"}:
+        return 0
+    if text in _BIDI_DISPATCH_TYPES:
+        return 1
+    if text == "load":
+        return 2
+    return 3
+
+
+def _sort_station_candidates(df: pl.DataFrame) -> pl.DataFrame:
+    if df.height == 0:
+        return df
+    sort_cols = [c for c in ["NonZeroIntervalCount", "DispatchIntervalCount", "MaxEnergyMW"] if c in df.columns]
+    descending = [True] * len(sort_cols)
+    out = df
+    if "DispatchType" in out.columns:
+        out = out.with_columns(
+            pl.col("DispatchType")
+            .map_elements(_dispatch_type_priority, return_dtype=pl.Int64)
+            .alias("_dispatch_type_priority")
+        )
+        sort_cols.append("_dispatch_type_priority")
+        descending.append(False)
+    if "DUID" in out.columns:
+        sort_cols.append("DUID")
+        descending.append(False)
+    out = out.sort(sort_cols, descending=descending, nulls_last=True)
+    return out.drop("_dispatch_type_priority") if "_dispatch_type_priority" in out.columns else out
+
+
+def _attach_station_pair_columns(df: pl.DataFrame) -> pl.DataFrame:
+    if df.height == 0:
+        return df
+    if "PairedGenDUID" not in df.columns or "PairedLoadDUID" not in df.columns:
+        df = df.with_columns([
+            pl.lit(None, dtype=pl.Utf8).alias("PairedGenDUID"),
+            pl.lit(None, dtype=pl.Utf8).alias("PairedLoadDUID"),
+        ])
+    if "DispatchType" not in df.columns:
+        return df
+
+    gen_rows = df.filter(
+        pl.col("DispatchType").cast(pl.Utf8, strict=False).str.to_lowercase().is_in(["generator", "generating unit"])
+    )
+    load_rows = df.filter(
+        pl.col("DispatchType").cast(pl.Utf8, strict=False).str.to_lowercase() == "load"
+    )
+    if gen_rows.height == 1 and load_rows.height == 1:
+        gen_duid = str(gen_rows["DUID"][0])
+        load_duid = str(load_rows["DUID"][0])
+        df = df.with_columns([
+            pl.when(pl.col("DUID") == gen_duid)
+            .then(pl.lit(load_duid))
+            .otherwise(pl.col("PairedLoadDUID"))
+            .alias("PairedLoadDUID"),
+            pl.when(pl.col("DUID") == load_duid)
+            .then(pl.lit(gen_duid))
+            .otherwise(pl.col("PairedGenDUID"))
+            .alias("PairedGenDUID"),
+        ])
+    return df
+
+
+# ---------------------------------------------------------------------------
+
 def list_dispatch_candidates(
     region: str,
     start_date: datetime,
@@ -183,13 +250,21 @@ def list_dispatch_candidates(
             return pl.DataFrame(), pl.DataFrame()
 
         duids_in_range = resolution["all_duids_in_range"]
+        station_info = BATTERY_REGISTRY.get(resolution["key"], {})
+        all_known_station_duids = list(dict.fromkeys(
+            str(entry["duid"]).strip()
+            for entry in station_info.get("duids", [])
+            if entry.get("duid")
+        ))
         print(
             f"Station: {resolution['station_name']!r} ({resolution['region']})\n"
             f"DUIDs active in {start_date.date()} → {end_date.date()}: {duids_in_range}"
         )
+        if all_known_station_duids and all_known_station_duids != duids_in_range:
+            print(f"All known DUIDs checked for this station: {all_known_station_duids}")
 
         # Guard: battery not registered in this period at all
-        if not duids_in_range:
+        if not duids_in_range and not all_known_station_duids:
             # Show what DUIDs exist and when, to help user pick the right range
             all_periods = [
                 f"  {e['duid']} ({e['type']}): "
@@ -217,7 +292,7 @@ def list_dispatch_candidates(
         dispatch_df = fetch_aemo_unit_dispatch(
             start_date=start_date,
             end_date=end_date,
-            duids=duids_in_range,
+            duids=all_known_station_duids or duids_in_range,
             cache_dir=cache_dir,
             refresh=refresh,
         )
@@ -261,7 +336,6 @@ def list_dispatch_candidates(
         # Populate capacity from the BATTERY_REGISTRY as a reliable fallback for
         # historical gen/load DUIDs that are deregistered from the NEMOSIS static
         # table (e.g. HPRG1/HPRL1 before Hornsdale's 2022 transition to HPR1).
-        station_info = BATTERY_REGISTRY.get(resolution["key"], {})
         registry_capacity_mwh: Optional[float] = station_info.get("capacity_mwh")
         registry_max_power_mw: Optional[float] = station_info.get("max_power_mw")
         static_rows = [{
@@ -272,32 +346,15 @@ def list_dispatch_candidates(
             "FuelType": "Grid",
             "StorageCapacityMWh": registry_capacity_mwh,
             "RegisteredCapacityMW": registry_max_power_mw,
-        } for e in resolution["active_duids"]]
+        } for e in station_info.get("duids", [])]
         battery_units = pl.DataFrame(static_rows, schema_overrides={
             "StorageCapacityMWh": pl.Float64,
             "RegisteredCapacityMW": pl.Float64,
         })
 
         active_battery_units = battery_units.join(summary, on="DUID", how="inner")
-        active_battery_units = active_battery_units.with_columns([
-            pl.lit(None, dtype=pl.Utf8).alias("PairedGenDUID"),
-            pl.lit(None, dtype=pl.Utf8).alias("PairedLoadDUID"),
-        ])
-        # Populate gen/load DUID for paired batteries
-        if resolution["gen_duid"]:
-            active_battery_units = active_battery_units.with_columns(
-                pl.when(pl.col("DispatchType") == "load")
-                .then(pl.lit(resolution["gen_duid"]))
-                .otherwise(pl.col("PairedGenDUID"))
-                .alias("PairedGenDUID")
-            )
-        if resolution["load_duid"]:
-            active_battery_units = active_battery_units.with_columns(
-                pl.when(pl.col("DispatchType") == "generator")
-                .then(pl.lit(resolution["load_duid"]))
-                .otherwise(pl.col("PairedLoadDUID"))
-                .alias("PairedLoadDUID")
-            )
+        battery_units = _sort_station_candidates(_attach_station_pair_columns(battery_units))
+        active_battery_units = _sort_station_candidates(_attach_station_pair_columns(active_battery_units))
 
         show_dispatch_table(
             active_battery_units,
@@ -490,13 +547,30 @@ def resolve_dispatch_selection(
         if chosen.height == 0 and start_date and end_date:
             resolution = resolve_battery_duids(query, start_date, end_date)
             if resolution["found"]:
-                # Use the primary DUID for this period: prefer bidi, then gen
-                bidi = resolution["bidi_duid"]
-                gen = resolution["gen_duid"]
-                duid = bidi or gen or duid
-                chosen = source_table.filter(pl.col("DUID") == duid).head(1)
-                if chosen.height == 0:
-                    chosen = battery_units.filter(pl.col("DUID") == duid).head(1)
+                station_info = BATTERY_REGISTRY.get(resolution["key"], {})
+                candidate_duids = list(dict.fromkeys(
+                    str(entry["duid"]).strip()
+                    for entry in station_info.get("duids", [])
+                    if entry.get("duid")
+                ))
+                if candidate_duids:
+                    chosen = _sort_station_candidates(
+                        source_table.filter(pl.col("DUID").cast(pl.Utf8, strict=False).is_in(candidate_duids))
+                    ).head(1)
+                    if chosen.height == 0:
+                        chosen = _sort_station_candidates(
+                            battery_units.filter(pl.col("DUID").cast(pl.Utf8, strict=False).is_in(candidate_duids))
+                        ).head(1)
+                if chosen.height > 0:
+                    duid = str(chosen["DUID"][0])
+                else:
+                    # Fall back to the registry primary DUID for this period: prefer bidi, then gen.
+                    bidi = resolution["bidi_duid"]
+                    gen = resolution["gen_duid"]
+                    duid = bidi or gen or duid
+                    chosen = source_table.filter(pl.col("DUID") == duid).head(1)
+                    if chosen.height == 0:
+                        chosen = battery_units.filter(pl.col("DUID") == duid).head(1)
                 print(
                     f"Resolved station name {query!r} → DUID {duid!r} "
                     f"for {start_date.date()} to {end_date.date()}"

@@ -109,6 +109,13 @@ See `toolbx_guide.md` for the full command sequence and the repo-root path rule.
 
 1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place it under `data/household/raw/`.
 2.  **AEMO Data:** Automatically fetched via `src/aemo_data.py` (cached in `data/aemo/`).
+    - The AEMO static generator mapping used by NEMOSIS is the **NEM Registration and Exemption List**.
+    - NEMOSIS' direct download URL is:
+      `https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls`
+    - If that direct link changes, use AEMO's NEM registration / registered participants page to re-download it manually:
+      `https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/participate-in-the-market/registration/registered-participants`
+    - Save the manual file under `data/aemo/manual/` to make it take priority over the runtime cache, or point the code at any local copy with `AEMO_GENERATORS_FILE=/absolute/path/to/file.xls`.
+    - NEMOSIS-managed static downloads now live under `data/aemo/_nemosis_static/`, so a failed fetch should not overwrite your manual copy.
 
 ## Reproducing the experiments
 

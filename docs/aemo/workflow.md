@@ -20,6 +20,24 @@ The AEMO offline RL workflow is now centered on notebooks so you can inspect int
 - `<repo_root>/src/aemo_notebook_utils.py`
 - `<repo_root>/configs/aemo_decision_transformer_model_kwargs.json`
 
+## Manual fallback for AEMO generator metadata
+
+Most AEMO data is fetched from NEMWeb archives, but the generator / battery registry mapping used by
+`fetch_aemo_generation_by_fuel()`, `get_available_battery_units()`, and dispatch replay station discovery
+comes from AEMO's **NEM Registration and Exemption List** static spreadsheet.
+
+- Direct file URL used by NEMOSIS:
+  `https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls`
+- Human-facing AEMO page to use if the direct link changes:
+  `https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/participate-in-the-market/registration/registered-participants`
+- Recommended manual fallback location in this repo:
+  `<repo_root>/data/aemo/manual/NEM Registration and Exemption List.xls`
+- Alternate override:
+  set `AEMO_GENERATORS_FILE=/absolute/path/to/NEM Registration and Exemption List.xls`
+
+The runtime keeps NEMOSIS-managed static downloads in `<repo_root>/data/aemo/_nemosis_static/` so a bad web
+response should not overwrite the manual fallback copy.
+
 ## What `notebooks/aemo_simrun.ipynb` does
 
 `notebooks/aemo_simrun.ipynb` is the main offline-data notebook. It is structured so you can stop after any stage and inspect the objects in memory.

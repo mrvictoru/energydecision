@@ -231,6 +231,68 @@ def test_list_dispatch_candidates_keeps_static_rows_when_dispatch_empty(monkeypa
     assert active_units.height == 0
 
 
+def test_list_dispatch_candidates_station_fetches_all_known_duids(monkeypatch):
+    import aemo_data as _aemo
+
+    captured = {}
+
+    def fake_resolve(name_or_duid, start_date, end_date):
+        assert name_or_duid == "hornsdale"
+        return {
+            "found": True,
+            "key": "hornsdale",
+            "station_name": "Hornsdale Power Reserve",
+            "region": "SA1",
+            "active_duids": [
+                {
+                    "duid": "HPR1",
+                    "type": "bidirectional",
+                    "valid_from": datetime(2022, 10, 1),
+                    "valid_until": None,
+                }
+            ],
+            "all_duids_in_range": ["HPR1"],
+            "gen_duid": None,
+            "load_duid": None,
+            "bidi_duid": "HPR1",
+            "spans_transition": False,
+            "transition_dates": [],
+        }
+
+    def fake_fetch(**kwargs):
+        captured["duids"] = kwargs["duids"]
+        return pl.DataFrame({
+            "SETTLEMENTDATE": [
+                datetime(2024, 1, 1, 0, 5),
+                datetime(2024, 1, 1, 0, 5),
+                datetime(2024, 1, 1, 0, 10),
+                datetime(2024, 1, 1, 0, 10),
+            ],
+            "DUID": ["HPRG1", "HPRL1", "HPRG1", "HPRL1"],
+            "TOTALCLEARED": [100.0, -60.0, 100.0, -60.0],
+            "RAISEREG": [5.0, 0.0, 5.0, 0.0],
+            "LOWERREG": [0.0, 0.0, 0.0, 0.0],
+        })
+
+    monkeypatch.setattr(_aemo, "resolve_battery_duids", fake_resolve)
+    monkeypatch.setattr(_aemo, "fetch_aemo_unit_dispatch", fake_fetch)
+
+    battery_units, active_units = list_dispatch_candidates(
+        region="SA1",
+        start_date=datetime(2024, 1, 1),
+        end_date=datetime(2024, 1, 2),
+        station_name="hornsdale",
+    )
+
+    assert set(captured["duids"]) == {"HPR1", "HPRG1", "HPRL1"}
+    assert "HPR1" in battery_units["DUID"].to_list()
+    assert active_units["DUID"].to_list()[0] == "HPRG1"
+    gen_row = active_units.filter(pl.col("DUID") == "HPRG1")
+    load_row = active_units.filter(pl.col("DUID") == "HPRL1")
+    assert gen_row["PairedLoadDUID"][0] == "HPRL1"
+    assert load_row["PairedGenDUID"][0] == "HPRG1"
+
+
 def test_resolve_raises_when_no_units():
     with pytest.raises(ValueError, match="No battery DUIDs"):
         resolve_dispatch_selection(
@@ -453,6 +515,40 @@ def test_resolve_selection_returns_region_metadata():
     assert sel["region"] == "SA1"
     assert sel["station_name"] == "Hornsdale Power Reserve"
     assert sel["station_key"] == "hornsdale"
+
+
+def test_resolve_station_name_prefers_active_candidate_over_registry_primary():
+    battery_units = pl.DataFrame({
+        "DUID": ["VBB1", "VBBG1", "VBBL1"],
+        "Region": ["VIC1", "VIC1", "VIC1"],
+        "DispatchType": ["bidirectional", "generator", "load"],
+        "StorageCapacityMWh": [450.0, 450.0, 450.0],
+        "RegisteredCapacityMW": [300.0, 300.0, 300.0],
+    })
+    active_battery_units = pl.DataFrame({
+        "DUID": ["VBBG1", "VBBL1"],
+        "Region": ["VIC1", "VIC1"],
+        "DispatchType": ["generator", "load"],
+        "StorageCapacityMWh": [450.0, 450.0],
+        "RegisteredCapacityMW": [300.0, 300.0],
+        "NonZeroIntervalCount": [2000, 2000],
+        "DispatchIntervalCount": [2000, 2000],
+        "MaxEnergyMW": [300.0, 300.0],
+        "PairedGenDUID": [None, "VBBG1"],
+        "PairedLoadDUID": ["VBBL1", None],
+    })
+
+    sel = resolve_dispatch_selection(
+        battery_units=battery_units,
+        active_battery_units=active_battery_units,
+        selected_duid="victorian_big_battery",
+        start_date=datetime(2024, 1, 1),
+        end_date=datetime(2024, 7, 1),
+    )
+
+    assert sel["duid"] == "VBBG1"
+    assert sel["dispatch_duid_gen"] == "VBBG1"
+    assert sel["dispatch_duid_load"] == "VBBL1"
 
 
 def test_merge_transition_dispatch_gen_load_to_bidi():

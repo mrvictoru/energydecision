@@ -9,6 +9,50 @@ This runbook creates a **new additive AEMO DT dataset** that targets the diversi
 
 It writes to a **new output directory** so you can compare it with the existing dataset instead of overwriting it.
 
+## Current generation status in this checkout
+
+The additive dispatch replay run was attempted in this repo and produced these raw outputs under
+`data/aemo_dt_diverse_2024/raw_logs/`:
+
+- `sa1_2024_h1__dispatch__hornsdale_replay_logs.parquet`
+- `sa1_2024_h1__dispatch__lake_bonney_replay_logs.parquet`
+- `vic1_2024_h1__dispatch__victorian_big_battery_replay_logs.parquet`
+
+Each successful replay contains `25,920` rows, for a total of `77,760` replay rows recorded in
+`data/aemo_dt_diverse_2024/aemo_dt_diverse_2024_dispatch_manifest.json`.
+
+### What has been generated successfully
+
+| Scenario | Dispatch alias | Status | Notes |
+| --- | --- | --- | --- |
+| `sa1_2024_h1` | `hornsdale` | Done | Replayed from `HPRG1` + `HPRL1` |
+| `sa1_2024_h1` | `lake_bonney` | Done | Manifest recorded `LKBONNY1` during the first successful run; current alias resolution now prefers the active 2024 gen/load pair when present |
+| `vic1_2024_h1` | `victorian_big_battery` | Done | Replayed from `VBBG1` + `VBBL1` |
+
+### What still needs generation
+
+| Scenario | Dispatch alias | Remaining blocker |
+| --- | --- | --- |
+| `nsw1_2024_h1` | `wallgrove` | No matching `WALGRV1` rows were found in the current local 2024 H1 `DISPATCHLOAD` cache |
+| `qld1_2024_h1` | `wandoan` | No matching `WANDB1` rows were found in the current local 2024 H1 `DISPATCHLOAD` cache |
+| `nsw1_2024_h2` | `wallgrove` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
+| `qld1_2024_h2` | `wandoan` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
+| `sa1_2024_h2` | `hornsdale` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
+| `sa1_2024_h2` | `lake_bonney` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
+| `vic1_2024_h2` | `victorian_big_battery` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
+| `tas1_2024_h1` | none | No recommended dispatch replay alias in this guide for TAS1 |
+| `tas1_2024_h2` | none | No recommended dispatch replay alias in this guide for TAS1 |
+
+### Important note about alias resolution
+
+Alias-based replay selection was patched after the first generation attempt. It now checks all known DUIDs
+for a station and prefers the ones that actually show activity in the requested date range. In the current
+cache that resolves:
+
+- Hornsdale → `HPRG1` + `HPRL1`
+- Lake Bonney → active 2024 data currently sorts to `LBBG1` + `LBBL1`, while `LKBONNY1` is also present
+- Victorian Big Battery → `VBBG1` + `VBBL1`
+
 ## What this recipe adds
 
 Compared with the current dataset, this recipe focuses on:

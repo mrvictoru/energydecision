@@ -337,12 +337,23 @@ create_aemo_env_from_data(
     - **Args**: date range, region, cache path, plus any `AEMOBatteryTradingEnv`-compatible overrides.
     - **Returns**: initialized env after fetching via `fetch_aemo_data_bundle` and preprocessing through `AEMODataPreprocessor`.
 - `fetch_aemo_data_bundle(start_date, end_date, region='NSW1', fcas_services=None, fuel_types=None, generator_info_path=None, cache_dir='data/aemo', refresh=False)`
-    - **Args**: spans energy prices, FCAS services, and fuel types to fetch; optional generator mapping.
+    - **Args**: spans energy prices, FCAS services, and fuel types to fetch; optional generator mapping. If AEMO blocks the static table download, pass `generator_info_path` to a manually downloaded **NEM Registration and Exemption List** spreadsheet or set `AEMO_GENERATORS_FILE`.
     - **Returns**: dict with `prices`, `fcas`, and `generation` Polars DataFrames ready for preprocessing.
 - `fetch_aemo_unit_dispatch(start_date, end_date, duid=None, region=None, generator_info_path=None, cache_dir='data/aemo', refresh=False)`
     - **Args**: yields unit-level dispatch including `TOTALCLEARED` and FCAS enablement for the specified DUID/region.
     - **Returns**: Polars DataFrame used by `AEMOAgent` for dispatch replay/FCAS revenue accounting.
 ```
+
+Manual static-table fallback:
+
+- Direct file URL used by NEMOSIS:
+  `https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls`
+- AEMO page for manual lookup if the direct link changes:
+  `https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/participate-in-the-market/registration/registered-participants`
+- Recommended repo-local placement:
+  `data/aemo/manual/NEM Registration and Exemption List.xls`
+- Runtime static cache:
+  `data/aemo/_nemosis_static/`
 
 ## Testing
 

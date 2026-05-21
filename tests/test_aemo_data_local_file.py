@@ -26,6 +26,8 @@ from aemo_data import (
     _read_excel_via_pandas,
     _read_generator_info_file,
     _auto_detect_generator_info_file,
+    _get_generator_info,
+    _get_nemosis_static_cache_dir,
     _find_column_by_candidates,
     get_available_battery_units,
     AEMO_REGIONS,
@@ -132,6 +134,47 @@ def test_auto_detect_returns_bundled_file():
     detected = _auto_detect_generator_info_file()
     assert detected is not None, "Expected a file to be auto-detected"
     assert detected.exists(), f"Detected path does not exist: {detected}"
+
+
+def test_get_nemosis_static_cache_dir_uses_isolated_subdirectory(tmp_path):
+    """Static-table downloads are isolated from the main data/aemo cache."""
+    cache_dir = tmp_path / "aemo"
+    static_dir = _get_nemosis_static_cache_dir(cache_dir)
+    assert static_dir == cache_dir / "_nemosis_static"
+    assert static_dir.exists()
+    assert static_dir.is_dir()
+
+
+def test_get_generator_info_uses_isolated_static_cache_and_falls_back(monkeypatch, tmp_path):
+    """A failed NEMOSIS static fetch should not touch the local fallback file."""
+    cache_dir = tmp_path / "aemo"
+    local_csv = cache_dir / "NEM Registration and Exemption List.csv"
+    local_csv.parent.mkdir(parents=True, exist_ok=True)
+    local_csv.write_text(
+        "DUID,Region,Fuel Source - Descriptor\n"
+        "LOCALBAT1,NSW1,Battery Storage\n",
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def fake_static_table(*, table_name, raw_data_location, update_static_file, select_columns):
+        calls.append(raw_data_location)
+        static_dir = Path(raw_data_location)
+        static_dir.mkdir(parents=True, exist_ok=True)
+        (static_dir / "NEM Registration and Exemption List.xls").write_text(
+            "Sorry, your request has failed. Please return to the home page and try again later.",
+            encoding="utf-8",
+        )
+        raise RuntimeError("simulated fetch failure")
+
+    monkeypatch.setattr("aemo_data.static_table", fake_static_table)
+    result = _get_generator_info(cache_dir, generator_info_path=str(local_csv))
+
+    assert result is not None
+    assert "LOCALBAT1" in result["DUID"].to_list()
+    assert calls == [str(cache_dir / "_nemosis_static")]
+    assert local_csv.read_text(encoding="utf-8").startswith("DUID,Region")
 
 
 # ---------------------------------------------------------------------------
@@ -347,4 +390,3 @@ def test_nonzero_interval_count_logic():
 
     assert compute_nonzero_count(dispatch_zero) == 0, "All-zero data should have NonZeroIntervalCount=0"
     assert compute_nonzero_count(dispatch_active) == 2, "Active data should have NonZeroIntervalCount=2"
-

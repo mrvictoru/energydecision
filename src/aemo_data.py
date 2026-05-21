@@ -90,13 +90,14 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
     "lake_bonney": {
         "full_name": "Lake Bonney BESS1",
         "region": "SA1",
-        "aliases": ["lbb", "lbb1", "lake bonney", "lake bonney bess"],
+        "aliases": ["lbb", "lbb1", "lkbonny1", "lake bonney", "lake bonney bess"],
         "capacity_mwh": 25.0,
         "max_power_mw": 25.0,
         "duids": [
             {"duid": "LBB1",  "type": "bidirectional", "valid_from": datetime(2022, 6, 1),  "valid_until": None},
             {"duid": "LBBG1", "type": "generator",     "valid_from": datetime(2019, 8, 1),  "valid_until": datetime(2022, 6, 1)},
             {"duid": "LBBL1", "type": "load",          "valid_from": datetime(2019, 8, 1),  "valid_until": datetime(2022, 6, 1)},
+            {"duid": "LKBONNY1", "type": "bidirectional", "valid_from": datetime(2019, 8, 1), "valid_until": None},
         ],
     },
     "dalrymple_north": {
@@ -167,10 +168,12 @@ BATTERY_REGISTRY: Dict[str, Dict[str, Any]] = {
     "victorian_big_battery": {
         "full_name": "Victorian Big Battery",
         "region": "VIC1",
-        "aliases": ["vbb1", "vbb", "big battery"],
+        "aliases": ["vbb1", "vbb", "vbbg1", "vbbl1", "big battery"],
         "capacity_mwh": 450.0,
         "max_power_mw": 300.0,
         "duids": [
+            {"duid": "VBBG1", "type": "generator", "valid_from": datetime(2021, 11, 1), "valid_until": None},
+            {"duid": "VBBL1", "type": "load",      "valid_from": datetime(2021, 11, 1), "valid_until": None},
             {"duid": "VBB1", "type": "bidirectional", "valid_from": datetime(2021, 11, 1), "valid_until": None},
         ],
     },
@@ -636,13 +639,18 @@ def _read_generator_info_file(file_path: Path) -> pl.DataFrame:
 def _auto_detect_generator_info_file() -> Optional[Path]:
     """Best-effort lookup for a locally downloaded generator info XLS/XLSX/CSV.
 
-    Searches ``src/data/aemo`` first (project-bundled copy), then ``data/aemo``
-    (NEMOSIS runtime cache).  Returns the first matching file found so that a
-    bundled copy in ``src/data/aemo`` takes priority over the cache.
+    Searches ``src/data/aemo`` first (project-bundled copy), then
+    ``data/aemo/manual`` (human-managed local copy), then ``data/aemo`` for
+    backward compatibility. Returns the first matching file found so that a
+    bundled or manual copy takes priority over the runtime cache.
     If no file is found, returns ``None``.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    search_dirs = [repo_root / "src/data/aemo", repo_root / "data/aemo"]
+    search_dirs = [
+        repo_root / "src/data/aemo",
+        repo_root / "data/aemo/manual",
+        repo_root / "data/aemo",
+    ]
 
     for directory in search_dirs:
         if not (directory.exists() and directory.is_dir()):
@@ -654,6 +662,13 @@ def _auto_detect_generator_info_file() -> Optional[Path]:
     return None
 
 
+def _get_nemosis_static_cache_dir(cache_path: Path) -> Path:
+    """Return the dedicated cache directory for NEMOSIS static tables."""
+    static_cache = cache_path / "_nemosis_static"
+    static_cache.mkdir(parents=True, exist_ok=True)
+    return static_cache
+
+
 def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = None) -> Optional[pl.DataFrame]:
     """
     Retrieve generator static info (DUID -> Region/Fuel descriptor).
@@ -662,10 +677,11 @@ def _get_generator_info(cache_path: Path, generator_info_path: Optional[str] = N
     falls back to a user-provided local XLS/XLSX/CSV.
     """
     # 1) Try NEMOSIS static_table (preferred when it works)
+    static_cache_path = _get_nemosis_static_cache_dir(cache_path)
     try:
         gen_info = static_table(
             table_name='Generators and Scheduled Loads',
-            raw_data_location=str(cache_path),
+            raw_data_location=str(static_cache_path),
             update_static_file=False,
             select_columns='all',
         )
@@ -1507,17 +1523,28 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
     
     Also detects if AEMO's server returned an HTML error page instead of the Excel file.
     """
-    # Helper to check if a file is an HTML error page from AEMO
-    def _is_html_error_file(file_path):
-        """Check if file contains AEMO's HTML error message."""
+    static_cache_path = _get_nemosis_static_cache_dir(cache_path)
+
+    # Helper to check if a file is an AEMO error payload instead of a spreadsheet.
+    def _is_aemo_error_file(file_path):
+        """Check if file contains an AEMO error page/message instead of Excel data."""
         try:
             with open(file_path, 'rb') as f:
-                # Read first 1KB to check for HTML markers
                 content = f.read(1024)
                 content_lower = content.lower()
-                # Check for HTML tags and AEMO error message
-                if (b'<html' in content_lower or b'<!doctype' in content_lower) and \
-                   (b'sorry' in content_lower or b'failed' in content_lower or b'error' in content_lower):
+                has_error_text = (
+                    b'sorry' in content_lower
+                    and b'failed' in content_lower
+                ) or b'please return to the home page' in content_lower
+                is_html_error = (
+                    (b'<html' in content_lower or b'<!doctype' in content_lower)
+                    and (b'sorry' in content_lower or b'failed' in content_lower or b'error' in content_lower)
+                )
+                has_excel_signature = (
+                    content.startswith(b'PK')
+                    or content.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1')
+                )
+                if (has_error_text or is_html_error) and not has_excel_signature:
                     return True
         except Exception:
             pass
@@ -1525,10 +1552,10 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
     
     # Check if any existing cached files are HTML error pages
     try:
-        cache_files = list(cache_path.glob('*'))
+        cache_files = list(static_cache_path.glob('*'))
         for cache_file in cache_files:
-            if cache_file.suffix.lower() in ['.xls', '.xlsx'] and _is_html_error_file(cache_file):
-                print(f"Detected corrupted/HTML error file in cache: {cache_file.name}")
+            if cache_file.suffix.lower() in ['.xls', '.xlsx'] and _is_aemo_error_file(cache_file):
+                print(f"Detected corrupted/error file in cache: {cache_file.name}")
                 print(f"Deleting corrupted file and forcing re-download...")
                 cache_file.unlink()
                 refresh = True  # Force refresh if we deleted a corrupted file
@@ -1538,7 +1565,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
     try:
         return static_table(
             table_name='Generators and Scheduled Loads',
-            raw_data_location=str(cache_path),
+            raw_data_location=str(static_cache_path),
             update_static_file=bool(refresh),
             select_columns='all',
         )
@@ -1547,7 +1574,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
         if 'Excel file format cannot be determined' in msg:
             # Inspect cache for .xls files and attempt conversion to .xlsx
             try:
-                files = sorted([p.name for p in Path(cache_path).iterdir()])
+                files = sorted([p.name for p in static_cache_path.iterdir()])
             except Exception:
                 files = []
 
@@ -1563,14 +1590,14 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                         "Install it in the Jupyter environment, e.g.:\n"
                         "  docker compose exec app python3 -m pip install xls2xlsx\n"
                         "Then restart the notebook kernel (or reload this module) and retry.\n\n"
-                        f"Cache directory: {cache_path}\n"
+                        f"Cache directory: {static_cache_path}\n"
                         f"Cache dir listing (first 50 entries): {files[:50]}"
                     ) from excel_error
 
                 for f in xls_files:
-                    xls_path = Path(cache_path) / f
+                    xls_path = static_cache_path / f
                     xlsx_name = xls_path.stem + '.xlsx'
-                    xlsx_path = Path(cache_path) / xlsx_name
+                    xlsx_path = static_cache_path / xlsx_name
                     # Skip conversion if xlsx already exists
                     if xlsx_path.exists():
                         converted.append(str(xlsx_path.name))
@@ -1587,7 +1614,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                     try:
                         return static_table(
                             table_name='Generators and Scheduled Loads',
-                            raw_data_location=str(cache_path),
+                            raw_data_location=str(static_cache_path),
                             update_static_file=False,
                             select_columns='all',
                         )
@@ -1600,7 +1627,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                     raise ValueError(
                         "Failed to convert cached .xls files to .xlsx.\n"
                         "Conversion errors: " + ", ".join([f"{n}: {e}" for n, e in conversion_errors]) + "\n\n"
-                        f"Cache directory: {cache_path}\n"
+                        f"Cache directory: {static_cache_path}\n"
                         f"Cache dir listing (first 50 entries): {files[:50]}\n\n"
                         "Fix: Install 'xls2xlsx' or delete the cache directory and retry (rm -rf data/aemo),"
                     ) from excel_error
@@ -1610,19 +1637,19 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
             try:
                 result = static_table(
                     table_name='Generators and Scheduled Loads',
-                    raw_data_location=str(cache_path),
+                    raw_data_location=str(static_cache_path),
                     update_static_file=True,
                     select_columns='all',
                 )
                 # Check if the newly downloaded file is an HTML error
                 try:
-                    files = sorted([p.name for p in Path(cache_path).iterdir()])
+                    files = sorted([p.name for p in static_cache_path.iterdir()])
                     for f in files:
-                        file_path = Path(cache_path) / f
+                        file_path = static_cache_path / f
                         if file_path.suffix.lower() in ['.xls', '.xlsx']:
-                            if _is_html_error_file(file_path):
+                            if _is_aemo_error_file(file_path):
                                 raise ValueError(
-                                    "AEMO server returned an HTML error page instead of the Excel file. "
+                                    "AEMO server returned an error payload instead of the Excel file. "
                                     "The server may be experiencing issues or rate-limiting requests.\n\n"
                                     "The downloaded file contains: 'Sorry, your request has failed...'\n\n"
                                     "Fixes:\n"
@@ -1630,7 +1657,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                                     " - Delete the corrupted cache file manually:\n"
                                     f"     rm {file_path}\n"
                                     " - Delete the entire cache directory and retry:\n"
-                                    f"     rm -rf {cache_path}\n"
+                                    f"     rm -rf {static_cache_path}\n"
                                     " - Try using a different date range or region to reduce load on AEMO servers\n"
                                 )
                 except Exception:
@@ -1639,7 +1666,7 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
             except Exception as excel_error2:
                 # Provide helpful diagnostics including cache listing
                 try:
-                    files = sorted([p.name for p in Path(cache_path).iterdir()])
+                    files = sorted([p.name for p in static_cache_path.iterdir()])
                 except Exception:
                     files = []
                 raise ValueError(
@@ -1650,12 +1677,12 @@ def _get_generators_static_table(cache_path: Path, refresh: bool):
                     "    (error message: 'Sorry, your request has failed...')\n"
                     " 2. The cached file is corrupt, empty, or has wrong extension\n"
                     " 3. The file format is .xls (old Excel) instead of .xlsx\n\n"
-                    f"Cache directory: {cache_path}\n"
+                    f"Cache directory: {static_cache_path}\n"
                     f"Cache dir listing (first 50 entries): {files[:50]}\n\n"
                     "Fixes:\n"
                     " - Wait a few minutes and try again (AEMO server may be temporarily unavailable)\n"
                     " - Delete the cache directory and retry:\n"
-                    f"     rm -rf {cache_path}\n"
+                    f"     rm -rf {static_cache_path}\n"
                     " - If files end with .xls, install 'xls2xlsx' in the Jupyter env:\n"
                     "     pip install xls2xlsx\n"
                     " - Call fetch_aemo_generation_by_fuel(..., refresh=True) to force re-download\n"

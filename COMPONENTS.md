@@ -149,7 +149,12 @@ generation = data["generation"]
 ### Notes
 
 - Data is cached under `data/aemo/` by default.
-- If AEMO static tables are blocked, set `AEMO_GENERATORS_FILE` to a local XLS/XLSX/CSV file.
+- If AEMO static tables are blocked, manually download AEMO's **NEM Registration and Exemption List** from
+  `https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls`
+  or find it via AEMO's registered participants page:
+  `https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/participate-in-the-market/registration/registered-participants`
+- Put the manual copy in `data/aemo/manual/` or set `AEMO_GENERATORS_FILE` to a local XLS/XLSX/CSV file.
+- NEMOSIS static-table downloads are isolated under `data/aemo/_nemosis_static/`.
 
 ---
 
