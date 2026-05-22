@@ -122,5 +122,6 @@ def test_main_writes_launch_plan_on_dry_run(
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     assert plan["run_tier"] == "proxy_baseline"
     assert plan["paths"]["dataset_path"] == str(dataset_path)
+    assert plan["recommended_evaluation_configs"]["pilot_screening"].endswith("configs/aemo_autoresearch_evaluator.mini.json")
     stdout = capsys.readouterr().out
     assert '"run_tag": "demo"' in stdout

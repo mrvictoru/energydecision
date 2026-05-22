@@ -252,7 +252,22 @@ Practical guidance:
 For interactive autoresearch loops, it is often better to pin a small **fixed pilot train/val split**
 for the proxy tier than to repeatedly launch the full learning-baseline subset pipeline. The wrapper now
 accepts an explicit validation parquet via `--val-dataset-path`, so you can keep the AEMO entrypoint while
-holding the train/validation pair constant:
+holding the train/validation pair constant.
+
+The repository now includes a reproducible pilot builder that refreshes the fixed split from the full
+AEMO dataset using a curated set of short cross-region episode slices:
+
+```bash
+python3 src/build_aemo_autoresearch_pilot.py
+```
+
+That command rewrites:
+
+- `data/aemo_dt/autoresearch_pilot/aemo_dt_train_pilot.parquet`
+- `data/aemo_dt/autoresearch_pilot/aemo_dt_val_pilot.parquet`
+- `data/aemo_dt/autoresearch_pilot/aemo_dt_autoresearch_pilot_manifest.json`
+
+Use the generated split like this:
 
 ```bash
 python3 src/pretrain_aemo_decision_transformer.py \
@@ -268,6 +283,19 @@ python3 src/pretrain_aemo_decision_transformer.py \
 
 Use that fixed pilot split only for cheap inner-loop ranking. Once a proxy change looks promising, rerun it
 on the heavier learning-baseline path before treating it as a serious branch point.
+
+For the proxy tier, prefer **best validation action loss** as the ranking metric and keep
+**best validation total loss** as the guardrail. The training surface manifest now writes both, plus a
+`pilot_ranking_metric` recommendation for the current preset.
+
+For simulator checks, use:
+
+- `configs/aemo_autoresearch_evaluator.mini.json` for quick pilot screening
+- `configs/aemo_autoresearch_evaluator.example.json` for the fuller held-out comparison
+
+Both evaluator configs can share cached non-DT reference rollouts through `reference_cache_dir`, so fixed
+baselines like `rule`, dispatch replay, and unchanged SB3 references do not need to rerun for every pilot
+experiment.
 
 If you want the live progress dashboard to update during a long subset epoch instead of only at the end,
 set `--checkpoints-per-epoch` above `1` so the trainer writes intermediate snapshot updates.

@@ -137,6 +137,19 @@ def test_resolve_training_surface_respects_explicit_learning_baseline_overrides(
     assert surface.training_kwargs["batch_size"] == 16
 
 
+def test_recommend_pilot_ranking_prefers_val_action_for_aemo_proxy():
+    ranking = pretrain_dt.recommend_pilot_ranking(
+        surface_preset="aemo_proxy",
+        best_val_total_loss=0.62,
+        best_val_action_loss=0.48,
+    )
+
+    assert ranking["pilot_ranking_metric"] == "best_val_action_loss"
+    assert ranking["pilot_ranking_value"] == pytest.approx(0.48)
+    assert ranking["pilot_ranking_guardrail_metric"] == "best_val_total_loss"
+    assert ranking["pilot_ranking_guardrail_value"] == pytest.approx(0.62)
+
+
 def test_validate_preset_dataset_policy_requires_explicit_validation_for_learning_baseline(tmp_path: Path):
     args = pretrain_dt.parse_args(["--surface-preset", "aemo_learning_baseline"])
     surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
@@ -343,3 +356,6 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     assert manifest["dataset_summary"]["train"]["window_count"] >= 1
     assert manifest["run_summary"]["checkpoint_count"] == 1
     assert manifest["run_summary"]["total_windows_processed"] >= 1
+    assert manifest["run_summary"]["final_val_action_loss"] == pytest.approx(0.35)
+    assert manifest["run_summary"]["best_val_action_loss"] == pytest.approx(0.35)
+    assert manifest["run_summary"]["pilot_ranking_metric"] == "best_val_total_loss"

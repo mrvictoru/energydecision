@@ -262,6 +262,32 @@ def summarize_dataset_shape(dataset: TrajectoryDataset, *, file_count: int) -> d
     }
 
 
+def _best_loss_value(values: Sequence[float]) -> float | None:
+    candidates = [float(value) for value in values if np.isfinite(value)]
+    return min(candidates) if candidates else None
+
+
+def recommend_pilot_ranking(
+    *,
+    surface_preset: str,
+    best_val_total_loss: float | None,
+    best_val_action_loss: float | None,
+) -> dict[str, Any]:
+    if surface_preset == "aemo_proxy" and best_val_action_loss is not None:
+        return {
+            "pilot_ranking_metric": "best_val_action_loss",
+            "pilot_ranking_value": best_val_action_loss,
+            "pilot_ranking_guardrail_metric": "best_val_total_loss",
+            "pilot_ranking_guardrail_value": best_val_total_loss,
+        }
+    return {
+        "pilot_ranking_metric": "best_val_total_loss",
+        "pilot_ranking_value": best_val_total_loss,
+        "pilot_ranking_guardrail_metric": None,
+        "pilot_ranking_guardrail_value": None,
+    }
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train the Decision Transformer on stored trajectory logs.",
@@ -1177,6 +1203,19 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     elapsed_seconds = max(0.0, time.monotonic() - started_at)
     total_windows_processed = int(len(train_dataset) * len(train_losses))
+    final_val_total_loss = float(val_losses[-1]) if val_losses else None
+    final_val_action_loss = float(val_action[-1]) if val_action else None
+    final_val_state_loss = float(val_state[-1]) if val_state else None
+    final_val_return_loss = float(val_return[-1]) if val_return else None
+    best_val_total_loss = _best_loss_value(val_losses)
+    best_val_action_loss = _best_loss_value(val_action)
+    best_val_state_loss = _best_loss_value(val_state)
+    best_val_return_loss = _best_loss_value(val_return)
+    pilot_ranking = recommend_pilot_ranking(
+        surface_preset=surface.preset_name,
+        best_val_total_loss=best_val_total_loss,
+        best_val_action_loss=best_val_action_loss,
+    )
     surface_manifest["run_summary"] = {
         "elapsed_seconds": elapsed_seconds,
         "checkpoint_count": int(len(history.get("loss_history", []))),
@@ -1185,8 +1224,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             total_windows_processed / elapsed_seconds if elapsed_seconds > 0 else None
         ),
         "final_train_total_loss": float(train_losses[-1]),
-        "final_val_total_loss": float(val_losses[-1]) if val_losses else None,
-        "best_val_total_loss": float(min(val_losses)) if val_losses else None,
+        "final_val_total_loss": final_val_total_loss,
+        "final_val_action_loss": final_val_action_loss,
+        "final_val_state_loss": final_val_state_loss,
+        "final_val_return_loss": final_val_return_loss,
+        "best_val_total_loss": best_val_total_loss,
+        "best_val_action_loss": best_val_action_loss,
+        "best_val_state_loss": best_val_state_loss,
+        "best_val_return_loss": best_val_return_loss,
+        **pilot_ranking,
     }
     write_json(surface_manifest_path, surface_manifest)
 

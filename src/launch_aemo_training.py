@@ -439,6 +439,10 @@ def build_launch_plan(
         "paths": {key: str(value) for key, value in paths.items()},
         "training_command": list(training_command),
         "tracker_command": list(tracker_command),
+        "recommended_evaluation_configs": {
+            "pilot_screening": str((repo_root() / "configs" / "aemo_autoresearch_evaluator.mini.json").resolve()),
+            "full_heldout": str((repo_root() / "configs" / "aemo_autoresearch_evaluator.example.json").resolve()),
+        },
         "monitor_attach_command": [
             sys.executable,
             str(repo_root() / "src" / "dt_progress_runner.py"),

@@ -55,7 +55,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -127,7 +127,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         ],
     }
     _write_json(output_path, manifest)
-    print(json.dumps(manifest, indent=2, sort_keys=True))
+    print(json.dumps(manifest, indent=2, sort_keys=True, default=str))
 
 
 if __name__ == "__main__":

@@ -259,9 +259,11 @@ For the current AEMO dataset layout:
 
 Use one fast proxy metric consistently for the inner loop:
 
-- **Primary metric**: final validation total loss from the DT run (`lower is better`)
+- **AEMO proxy tier (`aemo_proxy`)**: best validation action loss (`best_val_action_loss`, lower is better)
+- **Guardrail for AEMO proxy tier**: best validation total loss (`best_val_total_loss`)
+- **Broader baselines / non-proxy tiers**: best validation total loss (`best_val_total_loss`)
 
-Read it from the loss CSV written by `--loss-csv-path`, or from the final console summary if needed.
+Read it from the DT loss CSV / surface manifest summary, not only from the final console line.
 
 If a run has no validation set, record that explicitly and treat comparisons as weak evidence. Prefer runs with validation enabled.
 
@@ -332,13 +334,14 @@ Once setup is complete, loop autonomously:
 3. Make one focused change in `src/pretrain_decision_transformer.py`.
 4. Commit the change.
 5. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
-6. Read the final validation metric from the loss CSV or log.
+6. Read the proxy ranking metric from the loss CSV / surface manifest summary.
 7. Record the result in `results.tsv`.
-8. Run `src/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
-9. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
-10. If validation loss improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
-11. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.
-12. If the metric was worse, or the idea added complexity without clear evaluator benefit, revert to the previous kept commit.
+8. For AEMO proxy loops, prefer `configs/aemo_autoresearch_evaluator.mini.json` as the first simulator screen.
+9. Run `src/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
+10. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
+11. If the proxy metric improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
+12. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.
+13. If the metric was worse, or the idea added complexity without clear evaluator benefit, revert to the previous kept commit.
 
 For AEMO learning-baseline refreshes, prefer this low-hanging-fruit order:
 

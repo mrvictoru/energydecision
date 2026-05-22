@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -87,7 +88,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
 
 
 def _parse_datetime(value: str) -> datetime:
@@ -117,6 +118,32 @@ def _maybe_float(value: str | None) -> float | None:
     return float(text)
 
 
+def _best_row_by_metric(rows: Sequence[dict[str, Any]], metric_key: str) -> dict[str, Any] | None:
+    metric_rows = [row for row in rows if row.get(metric_key) is not None]
+    return min(metric_rows, key=lambda row: row[metric_key]) if metric_rows else None
+
+
+def resolve_pilot_ranking(surface_manifest: dict[str, Any], training_summary: dict[str, Any]) -> dict[str, Any]:
+    surface_preset = str(surface_manifest.get("surface_preset", "")).lower()
+    best_val_total = training_summary.get("best_val_total_loss")
+    best_val_action = training_summary.get("best_val_action_loss")
+    if surface_preset == "aemo_proxy" and best_val_action is not None:
+        return {
+            "surface_preset": surface_preset,
+            "pilot_ranking_metric": "best_val_action_loss",
+            "pilot_ranking_value": best_val_action,
+            "pilot_ranking_guardrail_metric": "best_val_total_loss",
+            "pilot_ranking_guardrail_value": best_val_total,
+        }
+    return {
+        "surface_preset": surface_preset,
+        "pilot_ranking_metric": "best_val_total_loss",
+        "pilot_ranking_value": best_val_total,
+        "pilot_ranking_guardrail_metric": None,
+        "pilot_ranking_guardrail_value": None,
+    }
+
+
 def summarize_loss_history(loss_csv_path: Path) -> dict[str, Any]:
     if not loss_csv_path.is_file():
         raise FileNotFoundError(f"Loss CSV not found: {loss_csv_path}")
@@ -144,8 +171,10 @@ def summarize_loss_history(loss_csv_path: Path) -> dict[str, Any]:
         )
 
     final_row = parsed_rows[-1]
-    val_rows = [row for row in parsed_rows if row["val_total"] is not None]
-    best_val_row = min(val_rows, key=lambda row: row["val_total"]) if val_rows else None
+    best_val_total_row = _best_row_by_metric(parsed_rows, "val_total")
+    best_val_action_row = _best_row_by_metric(parsed_rows, "val_action")
+    best_val_state_row = _best_row_by_metric(parsed_rows, "val_state")
+    best_val_return_row = _best_row_by_metric(parsed_rows, "val_return")
 
     return {
         "loss_csv_path": str(loss_csv_path),
@@ -153,11 +182,17 @@ def summarize_loss_history(loss_csv_path: Path) -> dict[str, Any]:
         "final_epoch": final_row["epoch"],
         "final_train_total_loss": final_row["train_total"],
         "final_val_total_loss": final_row["val_total"],
-        "best_val_epoch": best_val_row["epoch"] if best_val_row is not None else None,
-        "best_val_total_loss": best_val_row["val_total"] if best_val_row is not None else None,
-        "best_val_action_loss": best_val_row["val_action"] if best_val_row is not None else None,
-        "best_val_state_loss": best_val_row["val_state"] if best_val_row is not None else None,
-        "best_val_return_loss": best_val_row["val_return"] if best_val_row is not None else None,
+        "final_val_action_loss": final_row["val_action"],
+        "final_val_state_loss": final_row["val_state"],
+        "final_val_return_loss": final_row["val_return"],
+        "best_val_epoch": best_val_total_row["epoch"] if best_val_total_row is not None else None,
+        "best_val_total_loss": best_val_total_row["val_total"] if best_val_total_row is not None else None,
+        "best_val_action_epoch": best_val_action_row["epoch"] if best_val_action_row is not None else None,
+        "best_val_action_loss": best_val_action_row["val_action"] if best_val_action_row is not None else None,
+        "best_val_state_epoch": best_val_state_row["epoch"] if best_val_state_row is not None else None,
+        "best_val_state_loss": best_val_state_row["val_state"] if best_val_state_row is not None else None,
+        "best_val_return_epoch": best_val_return_row["epoch"] if best_val_return_row is not None else None,
+        "best_val_return_loss": best_val_return_row["val_return"] if best_val_return_row is not None else None,
     }
 
 
@@ -301,6 +336,87 @@ def _combine_episode_logs(episodes: Sequence[pl.DataFrame]) -> pl.DataFrame:
         [episode.with_columns(pl.lit(idx).alias("episode_id")) for idx, episode in enumerate(episodes)],
         how="diagonal_relaxed",
     )
+
+
+def _split_episode_logs(combined: pl.DataFrame) -> list[pl.DataFrame]:
+    if combined.height == 0:
+        return []
+    if "episode_id" not in combined.columns:
+        return [combined]
+    episode_ids = sorted(int(episode_id) for episode_id in combined["episode_id"].unique().to_list())
+    return [combined.filter(pl.col("episode_id") == episode_id).sort("step") for episode_id in episode_ids]
+
+
+def _resolve_reference_cache_dir(evaluation_config: dict[str, Any]) -> Path | None:
+    raw_path = evaluation_config.get("reference_cache_dir")
+    if raw_path is None:
+        return None
+    path = Path(str(raw_path))
+    if not path.is_absolute():
+        path = (repo_root() / path).resolve()
+    return path
+
+
+def _cacheable_policy(policy_cfg: dict[str, Any], reference_cache_dir: Path | None) -> bool:
+    if reference_cache_dir is None:
+        return False
+    return str(policy_cfg.get("kind", "")).lower() != "dt" and bool(policy_cfg.get("cache_rollouts", True))
+
+
+def _cache_slug(value: str) -> str:
+    chars = [char.lower() if char.isalnum() else "-" for char in str(value).strip()]
+    slug = "".join(chars).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug or "cache"
+
+
+def _reference_rollout_cache_path(
+    *,
+    reference_cache_dir: Path,
+    policy_cfg: dict[str, Any],
+    scenario: dict[str, Any],
+    battery_variant: dict[str, Any],
+    heldout_cfg: dict[str, Any],
+) -> tuple[Path, str]:
+    payload = {
+        "schema": "energydecision.autoresearch_rollout_cache.v1",
+        "policy": {key: value for key, value in policy_cfg.items() if key != "cache_rollouts"},
+        "scenario": {
+            "label": scenario["label"],
+            "region": scenario["region"],
+            "start_date": str(scenario["start_date"]),
+            "end_date": str(scenario["end_date"]),
+        },
+        "battery_variant": {
+            "label": battery_variant.get("label"),
+            "battery_capacity": battery_variant.get("battery_capacity"),
+            "max_battery_flow": battery_variant.get("max_battery_flow"),
+            "init_soc": battery_variant.get("init_soc"),
+            "battery_life_cost": battery_variant.get("battery_life_cost"),
+        },
+        "heldout": {
+            "step_duration": heldout_cfg.get("step_duration"),
+            "episode_hours": heldout_cfg.get("episode_hours"),
+            "max_step": heldout_cfg.get("max_step"),
+            "episodes_per_variant": heldout_cfg.get("episodes_per_variant"),
+            "random_episode_start": heldout_cfg.get("random_episode_start"),
+            "action_mode": heldout_cfg.get("action_mode"),
+            "degradation_mode": heldout_cfg.get("degradation_mode"),
+            "degradation_chemistry": heldout_cfg.get("degradation_chemistry"),
+            "degradation_temperature": heldout_cfg.get("degradation_temperature"),
+        },
+    }
+    cache_key = hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+    stem = "__".join(
+        [
+            _cache_slug(str(policy_cfg["name"])),
+            _cache_slug(str(scenario["label"])),
+            _cache_slug(str(battery_variant["label"])),
+            cache_key,
+        ]
+    )
+    return reference_cache_dir / f"{stem}.parquet", cache_key
 
 
 def _dt_rtg_value(policy_cfg: dict[str, Any], training_summary: dict[str, Any]) -> float:
@@ -554,6 +670,11 @@ def evaluate_aemo_heldout(
 
     heldout_logs_dir = output_dir / "heldout_logs"
     heldout_logs_dir.mkdir(parents=True, exist_ok=True)
+    reference_cache_dir = _resolve_reference_cache_dir(evaluation_config)
+    if reference_cache_dir is not None:
+        reference_cache_dir.mkdir(parents=True, exist_ok=True)
+    reference_cache_hits: list[dict[str, Any]] = []
+    reference_cache_misses: list[dict[str, Any]] = []
 
     for scenario in scenario_manifest:
         scenario_label = str(scenario["label"])
@@ -567,21 +688,58 @@ def evaluate_aemo_heldout(
             battery_label = str(battery_variant["label"])
             for policy in policies:
                 policy_name = str(policy["name"])
-                episodes = run_policy_episodes(
-                    policy_cfg=policy,
-                    processed_data=processed_data,
-                    scenario=runtime_scenario,
-                    battery_variant=battery_variant,
-                    heldout_cfg=heldout_cfg,
-                    training_summary=training_summary,
-                    dt_model=dt_model,
-                )
-                tagged = _with_episode_metadata(
-                    episodes,
-                    policy_name=policy_name,
-                    scenario_label=scenario_label,
-                    battery_label=battery_label,
-                )
+                tagged: list[pl.DataFrame] | None = None
+                cache_path: Path | None = None
+                cache_key: str | None = None
+                if _cacheable_policy(policy, reference_cache_dir):
+                    assert reference_cache_dir is not None
+                    cache_path, cache_key = _reference_rollout_cache_path(
+                        reference_cache_dir=reference_cache_dir,
+                        policy_cfg=policy,
+                        scenario=runtime_scenario,
+                        battery_variant=battery_variant,
+                        heldout_cfg=heldout_cfg,
+                    )
+                    if cache_path.is_file():
+                        tagged = _split_episode_logs(pl.read_parquet(cache_path))
+                        reference_cache_hits.append(
+                            {
+                                "policy_name": policy_name,
+                                "scenario_label": scenario_label,
+                                "battery_label": battery_label,
+                                "cache_key": cache_key,
+                                "path": str(cache_path),
+                            }
+                        )
+                    else:
+                        reference_cache_misses.append(
+                            {
+                                "policy_name": policy_name,
+                                "scenario_label": scenario_label,
+                                "battery_label": battery_label,
+                                "cache_key": cache_key,
+                                "path": str(cache_path),
+                            }
+                        )
+                if tagged is None:
+                    episodes = run_policy_episodes(
+                        policy_cfg=policy,
+                        processed_data=processed_data,
+                        scenario=runtime_scenario,
+                        battery_variant=battery_variant,
+                        heldout_cfg=heldout_cfg,
+                        training_summary=training_summary,
+                        dt_model=dt_model,
+                    )
+                    tagged = _with_episode_metadata(
+                        episodes,
+                        policy_name=policy_name,
+                        scenario_label=scenario_label,
+                        battery_label=battery_label,
+                    )
+                    if cache_path is not None:
+                        cached = _combine_episode_logs(tagged)
+                        cached.write_parquet(cache_path)
                 aggregate_logs.setdefault(policy_name, []).extend(tagged)
                 cohort_key = f"{policy_name}::{scenario_label}::{battery_label}"
                 cohort_logs[cohort_key] = tagged
@@ -675,6 +833,12 @@ def evaluate_aemo_heldout(
         "bootstrap_confidence_intervals": bootstrap,
         "paired_comparisons_vs_reference": paired,
         "reference_policy": reference_policy,
+        "reference_rollout_cache": {
+            "enabled": reference_cache_dir is not None,
+            "cache_dir": str(reference_cache_dir) if reference_cache_dir is not None else None,
+            "hits": reference_cache_hits,
+            "misses": reference_cache_misses,
+        },
         "plots_dir": str(plots_dir),
         "heldout_logs_dir": str(heldout_logs_dir),
     }
@@ -710,6 +874,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "surface_manifest_path": str(surface_manifest_path),
         "evaluation_config_path": str(evaluation_config_path),
         "training_summary": training_summary,
+        "pilot_ranking": resolve_pilot_ranking(surface_manifest, training_summary),
         "dt_model_path": str(model_path) if model_path is not None else None,
         "dt_model_device": model_device,
     }
@@ -727,7 +892,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     _write_json(output_dir / "evaluation_summary.json", summary)
-    print(json.dumps(summary, indent=2, sort_keys=True))
+    print(json.dumps(summary, indent=2, sort_keys=True, default=str))
 
 
 if __name__ == "__main__":
