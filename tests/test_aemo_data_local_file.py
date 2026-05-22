@@ -14,20 +14,27 @@ import sys
 import shutil
 import struct
 import tempfile
+import zipfile
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
 import pytest
+import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from aemo_data import (
+    AEMO_CACHE_ONLY_ENV_VAR,
     _is_zip_format,
     _read_excel_via_pandas,
     _read_generator_info_file,
     _auto_detect_generator_info_file,
     _get_generator_info,
+    _build_aemo_month_archive_url,
     _get_nemosis_static_cache_dir,
+    _dynamic_data_compiler_with_cache_control,
+    fetch_aemo_monthly_cache_files,
     _find_column_by_candidates,
     get_available_battery_units,
     AEMO_REGIONS,
@@ -175,6 +182,180 @@ def test_get_generator_info_uses_isolated_static_cache_and_falls_back(monkeypatc
     assert "LOCALBAT1" in result["DUID"].to_list()
     assert calls == [str(cache_dir / "_nemosis_static")]
     assert local_csv.read_text(encoding="utf-8").startswith("DUID,Region")
+
+
+def test_dynamic_data_compiler_cache_only_raises_for_missing_month(monkeypatch, tmp_path):
+    """Cache-only mode should fail fast instead of attempting a network fetch."""
+    monkeypatch.setenv(AEMO_CACHE_ONLY_ENV_VAR, "1")
+
+    with pytest.raises(FileNotFoundError, match="2024-08"):
+        _dynamic_data_compiler_with_cache_control(
+            start_time="2024/08/01 00:00:00",
+            end_time="2024/09/01 00:00:00",
+            table_name="DISPATCHLOAD",
+            raw_data_location=str(tmp_path),
+        )
+
+
+def test_dynamic_data_compiler_cache_only_uses_existing_local_month(monkeypatch, tmp_path):
+    """Cache-only mode should delegate to NEMOSIS when the local month exists."""
+    cache_dir = tmp_path / "aemo"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    local_csv = cache_dir / "PUBLIC_ARCHIVE#DISPATCHLOAD#FILE01#202408010000.CSV"
+    local_csv.write_text(
+        "C,header row ignored by NEMOSIS\n"
+        "SETTLEMENTDATE,DUID,TOTALCLEARED\n"
+        "2024/08/01 00:05:00,TEST1,1.0\n"
+        "C,footer row ignored by NEMOSIS\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv(AEMO_CACHE_ONLY_ENV_VAR, "1")
+    sentinel = object()
+    calls = []
+
+    def fake_dynamic_data_compiler(**kwargs):
+        calls.append(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("aemo_data.dynamic_data_compiler", fake_dynamic_data_compiler)
+
+    result = _dynamic_data_compiler_with_cache_control(
+        start_time="2024/08/01 00:00:00",
+        end_time="2024/09/01 00:00:00",
+        table_name="DISPATCHLOAD",
+        raw_data_location=str(cache_dir),
+    )
+
+    assert result is sentinel
+    assert len(calls) == 1
+    assert calls[0]["table_name"] == "DISPATCHLOAD"
+    assert calls[0]["raw_data_location"] == str(cache_dir)
+
+
+def test_build_aemo_month_archive_url_uses_double_encoded_hashes():
+    """Post-transition monthly archives require the double-encoded %2523 URL form."""
+    url = _build_aemo_month_archive_url("DISPATCHLOAD", 2025, 1)
+    assert url.endswith(
+        "PUBLIC_ARCHIVE%2523DISPATCHLOAD%2523FILE01%2523202501010000.zip"
+    )
+
+
+class _FakeResponse:
+    def __init__(self, content: bytes):
+        self.content = content
+
+    def raise_for_status(self):
+        return None
+
+
+class _FakeSession:
+    def __init__(self, payload: bytes):
+        self.payload = payload
+        self.calls = []
+
+    def get(self, url, timeout, headers):
+        self.calls.append({"url": url, "timeout": timeout, "headers": headers})
+        return _FakeResponse(self.payload)
+
+
+def _build_zip_bytes(member_name: str, content: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(member_name, content)
+    return buffer.getvalue()
+
+
+def test_fetch_aemo_monthly_cache_files_downloads_expected_csv(tmp_path):
+    """The manual downloader should write the exact CSV name NEMOSIS expects."""
+    csv_name = "PUBLIC_ARCHIVE#DISPATCHLOAD#FILE01#202501010000.CSV"
+    session = _FakeSession(
+        _build_zip_bytes(
+            csv_name,
+            b"SETTLEMENTDATE,DUID,TOTALCLEARED\n2025/01/01 00:05:00,TEST1,1.0\n",
+        )
+    )
+
+    manifest = fetch_aemo_monthly_cache_files(
+        start_date=datetime(2025, 1, 1),
+        end_date=datetime(2025, 2, 1),
+        tables=["DISPATCHLOAD"],
+        cache_dir=str(tmp_path),
+        session=session,
+    )
+
+    cached = tmp_path / csv_name
+    assert cached.exists()
+    assert "TEST1" in cached.read_text(encoding="utf-8")
+    assert manifest == [
+        {
+            "table_name": "DISPATCHLOAD",
+            "year": 2025,
+            "month": 1,
+            "path": str(cached),
+            "url": _build_aemo_month_archive_url("DISPATCHLOAD", 2025, 1),
+            "status": "downloaded",
+        }
+    ]
+    assert session.calls[0]["url"].endswith("%2523202501010000.zip")
+
+
+def test_fetch_aemo_monthly_cache_files_preserves_existing_file_on_bad_archive(tmp_path):
+    """A bad web response must not overwrite a valid local cache file."""
+    csv_name = "PUBLIC_ARCHIVE#DISPATCHLOAD#FILE01#202501010000.CSV"
+    cached = tmp_path / csv_name
+    cached.write_text("original-cache\n", encoding="utf-8")
+    session = _FakeSession(
+        _build_zip_bytes(
+            "WRONG_NAME.CSV",
+            b"broken\n",
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="did not contain expected member"):
+        fetch_aemo_monthly_cache_files(
+            start_date=datetime(2025, 1, 1),
+            end_date=datetime(2025, 2, 1),
+            tables=["DISPATCHLOAD"],
+            cache_dir=str(tmp_path),
+            overwrite=True,
+            session=session,
+        )
+
+    assert cached.read_text(encoding="utf-8") == "original-cache\n"
+
+
+def test_fetch_aemo_monthly_cache_files_retries_transient_request_errors(tmp_path):
+    """Transient request failures should be retried before giving up."""
+    csv_name = "PUBLIC_ARCHIVE#DISPATCHLOAD#FILE01#202501010000.CSV"
+    payload = _build_zip_bytes(
+        csv_name,
+        b"SETTLEMENTDATE,DUID,TOTALCLEARED\n2025/01/01 00:05:00,TEST1,1.0\n",
+    )
+
+    class _FlakySession:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, timeout, headers):
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.ConnectionError("temporary dns failure")
+            return _FakeResponse(payload)
+
+    session = _FlakySession()
+
+    manifest = fetch_aemo_monthly_cache_files(
+        start_date=datetime(2025, 1, 1),
+        end_date=datetime(2025, 2, 1),
+        tables=["DISPATCHLOAD"],
+        cache_dir=str(tmp_path),
+        session=session,
+        max_attempts=2,
+    )
+
+    assert session.calls == 2
+    assert manifest[0]["status"] == "downloaded"
 
 
 # ---------------------------------------------------------------------------

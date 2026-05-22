@@ -38,6 +38,29 @@ comes from AEMO's **NEM Registration and Exemption List** static spreadsheet.
 The runtime keeps NEMOSIS-managed static downloads in `<repo_root>/data/aemo/_nemosis_static/` so a bad web
 response should not overwrite the manual fallback copy.
 
+## Manual fallback for monthly MMS cache
+
+When post-2024-07 monthly MMS downloads fail through `nemosis`, use the repo's archive fetcher to
+stage the raw monthly CSVs directly into `<repo_root>/data/aemo/` with the exact filenames NEMOSIS
+expects.
+
+Example:
+
+```bash
+python3 src/fetch_aemo_monthly_cache.py --year 2025
+```
+
+Default tables:
+
+- `DISPATCHLOAD`
+- `DISPATCHPRICE`
+- `DISPATCHREGIONSUM`
+- `DISPATCH_UNIT_SCADA`
+
+The tool downloads the NEMWeb monthly archive zips, validates that each zip contains the expected
+`PUBLIC_ARCHIVE#...#FILE01#...CSV`, and only then writes or replaces the local cache file. That
+means a failed HTML/text response should not overwrite a valid local monthly cache file.
+
 ## What `notebooks/aemo_simrun.ipynb` does
 
 `notebooks/aemo_simrun.ipynb` is the main offline-data notebook. It is structured so you can stop after any stage and inspect the objects in memory.

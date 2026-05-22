@@ -162,6 +162,21 @@ The environment integrates with NEMOSIS to fetch actual AEMO market data:
 
 Data is automatically resampled to match environment step duration (default 30 minutes).
 
+If you have manually populated `data/aemo/` and want to stop NEMOSIS from attempting any
+network download, set `AEMO_CACHE_ONLY=1` before running the pipeline. In that mode the repo
+uses only local monthly cache files and fails fast with the expected missing filename when a
+required month is absent.
+
+If those monthly cache files are missing because NEMOSIS cannot fetch the post-2024-07 monthly
+archive format directly, stage them with:
+
+```bash
+python3 src/fetch_aemo_monthly_cache.py --year 2025
+```
+
+That tool writes the exact `PUBLIC_ARCHIVE#...#FILE01#...CSV` filenames that NEMOSIS expects and
+validates each zip before replacing any existing cache file.
+
 ### Battery Constraints
 
 - **Capacity limits**: SOC ∈ [0, battery_capacity]

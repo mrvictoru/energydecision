@@ -116,6 +116,10 @@ See `toolbx_guide.md` for the full command sequence and the repo-root path rule.
       `https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/participate-in-the-market/registration/registered-participants`
     - Save the manual file under `data/aemo/manual/` to make it take priority over the runtime cache, or point the code at any local copy with `AEMO_GENERATORS_FILE=/absolute/path/to/file.xls`.
     - NEMOSIS-managed static downloads now live under `data/aemo/_nemosis_static/`, so a failed fetch should not overwrite your manual copy.
+    - To force dynamic AEMO loads to use only the local cache and never try the network, set `AEMO_CACHE_ONLY=1`. Missing monthly cache files will then fail fast with the expected filename.
+    - If NEMOSIS cannot fetch post-2024-07 monthly MMS files, use the repo tool to stage them into the same cache layout:
+      `python3 src/fetch_aemo_monthly_cache.py --year 2025`
+      By default it downloads `DISPATCHLOAD`, `DISPATCHPRICE`, `DISPATCHREGIONSUM`, and `DISPATCH_UNIT_SCADA` into `data/aemo/`.
 
 ## Reproducing the experiments
 

@@ -21,16 +21,24 @@ import polars as pl
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Iterable, Mapping
+from contextlib import contextmanager
+import io
 import os
+import requests
+import time
 import warnings
+import zipfile
+from unittest.mock import patch
 
 
 # Import NEMOSIS for actual AEMO data fetching
 try:
     from nemosis import dynamic_data_compiler, static_table
+    from nemosis import data_fetch_methods as _nemosis_data_fetch_methods
     HAS_NEMOSIS = True
 except ImportError:
     HAS_NEMOSIS = False
+    _nemosis_data_fetch_methods = None
     warnings.warn(
         "NEMOSIS not installed. Install with: pip install nemosis. "
         "Falling back to synthetic data generation for demonstration."
@@ -57,6 +65,14 @@ FUEL_TYPES = [
 # Minimum absolute MW value to consider a dispatch interval "non-zero".
 # Values below this threshold (e.g. rounding artefacts) are treated as zero.
 DISPATCH_NONZERO_THRESHOLD: float = 0.001
+
+AEMO_CACHE_ONLY_ENV_VAR = "AEMO_CACHE_ONLY"
+AEMO_MONTHLY_CACHE_TABLES = (
+    "DISPATCHLOAD",
+    "DISPATCHPRICE",
+    "DISPATCHREGIONSUM",
+    "DISPATCH_UNIT_SCADA",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -733,6 +749,227 @@ def get_cache_dir(base_dir: str = "data/aemo") -> Path:
     return cache_path
 
 
+def _is_truthy_env(value: Optional[str]) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_aemo_cache_only_enabled() -> bool:
+    """Return True when dynamic AEMO fetches must use the local cache only."""
+    return _is_truthy_env(os.getenv(AEMO_CACHE_ONLY_ENV_VAR))
+
+
+def _build_nemosis_month_stub(table_name: str, year: int, month: int, chunk: int = 1) -> str:
+    """Mirror the NEMOSIS on-disk filename stub for monthly MMS tables."""
+    if year > 2024 or (year == 2024 and month >= 8):
+        return f"PUBLIC_ARCHIVE#{table_name}#FILE{chunk:02d}#{year}{month:02d}010000"
+    return f"PUBLIC_DVD_{table_name}_{year}{month:02d}010000"
+
+
+def _build_aemo_month_archive_url(table_name: str, year: int, month: int, chunk: int = 1) -> str:
+    """Return the NEMWeb monthly archive URL for a table/month pair."""
+    archive_name = _build_nemosis_month_stub(table_name, year, month, chunk=chunk).replace(
+        "#", "%2523"
+    )
+    return (
+        "https://www.nemweb.com.au/Data_Archive/Wholesale_Electricity/MMSDM/"
+        f"{year}/MMSDM_{year}_{month:02d}/MMSDM_Historical_Data_SQLLoader/DATA/{archive_name}.zip"
+    )
+
+
+def _has_local_nemosis_month_file(cache_path: Path, table_name: str, year: int, month: int) -> bool:
+    """Return True when the month exists locally as CSV/feather/parquet."""
+    stub = _build_nemosis_month_stub(table_name, year, month)
+    patterns = [
+        cache_path / f"{stub}.csv",
+        cache_path / f"{stub}.CSV",
+        cache_path / f"{stub}.feather",
+        cache_path / f"{stub}.parquet",
+    ]
+    return any(path.exists() for path in patterns)
+
+
+def _download_aemo_month_archive_file(
+    *,
+    url: str,
+    expected_csv_name: str,
+    destination_path: Path,
+    session: Optional[requests.Session] = None,
+    timeout: int = 180,
+    max_attempts: int = 5,
+) -> None:
+    """Download one monthly archive zip and atomically write the expected CSV."""
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = destination_path.with_suffix(f"{destination_path.suffix}.tmp")
+    client = session or requests.Session()
+    last_error: Optional[Exception] = None
+    response = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = client.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+            response.raise_for_status()
+            last_error = None
+            break
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt == max_attempts:
+                raise
+            time.sleep(min(2 * attempt, 10))
+
+    if response is None:
+        raise RuntimeError(f"Failed to download {url}") from last_error
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            if expected_csv_name not in archive.namelist():
+                raise RuntimeError(
+                    f"{url} did not contain expected member {expected_csv_name}; "
+                    f"found {archive.namelist()[:5]}"
+                )
+            with archive.open(expected_csv_name) as src, temporary_path.open("wb") as dst:
+                dst.write(src.read())
+        temporary_path.replace(destination_path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def fetch_aemo_monthly_cache_files(
+    *,
+    start_date: datetime,
+    end_date: datetime,
+    tables: Iterable[str] = AEMO_MONTHLY_CACHE_TABLES,
+    cache_dir: str = "data/aemo",
+    overwrite: bool = False,
+    session: Optional[requests.Session] = None,
+    timeout: int = 180,
+    max_attempts: int = 5,
+) -> list[dict[str, Any]]:
+    """Download monthly MMS archives into NEMOSIS-compatible cache files."""
+    if end_date <= start_date:
+        raise ValueError("end_date must be later than start_date.")
+
+    cache_path = get_cache_dir(cache_dir)
+    manifest: list[dict[str, Any]] = []
+    requested_tables = [str(table).strip().upper() for table in tables if str(table).strip()]
+    for window_start, _ in _iter_month_windows(start_date, end_date):
+        for table_name in requested_tables:
+            stub = _build_nemosis_month_stub(table_name, window_start.year, window_start.month)
+            csv_name = f"{stub}.CSV"
+            destination_path = cache_path / csv_name
+            if destination_path.exists() and not overwrite:
+                manifest.append(
+                    {
+                        "table_name": table_name,
+                        "year": window_start.year,
+                        "month": window_start.month,
+                        "path": str(destination_path),
+                        "url": _build_aemo_month_archive_url(
+                            table_name, window_start.year, window_start.month
+                        ),
+                        "status": "existing",
+                    }
+                )
+                continue
+
+            url = _build_aemo_month_archive_url(table_name, window_start.year, window_start.month)
+            _download_aemo_month_archive_file(
+                url=url,
+                expected_csv_name=csv_name,
+                destination_path=destination_path,
+                session=session,
+                timeout=timeout,
+                max_attempts=max_attempts,
+            )
+            manifest.append(
+                {
+                    "table_name": table_name,
+                    "year": window_start.year,
+                    "month": window_start.month,
+                    "path": str(destination_path),
+                    "url": url,
+                    "status": "downloaded",
+                }
+            )
+
+    return manifest
+
+
+def _missing_local_nemosis_months(
+    start_time: str,
+    end_time: str,
+    table_name: str,
+    raw_data_location: str,
+) -> list[str]:
+    """Return missing local monthly cache keys for the requested range."""
+    cache_path = Path(raw_data_location)
+    start_dt = datetime.strptime(start_time, "%Y/%m/%d %H:%M:%S")
+    end_dt = datetime.strptime(end_time, "%Y/%m/%d %H:%M:%S")
+    missing: list[str] = []
+    for window_start, _ in _iter_month_windows(start_dt, end_dt):
+        if not _has_local_nemosis_month_file(
+            cache_path, table_name, window_start.year, window_start.month
+        ):
+            missing.append(f"{window_start.year}-{window_start.month:02d}")
+    return missing
+
+
+@contextmanager
+def _nemosis_downloads_disabled():
+    """Prevent NEMOSIS from downloading missing dynamic-table files."""
+    if not HAS_NEMOSIS or _nemosis_data_fetch_methods is None:
+        yield
+        return
+    with patch.object(_nemosis_data_fetch_methods, "_download_data", lambda *args, **kwargs: None):
+        yield
+
+
+def _dynamic_data_compiler_with_cache_control(
+    *,
+    start_time: str,
+    end_time: str,
+    table_name: str,
+    raw_data_location: str,
+    **kwargs,
+):
+    """Wrap NEMOSIS with an optional cache-only mode driven by env var."""
+    cache_only = kwargs.pop("cache_only", None)
+    if cache_only is None:
+        cache_only = _is_aemo_cache_only_enabled()
+
+    if cache_only:
+        missing_months = _missing_local_nemosis_months(
+            start_time=start_time,
+            end_time=end_time,
+            table_name=table_name,
+            raw_data_location=raw_data_location,
+        )
+        if missing_months:
+            first_year, first_month = map(int, missing_months[0].split("-"))
+            expected = _build_nemosis_month_stub(table_name, first_year, first_month)
+            raise FileNotFoundError(
+                f"{AEMO_CACHE_ONLY_ENV_VAR}=1 and local cache is missing {table_name} month(s) "
+                f"{', '.join(missing_months)} under {raw_data_location}. "
+                f"Expected a file such as {expected}.CSV"
+            )
+
+        with _nemosis_downloads_disabled():
+            return dynamic_data_compiler(
+                start_time=start_time,
+                end_time=end_time,
+                table_name=table_name,
+                raw_data_location=raw_data_location,
+                **kwargs,
+            )
+
+    return dynamic_data_compiler(
+        start_time=start_time,
+        end_time=end_time,
+        table_name=table_name,
+        raw_data_location=raw_data_location,
+        **kwargs,
+    )
+
+
 def fetch_aemo_dispatch_price(
     start_date: datetime,
     end_date: datetime,
@@ -786,7 +1023,7 @@ def fetch_aemo_dispatch_price(
     # Use NEMOSIS to fetch DISPATCHPRICE table
     # This table contains regional reference prices at 5-minute intervals
     try:
-        price_data = dynamic_data_compiler(
+        price_data = _dynamic_data_compiler_with_cache_control(
             start_time=start_time,
             end_time=end_time,
             table_name='DISPATCHPRICE',
@@ -804,7 +1041,7 @@ def fetch_aemo_dispatch_price(
             price_pl = _coerce_f64(price_pl, 'RRP')
 
             # Also fetch DISPATCHREGIONSUM for demand data
-            demand_data = dynamic_data_compiler(
+            demand_data = _dynamic_data_compiler_with_cache_control(
                 start_time=start_time,
                 end_time=end_time,
                 table_name='DISPATCHREGIONSUM',
@@ -901,7 +1138,7 @@ def fetch_aemo_fcas_price(
     
     try:
         # Fetch DISPATCHPRICE which contains FCAS prices
-        price_data = dynamic_data_compiler(
+        price_data = _dynamic_data_compiler_with_cache_control(
             start_time=start_time,
             end_time=end_time,
             table_name='DISPATCHPRICE',
@@ -1084,7 +1321,7 @@ def fetch_aemo_unit_dispatch(
                     f"{window_start.date()} to {window_end.date()}"
                 )
 
-            chunk_raw = dynamic_data_compiler(
+            chunk_raw = _dynamic_data_compiler_with_cache_control(
                 start_time=window_start_time,
                 end_time=window_end_time,
                 table_name='DISPATCHLOAD',
@@ -1175,7 +1412,7 @@ def check_aemo_dispatch_availability(
     )
 
     for window_start, window_end in windows:
-        chunk = dynamic_data_compiler(
+        chunk = _dynamic_data_compiler_with_cache_control(
             start_time=window_start.strftime('%Y/%m/%d %H:%M:%S'),
             end_time=window_end.strftime('%Y/%m/%d %H:%M:%S'),
             table_name='DISPATCHLOAD',
@@ -1286,7 +1523,7 @@ def find_duid_first_dispatch(
         if verbose:
             print(f"  Checking {window_start.date()} …", end=" ", flush=True)
         try:
-            chunk = dynamic_data_compiler(
+            chunk = _dynamic_data_compiler_with_cache_control(
                 start_time=window_start.strftime('%Y/%m/%d %H:%M:%S'),
                 end_time=window_end.strftime('%Y/%m/%d %H:%M:%S'),
                 table_name='DISPATCHLOAD',
@@ -2064,7 +2301,7 @@ def fetch_aemo_generation_by_fuel(
         }
         
         # Get SCADA data for generation
-        scada_data = dynamic_data_compiler(
+        scada_data = _dynamic_data_compiler_with_cache_control(
             start_time=start_time,
             end_time=end_time,
             table_name='DISPATCH_UNIT_SCADA',

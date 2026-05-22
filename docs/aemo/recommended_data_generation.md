@@ -21,6 +21,11 @@ The additive dispatch replay run was attempted in this repo and produced these r
 Each successful replay contains `25,920` rows, for a total of `77,760` replay rows recorded in
 `data/aemo_dt_diverse_2024/aemo_dt_diverse_2024_dispatch_manifest.json`.
 
+A fresh retry in the GPU Distrobox on 2026-05-21 did **not** add any new recommended dispatch outputs.
+After that retry, the missing Aug-Dec 2024 monthly `PUBLIC_ARCHIVE#...#FILE01` cache files were
+downloaded manually into `data/aemo/`, so the H2 rows below are now **locally staged** rather than
+blocked on missing upstream downloads.
+
 ### What has been generated successfully
 
 | Scenario | Dispatch alias | Status | Notes |
@@ -33,15 +38,51 @@ Each successful replay contains `25,920` rows, for a total of `77,760` replay ro
 
 | Scenario | Dispatch alias | Remaining blocker |
 | --- | --- | --- |
-| `nsw1_2024_h1` | `wallgrove` | No matching `WALGRV1` rows were found in the current local 2024 H1 `DISPATCHLOAD` cache |
-| `qld1_2024_h1` | `wandoan` | No matching `WANDB1` rows were found in the current local 2024 H1 `DISPATCHLOAD` cache |
-| `nsw1_2024_h2` | `wallgrove` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
-| `qld1_2024_h2` | `wandoan` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
-| `sa1_2024_h2` | `hornsdale` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
-| `sa1_2024_h2` | `lake_bonney` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
-| `vic1_2024_h2` | `victorian_big_battery` | `nemosis` `DISPATCHLOAD` archive fetch fails in this runtime (`NoDataToReturn`) |
+| `nsw1_2024_h1` | `wallgrove` | `WALGRV1` is discoverable, but the current local 2024 H1 `DISPATCHLOAD` cache still returns zero rows for that DUID |
+| `qld1_2024_h1` | `wandoan` | `WANDB1` is discoverable, but the current local 2024 H1 `DISPATCHLOAD` cache still returns zero rows for that DUID |
+| `nsw1_2024_h2` | `wallgrove` | Aug-Dec 2024 monthly cache is now present locally; rerun with `AEMO_CACHE_ONLY=1` to avoid the broken upstream monthly fetch path |
+| `qld1_2024_h2` | `wandoan` | Aug-Dec 2024 monthly cache is now present locally; rerun with `AEMO_CACHE_ONLY=1` to avoid the broken upstream monthly fetch path |
+| `sa1_2024_h2` | `hornsdale` | Aug-Dec 2024 monthly cache is now present locally; rerun with `AEMO_CACHE_ONLY=1` to avoid the broken upstream monthly fetch path |
+| `sa1_2024_h2` | `lake_bonney` | Aug-Dec 2024 monthly cache is now present locally; rerun with `AEMO_CACHE_ONLY=1` to avoid the broken upstream monthly fetch path |
+| `vic1_2024_h2` | `victorian_big_battery` | Aug-Dec 2024 monthly cache is now present locally; rerun with `AEMO_CACHE_ONLY=1` to avoid the broken upstream monthly fetch path |
 | `tas1_2024_h1` | none | No recommended dispatch replay alias in this guide for TAS1 |
 | `tas1_2024_h2` | none | No recommended dispatch replay alias in this guide for TAS1 |
+
+### Fresh retry notes
+
+- `nsw1_2024_h1` / `wallgrove`: the alias resolves to `WALGRV1`, but replay selection still ends with
+  `DUID 'WALGRV1' has no DISPATCHLOAD rows in the chosen range 2024-01-01 to 2024-07-01.`
+- `nsw1_2024_h2` / `wallgrove`: the earlier recheck failed while downloading
+  `PUBLIC_ARCHIVE#DISPATCHLOAD#FILE01#202408010000`, but the real Aug-Dec 2024 `FILE01` cache files
+  have now been staged manually under `data/aemo/`.
+- The isolated static-cache patch is still doing its job during these retries: corrupted NEMOSIS static
+  downloads are cleaned from `data/aemo/_nemosis_static/` instead of touching any manual spreadsheet
+  placed under `data/aemo/manual/`.
+
+### Newly staged monthly cache
+
+The local `data/aemo/` cache now includes the real monthly `FILE01` CSVs for:
+
+- `DISPATCHLOAD`
+- `DISPATCHPRICE`
+- `DISPATCHREGIONSUM`
+- `DISPATCH_UNIT_SCADA`
+
+for every month from **2024-08** through **2024-12**.
+
+These files were fetched from the AEMO monthly archive using the exact double-encoded archive URLs
+published on the NEMweb directory pages (for example `PUBLIC_ARCHIVE%2523DISPATCHLOAD%2523FILE01...`).
+That URL shape is important: it is the working manual-download path that bypasses the current
+post-2024-07 `nemosis` fetch failure.
+
+For future ranges, prefer the repo helper instead of hand-downloading each zip:
+
+```bash
+python3 src/fetch_aemo_monthly_cache.py --year 2025
+```
+
+It stages the same monthly `FILE01` CSVs directly into `data/aemo/` and only replaces a local
+cache file after validating that the downloaded zip contains the expected member.
 
 ### Important note about alias resolution
 
