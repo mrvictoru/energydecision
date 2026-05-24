@@ -254,6 +254,7 @@ For AEMO autoresearch, treat the training loop as two separate tiers:
 For the current AEMO dataset layout:
 
 - treat `aemo_dt_dataset_train_subset_007` as a **proxy-only** slice, not the main learning baseline
+- the fixed autoresearch pilot uses contiguous week-long slices per episode, so each example carries about one week of 5-minute history
 - prefer one of the normal 24-episode train subsets plus explicit validation subsets/files for learning baselines
 - prefer `context_len=288` for learning baselines; `120` is an acceptable runtime fallback, but `60` is primarily a proxy-loop setting
 - wrapper launches can now forward `context_len` and other approved DT shape knobs, but the direct trainer is still the right entrypoint for manual mixed-corpus command lines

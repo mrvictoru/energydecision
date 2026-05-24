@@ -63,3 +63,10 @@ def test_build_pilot_split_writes_curated_train_and_val(tmp_path: Path):
     assert manifest["val_episode_count"] == 1
     assert saved_manifest["train"][0]["source_episode_id"] == 10
     assert saved_manifest["val"][0]["source_policy"] == "vic_td3"
+
+
+def test_default_spec_uses_week_long_slices():
+    spec = pilot_builder.default_spec()
+
+    assert all(selection["step_count"] == 2016 for selection in spec["train"])
+    assert all(selection["step_count"] == 2016 for selection in spec["val"])

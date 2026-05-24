@@ -17,22 +17,23 @@ def repo_root() -> Path:
 def default_spec() -> dict[str, Any]:
     return {
         "description": (
-            "Curated fixed AEMO pilot split for autoresearch. The train set mixes regions and policy "
-            "families, while validation stays rule-heavy to keep comparisons stable."
+            "Curated fixed AEMO pilot split for autoresearch. Each selection is a contiguous week-long "
+            "slice, the train set mixes regions and policy families, and validation stays rule-heavy to "
+            "keep comparisons stable."
         ),
         "train": [
-            {"episode_id": 0, "start_step": 0, "step_count": 32},
-            {"episode_id": 45, "start_step": 2048, "step_count": 32},
-            {"episode_id": 64, "start_step": 4096, "step_count": 32},
-            {"episode_id": 96, "start_step": 6144, "step_count": 32},
-            {"episode_id": 114, "start_step": 8192, "step_count": 32},
-            {"episode_id": 160, "start_step": 10240, "step_count": 32},
+            {"episode_id": 0, "start_step": 0, "step_count": 2016},
+            {"episode_id": 45, "start_step": 2048, "step_count": 2016},
+            {"episode_id": 64, "start_step": 4096, "step_count": 2016},
+            {"episode_id": 96, "start_step": 6144, "step_count": 2016},
+            {"episode_id": 114, "start_step": 8192, "step_count": 2016},
+            {"episode_id": 160, "start_step": 10240, "step_count": 2016},
         ],
         "val": [
-            {"episode_id": 7, "start_step": 1024, "step_count": 32},
-            {"episode_id": 37, "start_step": 3072, "step_count": 32},
-            {"episode_id": 105, "start_step": 5120, "step_count": 32},
-            {"episode_id": 133, "start_step": 7168, "step_count": 32},
+            {"episode_id": 7, "start_step": 1024, "step_count": 2016},
+            {"episode_id": 37, "start_step": 3072, "step_count": 2016},
+            {"episode_id": 105, "start_step": 5120, "step_count": 2016},
+            {"episode_id": 133, "start_step": 7168, "step_count": 2016},
         ],
     }
 

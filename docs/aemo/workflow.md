@@ -259,7 +259,7 @@ accepts an explicit validation parquet via `--val-dataset-path`, so you can keep
 holding the train/validation pair constant.
 
 The repository now includes a reproducible pilot builder that refreshes the fixed split from the full
-AEMO dataset using a curated set of short cross-region episode slices:
+AEMO dataset using a curated set of week-long cross-region episode slices:
 
 ```bash
 python3 src/build_aemo_autoresearch_pilot.py
@@ -286,7 +286,8 @@ python3 src/pretrain_aemo_decision_transformer.py \
 ```
 
 Use that fixed pilot split only for cheap inner-loop ranking. Once a proxy change looks promising, rerun it
-on the heavier learning-baseline path before treating it as a serious branch point.
+on the heavier learning-baseline path before treating it as a serious branch point. Each pilot example is
+about one week of history, or roughly 2k 5-minute rows.
 
 For the proxy tier, prefer **best validation action loss** as the ranking metric and keep
 **best validation total loss** as the guardrail. The training surface manifest now writes both, plus a
