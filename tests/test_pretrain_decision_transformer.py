@@ -150,6 +150,38 @@ def test_recommend_pilot_ranking_prefers_val_action_for_aemo_proxy():
     assert ranking["pilot_ranking_guardrail_value"] == pytest.approx(0.62)
 
 
+def test_aemo_proxy_context_override_auto_scales_rope_cache():
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "aemo_proxy",
+            "--context-length",
+            "120",
+        ]
+    )
+
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+    assert surface.model_kwargs["context_len"] == 120
+    assert surface.model_kwargs["rope_max_position"] == 360
+
+
+def test_aemo_proxy_context_override_rejects_explicit_small_rope_cache():
+    args = pretrain_dt.parse_args(
+        [
+            "--surface-preset",
+            "aemo_proxy",
+            "--context-length",
+            "120",
+            "--rope-max-position",
+            "180",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="rope_max_position is too small"):
+        pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+
 def test_validate_preset_dataset_policy_requires_explicit_validation_for_learning_baseline(tmp_path: Path):
     args = pretrain_dt.parse_args(["--surface-preset", "aemo_learning_baseline"])
     surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})

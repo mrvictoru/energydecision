@@ -648,7 +648,17 @@ def assemble_model_kwargs(args: argparse.Namespace, base_kwargs: dict[str, Any])
     rope_max_pos = model_kwargs.get("rope_max_position")
     if rope_max_pos is None:
         rope_max_pos = 3 * model_kwargs["context_len"]
-    model_kwargs["rope_max_position"] = int(rope_max_pos)
+    rope_max_pos = int(rope_max_pos)
+    min_rope_max_pos = 3 * model_kwargs["context_len"]
+    if bool(model_kwargs.get("rope_enabled", False)) and rope_max_pos < min_rope_max_pos:
+        if args.rope_max_position is not None:
+            raise ValueError(
+                "rope_max_position is too small for the requested context length: "
+                f"received rope_max_position={rope_max_pos}, but need at least {min_rope_max_pos} "
+                f"for context_len={model_kwargs['context_len']}."
+            )
+        rope_max_pos = min_rope_max_pos
+    model_kwargs["rope_max_position"] = rope_max_pos
     model_kwargs["rope_base"] = float(model_kwargs.get("rope_base", 10000.0))
     model_kwargs["rope_enabled"] = bool(model_kwargs.get("rope_enabled", False))
 
