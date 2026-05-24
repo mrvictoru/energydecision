@@ -182,6 +182,21 @@ def test_aemo_proxy_context_override_rejects_explicit_small_rope_cache():
         pretrain_dt.resolve_training_surface(args, base_kwargs={})
 
 
+def test_aemo_proxy_frontier_defaults_bake_in_frontier_shape():
+    args = pretrain_dt.parse_args(["--surface-preset", "aemo_proxy_frontier"])
+
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+    assert surface.model_variant == "deeper_wider"
+    assert surface.model_kwargs["context_len"] == 180
+    assert surface.model_kwargs["rope_max_position"] == 540
+    assert surface.model_kwargs["n_block"] == 8
+    assert surface.model_kwargs["h_dim"] == 384
+    assert surface.training_kwargs["batch_size"] == 16
+    assert surface.training_kwargs["epochs"] == 2
+    assert surface.training_kwargs["checkpoints_per_epoch"] == 4
+
+
 def test_validate_preset_dataset_policy_requires_explicit_validation_for_learning_baseline(tmp_path: Path):
     args = pretrain_dt.parse_args(["--surface-preset", "aemo_learning_baseline"])
     surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})

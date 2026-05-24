@@ -167,6 +167,12 @@ MODEL_VARIANTS: dict[str, dict[str, Any]] = {
         "n_heads": 8,
         "drop_p": 0.1,
     },
+    "deeper_wider": {
+        "n_block": 8,
+        "h_dim": 384,
+        "n_heads": 8,
+        "drop_p": 0.1,
+    },
     "aemo_multimarket": {
         "state_dim": 18,
         "act_dim": 3,
@@ -213,6 +219,30 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "num_workers": 0,
             "checkpoint_interval": 1,
             "checkpoints_per_epoch": 1,
+        },
+    ),
+    "aemo_proxy_frontier": SurfacePreset(
+        description=(
+            "Pilot-ranking AEMO proxy preset baked from the current frontier defaults. Use this for the "
+            "canonical fixed-split proxy baseline."
+        ),
+        model_variant="deeper_wider",
+        model_overrides={
+            "state_dim": 18,
+            "act_dim": 3,
+            "context_len": 180,
+            "max_timestep": 2016,
+            "rope_enabled": True,
+            "rope_max_position": 540,
+        },
+        train_overrides={
+            "batch_size": 16,
+            "epochs": 2,
+            "lr": 3e-5,
+            "amp_mode": "auto",
+            "num_workers": 0,
+            "checkpoint_interval": 1,
+            "checkpoints_per_epoch": 4,
         },
     ),
     "aemo_learning_baseline": SurfacePreset(

@@ -170,6 +170,10 @@ python3 src/launch_aemo_training.py --run-tier proxy-baseline
 python3 src/launch_aemo_training.py --run-tier learning-baseline
 ```
 
+The baked-in `proxy-baseline` defaults now follow the current frontier pilot setting: fixed pilot
+train/validation split, `context_length=180`, `batch_size=16`, `epochs=2`, and a deeper+wider
+transformer (`n_block=8`, `h_dim=384`, `n_heads=8`).
+
 For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
 If the training process is already running, use `--attach` with the same `--progress-snapshot-path` and no child command:

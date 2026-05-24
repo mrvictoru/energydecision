@@ -28,8 +28,9 @@ def test_build_training_command_uses_proxy_baseline_defaults(tmp_path: Path):
     )
 
     assert command[0] == sys.executable
-    assert command[command.index("--surface-preset") + 1] == "aemo_proxy"
-    assert command[command.index("--batch-size") + 1] == "128"
+    assert command[command.index("--surface-preset") + 1] == "aemo_proxy_frontier"
+    assert command[command.index("--batch-size") + 1] == "16"
+    assert command[command.index("--epochs") + 1] == "2"
     assert command[command.index("--checkpoints-per-epoch") + 1] == "4"
     assert command[command.index("--val-dataset-path") + 1] == str(paths["val_dataset_path"])
 
