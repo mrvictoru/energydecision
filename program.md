@@ -256,7 +256,8 @@ For AEMO autoresearch, treat the training loop as two separate tiers:
    - use this to rank cheap ideas quickly
    - compact models and narrow slices are acceptable here
    - do not treat the result as the project baseline without evaluator confirmation
-   - for interactive loops, it is acceptable to pin a small fixed pilot train parquet plus a fixed explicit validation parquet (for example under `data/aemo_dt/autoresearch_pilot/`) as long as every proxy comparison uses the same split
+   - for kickstart and interactive loops, use the lengthened fixed pilot train parquet plus a fixed explicit validation parquet (for example under `data/aemo_dt/autoresearch_pilot/`) so the full corpus is not needed until later
+   - keep every proxy comparison on the same pilot split
 
 2. **Learning baseline**
    - use this when establishing the actual baseline checkpoint that future experiments should branch from
