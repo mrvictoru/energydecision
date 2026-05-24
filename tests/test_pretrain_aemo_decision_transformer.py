@@ -1,8 +1,10 @@
 import os
 import sys
 from argparse import Namespace
+from importlib import import_module
 from pathlib import Path
 
+import pytest
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -47,6 +49,19 @@ def _args(tmp_path: Path) -> Namespace:
         rope_max_position=None,
         rope_base=None,
     )
+
+
+def test_parse_args_bakes_in_frontier_aemo_defaults(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(sys, "argv", ["pretrain_aemo_decision_transformer.py"])
+    args = import_module("pretrain_aemo_decision_transformer").parse_args()
+
+    assert args.surface_preset == "aemo_learning_baseline"
+    assert args.batch_size == 16
+    assert args.epochs == 2
+    assert args.lr == 3e-5
+    assert args.amp_mode == "auto"
+    assert args.checkpoints_per_epoch == 4
+    assert args.num_workers == 0
 
 
 def test_build_training_commands_resumes_after_first_subset(tmp_path: Path):

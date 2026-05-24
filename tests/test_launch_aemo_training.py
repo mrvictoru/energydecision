@@ -54,7 +54,9 @@ def test_build_training_command_enables_subset_mode_for_learning_baseline(tmp_pa
 
     assert "--train-in-subsets" in command
     assert command[command.index("--subset-episodes") + 1] == "24"
-    assert command[command.index("--epochs-per-subset") + 1] == "1"
+    assert command[command.index("--epochs-per-subset") + 1] == "2"
+    assert command[command.index("--batch-size") + 1] == "16"
+    assert command[command.index("--model-variant") + 1] == "deeper_wider"
 
 
 def test_build_training_command_forwards_context_and_shape_overrides(tmp_path: Path):

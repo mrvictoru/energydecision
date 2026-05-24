@@ -247,17 +247,26 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
     ),
     "aemo_learning_baseline": SurfacePreset(
         description=(
-            "Broader AEMO learning baseline with explicit validation, longer context, and evaluator-backed "
-            "optimizer defaults."
+            "Broader AEMO learning baseline with explicit validation and the current frontier DT defaults "
+            "baked in for full-corpus follow-up runs."
         ),
-        model_variant="aemo_multimarket",
+        model_variant="deeper_wider",
+        model_overrides={
+            "state_dim": 18,
+            "act_dim": 3,
+            "context_len": 180,
+            "max_timestep": 2016,
+            "rope_enabled": True,
+            "rope_max_position": 540,
+        },
         train_overrides={
-            "batch_size": 32,
-            "epochs": 1,
+            "batch_size": 16,
+            "epochs": 2,
             "lr": 3e-5,
             "amp_mode": "auto",
+            "num_workers": 0,
             "checkpoint_interval": 1,
-            "checkpoints_per_epoch": 1,
+            "checkpoints_per_epoch": 4,
         },
         requires_explicit_validation=True,
         min_train_episodes=8,

@@ -109,11 +109,15 @@ def test_resolve_training_surface_exposes_aemo_learning_baseline_defaults():
 
     surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
 
-    assert surface.model_variant == "aemo_multimarket"
-    assert surface.model_kwargs["context_len"] == 288
+    assert surface.model_variant == "deeper_wider"
+    assert surface.model_kwargs["context_len"] == 180
     assert surface.model_kwargs["act_dim"] == 3
+    assert surface.model_kwargs["n_block"] == 8
+    assert surface.model_kwargs["h_dim"] == 384
     assert surface.training_kwargs["lr"] == pytest.approx(3e-5)
-    assert surface.training_kwargs["batch_size"] == 32
+    assert surface.training_kwargs["batch_size"] == 16
+    assert surface.training_kwargs["epochs"] == 2
+    assert surface.training_kwargs["checkpoints_per_epoch"] == 4
 
 
 def test_resolve_training_surface_respects_explicit_learning_baseline_overrides():

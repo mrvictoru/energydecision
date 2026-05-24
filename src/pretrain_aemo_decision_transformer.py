@@ -260,8 +260,8 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to save AEMO DT loss history as CSV.",
     )
     parser.add_argument("--epochs", type=int, default=2)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--lr", type=float, default=2e-5)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=3e-5)
     parser.add_argument(
         "--val-split",
         type=float,
@@ -278,18 +278,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--amp-mode",
         choices=["auto", "on", "off"],
-        default="off",
+        default="auto",
         help="Automatic mixed precision mode: auto (GPU only), on (force on CUDA), off (disable).",
     )
     parser.add_argument("--checkpoint-interval", type=int, default=1)
-    parser.add_argument("--checkpoints-per-epoch", type=int, default=6)
+    parser.add_argument("--checkpoints-per-epoch", type=int, default=4)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--return-scale", type=float, default=1.0)
     parser.add_argument("--action-loss-weight", type=float, default=1.0)
     parser.add_argument("--state-loss-weight", type=float, default=0.01)
     parser.add_argument("--return-loss-weight", type=float, default=0.002)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
-    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument(
         "--no-persistent-workers",
         dest="persistent_workers",
