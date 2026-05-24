@@ -15,6 +15,14 @@ def _args(tmp_path: Path) -> Namespace:
         model_config=tmp_path / "config.json",
         surface_preset="aemo_learning_baseline",
         model_variant=None,
+        context_length=None,
+        state_dim=None,
+        act_dim=None,
+        n_block=None,
+        h_dim=None,
+        n_heads=None,
+        drop_p=None,
+        max_timestep=None,
         save_path=tmp_path / "model.pt",
         checkpoint_path=tmp_path / "checkpoint.pt",
         loss_csv_path=tmp_path / "loss.csv",
@@ -128,6 +136,36 @@ def test_build_training_command_passes_model_variant(tmp_path: Path):
 
     assert command[command.index("--surface-preset") + 1] == "aemo_proxy"
     assert command[command.index("--model-variant") + 1] == "compact"
+
+
+def test_build_training_command_forwards_direct_trainer_knobs(tmp_path: Path):
+    args = _args(tmp_path)
+    args.context_length = 576
+    args.state_dim = 18
+    args.act_dim = 3
+    args.n_block = 4
+    args.h_dim = 128
+    args.n_heads = 8
+    args.drop_p = 0.1
+    args.max_timestep = 2016
+    root = tmp_path / "repo"
+    root.mkdir()
+
+    command = build_training_commands(
+        root=root,
+        args=args,
+        dataset_paths=[tmp_path / "subset_001.parquet"],
+        epochs_per_stage=1,
+    )[0]
+
+    assert command[command.index("--context-length") + 1] == "576"
+    assert command[command.index("--state-dim") + 1] == "18"
+    assert command[command.index("--act-dim") + 1] == "3"
+    assert command[command.index("--n-block") + 1] == "4"
+    assert command[command.index("--h-dim") + 1] == "128"
+    assert command[command.index("--n-heads") + 1] == "8"
+    assert command[command.index("--drop-p") + 1] == "0.1"
+    assert command[command.index("--max-timestep") + 1] == "2016"
 
 
 def test_main_forwards_explicit_validation_dataset(tmp_path: Path, monkeypatch):

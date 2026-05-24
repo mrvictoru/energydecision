@@ -229,6 +229,10 @@ python3 src/pretrain_aemo_decision_transformer.py \
 
 If you are already inside the `energydecision` Distrobox shell at the repo root, run the same
 command as `python3 src/pretrain_aemo_decision_transformer.py` and keep normal `data/...` paths.
+The wrapper now forwards a small approved set of direct-trainer shape knobs such as `--context-length`,
+`--state-dim`, and `--rope-max-position`, but it still expects one dataset path at a time.
+For manual mixed-corpus runs that rely on `--patterns`, call `src/pretrain_decision_transformer.py`
+directly instead.
 
 For most CLI training runs, prefer the higher-level launcher instead:
 
@@ -296,6 +300,35 @@ For simulator checks, use:
 Both evaluator configs can share cached non-DT reference rollouts through `reference_cache_dir`, so fixed
 baselines like `rule`, dispatch replay, and unchanged SB3 references do not need to rerun for every pilot
 experiment.
+
+If the broader AEMO corpus is still too dominated by the original multi-year episode spans, you can
+resegment it into shorter fixed-horizon episodes before launching the learning baseline. The repository
+includes a builder for that workflow:
+
+```bash
+python3 src/build_aemo_short_horizon_dataset.py \
+  --dataset-tag aemo_dt_8week \
+  --target-episode-hours 1344 \
+  --subset-episodes 24
+```
+
+That command:
+
+- rewrites the existing non-eval dataset into contiguous **8-week** episodes
+- preserves the original **rule + SB3 + dispatch replay** source-policy mix
+- writes:
+  - `data/aemo_dt/aemo_dt_8week_dataset.parquet`
+  - `data/aemo_dt/aemo_dt_8week_manifest.json`
+  - `data/aemo_dt/aemo_dt_8week_scenario_manifest.json`
+  - `data/aemo_dt/aemo_dt_8week_dataset_subsets/`
+
+You can then point the broader training tier at the refreshed dataset:
+
+```bash
+python3 src/launch_aemo_training.py \
+  --run-tier learning-baseline \
+  --dataset-path data/aemo_dt/aemo_dt_8week_dataset.parquet
+```
 
 If you want the live progress dashboard to update during a long subset epoch instead of only at the end,
 set `--checkpoints-per-epoch` above `1` so the trainer writes intermediate snapshot updates.

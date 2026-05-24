@@ -194,6 +194,54 @@ def parse_args() -> argparse.Namespace:
         help="Optional DT model variant forwarded to src/pretrain_decision_transformer.py.",
     )
     parser.add_argument(
+        "--context-length",
+        type=int,
+        default=None,
+        help="Optional DT context length forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--state-dim",
+        type=int,
+        default=None,
+        help="Optional DT state dimension forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--act-dim",
+        type=int,
+        default=None,
+        help="Optional DT action dimension forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--n-block",
+        type=int,
+        default=None,
+        help="Optional DT block count forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--h-dim",
+        type=int,
+        default=None,
+        help="Optional DT hidden size forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--n-heads",
+        type=int,
+        default=None,
+        help="Optional DT attention head count forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--drop-p",
+        type=float,
+        default=None,
+        help="Optional DT dropout forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
+        "--max-timestep",
+        type=int,
+        default=None,
+        help="Optional DT max timestep forwarded to src/pretrain_decision_transformer.py.",
+    )
+    parser.add_argument(
         "--save-path",
         type=Path,
         default=repo_root() / "models" / "aemo" / "dt" / "aemo_dt_model.pt",
@@ -342,6 +390,23 @@ def build_training_command(
         "--checkpoints-per-epoch",
         str(args.checkpoints_per_epoch),
     ]
+
+    if args.context_length is not None:
+        command.extend(["--context-length", str(args.context_length)])
+    if args.state_dim is not None:
+        command.extend(["--state-dim", str(args.state_dim)])
+    if args.act_dim is not None:
+        command.extend(["--act-dim", str(args.act_dim)])
+    if args.n_block is not None:
+        command.extend(["--n-block", str(args.n_block)])
+    if args.h_dim is not None:
+        command.extend(["--h-dim", str(args.h_dim)])
+    if args.n_heads is not None:
+        command.extend(["--n-heads", str(args.n_heads)])
+    if args.drop_p is not None:
+        command.extend(["--drop-p", str(args.drop_p)])
+    if args.max_timestep is not None:
+        command.extend(["--max-timestep", str(args.max_timestep)])
 
     if val_data_dir is not None:
         command.extend(["--val-data-dir", str(val_data_dir)])

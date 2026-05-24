@@ -82,6 +82,9 @@ Only change knobs already exposed by `src/pretrain_decision_transformer.py`, inc
 - DataLoader settings (`num_workers`, `persistent_workers`, `prefetch_factor`)
 - split-policy handling already supported by the file
 
+The AEMO wrapper may forward a curated subset of those same knobs, but manual mixed-corpus runs that need
+`--patterns` or other direct-trainer-only flags should call `src/pretrain_decision_transformer.py` directly.
+
 The harness may also improve the code inside the editable surface if the change still preserves the existing adapter contract and artifact contract.
 
 ## What the harness must not change
@@ -253,6 +256,7 @@ For the current AEMO dataset layout:
 - treat `aemo_dt_dataset_train_subset_007` as a **proxy-only** slice, not the main learning baseline
 - prefer one of the normal 24-episode train subsets plus explicit validation subsets/files for learning baselines
 - prefer `context_len=288` for learning baselines; `120` is an acceptable runtime fallback, but `60` is primarily a proxy-loop setting
+- wrapper launches can now forward `context_len` and other approved DT shape knobs, but the direct trainer is still the right entrypoint for manual mixed-corpus command lines
 - prefer `lr=3e-5` over `2e-5` as the starting learning-baseline LR unless new evaluator evidence contradicts it
 
 ## Primary metric
