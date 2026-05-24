@@ -254,3 +254,101 @@ def test_evaluate_aemo_heldout_reuses_cached_reference_rollouts(tmp_path: Path, 
     assert call_counts['rule'] == 1
     assert first['reference_rollout_cache']['misses']
     assert second['reference_rollout_cache']['hits']
+
+
+def test_evaluate_aemo_heldout_parallel_rollouts_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    scenario_manifest = [
+        {
+            'label': 'heldout_nsw1',
+            'region': 'NSW1',
+            'start_date': datetime(2024, 1, 1),
+            'end_date': datetime(2024, 1, 2),
+        },
+        {
+            'label': 'heldout_sa1',
+            'region': 'SA1',
+            'start_date': datetime(2024, 7, 1),
+            'end_date': datetime(2024, 7, 2),
+        },
+    ]
+    processed = {
+        'heldout_nsw1': pl.DataFrame({'RRP': [10.0, 20.0]}),
+        'heldout_sa1': pl.DataFrame({'RRP': [30.0, 40.0]}),
+    }
+    call_counts = {'candidate_dt': 0, 'rule': 0}
+
+    monkeypatch.setattr(evaluator, 'fetch_and_preprocess_aemo_scenarios', lambda **kwargs: (processed, scenario_manifest))
+    monkeypatch.setattr(
+        evaluator,
+        'preflight_processed_cache_paths',
+        lambda **kwargs: [{'label': 'heldout_nsw1', 'cache_exists': False}, {'label': 'heldout_sa1', 'cache_exists': False}],
+    )
+    monkeypatch.setattr(
+        evaluator,
+        'resolve_battery_variants',
+        lambda variants: [
+            {
+                'label': 'medium',
+                'battery_capacity': 10.0,
+                'max_battery_flow': 5.0,
+                'init_soc': 5.0,
+                'battery_life_cost': 1000.0,
+            }
+        ],
+    )
+
+    def fake_run_policy_episodes(**kwargs):
+        policy_name = kwargs['policy_cfg']['name']
+        call_counts[policy_name] += 1
+        if policy_name == 'candidate_dt':
+            return [_episode([2.0, 2.0], [{'battery_soc': 5.0, 'capacity_mwh': 10.0}, {'battery_soc': 4.0, 'capacity_mwh': 10.0}])]
+        return [_episode([1.0, 1.0], [{'battery_soc': 5.0, 'capacity_mwh': 10.0}, {'battery_soc': 6.0, 'capacity_mwh': 10.0}])]
+
+    monkeypatch.setattr(evaluator, 'run_policy_episodes', fake_run_policy_episodes)
+
+    evaluation_config = {
+        'track': 'aemo',
+        'target_return': 0.0,
+        'bootstrap_iterations': 10,
+        'bootstrap_seed': 1,
+        'reference_policy': 'rule',
+        'heldout': {
+            'step_duration': 0.5,
+            'episode_hours': 1.0,
+            'fit_global_stats': False,
+            'parallel_workers': 2,
+            'parallelize_candidate_dt': False,
+            'battery_variants': [{'name': 'medium'}],
+            'scenarios': [
+                {
+                    'label': 'heldout_nsw1',
+                    'region': 'NSW1',
+                    'start_date': '2024-01-01',
+                    'end_date': '2024-01-02',
+                },
+                {
+                    'label': 'heldout_sa1',
+                    'region': 'SA1',
+                    'start_date': '2024-07-01',
+                    'end_date': '2024-07-02',
+                },
+            ],
+        },
+        'policies': [
+            {'name': 'candidate_dt', 'kind': 'dt', 'rtg_value': 0.0},
+            {'name': 'rule', 'kind': 'rule'},
+        ],
+    }
+
+    summary = evaluator.evaluate_aemo_heldout(
+        surface_manifest={'paths': {}},
+        training_summary={'best_val_total_loss': 0.4},
+        evaluation_config=evaluation_config,
+        output_dir=tmp_path,
+        dt_model=object(),
+    )
+
+    assert call_counts['candidate_dt'] == 2
+    assert call_counts['rule'] == 2
+    assert summary['rollout_execution']['parallel_workers'] == 2
+    assert summary['rollout_execution']['parallelize_candidate_dt'] is False

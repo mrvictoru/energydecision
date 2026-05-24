@@ -22,6 +22,8 @@
     "episodes_per_variant": 2,
     "random_episode_start": false,
     "fit_global_stats": true,
+    "parallel_workers": 4,
+    "parallelize_candidate_dt": false,
     "battery_variants": [
       {
         "name": "medium",

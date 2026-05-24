@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -610,6 +611,46 @@ def _flatten_safety_rows(metrics_by_experiment: dict[str, dict[str, Any]]) -> di
     return flattened
 
 
+def _sum_count_maps(metrics: Sequence[dict[str, Any]], field: str) -> dict[str, int]:
+    combined: dict[str, int] = {}
+    for metric in metrics:
+        for key, value in dict(metric.get(field, {})).items():
+            combined[str(key)] = combined.get(str(key), 0) + int(value)
+    return combined
+
+
+def _aggregate_safety_metrics_by_policy(cohort_safety: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for cohort_key, metrics in cohort_safety.items():
+        policy_name = str(cohort_key).split("::", 1)[0]
+        grouped.setdefault(policy_name, []).append(metrics)
+
+    aggregate: dict[str, dict[str, Any]] = {}
+    for policy_name, metrics_list in grouped.items():
+        total_steps = int(sum(int(metrics.get("total_steps", 0)) for metrics in metrics_list))
+        episodes_evaluated = int(sum(int(metrics.get("episodes_evaluated", 0)) for metrics in metrics_list))
+        violation_step_count = int(sum(int(metrics.get("violation_step_count", 0)) for metrics in metrics_list))
+        clip_step_count = int(sum(int(metrics.get("clip_step_count", 0)) for metrics in metrics_list))
+        violation_episode_count = int(sum(int(metrics.get("violation_episode_count", 0)) for metrics in metrics_list))
+        deg_incident_episode_count = int(sum(int(metrics.get("deg_incident_episode_count", 0)) for metrics in metrics_list))
+
+        aggregate[policy_name] = {
+            "episodes_evaluated": episodes_evaluated,
+            "total_steps": total_steps,
+            "violation_step_count": violation_step_count,
+            "violation_step_rate": (violation_step_count / total_steps) if total_steps > 0 else 0.0,
+            "violation_episode_count": violation_episode_count,
+            "violation_episode_rate": (violation_episode_count / episodes_evaluated) if episodes_evaluated > 0 else 0.0,
+            "deg_incident_episode_count": deg_incident_episode_count,
+            "deg_incident_episode_rate": (deg_incident_episode_count / episodes_evaluated) if episodes_evaluated > 0 else 0.0,
+            "clip_step_count": clip_step_count,
+            "clip_step_rate": (clip_step_count / total_steps) if total_steps > 0 else 0.0,
+            "violation_counts": _sum_count_maps(metrics_list, "violation_counts"),
+            "clip_counts": _sum_count_maps(metrics_list, "clip_counts"),
+        }
+    return aggregate
+
+
 def evaluate_aemo_heldout(
     *,
     surface_manifest: dict[str, Any],
@@ -675,7 +716,10 @@ def evaluate_aemo_heldout(
         reference_cache_dir.mkdir(parents=True, exist_ok=True)
     reference_cache_hits: list[dict[str, Any]] = []
     reference_cache_misses: list[dict[str, Any]] = []
+    parallel_workers = max(1, int(heldout_cfg.get("parallel_workers", 1)))
+    parallelize_candidate_dt = bool(heldout_cfg.get("parallelize_candidate_dt", False))
 
+    work_items: list[dict[str, Any]] = []
     for scenario in scenario_manifest:
         scenario_label = str(scenario["label"])
         processed_data = processed_by_label[scenario_label]
@@ -687,62 +731,124 @@ def evaluate_aemo_heldout(
         for battery_variant in battery_variants:
             battery_label = str(battery_variant["label"])
             for policy in policies:
-                policy_name = str(policy["name"])
-                tagged: list[pl.DataFrame] | None = None
-                cache_path: Path | None = None
-                cache_key: str | None = None
-                if _cacheable_policy(policy, reference_cache_dir):
-                    assert reference_cache_dir is not None
-                    cache_path, cache_key = _reference_rollout_cache_path(
-                        reference_cache_dir=reference_cache_dir,
-                        policy_cfg=policy,
-                        scenario=runtime_scenario,
-                        battery_variant=battery_variant,
-                        heldout_cfg=heldout_cfg,
-                    )
-                    if cache_path.is_file():
-                        tagged = _split_episode_logs(pl.read_parquet(cache_path))
-                        reference_cache_hits.append(
-                            {
-                                "policy_name": policy_name,
-                                "scenario_label": scenario_label,
-                                "battery_label": battery_label,
-                                "cache_key": cache_key,
-                                "path": str(cache_path),
-                            }
-                        )
-                    else:
-                        reference_cache_misses.append(
-                            {
-                                "policy_name": policy_name,
-                                "scenario_label": scenario_label,
-                                "battery_label": battery_label,
-                                "cache_key": cache_key,
-                                "path": str(cache_path),
-                            }
-                        )
-                if tagged is None:
-                    episodes = run_policy_episodes(
-                        policy_cfg=policy,
-                        processed_data=processed_data,
-                        scenario=runtime_scenario,
-                        battery_variant=battery_variant,
-                        heldout_cfg=heldout_cfg,
-                        training_summary=training_summary,
-                        dt_model=dt_model,
-                    )
-                    tagged = _with_episode_metadata(
-                        episodes,
-                        policy_name=policy_name,
-                        scenario_label=scenario_label,
-                        battery_label=battery_label,
-                    )
-                    if cache_path is not None:
-                        cached = _combine_episode_logs(tagged)
-                        cached.write_parquet(cache_path)
-                aggregate_logs.setdefault(policy_name, []).extend(tagged)
-                cohort_key = f"{policy_name}::{scenario_label}::{battery_label}"
-                cohort_logs[cohort_key] = tagged
+                work_items.append(
+                    {
+                        "policy": policy,
+                        "policy_name": str(policy["name"]),
+                        "policy_kind": str(policy["kind"]).lower(),
+                        "scenario_label": scenario_label,
+                        "runtime_scenario": runtime_scenario,
+                        "battery_variant": battery_variant,
+                        "battery_label": battery_label,
+                        "processed_data": processed_data,
+                    }
+                )
+
+    def _execute_rollout(item: dict[str, Any]) -> dict[str, Any]:
+        policy = dict(item["policy"])
+        policy_name = str(item["policy_name"])
+        scenario_label = str(item["scenario_label"])
+        battery_label = str(item["battery_label"])
+        tagged: list[pl.DataFrame] | None = None
+        cache_path: Path | None = None
+        cache_key: str | None = None
+        cache_event: str | None = None
+
+        if _cacheable_policy(policy, reference_cache_dir):
+            assert reference_cache_dir is not None
+            cache_path, cache_key = _reference_rollout_cache_path(
+                reference_cache_dir=reference_cache_dir,
+                policy_cfg=policy,
+                scenario=item["runtime_scenario"],
+                battery_variant=item["battery_variant"],
+                heldout_cfg=heldout_cfg,
+            )
+            if cache_path.is_file():
+                tagged = _split_episode_logs(pl.read_parquet(cache_path))
+                cache_event = "hit"
+            else:
+                cache_event = "miss"
+
+        if tagged is None:
+            episodes = run_policy_episodes(
+                policy_cfg=policy,
+                processed_data=item["processed_data"],
+                scenario=item["runtime_scenario"],
+                battery_variant=item["battery_variant"],
+                heldout_cfg=heldout_cfg,
+                training_summary=training_summary,
+                dt_model=dt_model,
+            )
+            tagged = _with_episode_metadata(
+                episodes,
+                policy_name=policy_name,
+                scenario_label=scenario_label,
+                battery_label=battery_label,
+            )
+            if cache_path is not None and cache_event == "miss":
+                cached = _combine_episode_logs(tagged)
+                cached.write_parquet(cache_path)
+
+        return {
+            "policy_name": policy_name,
+            "scenario_label": scenario_label,
+            "battery_label": battery_label,
+            "tagged": tagged,
+            "cache_path": str(cache_path) if cache_path is not None else None,
+            "cache_key": cache_key,
+            "cache_event": cache_event,
+        }
+
+    results_by_index: list[dict[str, Any] | None] = [None] * len(work_items)
+    parallel_slots: list[tuple[int, dict[str, Any]]] = []
+    for idx, item in enumerate(work_items):
+        is_candidate_dt = item["policy_kind"] == "dt"
+        can_parallel = parallel_workers > 1 and (parallelize_candidate_dt or not is_candidate_dt)
+        if can_parallel:
+            parallel_slots.append((idx, item))
+        else:
+            results_by_index[idx] = _execute_rollout(item)
+
+    if parallel_slots:
+        with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
+            ordered_inputs = [item for _, item in parallel_slots]
+            ordered_indices = [idx for idx, _ in parallel_slots]
+            ordered_results = list(executor.map(_execute_rollout, ordered_inputs))
+        for idx, result in zip(ordered_indices, ordered_results):
+            results_by_index[idx] = result
+
+    for result in results_by_index:
+        assert result is not None
+        policy_name = str(result["policy_name"])
+        scenario_label = str(result["scenario_label"])
+        battery_label = str(result["battery_label"])
+        tagged = list(result["tagged"])
+        aggregate_logs.setdefault(policy_name, []).extend(tagged)
+        cohort_key = f"{policy_name}::{scenario_label}::{battery_label}"
+        cohort_logs[cohort_key] = tagged
+        cache_event = result.get("cache_event")
+        cache_path = result.get("cache_path")
+        cache_key = result.get("cache_key")
+        if cache_event == "hit":
+            reference_cache_hits.append(
+                {
+                    "policy_name": policy_name,
+                    "scenario_label": scenario_label,
+                    "battery_label": battery_label,
+                    "cache_key": cache_key,
+                    "path": cache_path,
+                }
+            )
+        elif cache_event == "miss":
+            reference_cache_misses.append(
+                {
+                    "policy_name": policy_name,
+                    "scenario_label": scenario_label,
+                    "battery_label": battery_label,
+                    "cache_key": cache_key,
+                    "path": cache_path,
+                }
+            )
 
     aggregate_logs = {name: logs for name, logs in aggregate_logs.items() if logs}
     if not aggregate_logs:
@@ -768,7 +874,8 @@ def evaluate_aemo_heldout(
         save_dir=None,
     )
 
-    safety_metrics = {name: compute_info_signal_metrics(logs) for name, logs in aggregate_logs.items()}
+    cohort_safety_metrics = {name: compute_info_signal_metrics(logs) for name, logs in cohort_logs.items()}
+    safety_metrics = _aggregate_safety_metrics_by_policy(cohort_safety_metrics)
     safety_rows = _flatten_safety_rows(safety_metrics)
     for name, row in metrics_rows.items():
         row.update(safety_rows.get(name, {}))
@@ -780,7 +887,7 @@ def evaluate_aemo_heldout(
     for row in cohort_metrics_df.to_dicts():
         experiment = str(row["experiment"])
         policy_name, scenario_label, battery_label = experiment.split("::", 2)
-        safety = compute_info_signal_metrics(cohort_logs[experiment])
+        safety = cohort_safety_metrics[experiment]
         by_cohort_rows.append(
             {
                 **row,
@@ -838,6 +945,11 @@ def evaluate_aemo_heldout(
             "cache_dir": str(reference_cache_dir) if reference_cache_dir is not None else None,
             "hits": reference_cache_hits,
             "misses": reference_cache_misses,
+        },
+        "rollout_execution": {
+            "parallel_workers": parallel_workers,
+            "parallelize_candidate_dt": parallelize_candidate_dt,
+            "work_item_count": len(work_items),
         },
         "plots_dir": str(plots_dir),
         "heldout_logs_dir": str(heldout_logs_dir),

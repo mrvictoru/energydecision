@@ -304,6 +304,9 @@ For simulator checks, use:
 Both evaluator configs can share cached non-DT reference rollouts through `reference_cache_dir`, so fixed
 baselines like `rule`, dispatch replay, and unchanged SB3 references do not need to rerun for every pilot
 experiment.
+They also now include `heldout.parallel_workers` with `parallelize_candidate_dt=false`, so evaluator
+rollouts run in parallel by default for reference policies while DT candidate rollouts stay serial unless
+you explicitly opt in.
 
 If the broader AEMO corpus is still too dominated by the original multi-year episode spans, you can
 resegment it into shorter fixed-horizon episodes before launching the learning baseline. The repository

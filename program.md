@@ -209,6 +209,18 @@ Use `src/autoresearch_evaluator.py` as the fixed evaluation entrypoint for autor
 
 For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, copy it to a run-specific config outside the editable DT training surface, and fix the held-out scenarios, battery variants, dispatch replay stations, baseline policies, and DT `rtg_value` before the search loop begins.
 
+For faster autoresearch loops, enable evaluator rollout parallelism in the held-out config and keep it on during the search:
+
+```json
+"heldout": {
+  "...": "...",
+  "parallel_workers": 4,
+  "parallelize_candidate_dt": false
+}
+```
+
+Use `parallel_workers > 1` for parallel scenario × battery × policy rollout execution. Keep `parallelize_candidate_dt=false` unless you explicitly want DT candidate rollouts to run in parallel with reference policies.
+
 Before the search loop begins, ensure the evaluator `cache_dir` is writable by the same user who will run
 autoresearch. Prewarming the fixed held-out scenario windows in that cache directory is recommended so
 evaluator reruns do not spend the inner loop fetching and preprocessing the same AEMO data repeatedly.
