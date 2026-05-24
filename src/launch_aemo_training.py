@@ -156,6 +156,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--subset-episodes", type=int, default=None)
     parser.add_argument("--epochs-per-subset", type=int, default=None)
     parser.add_argument("--val-split", type=float, default=None)
+    parser.add_argument("--context-length", type=int, default=None)
+    parser.add_argument("--state-dim", type=int, default=None)
+    parser.add_argument("--act-dim", type=int, default=None)
+    parser.add_argument("--n-block", type=int, default=None)
+    parser.add_argument("--h-dim", type=int, default=None)
+    parser.add_argument("--n-heads", type=int, default=None)
+    parser.add_argument("--drop-p", type=float, default=None)
+    parser.add_argument("--max-timestep", type=int, default=None)
+    parser.add_argument("--rope-enabled", action="store_true")
+    parser.add_argument("--rope-max-position", type=int, default=None)
+    parser.add_argument("--rope-base", type=float, default=None)
     parser.add_argument("--device", type=str, default=None, help="Optional explicit torch device string.")
     parser.add_argument(
         "--amp-mode",
@@ -383,6 +394,28 @@ def build_training_command(
     resolved_model_variant = args.model_variant or tier.model_variant
     if resolved_model_variant is not None:
         command.extend(["--model-variant", resolved_model_variant])
+    if args.context_length is not None:
+        command.extend(["--context-length", str(args.context_length)])
+    if args.state_dim is not None:
+        command.extend(["--state-dim", str(args.state_dim)])
+    if args.act_dim is not None:
+        command.extend(["--act-dim", str(args.act_dim)])
+    if args.n_block is not None:
+        command.extend(["--n-block", str(args.n_block)])
+    if args.h_dim is not None:
+        command.extend(["--h-dim", str(args.h_dim)])
+    if args.n_heads is not None:
+        command.extend(["--n-heads", str(args.n_heads)])
+    if args.drop_p is not None:
+        command.extend(["--drop-p", str(args.drop_p)])
+    if args.max_timestep is not None:
+        command.extend(["--max-timestep", str(args.max_timestep)])
+    if args.rope_enabled:
+        command.append("--rope-enabled")
+    if args.rope_max_position is not None:
+        command.extend(["--rope-max-position", str(args.rope_max_position)])
+    if args.rope_base is not None:
+        command.extend(["--rope-base", str(args.rope_base)])
     if args.device is not None:
         command.extend(["--device", args.device])
     if paths["val_dataset_path"] is not None:

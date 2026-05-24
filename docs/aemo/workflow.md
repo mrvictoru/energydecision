@@ -244,6 +244,9 @@ python3 src/launch_aemo_training.py --run-tier learning-baseline
 It makes the intended run tier explicit, writes `aemo_training_launch_plan.json` next to the run
 artifacts, starts the live progress dashboard automatically, and re-enters the preferred Distrobox
 when launched from the host shell.
+The launcher also forwards direct DT shape overrides (for example `--context-length`, `--h-dim`,
+`--n-heads`, and RoPE flags) to the AEMO wrapper so you can run controlled context/model sweeps
+without rewriting the full command line.
 
 Practical guidance:
 

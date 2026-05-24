@@ -56,6 +56,66 @@ def test_build_training_command_enables_subset_mode_for_learning_baseline(tmp_pa
     assert command[command.index("--epochs-per-subset") + 1] == "1"
 
 
+def test_build_training_command_forwards_context_and_shape_overrides(tmp_path: Path):
+    args = launcher.parse_args(
+        [
+            "--run-tier",
+            "proxy-baseline",
+            "--run-tag",
+            "demo",
+            "--runtime-mode",
+            "allow-host",
+            "--context-length",
+            "576",
+            "--state-dim",
+            "18",
+            "--act-dim",
+            "3",
+            "--n-block",
+            "4",
+            "--h-dim",
+            "128",
+            "--n-heads",
+            "8",
+            "--drop-p",
+            "0.1",
+            "--max-timestep",
+            "2016",
+            "--rope-enabled",
+            "--rope-max-position",
+            "1728",
+            "--rope-base",
+            "10000",
+        ]
+    )
+    paths = {
+        "dataset_path": tmp_path / "train.parquet",
+        "val_dataset_path": tmp_path / "val.parquet",
+        "save_path": tmp_path / "model.pt",
+        "checkpoint_path": tmp_path / "checkpoint.pt",
+        "loss_csv_path": tmp_path / "loss.csv",
+    }
+
+    command = launcher.build_training_command(
+        root=tmp_path,
+        args=args,
+        tier=launcher.RUN_TIERS["proxy-baseline"],
+        paths=paths,
+    )
+
+    assert command[command.index("--context-length") + 1] == "576"
+    assert command[command.index("--state-dim") + 1] == "18"
+    assert command[command.index("--act-dim") + 1] == "3"
+    assert command[command.index("--n-block") + 1] == "4"
+    assert command[command.index("--h-dim") + 1] == "128"
+    assert command[command.index("--n-heads") + 1] == "8"
+    assert command[command.index("--drop-p") + 1] == "0.1"
+    assert command[command.index("--max-timestep") + 1] == "2016"
+    assert "--rope-enabled" in command
+    assert command[command.index("--rope-max-position") + 1] == "1728"
+    assert command[command.index("--rope-base") + 1] == "10000.0"
+
+
 def test_maybe_reenter_distrobox_invokes_distrobox_when_requested(monkeypatch: pytest.MonkeyPatch):
     args = launcher.parse_args(["--run-tier", "proxy-baseline", "--runtime-mode", "require-distrobox"])
     monkeypatch.setattr(launcher, "detect_runtime", lambda: {"inside_container": False})
