@@ -74,6 +74,8 @@ For AEMO, use a stricter protocol:
 - report exactly one primary DT model on test
 - treat prompt-sensitivity plots as secondary analysis
 
+Before inference, calibrate the prompt on the **target evaluation scenario**. The earlier sweeps showed that RTGs recommended on one region/time slice can degrade performance when reused on another slice, so the chosen `rtg_value` should match the held-out scenario you actually plan to deploy against.
+
 Primary comparison should be:
 - DT
 - rule baseline
