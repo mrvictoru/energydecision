@@ -219,6 +219,10 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "num_workers": 0,
             "checkpoint_interval": 1,
             "checkpoints_per_epoch": 1,
+            "discount": 0.95,
+            "return_scale": 2.0,
+            "action_loss_weight": 0.75,
+            "return_loss_weight": 0.0,
         },
     ),
     "aemo_proxy_frontier": SurfacePreset(
@@ -243,6 +247,10 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "num_workers": 0,
             "checkpoint_interval": 1,
             "checkpoints_per_epoch": 4,
+            "discount": 0.95,
+            "return_scale": 2.0,
+            "action_loss_weight": 0.75,
+            "return_loss_weight": 0.0,
         },
     ),
     "aemo_learning_baseline": SurfacePreset(
@@ -267,6 +275,10 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "num_workers": 0,
             "checkpoint_interval": 1,
             "checkpoints_per_epoch": 4,
+            "discount": 0.95,
+            "return_scale": 2.0,
+            "action_loss_weight": 0.75,
+            "return_loss_weight": 0.0,
         },
         requires_explicit_validation=True,
         min_train_episodes=8,
@@ -312,7 +324,7 @@ def recommend_pilot_ranking(
     best_val_total_loss: float | None,
     best_val_action_loss: float | None,
 ) -> dict[str, Any]:
-    if surface_preset == "aemo_proxy" and best_val_action_loss is not None:
+    if surface_preset.startswith("aemo_") and best_val_action_loss is not None:
         return {
             "pilot_ranking_metric": "best_val_action_loss",
             "pilot_ranking_value": best_val_action_loss,

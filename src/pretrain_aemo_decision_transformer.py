@@ -284,10 +284,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-interval", type=int, default=1)
     parser.add_argument("--checkpoints-per-epoch", type=int, default=4)
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--return-scale", type=float, default=1.0)
-    parser.add_argument("--action-loss-weight", type=float, default=1.0)
+    parser.add_argument("--return-scale", type=float, default=2.0)
+    parser.add_argument("--action-loss-weight", type=float, default=0.75)
     parser.add_argument("--state-loss-weight", type=float, default=0.01)
-    parser.add_argument("--return-loss-weight", type=float, default=0.002)
+    parser.add_argument("--return-loss-weight", type=float, default=0.0)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument(
