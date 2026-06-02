@@ -79,6 +79,7 @@ Only change knobs already exposed by `src/pretrain_decision_transformer.py`, inc
 - DT dimensions (`state_dim`, `act_dim`, `n_block`, `h_dim`, `n_heads`, `context_len`, `max_timestep`)
 - dropout and RoPE settings
 - training hyperparameters (`batch_size`, `epochs`, `lr`, `discount`, `return_scale`, loss weights, weight decay)
+- approved optimizer / scheduler selection, including optional custom class-path hooks already supported by the surface
 - DataLoader settings (`num_workers`, `persistent_workers`, `prefetch_factor`)
 - split-policy handling already supported by the file
 
@@ -99,7 +100,8 @@ The harness may also improve the code inside the editable surface if the change 
 ## Hard constraints from the codebase
 
 - `src/pretrain_decision_transformer.py` is the canonical entrypoint.
-- Approved optimizers and schedulers are currently restricted by the code surface.
+- Approved optimizers and schedulers are restricted by the code surface allowlist.
+- Custom optimizer / scheduler paths are only valid when they are already importable in the repo/runtime and do not require new dependencies.
 - AEMO-shaped DT runs must keep `act_dim` aligned with `action_mode`:
   - `simple -> 1`
   - `multi_market -> 3`

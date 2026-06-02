@@ -73,6 +73,32 @@ def test_parse_args_accepts_legacy_cli_contract():
     assert args.scheduler == "steplr"
 
 
+def test_parse_args_accepts_custom_optimizer_and_scheduler_contract():
+    args = pretrain_dt.parse_args(
+        [
+            "--optimizer",
+            "custom",
+            "--optimizer-class-path",
+            "torch.optim:AdamW",
+            "--optimizer-kwargs-json",
+            '{"eps": 1e-7}',
+            "--scheduler",
+            "custom",
+            "--scheduler-class-path",
+            "torch.optim.lr_scheduler:StepLR",
+            "--scheduler-kwargs-json",
+            '{"step_size": 3, "gamma": 0.8}',
+        ]
+    )
+
+    assert args.optimizer == "custom"
+    assert args.optimizer_class_path == "torch.optim:AdamW"
+    assert args.optimizer_kwargs_json == '{"eps": 1e-7}'
+    assert args.scheduler == "custom"
+    assert args.scheduler_class_path == "torch.optim.lr_scheduler:StepLR"
+    assert args.scheduler_kwargs_json == '{"step_size": 3, "gamma": 0.8}'
+
+
 def test_load_model_kwargs_rejects_unknown_keys(tmp_path: Path):
     config_path = tmp_path / "bad_config.json"
     config_path.write_text(json.dumps({"state_dim": 12, "unsupported_knob": 7}), encoding="utf-8")
@@ -139,6 +165,40 @@ def test_resolve_training_surface_respects_explicit_learning_baseline_overrides(
     assert surface.training_kwargs["epochs"] == 4
     assert surface.training_kwargs["lr"] == pytest.approx(4e-5)
     assert surface.training_kwargs["batch_size"] == 16
+
+
+def test_resolve_training_surface_requires_custom_optimizer_path():
+    args = pretrain_dt.parse_args(
+        [
+            "--optimizer",
+            "custom",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="requires --optimizer-class-path"):
+        pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+
+def test_resolve_training_surface_parses_custom_optimizer_surface_kwargs():
+    args = pretrain_dt.parse_args(
+        [
+            "--optimizer",
+            "custom",
+            "--optimizer-class-path",
+            "torch.optim:AdamW",
+            "--optimizer-kwargs-json",
+            '{"eps": 1e-7}',
+            "--scheduler",
+            "none",
+        ]
+    )
+
+    surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
+
+    assert surface.training_kwargs["optimizer"] == "custom"
+    assert surface.training_kwargs["optimizer_class_path"] == "torch.optim:AdamW"
+    assert surface.training_kwargs["optimizer_kwargs"] == {"eps": 1e-7}
+    assert surface.training_kwargs["scheduler"] == "none"
 
 
 def test_recommend_pilot_ranking_prefers_val_action_for_aemo_proxy():
@@ -301,6 +361,10 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     monkeypatch.setattr(pretrain_dt, "repo_root", lambda: tmp_path)
 
     def fake_train_decision_transformer(**kwargs):
+        assert kwargs["optimizer_name"] == "adamw"
+        assert kwargs["scheduler_name"] == "steplr"
+        assert kwargs["optimizer_kwargs"] == {}
+        assert kwargs["scheduler_kwargs"] == {}
         Path(kwargs["save_path"]).write_bytes(b"weights")
         Path(kwargs["checkpoint_path"]).write_bytes(b"checkpoint")
         Path(kwargs["progress_snapshot_path"]).write_text(

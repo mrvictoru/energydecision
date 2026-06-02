@@ -166,6 +166,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rope-enabled", action="store_true")
     parser.add_argument("--rope-max-position", type=int, default=None)
     parser.add_argument("--rope-base", type=float, default=None)
+    parser.add_argument("--optimizer", type=str, default=None)
+    parser.add_argument("--scheduler", type=str, default=None)
+    parser.add_argument("--optimizer-class-path", type=str, default=None)
+    parser.add_argument("--optimizer-kwargs-json", type=str, default=None)
+    parser.add_argument("--scheduler-class-path", type=str, default=None)
+    parser.add_argument("--scheduler-kwargs-json", type=str, default=None)
     parser.add_argument("--device", type=str, default=None, help="Optional explicit torch device string.")
     parser.add_argument(
         "--amp-mode",
@@ -415,6 +421,18 @@ def build_training_command(
         command.extend(["--rope-max-position", str(args.rope_max_position)])
     if args.rope_base is not None:
         command.extend(["--rope-base", str(args.rope_base)])
+    if args.optimizer is not None:
+        command.extend(["--optimizer", args.optimizer])
+    if args.scheduler is not None:
+        command.extend(["--scheduler", args.scheduler])
+    if args.optimizer_class_path is not None:
+        command.extend(["--optimizer-class-path", args.optimizer_class_path])
+    if args.optimizer_kwargs_json is not None:
+        command.extend(["--optimizer-kwargs-json", args.optimizer_kwargs_json])
+    if args.scheduler_class_path is not None:
+        command.extend(["--scheduler-class-path", args.scheduler_class_path])
+    if args.scheduler_kwargs_json is not None:
+        command.extend(["--scheduler-kwargs-json", args.scheduler_kwargs_json])
     if args.device is not None:
         command.extend(["--device", args.device])
     if paths["val_dataset_path"] is not None:

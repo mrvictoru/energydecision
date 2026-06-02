@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from typing import Optional, Any
+import importlib
 import json
 import os
 import subprocess
@@ -444,6 +445,118 @@ try:
 except (ImportError, AttributeError):  # pragma: no cover - compatibility fallback
     from torch.cuda.amp import GradScaler, autocast  # type: ignore
 
+
+class NullLRScheduler:
+    """No-op scheduler that preserves checkpoint shape when scheduling is disabled."""
+
+    def step(self) -> None:
+        return None
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        _ = state_dict
+
+
+def _load_symbol(path: str) -> Any:
+    module_name, _, attr_name = path.partition(":")
+    if not module_name or not attr_name:
+        if "." not in path:
+            raise ValueError(
+                f"Custom import path {path!r} must be in the form package.module:SymbolName."
+            )
+        module_name, attr_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    try:
+        return getattr(module, attr_name)
+    except AttributeError as exc:
+        raise ValueError(f"Custom import path {path!r} does not expose attribute {attr_name!r}.") from exc
+
+
+def _build_optimizer(
+    *,
+    model: DecisionTransformer,
+    optimizer_name: str,
+    lr: float,
+    weight_decay: float,
+    optimizer_kwargs: Optional[dict[str, Any]],
+    optimizer_class_path: Optional[str],
+) -> Any:
+    kwargs = dict(optimizer_kwargs or {})
+    optimizer_key = optimizer_name.lower()
+    if optimizer_key == "custom":
+        if not optimizer_class_path:
+            raise ValueError("optimizer_name='custom' requires optimizer_class_path.")
+        optimizer_ctor = _load_symbol(optimizer_class_path)
+        kwargs.setdefault("lr", lr)
+        kwargs.setdefault("weight_decay", weight_decay)
+        return optimizer_ctor(model.parameters(), **kwargs)
+    if optimizer_key == "adamw":
+        return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    if optimizer_key == "adam":
+        return torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    if optimizer_key == "sgd":
+        return torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    if optimizer_key == "rmsprop":
+        return torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    raise ValueError(f"Unsupported optimizer_name={optimizer_name!r}.")
+
+
+def _build_scheduler(
+    *,
+    optimizer: Any,
+    scheduler_name: str,
+    epochs: int,
+    scheduler_kwargs: Optional[dict[str, Any]],
+    scheduler_class_path: Optional[str],
+) -> Any:
+    kwargs = dict(scheduler_kwargs or {})
+    scheduler_key = scheduler_name.lower()
+    if scheduler_key == "none":
+        return NullLRScheduler()
+    if scheduler_key == "custom":
+        if not scheduler_class_path:
+            raise ValueError("scheduler_name='custom' requires scheduler_class_path.")
+        scheduler_ctor = _load_symbol(scheduler_class_path)
+        return scheduler_ctor(optimizer, **kwargs)
+    if scheduler_key == "steplr":
+        kwargs.setdefault("step_size", 10)
+        kwargs.setdefault("gamma", 0.5)
+        return torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
+    if scheduler_key == "cosineannealinglr":
+        kwargs.setdefault("T_max", max(1, int(epochs)))
+        kwargs.setdefault("eta_min", 0.0)
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
+    if scheduler_key == "exponentiallr":
+        kwargs.setdefault("gamma", 0.95)
+        return torch.optim.lr_scheduler.ExponentialLR(optimizer, **kwargs)
+    raise ValueError(f"Unsupported scheduler_name={scheduler_name!r}.")
+
+
+def _validate_resume_compatibility(
+    *,
+    checkpoint: dict[str, Any],
+    optimizer_name: str,
+    scheduler_name: str,
+    optimizer_class_path: Optional[str],
+    scheduler_class_path: Optional[str],
+) -> None:
+    expected_pairs = (
+        ("optimizer_name", optimizer_name),
+        ("scheduler_name", scheduler_name),
+        ("optimizer_class_path", optimizer_class_path),
+        ("scheduler_class_path", scheduler_class_path),
+    )
+    for key, expected in expected_pairs:
+        if key not in checkpoint:
+            continue
+        if checkpoint.get(key) != expected:
+            raise ValueError(
+                f"Checkpoint {key}={checkpoint.get(key)!r} does not match requested {key}={expected!r}. "
+                "Resume requires the same optimizer/scheduler selection used to create the checkpoint."
+            )
+
 def train_decision_transformer(
     ds: TrajectoryDataset,
     model: DecisionTransformer,
@@ -463,6 +576,12 @@ def train_decision_transformer(
     state_loss_weight: float = 0.01,
     return_loss_weight: float = 0.002,
     weight_decay: float = 1e-4,
+    optimizer_name: str = "adamw",
+    scheduler_name: str = "steplr",
+    optimizer_class_path: Optional[str] = None,
+    optimizer_kwargs: Optional[dict[str, Any]] = None,
+    scheduler_class_path: Optional[str] = None,
+    scheduler_kwargs: Optional[dict[str, Any]] = None,
     return_scale: float = 1.0,
     amp_mode: str = "auto",
     save_best_divergence_ratio: float = 4.0,
@@ -845,6 +964,12 @@ def train_decision_transformer(
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
+            "optimizer_name": optimizer_name,
+            "scheduler_name": scheduler_name,
+            "optimizer_class_path": optimizer_class_path,
+            "scheduler_class_path": scheduler_class_path,
+            "optimizer_kwargs": dict(optimizer_kwargs or {}),
+            "scheduler_kwargs": dict(scheduler_kwargs or {}),
             "log_losses": log_losses,
             "train_action_losses": train_action_losses,
             "train_state_losses": train_state_losses,
@@ -965,10 +1090,21 @@ def train_decision_transformer(
     
     # Save return_scale to model for inference consistency
     model.return_scale = return_scale
-    # Set up optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    optimizer = _build_optimizer(
+        model=model,
+        optimizer_name=optimizer_name,
+        lr=lr,
+        weight_decay=weight_decay,
+        optimizer_kwargs=optimizer_kwargs,
+        optimizer_class_path=optimizer_class_path,
+    )
+    scheduler = _build_scheduler(
+        optimizer=optimizer,
+        scheduler_name=scheduler_name,
+        epochs=epochs,
+        scheduler_kwargs=scheduler_kwargs,
+        scheduler_class_path=scheduler_class_path,
+    )
 
     # AMP setup
     amp_allowed, scaler = _resolve_amp_settings(device, amp_mode)
@@ -992,6 +1128,13 @@ def train_decision_transformer(
     if resume and checkpoint_path and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=device)
+        _validate_resume_compatibility(
+            checkpoint=checkpoint,
+            optimizer_name=optimizer_name,
+            scheduler_name=scheduler_name,
+            optimizer_class_path=optimizer_class_path,
+            scheduler_class_path=scheduler_class_path,
+        )
 
         # Ensure return_scale matches the one used when this checkpoint was created.
         ckpt_return_scale = checkpoint.get("return_scale", None)

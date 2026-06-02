@@ -37,8 +37,8 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
         "rope_base",
     }
 )
-APPROVED_OPTIMIZERS = ("adamw",)
-APPROVED_SCHEDULERS = ("steplr",)
+APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
+APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none", "custom")
 ACTION_MODE_TO_ACT_DIM = {"simple": 1, "multi_market": 3}
 VALID_AEMO_ACT_DIMS = frozenset(ACTION_MODE_TO_ACT_DIM.values())
 AEMO_STATE_DIM = 18
@@ -70,6 +70,12 @@ SEARCHABLE_KNOBS = (
     "num_workers",
     "persistent_workers",
     "prefetch_factor",
+    "optimizer",
+    "scheduler",
+    "optimizer_class_path",
+    "scheduler_class_path",
+    "optimizer_kwargs",
+    "scheduler_kwargs",
     "checkpoint_interval",
     "checkpoints_per_epoch",
     "seed",
@@ -97,6 +103,10 @@ TRAINING_KNOB_TO_ARG_DEST = {
     "prefetch_factor": "prefetch_factor",
     "optimizer": "optimizer",
     "scheduler": "scheduler",
+    "optimizer_class_path": "optimizer_class_path",
+    "scheduler_class_path": "scheduler_class_path",
+    "optimizer_kwargs": "optimizer_kwargs_json",
+    "scheduler_kwargs": "scheduler_kwargs_json",
 }
 FROZEN_INVARIANTS = (
     "editable_training_surface_file",
@@ -107,8 +117,8 @@ FROZEN_INVARIANTS = (
     "artifact_contract=model,checkpoint,loss_csv,metadata_sidecars",
     "adapter_contract=pretrain_aemo_decision_transformer.py and aemo_notebook_utils.py",
     "canonical_entrypoint=src/pretrain_decision_transformer.py",
-    "optimizer_impl=adamw",
-    "scheduler_impl=steplr",
+    "optimizer_checkpoint_key=optimizer_state_dict",
+    "scheduler_checkpoint_key=scheduler_state_dict",
 )
 SURFACE_CONSTRAINTS = {
     "h_dim_divisible_by_n_heads": "h_dim must be divisible by n_heads",
@@ -398,6 +408,30 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Approved scheduler selection exposed by the training surface.",
     )
     parser.add_argument(
+        "--optimizer-class-path",
+        type=str,
+        default=None,
+        help="Import path for --optimizer=custom in the form package.module:ClassName.",
+    )
+    parser.add_argument(
+        "--optimizer-kwargs-json",
+        type=str,
+        default=None,
+        help="Optional JSON object merged into optimizer construction kwargs.",
+    )
+    parser.add_argument(
+        "--scheduler-class-path",
+        type=str,
+        default=None,
+        help="Import path for --scheduler=custom in the form package.module:ClassName.",
+    )
+    parser.add_argument(
+        "--scheduler-kwargs-json",
+        type=str,
+        default=None,
+        help="Optional JSON object merged into scheduler construction kwargs.",
+    )
+    parser.add_argument(
         "--split-policy",
         choices=["auto", "episode", "explicit_validation"],
         default="auto",
@@ -596,6 +630,18 @@ def write_json(output_path: Path, payload: dict[str, Any]) -> None:
         raise ValueError(f"Failed to write JSON payload to {output_path}: {exc}") from exc
 
 
+def parse_json_object_arg(raw_value: str | None, *, flag_name: str) -> dict[str, Any]:
+    if raw_value is None:
+        return {}
+    try:
+        decoded = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{flag_name} must be valid JSON: {exc.msg}.") from exc
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{flag_name} must decode to a JSON object.")
+    return decoded
+
+
 def validate_supported_model_kwargs(model_kwargs: dict[str, Any], *, source: str) -> None:
     unknown_keys = sorted(set(model_kwargs) - SUPPORTED_MODEL_CONFIG_KEYS)
     if unknown_keys:
@@ -755,12 +801,32 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "prefetch_factor": args.prefetch_factor,
         "optimizer": args.optimizer,
         "scheduler": args.scheduler,
+        "optimizer_class_path": args.optimizer_class_path,
+        "optimizer_kwargs": parse_json_object_arg(
+            args.optimizer_kwargs_json,
+            flag_name="--optimizer-kwargs-json",
+        ),
+        "scheduler_class_path": args.scheduler_class_path,
+        "scheduler_kwargs": parse_json_object_arg(
+            args.scheduler_kwargs_json,
+            flag_name="--scheduler-kwargs-json",
+        ),
     }
     for key, value in preset.train_overrides.items():
         arg_dest = TRAINING_KNOB_TO_ARG_DEST.get(key)
         if arg_dest is not None and arg_dest in explicit_cli_args:
             continue
         training_kwargs[key] = value
+    if training_kwargs["optimizer"] == "custom":
+        if not training_kwargs["optimizer_class_path"]:
+            raise ValueError("--optimizer=custom requires --optimizer-class-path.")
+    elif training_kwargs["optimizer_class_path"] is not None:
+        raise ValueError("--optimizer-class-path requires --optimizer=custom.")
+    if training_kwargs["scheduler"] == "custom":
+        if not training_kwargs["scheduler_class_path"]:
+            raise ValueError("--scheduler=custom requires --scheduler-class-path.")
+    elif training_kwargs["scheduler_class_path"] is not None:
+        raise ValueError("--scheduler-class-path requires --scheduler=custom.")
     for key, value in training_kwargs.items():
         validate_numeric_range(key, value)
     return training_kwargs
@@ -1173,6 +1239,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         return_loss_weight=surface.training_kwargs["return_loss_weight"],
         weight_decay=surface.training_kwargs["weight_decay"],
         return_scale=surface.training_kwargs["return_scale"],
+        optimizer_name=surface.training_kwargs["optimizer"],
+        scheduler_name=surface.training_kwargs["scheduler"],
+        optimizer_class_path=surface.training_kwargs["optimizer_class_path"],
+        optimizer_kwargs=surface.training_kwargs["optimizer_kwargs"],
+        scheduler_class_path=surface.training_kwargs["scheduler_class_path"],
+        scheduler_kwargs=surface.training_kwargs["scheduler_kwargs"],
         amp_mode=surface.training_kwargs["amp_mode"],
         num_workers=surface.training_kwargs["num_workers"],
         persistent_workers=surface.training_kwargs["persistent_workers"],

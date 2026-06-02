@@ -119,6 +119,52 @@ def test_build_training_command_forwards_context_and_shape_overrides(tmp_path: P
     assert command[command.index("--rope-base") + 1] == "10000.0"
 
 
+def test_build_training_command_forwards_optimizer_surface_flags(tmp_path: Path):
+    args = launcher.parse_args(
+        [
+            "--run-tier",
+            "proxy-baseline",
+            "--run-tag",
+            "demo",
+            "--runtime-mode",
+            "allow-host",
+            "--optimizer",
+            "custom",
+            "--optimizer-class-path",
+            "torch.optim:AdamW",
+            "--optimizer-kwargs-json",
+            '{"eps": 1e-7}',
+            "--scheduler",
+            "custom",
+            "--scheduler-class-path",
+            "torch.optim.lr_scheduler:StepLR",
+            "--scheduler-kwargs-json",
+            '{"step_size": 3, "gamma": 0.8}',
+        ]
+    )
+    paths = {
+        "dataset_path": tmp_path / "train.parquet",
+        "val_dataset_path": tmp_path / "val.parquet",
+        "save_path": tmp_path / "model.pt",
+        "checkpoint_path": tmp_path / "checkpoint.pt",
+        "loss_csv_path": tmp_path / "loss.csv",
+    }
+
+    command = launcher.build_training_command(
+        root=tmp_path,
+        args=args,
+        tier=launcher.RUN_TIERS["proxy-baseline"],
+        paths=paths,
+    )
+
+    assert command[command.index("--optimizer") + 1] == "custom"
+    assert command[command.index("--optimizer-class-path") + 1] == "torch.optim:AdamW"
+    assert command[command.index("--optimizer-kwargs-json") + 1] == '{"eps": 1e-7}'
+    assert command[command.index("--scheduler") + 1] == "custom"
+    assert command[command.index("--scheduler-class-path") + 1] == "torch.optim.lr_scheduler:StepLR"
+    assert command[command.index("--scheduler-kwargs-json") + 1] == '{"step_size": 3, "gamma": 0.8}'
+
+
 def test_maybe_reenter_distrobox_invokes_distrobox_when_requested(monkeypatch: pytest.MonkeyPatch):
     args = launcher.parse_args(["--run-tier", "proxy-baseline", "--runtime-mode", "require-distrobox"])
     monkeypatch.setattr(launcher, "detect_runtime", lambda: {"inside_container": False})
