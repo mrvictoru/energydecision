@@ -1,0 +1,108 @@
+commit	track	metric	status	description
+45d0b37	aemo	1.038316	keep	pilot baseline: proxy-baseline on lengthened pilot split, lr=3e-5, batch=128
+45d0b37	aemo	1.103598	discard	pilot lr sweep: proxy-baseline on lengthened pilot split, lr=2e-5, batch=128
+45d0b37	aemo	0.570140	keep	pilot batch sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=64
+45d0b37	aemo	n/a	crash	context-length 120 launch failed in the current proxy-baseline wrapper shape
+0beb9bc	aemo	1.026434	keep	pilot context sweep after RoPE fix: proxy-baseline on lengthened pilot split, lr=3e-5, batch=128, context=120
+0beb9bc	aemo	0.534541	keep	pilot combined sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=64, context=120
+0beb9bc	aemo	0.361425	keep	pilot combined sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=32, context=120
+0beb9bc	aemo	-2.130891	discard	mini evaluator on best pilot checkpoint: held-out mean reward trails rule baseline despite best proxy metric
+0beb9bc	aemo	0.267862	keep	pilot capacity sweep: proxy-baseline on lengthened pilot split, model_variant=wide, batch=64, context=120
+0beb9bc	aemo	0.205853	keep	pilot extra-epoch sweep: proxy-baseline on lengthened pilot split, batch=32, context=120, epochs=2
+0beb9bc	aemo	-1.091310	keep	mini evaluator on wide checkpoint: best held-out result so far before prompt calibration, though still behind rule
+0beb9bc	aemo	-1.303508	discard	mini evaluator on two-epoch compact checkpoint: improved over first compact candidate but worse than wide on held-out reward
+0beb9bc	aemo	-0.843877	keep	prompt-calibrated mini evaluator on wide checkpoint: best held-out reward so far, nearly closing the gap to rule
+0beb9bc	aemo	0.371456	discard	return-loss-weight sweep: proxy loss regressed versus wide baseline despite lower return loss
+0beb9bc	aemo	-1.250328	discard	mini evaluator on return-loss sweep: held-out reward regressed versus the wide baseline
+0beb9bc	aemo	-0.420342	keep	alt-scenario mini evaluator on wide checkpoint: SA1 winter short at default RTG=0 yielded a much less negative recommended RTG than NSW1
+0beb9bc	aemo	-0.771962	keep	alt-scenario mini evaluator on wide checkpoint: mixed NSW1+SA1 short suite at default RTG=0 shifted the recommended RTG toward SA1-like values
+0beb9bc	aemo	-1.361597	discard	cross-RTG evaluator on NSW1 short: applying the SA1-derived RTG to NSW1 degraded held-out reward versus both default and NSW1-derived prompt calibration
+0beb9bc	aemo	-1.253434	discard	cross-RTG evaluator on NSW1 short: applying the mixed-suite-derived RTG to NSW1 also degraded held-out reward versus the NSW1-derived prompt calibration
+0beb9bc	aemo	0.164527	keep	validation-loss sweep: wide model, batch=32, context=120, epochs=1 improved both proxy total and action loss versus prior wide baseline
+0beb9bc	aemo	0.144980	keep	validation-loss sweep: wide model, batch=64, context=120, epochs=2 set the best proxy action loss so far
+0beb9bc	aemo	0.141359	keep	validation-loss sweep: wide model, batch=32, context=120, epochs=2 set the best proxy total loss so far
+0beb9bc	aemo	0.146484	keep	ceiling sweep: wide model, batch=64, context=180, epochs=2 improved over the older wide baseline but did not beat the context=120 two-epoch leaders
+0beb9bc	aemo	0.131841	keep	ceiling sweep: wide model, batch=32, context=180, epochs=2 set the best proxy total and action loss seen so far
+0beb9bc	aemo	0.139771	keep	ceiling sweep: manually widened model (n_block=6, h_dim=384), batch=64, context=120, epochs=2 improved total loss but not action loss versus the best wide runs
+0beb9bc	aemo	0.141324	keep	ceiling sweep: wide model, batch=64, context=120, epochs=2, lr=5e-5 improved total loss over lr=3e-5 at the same shape but did not beat longer-context runs
+0beb9bc	aemo	0.125920	keep	frontier sweep: wide model, batch=16, context=180, epochs=2 set the best proxy total loss seen so far while also slightly improving action loss
+0beb9bc	aemo	0.132173	keep	frontier sweep: wide model, batch=32, context=240, epochs=2 did not beat the context=180 frontier, suggesting diminishing returns beyond context=180 in this regime
+0beb9bc	aemo	0.127319	keep	frontier sweep: wide model, batch=32, context=180, epochs=3 improved over the earlier batch32-context180-epochs2 run but not over smaller-batch or deeper alternatives
+0beb9bc	aemo	0.127130	keep	frontier sweep: wide model, batch=32, context=180, epochs=2, lr=5e-5 slightly improved over lr=3e-5 at the same shape but stayed behind the best smaller-batch run
+0beb9bc	aemo	0.126248	keep	frontier sweep: deeper model (n_block=6, h_dim=256), batch=32, context=180, epochs=2 set the best proxy action loss seen so far
+0beb9bc	aemo	0.130815	keep	frontier sweep: wide model, batch=16, context=240, epochs=2 improved over batch32-context240 but still trailed the batch16-context180 frontier
+0beb9bc	aemo	0.130465	keep	architecture sweep: standard model (n_block=4, h_dim=128), batch=16, context=180, epochs=2 established the matched baseline for depth/width comparison
+0beb9bc	aemo	0.125244	keep	architecture sweep: deep model (n_block=6, h_dim=128), batch=16, context=180, epochs=2 set the best proxy action loss seen so far
+0beb9bc	aemo	0.123659	keep	architecture sweep: deep+wide model (n_block=6, h_dim=256), batch=16, context=180, epochs=2 improved on both deep-only and wide-only total loss
+0beb9bc	aemo	0.115776	keep	architecture sweep: deeper+wider model (n_block=8, h_dim=384), batch=16, context=180, epochs=2 set the best proxy total loss seen so far
+0beb9bc	aemo	-0.907272	discard	mini evaluator on wide frontier checkpoint: batch=16, context=180, epochs=2 still trailed the rule reference on NSW1 short
+0beb9bc	aemo	-0.918159	discard	mini evaluator on deep frontier checkpoint: best action-loss architecture still trailed the rule reference on NSW1 short
+0beb9bc	aemo	-1.200064	discard	mini evaluator on deep+wide frontier checkpoint: better proxy loss did not translate to better NSW1 short reward
+0beb9bc	aemo	-0.236547	keep	mini evaluator on deeper+wider frontier checkpoint: first frontier model to beat the rule reference on NSW1 short at default RTG
+0beb9bc	aemo	0.114788	keep	frontier sweep 2 baseline rerun: deeper+wider proxy frontier (n_block=8, h_dim=384), batch=16, context=180, epochs=2 reran slightly better than the prior best proxy loss
+0beb9bc	aemo	0.125366	keep	frontier sweep 2 size test: smaller deep+wide model (n_block=6, h_dim=256), batch=16, context=180, epochs=2 regressed on both proxy total and action loss
+0beb9bc	aemo	0.116345	keep	frontier sweep 2 size test: deeper 10x384 model stayed close to the frontier but did not beat the 8x384 baseline on proxy total or action loss
+0beb9bc	aemo	0.111081	keep	frontier sweep 2 size test: wider 8x512 model became the new best proxy total and action-loss checkpoint under the context=180, epochs=2 baseline
+0beb9bc	aemo	0.116984	keep	frontier sweep 2 epoch test: extending the 8x384 frontier to 3 epochs improved best action loss slightly but regressed total loss and finished worse
+0beb9bc	aemo	0.118219	keep	frontier sweep 2 LR test: lowering the 8x384 frontier to lr=2e-5 degraded proxy total and action loss
+0beb9bc	aemo	0.111948	keep	frontier sweep 2 LR test: raising the 8x384 frontier to lr=5e-5 improved over lr=3e-5 but still trailed the 8x512 size win
+0beb9bc	aemo	0.118556	keep	frontier sweep 2 context test: shortening the 8x384 frontier to context=120 clearly regressed proxy total and action loss
+0beb9bc	aemo	0.114464	keep	frontier sweep 2 context test: lengthening the 8x384 frontier to context=240 slightly improved action loss over context=180 but did not beat the best total-loss frontier
+0beb9bc	aemo	0.115215	keep	frontier sweep 3 batch test: lowering the 8x512 frontier to batch=8 did not beat batch=16 and finished with noticeably worse final validation loss
+0beb9bc	aemo	0.116952	keep	frontier sweep 3 batch test: batch=12 also regressed on both proxy total and action loss versus the batch=16 frontier
+0beb9bc	aemo	0.122183	keep	frontier sweep 3 batch test: increasing the 8x512 frontier to batch=24 clearly degraded proxy total and action loss
+0beb9bc	aemo	0.119878	keep	frontier sweep 3 batch test: batch=32 remained worse than batch=16, confirming batch=16 is still the sweet spot for the wider frontier
+0beb9bc	aemo	0.112216	keep	frontier sweep 4 weight-decay test: removing weight decay entirely stayed competitive but still trailed the base 8x512 frontier on total and action loss
+0beb9bc	aemo	0.113200	keep	frontier sweep 4 weight-decay test: lowering weight decay to 5e-5 regressed versus both the base frontier and wd=0
+0beb9bc	aemo	0.112728	keep	frontier sweep 4 weight-decay test: raising weight decay to 2e-4 was slightly better than wd=5e-5 but still behind the base frontier
+0beb9bc	aemo	0.112043	keep	frontier sweep 4 weight-decay test: raising weight decay to 5e-4 was the best decay variant but still did not beat the base 8x512 frontier
+0beb9bc	aemo	0.112271	keep	frontier sweep 5 dropout test: lowering dropout to 0.05 stayed competitive and improved action loss versus the base 8x512 frontier but did not beat its total loss
+0beb9bc	aemo	0.109743	keep	frontier sweep 5 dropout test: raising dropout to 0.15 produced the new best proxy total loss and nearly matched the best action-loss checkpoint
+0beb9bc	aemo	0.110965	keep	frontier sweep 5 dropout test: raising dropout further to 0.20 improved over the base 8x512 frontier but stayed behind dropout 0.15
+0beb9bc	aemo	0.108549	keep	frontier sweep 6 loss-weight base: 8x512, batch=16, context=180, epochs=2, lr=3e-5, drop_p=0.15 with default action/state/return weights improved proxy total loss further
+0beb9bc	aemo	0.097078	keep	frontier sweep 6 return-loss test: setting return_loss_weight=0.0 gave the best proxy total loss in this sweep, although action loss was slightly worse than the best action-weighted run
+0beb9bc	aemo	0.116489	keep	frontier sweep 6 state-loss test: lowering state_loss_weight to 0.005 regressed both proxy total and action loss
+0beb9bc	aemo	0.158465	keep	frontier sweep 6 action-loss test: raising action_loss_weight to 1.5 badly hurt total loss and did not improve action loss enough to offset it
+0beb9bc	aemo	0.099470	keep	frontier sweep 7 return-scale test: return_scale=0.5 improved over the base frontier but did not beat the stronger return_scale variants
+0beb9bc	aemo	0.096301	keep	frontier sweep 7 return-scale test: return_scale=1.0 improved further and beat the prior return-free frontier
+0beb9bc	aemo	0.095277	keep	frontier sweep 7 return-scale test: return_scale=2.0 produced the best proxy total and action loss seen in this return-scale sweep
+0beb9bc	aemo	0.092526	keep	frontier sweep 8 discount test: discount=0.95 improved total loss further on the return_scale=2.0 frontier
+0beb9bc	aemo	0.093049	keep	frontier sweep 8 discount test: discount=0.99 stayed close but did not beat discount=0.95
+0beb9bc	aemo	0.096434	keep	frontier sweep 8 discount test: discount=1.0 regressed versus the lower-discount settings
+0e11cf5	aemo	0.070197	keep	frontier sweep 9 action-weight test: action_loss_weight=0.75 on the 8x512 frontier gave the best proxy total loss in the sweep
+0e11cf5	aemo	0.093453	discard	frontier sweep 9 action-weight test: action_loss_weight=1.0 regressed versus 0.75 on the 8x512 frontier
+0e11cf5	aemo	0.110902	discard	frontier sweep 9 action-weight test: action_loss_weight=1.25 regressed further and did not improve the proxy frontier
+0e11cf5	aemo	-0.487420	keep	mini evaluator on action-weight tuned checkpoint: held-out NSW1 short reward beat the rule baseline at default RTG
+0e11cf5	aemo	-0.196801	keep	mini evaluator on action-loss baseline checkpoint: held-out NSW1 short reward beat the rule baseline even though proxy loss was worse than action_loss_weight=0.75
+19e9c43	aemo	0.104890	discard	expanded pilot aw100: larger 12x6 pilot split regressed proxy total loss versus the smaller pilot aw100 run
+19e9c43	aemo	-0.839465	discard	expanded pilot aw100: larger pilot split failed to carry over on NSW1 short mini evaluation and trailed the rule baseline
+20260528-expanded-aw075	aemo	0.075871	keep	expanded pilot aw075: larger 12x6 pilot split improved proxy total loss relative to the other expanded configs
+20260528-expanded-aw075	aemo	-0.537952	keep	expanded pilot aw075: larger 12x6 pilot split still beat the rule baseline on NSW1 short mini evaluation
+20260528-expanded-deeperwider	aemo	0.153731	discard	expanded pilot deeper+wider: larger 12x6 pilot split regressed proxy total loss badly versus the aw075/aw100 expanded runs
+20260528-expanded-deeperwider	aemo	-0.537952	keep	expanded pilot deeper+wider: larger 12x6 pilot split still beat the rule baseline on NSW1 short mini evaluation
+20260528-smallpilot-direct-lr025	aemo	0.072444	keep	small-pilot direct LR sweep: 8x512 tuned frontier with discount=0.95, lr=2.5e-5 on the original 6-train pilot improved late but stayed slightly behind the 3e-5 champion
+20260528-smallpilot-direct-lr035	aemo	0.073426	keep	small-pilot direct LR sweep: 8x512 tuned frontier with discount=0.95, lr=3.5e-5 on the original 6-train pilot briefly led mid-run but finished behind the 3e-5 champion
+20260528-smallpilot-direct-lr040	aemo	0.070446	keep	small-pilot direct LR sweep: 8x512 tuned frontier with discount=0.95, lr=4e-5 on the original 6-train pilot stayed behind the 3e-5 champion
+20260528-smallpilot-direct-lr050	aemo	0.066424	keep	small-pilot direct LR sweep: 8x512 tuned frontier with discount=0.95, lr=5e-5 on the original 6-train pilot set a new proxy frontier
+20260528-smallpilot-lr050-e3	aemo	0.070680	keep	small-pilot epoch follow-up: extending the new lr=5e-5 frontier to 3 epochs on the original 6-train pilot did not improve the 2-epoch lr=5e-5 frontier
+20260528-smallpilot-lr050-aw060	aemo	0.055353	keep	small-pilot action-weight follow-up: lowering action_loss_weight to 0.6 on the lr=5e-5 frontier produced a much stronger new proxy frontier on the original 6-train pilot
+20260528-smallpilot-lr050-aw050	aemo	0.047593	keep	small-pilot action-weight follow-up: lowering action_loss_weight further to 0.5 on the lr=5e-5 frontier set another new proxy frontier on the original 6-train pilot
+20260528-smallpilot-lr050-aw040	aemo	0.038453	keep	small-pilot action-weight follow-up: lowering action_loss_weight to 0.4 on the lr=5e-5 frontier set a lower proxy total loss again, although raw action loss drifted slightly worse
+20260528-smallpilot-lr050-aw030	aemo	0.029507	keep	small-pilot action-weight boundary check: lowering action_loss_weight to 0.3 drove proxy total loss lower again, but raw action loss drifted worse, confirming the metric is now strongly weight-shaped
+20260603-smallpilot-lr050-aw075	aemo	0.068715	keep	plateau reward-aware check: small-pilot lr=5e-5, action_loss_weight=0.75 (best_val_total_loss)
+20260603-smallpilot-lr050-aw075	aemo	-0.698179	keep	mini evaluator: small-pilot lr=5e-5, action_loss_weight=0.75 on NSW1 short (mean_reward candidate_dt; rule=-0.713351)
+20260603-smallpilot-lr050-aw090	aemo	0.082632	keep	plateau reward-aware check: small-pilot lr=5e-5, action_loss_weight=0.90 (best_val_total_loss)
+20260603-smallpilot-lr050-aw090	aemo	-0.673106	keep	mini evaluator: small-pilot lr=5e-5, action_loss_weight=0.90 on NSW1 short (mean_reward candidate_dt; rule=-0.713351)
+20260603-smallpilot-lr050-aw100	aemo	0.092577	keep	plateau reward-aware check: small-pilot lr=5e-5, action_loss_weight=1.00 (best_val_total_loss)
+20260603-smallpilot-lr050-aw100	aemo	-0.378167	keep	mini evaluator: small-pilot lr=5e-5, action_loss_weight=1.00 on NSW1 short (mean_reward candidate_dt; rule=-0.713351)
+bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell off bus) on run_tag=opt_sched_sweep_20260603_205005_adamw_steplr; logs=eval_output/system_logs/opt_sched_sweep_20260603_205005
+1dc42e1	aemo	n/a	crash	opt sweep (clk<=1500): CUDA healthcheck failed then Xid79/Xid154; GPU lost (nvidia-smi: no devices); logs=eval_output/system_logs/opt_sweep_clk1500_20260604_131930
+771cbf6	aemo	n/a	keep	opt sweep (new clk cap): proxy-smoke opt=adamw sched=none; logs=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/system_logs/opt_sweep_clkLOW_20260604_135339; run_tag=opt_sweep_clkLOW_20260604_135339_adamw_none
+771cbf6	aemo	n/a	keep	opt sweep (new clk cap): proxy-smoke opt=adam sched=none; logs=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/system_logs/opt_sweep_clkLOW_20260604_135339; run_tag=opt_sweep_clkLOW_20260604_135339_adam_none
+771cbf6	aemo	n/a	keep	opt sweep (new clk cap): proxy-smoke opt=rmsprop sched=none; logs=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/system_logs/opt_sweep_clkLOW_20260604_135339; run_tag=opt_sweep_clkLOW_20260604_135339_rmsprop_none
+771cbf6	aemo	n/a	keep	opt sweep (new clk cap): proxy-smoke opt=sgd sched=none; logs=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/system_logs/opt_sweep_clkLOW_20260604_135339; run_tag=opt_sweep_clkLOW_20260604_135339_sgd_none
+771cbf6	aemo	n/a	keep	opt sweep (new clk cap): proxy-smoke opt=muon sched=none; logs=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/system_logs/opt_sweep_clkLOW_20260604_135339; run_tag=opt_sweep_clkLOW_20260604_135339_muon_none
+771cbf6	aemo	n/a	keep	opt sweep (new clk cap): proxy-smoke opt=adamw sched=steplr; logs=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/system_logs/opt_sweep_clkLOW_20260604_135339; run_tag=opt_sweep_clkLOW_20260604_135339_adamw_steplr
+609dd24	aemo	-2.295426695845123	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 rmsprop_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/rmsprop_none
+609dd24	aemo	-2.137930759377132	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 adamw_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/adamw_none
+609dd24	aemo	-1.830449334661178	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 muon_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/muon_none

@@ -180,3 +180,7 @@ cython_debug/
 # models
 /models
 *.zip
+
+# eval artifacts (telemetry + evaluator outputs)
+/eval_output/system_logs/
+/eval_output/autoresearch/
