@@ -79,3 +79,28 @@
 - **AEMO subset training is episode-based.** Split by episode before writing subset parquet files, then resume checkpoints across subset stages.
 - **The live DT progress UI reads trainer snapshots.** Use `src/dt_progress_runner.py --attach` to monitor an existing job.
 - **For AEMO cache issues, prefer local data over the network.** Use manual `data/aemo/manual/` / `AEMO_GENERATORS_FILE` for static table fallback, and `AEMO_CACHE_ONLY=1` to force cached monthly MMS files.
+
+## GPU crash telemetry (Xid79 / GPU lost)
+
+When running long GPU training (DT pretrain / optimizer experiments), always collect host-side telemetry so an NVIDIA Xid79 / “GPU is lost” event leaves a timeline that survives reboots.
+
+### Recommended runner (host-side)
+
+From repo root (host), launch the telemetry-wrapped training script (logs are written under `eval_output/system_logs/<TAG>/`):
+
+```bash
+bash eval_output/system_logs/run_full_learning_baseline.sh <TAG>
+```
+
+This captures:
+- `nvidia_smi_query.csv` (util/temp/power/PCIe link gen+width)
+- `nvidia_dmon.txt` (dmon streaming incl PCIe throughput/error counters)
+- `vmstat.txt` / `iostat.txt` + `timeline.txt`
+- `journalctl_k_follow.txt` (kernel follow; Xid timeline)
+- `train_stdout_stderr.log`
+
+### Shutdown safety contract
+
+Only shut down / reboot once the run directory contains `SAFE_TO_SHUTDOWN.txt`.
+- If `CRASH_DETECTED.txt` exists, assume the system is unstable and a reboot is **required** after logs are saved.
+- If `SAFE_TO_SHUTDOWN.txt` exists without `CRASH_DETECTED.txt`, the run finished without detecting Xid79 signatures and it is safe to exit Distrobox and shut down.
