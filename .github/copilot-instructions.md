@@ -102,5 +102,6 @@ This captures:
 ### Shutdown safety contract
 
 Only shut down / reboot once the run directory contains `SAFE_TO_SHUTDOWN.txt`.
+- The runner is designed to write `SAFE_TO_SHUTDOWN.txt` even when the training process exits non-zero (e.g. SIGABRT) or the shell receives SIGHUP/TERM.
 - If `CRASH_DETECTED.txt` exists, assume the system is unstable and a reboot is **required** after logs are saved.
 - If `SAFE_TO_SHUTDOWN.txt` exists without `CRASH_DETECTED.txt`, the run finished without detecting Xid79 signatures and it is safe to exit Distrobox and shut down.
