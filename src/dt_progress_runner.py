@@ -1057,16 +1057,16 @@ def build_rich_dashboard(state: DashboardState) -> Any:
         Layout(Panel(Text("q: ctrl-c / stop process | --ui plain for fallback", style="dim"), border_style="grey50"), size=3),
     )
     layout["body"].split_row(
-        Layout(name="left", ratio=3),
+        Layout(name="left", ratio=4),
         Layout(name="right", ratio=3),
     )
     layout["left"].split_column(
-        Layout(Panel(Group(*progress_items), title="training progress", border_style="green"), ratio=1),
+        Layout(Panel(Group(*progress_items), title="training progress", border_style="green"), ratio=3),
+        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=2),
     )
     layout["right"].split_column(
         Layout(Panel(Group(*gpu_lines), title="gpu", border_style="magenta"), ratio=3),
         Layout(Panel(Group(*sys_lines), title="system", border_style="cyan"), ratio=3),
-        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=1),
     )
     return layout
 
