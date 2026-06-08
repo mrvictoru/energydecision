@@ -281,7 +281,7 @@ def test_plain_dashboard_includes_system_metrics(tmp_path: Path):
     assert "75°C" in rendered
     assert "180" in rendered or "180.0" in rendered
     assert "99%" in rendered
-    assert "loss spark:" in rendered
+    assert "train loss:" in rendered
 
 
 def test_rich_dashboard_shows_gpu_and_system_panels(tmp_path: Path):
@@ -431,3 +431,82 @@ def test_dashboard_parsed_overrides_snapshot_train_text(tmp_path: Path):
     )
     assert "loss=0.0175" in state.train_text
     assert "epoch 1/2" in state.progress_text
+
+
+def test_config_extracted_from_manifest(tmp_path: Path):
+    log_path = tmp_path / "monitor.log"
+    log_path.write_text("log line\n", encoding="utf-8")
+    state = progress_runner.build_dashboard_state(
+        snapshot={"status": "running", "progress_fraction": 0.5, "current_train": {"train_total_avg": 0.1}},
+        manifest={
+            "model_variant": "deeper_wider",
+            "optimizer": "adamw",
+            "scheduler": "steplr",
+            "model_kwargs": {"context_len": 180, "n_block": 8, "h_dim": 512, "n_heads": 8, "drop_p": 0.15, "act_dim": 3, "state_dim": 18},
+            "dataset_summary": {"train": {"window_count": 3633361}},
+        },
+        log_path=log_path,
+        log_tail=["log line"],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+    )
+    assert state.config_text is not None
+    assert "context=180" in state.config_text
+    assert "n_block=8" in state.config_text
+    assert "h_dim=512" in state.config_text
+    assert "n_heads=8" in state.config_text
+    assert "drop_p=0.15" in state.config_text
+    assert "variant=deeper_wider" in state.config_text
+
+
+def test_val_loss_tracked_from_snapshot(tmp_path: Path):
+    log_path = tmp_path / "monitor.log"
+    log_path.write_text("log\n", encoding="utf-8")
+    state = progress_runner.build_dashboard_state(
+        snapshot={"status": "running", "progress_fraction": 0.5, "current_train": {"train_total_avg": 0.1}, "validation": {"val_total": 0.456}},
+        manifest=None,
+        log_path=log_path,
+        log_tail=["log"],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+        val_loss_history=[0.5],
+    )
+    assert len(state.val_loss_history) == 2
+    assert abs(state.val_loss_history[-1] - 0.456) < 0.001
+
+
+def test_plain_dashboard_shows_config(tmp_path: Path):
+    log_path = tmp_path / "training.log"
+    log_path.write_text("log\n", encoding="utf-8")
+    state = progress_runner.build_dashboard_state(
+        snapshot={"status": "running", "progress_fraction": 0.5, "current_train": {"train_total_avg": 0.1}},
+        manifest={"model_variant": "compact", "model_kwargs": {"context_len": 120, "n_block": 6}},
+        log_path=log_path,
+        log_tail=["log"],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+    )
+    rendered = progress_runner.render_plain_dashboard(state)
+    assert "config:" in rendered
+    assert "context=120" in rendered
+    assert "variant=compact" in rendered
+
+
+def test_plain_dashboard_shows_val_loss_sparkline(tmp_path: Path):
+    log_path = tmp_path / "training.log"
+    log_path.write_text("log\n", encoding="utf-8")
+    state = progress_runner.build_dashboard_state(
+        snapshot={"status": "running", "progress_fraction": 0.5, "current_train": {"train_total_avg": 0.1}},
+        manifest=None,
+        log_path=log_path,
+        log_tail=["log"],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+        val_loss_history=[0.5, 0.4, 0.45],
+    )
+    rendered = progress_runner.render_plain_dashboard(state)
+    assert "val loss:" in rendered

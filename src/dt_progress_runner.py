@@ -122,10 +122,13 @@ class DashboardState:
     log_tail: list[str]
     system_metrics: dict[str, Any] = field(default_factory=dict)
     loss_history: list[float] = field(default_factory=list)
+    val_loss_history: list[float] = field(default_factory=list)
     gpu_util_history: list[float] = field(default_factory=list)
     gpu_temp_history: list[float] = field(default_factory=list)
     gpu_power_history: list[float] = field(default_factory=list)
     csv_path: str | None = None
+    config_text: str | None = None
+    config_rows: list[tuple[str, str]] = field(default_factory=list)
 
 
 class SystemMonitor:
@@ -254,7 +257,7 @@ class SystemMonitor:
 class MetricsHistory:
     CSV_COLUMNS = [
         "timestamp", "epoch", "segment", "progress_fraction",
-        "train_loss", "val_loss", "best_score",
+        "train_loss", "val_loss", "log_loss", "best_score",
         "sys_cpu_pct", "sys_ram_used_gb", "sys_ram_total_gb",
         "disk_read_mbs", "disk_write_mbs",
         "gpu_util_pct", "gpu_temp_c", "gpu_power_w", "gpu_fan_pct",
@@ -280,7 +283,7 @@ class MetricsHistory:
                 self._csv_fh = None
                 self._csv_writer = None
 
-    def record(self, *, snapshot: dict[str, Any] | None, system: dict[str, Any]) -> None:
+    def record(self, *, snapshot: dict[str, Any] | None, system: dict[str, Any], parsed: dict[str, Any] | None = None) -> None:
         row: dict[str, Any] = {
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
         }
@@ -294,6 +297,14 @@ class MetricsHistory:
             row["val_loss"] = val.get("val_total", "")
             best = snapshot.get("best") or {}
             row["best_score"] = best.get("score", "")
+        if parsed is not None:
+            row["epoch"] = row.get("epoch") or parsed.get("epoch", "")
+            row["segment"] = row.get("segment") or parsed.get("seg", "")
+            if not row.get("progress_fraction"):
+                row["progress_fraction"] = parsed.get("progress_pct", "") if isinstance(parsed.get("progress_pct"), (int, float)) else ""
+            if not row.get("train_loss") and parsed.get("loss") is not None:
+                row["train_loss"] = parsed["loss"]
+            row["log_loss"] = parsed.get("loss", "")
         row.update(system)
         self._buffer.append(row)
         if self._csv_writer is not None:
@@ -500,6 +511,7 @@ def build_dashboard_state(
     return_code: int | None = None,
     system_metrics: dict[str, Any] | None = None,
     loss_history: list[float] | None = None,
+    val_loss_history: list[float] | None = None,
     gpu_util_history: list[float] | None = None,
     gpu_temp_history: list[float] | None = None,
     gpu_power_history: list[float] | None = None,
@@ -545,6 +557,41 @@ def build_dashboard_state(
         )
         if run_summary_text == "n/a":
             run_summary_text = None
+
+    config_text = None
+    config_rows: list[tuple[str, str]] = []
+    if manifest:
+        mk = manifest.get("model_kwargs") or {}
+        config_pairs: list[tuple[str, str]] = []
+        for key, label, source in [
+            ("batch_size", "batch", None),
+            ("context_len", "context", mk),
+            ("n_block", "n_block", mk),
+            ("h_dim", "h_dim", mk),
+            ("n_heads", "n_heads", mk),
+            ("drop_p", "drop_p", mk),
+            ("act_dim", "act_dim", mk),
+            ("state_dim", "state_dim", mk),
+        ]:
+            val = source.get(key) if source else None
+            if val is not None:
+                config_rows.append((label, str(val)))
+        variant = manifest.get("model_variant")
+        if variant:
+            config_rows.append(("variant", str(variant)))
+        optimizer = manifest.get("optimizer")
+        if optimizer:
+            config_rows.append(("opt", str(optimizer)))
+        scheduler = manifest.get("scheduler")
+        if scheduler:
+            config_rows.append(("sched", str(scheduler)))
+        ckpt_epoch = manifest.get("checkpoints_per_epoch")
+        if ckpt_epoch:
+            config_rows.append(("ckpt/epoch", str(ckpt_epoch)))
+        train_w = (manifest.get("dataset_summary") or {}).get("train", {}).get("window_count")
+        if train_w:
+            config_rows.append(("windows", f"{train_w:,}"))
+        config_text = "  ".join(f"{k}={v}" for k, v in config_rows[:12])
 
     child_state: str | None = None
     if child is not None:
@@ -607,10 +654,13 @@ def build_dashboard_state(
             log_tail=[line.rstrip() for line in log_tail] or ["(no log output yet)"],
             system_metrics=system_metrics or {},
             loss_history=loss_history or [],
+            val_loss_history=val_loss_history or [],
             gpu_util_history=gpu_util_history or [],
             gpu_temp_history=gpu_temp_history or [],
             gpu_power_history=gpu_power_history or [],
             csv_path=csv_path,
+            config_text=config_text,
+            config_rows=config_rows,
         )
 
     progress = progress_percent(snapshot)
@@ -628,6 +678,10 @@ def build_dashboard_state(
             latest_history[-1],
             ["epoch", "segment", "train_total_avg", "val_total", "train_total_ema"],
         )
+
+    val_loss = validation.get("val_total")
+    if val_loss is not None and val_loss_history is not None:
+        val_loss_history = list(val_loss_history) + [float(val_loss)]
 
     if parsed is not None:
         p_epoch = parsed.get("epoch", "?")
@@ -684,10 +738,13 @@ def build_dashboard_state(
         log_tail=[line.rstrip() for line in log_tail] or ["(no log output yet)"],
         system_metrics=system_metrics or {},
         loss_history=loss_history or [],
+        val_loss_history=val_loss_history or [],
         gpu_util_history=gpu_util_history or [],
         gpu_temp_history=gpu_temp_history or [],
         gpu_power_history=gpu_power_history or [],
         csv_path=csv_path,
+        config_text=config_text,
+        config_rows=config_rows,
     )
 
 
@@ -739,7 +796,9 @@ def render_plain_dashboard(state: DashboardState) -> str:
         if sys_parts:
             lines.append(f"system: {' | '.join(sys_parts)}")
     if state.loss_history:
-        lines.append(f"loss spark: {sparkline(state.loss_history, width=60)}  ({max(state.loss_history):.4f} → {min(state.loss_history):.4f})")
+        lines.append(f"train loss: {sparkline(state.loss_history, width=60)}  ({min(state.loss_history):.4f} → {max(state.loss_history):.4f})")
+    if state.val_loss_history:
+        lines.append(f"  val loss: {sparkline(state.val_loss_history, width=60)}  ({min(state.val_loss_history):.4f} → {max(state.val_loss_history):.4f})")
     if state.gpu_util_history:
         lines.append(f"gpu util:   {sparkline(state.gpu_util_history, width=60)}")
     if state.gpu_temp_history:
@@ -748,6 +807,8 @@ def render_plain_dashboard(state: DashboardState) -> str:
         lines.append(f"run summary: {state.run_summary_text}")
     if state.last_checkpoint_text is not None:
         lines.append(f"last checkpoint: {state.last_checkpoint_text}")
+    if state.config_text:
+        lines.append(f"config: {state.config_text}")
     if state.csv_path:
         lines.append(f"csv: {state.csv_path}")
     lines.append("log tail:")
@@ -767,6 +828,7 @@ def render_dashboard(
     return_code: int | None = None,
     system_metrics: dict[str, Any] | None = None,
     loss_history: list[float] | None = None,
+    val_loss_history: list[float] | None = None,
     gpu_util_history: list[float] | None = None,
     gpu_temp_history: list[float] | None = None,
     gpu_power_history: list[float] | None = None,
@@ -783,6 +845,7 @@ def render_dashboard(
         return_code=return_code,
         system_metrics=system_metrics,
         loss_history=loss_history,
+        val_loss_history=val_loss_history,
         gpu_util_history=gpu_util_history,
         gpu_temp_history=gpu_temp_history,
         gpu_power_history=gpu_power_history,
@@ -863,25 +926,32 @@ def build_rich_dashboard(state: DashboardState) -> Any:
             Text(f"  {bar(state.progress_percent / 100, width=30)}  {state.progress_percent:.1f}%", style="bold cyan")
         )
 
-    batch_text = ""
     if state.train_text and state.train_text != "n/a":
-        batch_text = state.train_text
-    if batch_text:
-        progress_items.append(Text(f"train: {batch_text}", style=""))
-    if state.val_text and state.val_text != "n/a":
-        progress_items.append(Text(f"  val: {state.val_text}", style=""))
-    if state.best_text and state.best_text != "n/a":
-        progress_items.append(Text(f" best: {state.best_text}", style="bold green"))
-    if state.last_checkpoint_text:
-        progress_items.append(Text(f" last: {state.last_checkpoint_text}", style="dim"))
+        progress_items.append(Text(state.train_text, style=""))
 
     if state.loss_history and len(state.loss_history) >= 2:
         spark_text = sparkline(state.loss_history, width=50)
         lo, hi = min(state.loss_history), max(state.loss_history)
         progress_items.append(Text(""))
-        progress_items.append(Text(f" loss [{len(state.loss_history)} samples]", style="bold"))
+        progress_items.append(Text(f" train loss [{len(state.loss_history)} samples]", style="green"))
         progress_items.append(Text(f" {spark_text}", style="green"))
-        progress_items.append(Text(f" {hi:.4f} → {lo:.4f}  (Δ {hi - lo:.4f})", style="dim"))
+        progress_items.append(Text(f" {lo:.4f} → {hi:.4f}  (Δ {hi - lo:.4f})", style="dim"))
+
+    if state.val_loss_history and len(state.val_loss_history) >= 2:
+        v_spark = sparkline(state.val_loss_history, width=50)
+        v_lo, v_hi = min(state.val_loss_history), max(state.val_loss_history)
+        progress_items.append(Text(""))
+        progress_items.append(Text(f" val loss   [{len(state.val_loss_history)} samples]", style="yellow"))
+        progress_items.append(Text(f" {v_spark}", style="yellow"))
+        progress_items.append(Text(f" {v_lo:.4f} → {v_hi:.4f}  (Δ {v_hi - v_lo:.4f})", style="dim"))
+
+    if state.val_text and state.val_text != "n/a":
+        progress_items.append(Text(""))
+        progress_items.append(Text(state.val_text, style=""))
+    if state.best_text and state.best_text != "n/a":
+        progress_items.append(Text(state.best_text, style="bold green"))
+    if state.last_checkpoint_text:
+        progress_items.append(Text(state.last_checkpoint_text, style="dim"))
 
     gpu_lines: list[Any] = []
     gpu_name = sm.get("gpu_name", "GPU")
@@ -944,25 +1014,25 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     disk_w = sm.get("disk_write_mbs")
     if disk_r is not None:
         sys_lines.append(Text(f" Disk R:{disk_r:.1f} W:{disk_w or 0:.1f} MB/s", style="dim"))
-
-    proc_parts: list[str] = []
     res_text = state.resources_text
     if res_text and res_text != "n/a":
         sys_lines.append(Text(""))
         sys_lines.append(Text("Process", style="bold"))
         sys_lines.append(Text(f" {res_text}", style="dim"))
 
-    summary = Table.grid(padding=(0, 1))
-    summary.add_column(style="bold cyan", no_wrap=True)
-    summary.add_column()
-    if state.surface_text:
-        summary.add_row("surface", state.surface_text)
-    if state.dataset_text:
-        summary.add_row("datasets", state.dataset_text)
-    if state.run_summary_text:
-        summary.add_row("run", state.run_summary_text)
+    config_panel_items: list[Any] = []
+    if state.config_rows:
+        for key, val in state.config_rows:
+            config_panel_items.append(Text(f" {key}={val}", style=""))
+    elif state.surface_text or state.dataset_text or state.run_summary_text:
+        if state.surface_text:
+            config_panel_items.append(Text(f" surface: {state.surface_text}", style="dim"))
+        if state.dataset_text:
+            config_panel_items.append(Text(f" datasets: {state.dataset_text}", style="dim"))
+        if state.run_summary_text:
+            config_panel_items.append(Text(f" run: {state.run_summary_text}", style="dim"))
     if state.csv_path:
-        summary.add_row("csv", state.csv_path)
+        config_panel_items.append(Text(f" csv: {state.csv_path}", style="dim"))
 
     log_text = Text("\n".join(state.log_tail))
 
@@ -979,7 +1049,7 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     )
     layout["left"].split_column(
         Layout(Panel(Group(*progress_items), title="training progress", border_style="green"), ratio=3),
-        Layout(Panel(summary, title="config", border_style="blue"), ratio=1),
+        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=1),
     )
     layout["right"].split_column(
         Layout(Panel(Group(*gpu_lines), title="gpu", border_style="magenta"), ratio=3),
@@ -1025,10 +1095,13 @@ def run_plain_loop(
             manifest = load_json(manifest_path)
             log_tail = tail_lines(log_path, tail_limit)
             sys_metrics: dict[str, Any] = {}
+            parsed: dict[str, Any] | None = _parse_last_tqdm_line(log_tail)
             if system_monitor is not None:
                 sys_metrics = system_monitor.poll()
             if metrics_history is not None:
-                metrics_history.record(snapshot=snapshot, system=sys_metrics)
+                metrics_history.record(snapshot=snapshot, system=sys_metrics, parsed=parsed)
+            lh = metrics_history.history("train_loss") if metrics_history else []
+            vh = metrics_history.history("val_loss") if metrics_history else []
             render = render_dashboard(
                 snapshot=snapshot,
                 manifest=manifest,
@@ -1038,7 +1111,8 @@ def run_plain_loop(
                 child=child,
                 started_at=started_at,
                 system_metrics=sys_metrics,
-                loss_history=metrics_history.history("train_loss") if metrics_history else [],
+                loss_history=lh,
+                val_loss_history=vh,
                 gpu_util_history=metrics_history.history("gpu_util_pct") if metrics_history else [],
                 gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
                 gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
@@ -1074,6 +1148,7 @@ def run_plain_loop(
         return_code=return_code,
         system_metrics=final_sys,
         loss_history=metrics_history.history("train_loss") if metrics_history else [],
+        val_loss_history=metrics_history.history("val_loss") if metrics_history else [],
         gpu_util_history=metrics_history.history("gpu_util_pct") if metrics_history else [],
         gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
         gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
@@ -1108,10 +1183,13 @@ def run_rich_loop(
                 manifest = load_json(manifest_path)
                 log_tail = tail_lines(log_path, tail_limit)
                 sys_metrics: dict[str, Any] = {}
+                parsed: dict[str, Any] | None = _parse_last_tqdm_line(log_tail)
                 if system_monitor is not None:
                     sys_metrics = system_monitor.poll()
                 if metrics_history is not None:
-                    metrics_history.record(snapshot=snapshot, system=sys_metrics)
+                    metrics_history.record(snapshot=snapshot, system=sys_metrics, parsed=parsed)
+                lh = metrics_history.history("train_loss") if metrics_history else []
+                vh = metrics_history.history("val_loss") if metrics_history else []
                 state = build_dashboard_state(
                     snapshot=snapshot,
                     manifest=manifest,
@@ -1121,7 +1199,8 @@ def run_rich_loop(
                     child=child,
                     started_at=started_at,
                     system_metrics=sys_metrics,
-                    loss_history=metrics_history.history("train_loss") if metrics_history else [],
+                    loss_history=lh,
+                    val_loss_history=vh,
                     gpu_util_history=metrics_history.history("gpu_util_pct") if metrics_history else [],
                     gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
                     gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
@@ -1153,6 +1232,7 @@ def run_rich_loop(
             return_code=return_code,
             system_metrics=final_sys,
             loss_history=metrics_history.history("train_loss") if metrics_history else [],
+            val_loss_history=metrics_history.history("val_loss") if metrics_history else [],
             gpu_util_history=metrics_history.history("gpu_util_pct") if metrics_history else [],
             gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
             gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
