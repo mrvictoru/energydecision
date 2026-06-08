@@ -930,7 +930,7 @@ def build_rich_dashboard(state: DashboardState) -> Any:
         progress_items.append(Text(state.train_text, style=""))
 
     if state.loss_history and len(state.loss_history) >= 2:
-        spark_text = sparkline(state.loss_history, width=50)
+        spark_text = sparkline(state.loss_history, width=60)
         lo, hi = min(state.loss_history), max(state.loss_history)
         progress_items.append(Text(""))
         progress_items.append(Text(f" train loss [{len(state.loss_history)} samples]", style="green"))
@@ -938,7 +938,7 @@ def build_rich_dashboard(state: DashboardState) -> Any:
         progress_items.append(Text(f" {lo:.4f} → {hi:.4f}  (Δ {hi - lo:.4f})", style="dim"))
 
     if state.val_loss_history and len(state.val_loss_history) >= 2:
-        v_spark = sparkline(state.val_loss_history, width=50)
+        v_spark = sparkline(state.val_loss_history, width=60)
         v_lo, v_hi = min(state.val_loss_history), max(state.val_loss_history)
         progress_items.append(Text(""))
         progress_items.append(Text(f" val loss   [{len(state.val_loss_history)} samples]", style="yellow"))
@@ -1023,10 +1023,19 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     config_panel_items: list[Any] = []
     if state.config_rows:
         config_table = Table.grid(padding=(0, 2))
+        # 2-column layout: key1 val1 key2 val2
         config_table.add_column(style="bold cyan", no_wrap=True)
         config_table.add_column(style="")
-        for key, val in state.config_rows:
-            config_table.add_row(key, str(val))
+        config_table.add_column(style="bold cyan", no_wrap=True)
+        config_table.add_column(style="")
+        rows = state.config_rows
+        for i in range(0, len(rows), 2):
+            k1, v1 = rows[i]
+            if i + 1 < len(rows):
+                k2, v2 = rows[i + 1]
+                config_table.add_row(k1, str(v1), k2, str(v2))
+            else:
+                config_table.add_row(k1, str(v1), "", "")
         config_panel_items.append(config_table)
     elif state.surface_text or state.dataset_text or state.run_summary_text:
         if state.surface_text:
@@ -1055,9 +1064,9 @@ def build_rich_dashboard(state: DashboardState) -> Any:
         Layout(Panel(Group(*progress_items), title="training progress", border_style="green"), ratio=1),
     )
     layout["right"].split_column(
-        Layout(Panel(Group(*gpu_lines), title="gpu", border_style="magenta"), ratio=2),
-        Layout(Panel(Group(*sys_lines), title="system", border_style="cyan"), ratio=2),
-        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=2),
+        Layout(Panel(Group(*gpu_lines), title="gpu", border_style="magenta"), ratio=3),
+        Layout(Panel(Group(*sys_lines), title="system", border_style="cyan"), ratio=3),
+        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=1),
     )
     return layout
 
