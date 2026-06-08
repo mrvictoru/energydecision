@@ -1043,7 +1043,7 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     layout = Layout()
     layout.split_column(
         Layout(Panel(header, title="status", border_style="bright_blue"), size=3),
-        Layout(name="body", ratio=1),
+        Layout(name="body", ratio=4),
         Layout(Panel(log_text, title="log tail", border_style="yellow"), ratio=1),
         Layout(Panel(Text("q: ctrl-c / stop process | --ui plain for fallback", style="dim"), border_style="grey50"), size=3),
     )
