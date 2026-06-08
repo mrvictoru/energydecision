@@ -1022,8 +1022,12 @@ def build_rich_dashboard(state: DashboardState) -> Any:
 
     config_panel_items: list[Any] = []
     if state.config_rows:
+        config_table = Table.grid(padding=(0, 2))
+        config_table.add_column(style="bold cyan", no_wrap=True)
+        config_table.add_column(style="")
         for key, val in state.config_rows:
-            config_panel_items.append(Text(f" {key}={val}", style=""))
+            config_table.add_row(key, str(val))
+        config_panel_items.append(config_table)
     elif state.surface_text or state.dataset_text or state.run_summary_text:
         if state.surface_text:
             config_panel_items.append(Text(f" surface: {state.surface_text}", style="dim"))
@@ -1045,15 +1049,15 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     )
     layout["body"].split_row(
         Layout(name="left", ratio=3),
-        Layout(name="right", ratio=2),
+        Layout(name="right", ratio=3),
     )
     layout["left"].split_column(
-        Layout(Panel(Group(*progress_items), title="training progress", border_style="green"), ratio=3),
-        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=1),
+        Layout(Panel(Group(*progress_items), title="training progress", border_style="green"), ratio=1),
     )
     layout["right"].split_column(
-        Layout(Panel(Group(*gpu_lines), title="gpu", border_style="magenta"), ratio=3),
+        Layout(Panel(Group(*gpu_lines), title="gpu", border_style="magenta"), ratio=2),
         Layout(Panel(Group(*sys_lines), title="system", border_style="cyan"), ratio=2),
+        Layout(Panel(Group(*config_panel_items), title="config", border_style="blue"), ratio=2),
     )
     return layout
 

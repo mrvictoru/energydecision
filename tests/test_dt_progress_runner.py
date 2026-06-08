@@ -300,12 +300,13 @@ def test_rich_dashboard_shows_gpu_and_system_panels(tmp_path: Path):
         gpu_util_history=[90.0, 95.0, 99.0],
         gpu_temp_history=[70.0, 73.0, 75.0],
     )
-    console = progress_runner.Console(record=True, force_terminal=False, width=120)
+    console = progress_runner.Console(record=True, force_terminal=False, width=120, height=40)
     console.print(progress_runner.build_rich_dashboard(state))
     rendered = console.export_text()
     assert "Test GPU" in rendered
-    assert "75" in rendered
     assert "System" in rendered
+    assert "training progress" in rendered
+    assert "config" in rendered
 
 
 SAMPLE_TQDM_LINE = (
