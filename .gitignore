@@ -185,3 +185,4 @@ cython_debug/
 /eval_output/system_logs/*
 !/eval_output/system_logs/run_full_learning_baseline.sh
 /eval_output/autoresearch/
+opencode.json
