@@ -985,31 +985,31 @@ def build_rich_dashboard(state: DashboardState) -> Any:
 
     gpu_util = sm.get("gpu_util_pct")
     if gpu_util is not None:
-        gpu_lines.append(Text(f" util {bar(gpu_util / 100, width=20)} {gpu_util}%", style="cyan"))
+        gpu_lines.append(Text(f" util {bar(gpu_util / 100, width=12)} {gpu_util}%", style="cyan"))
 
     vram_used = sm.get("vram_used_gb")
     vram_total = sm.get("vram_total_gb")
     if vram_used is not None and vram_total is not None and vram_total > 0:
         vram_frac = vram_used / vram_total
-        gpu_lines.append(Text(f" vram {bar(vram_frac, width=20)} {vram_used}/{vram_total}G", style="magenta"))
+        gpu_lines.append(Text(f" vram {bar(vram_frac, width=12)} {vram_used}/{vram_total}G", style="magenta"))
 
     if state.gpu_util_history and len(state.gpu_util_history) >= 2:
         gpu_lines.append(Text(""))
-        gpu_lines.append(Text(f" {sparkline(state.gpu_util_history, width=40)}", style="cyan"))
+        gpu_lines.append(Text(f" {sparkline(state.gpu_util_history, width=24)}", style="cyan"))
     if state.gpu_temp_history and len(state.gpu_temp_history) >= 2:
         lo_t, hi_t = min(state.gpu_temp_history), max(state.gpu_temp_history)
-        gpu_lines.append(Text(f" {sparkline(state.gpu_temp_history, width=40)}  {lo_t:.0f}–{hi_t:.0f}°C", style=_temp_style(hi_t)))
+        gpu_lines.append(Text(f" {sparkline(state.gpu_temp_history, width=24)}  {lo_t:.0f}–{hi_t:.0f}°C", style=_temp_style(hi_t)))
 
     sys_lines: list[Any] = []
     sys_lines.append(Text("System", style="bold"))
     sys_cpu = sm.get("sys_cpu_pct")
     if sys_cpu is not None:
-        sys_lines.append(Text(f" CPU  {bar(sys_cpu / 100, width=20)} {sys_cpu:.0f}%", style="cyan"))
+        sys_lines.append(Text(f" CPU  {bar(sys_cpu / 100, width=12)} {sys_cpu:.0f}%", style="cyan"))
     sys_ram = sm.get("sys_ram_used_gb")
     sys_ram_total = sm.get("sys_ram_total_gb")
     if sys_ram is not None and sys_ram_total is not None and sys_ram_total > 0:
         ram_frac = sys_ram / sys_ram_total
-        sys_lines.append(Text(f" RAM  {bar(ram_frac, width=20)} {sys_ram:.1f}/{sys_ram_total:.1f}G", style="magenta"))
+        sys_lines.append(Text(f" RAM  {bar(ram_frac, width=12)} {sys_ram:.1f}/{sys_ram_total:.1f}G", style="magenta"))
     disk_r = sm.get("disk_read_mbs")
     disk_w = sm.get("disk_write_mbs")
     if disk_r is not None:
