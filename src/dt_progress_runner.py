@@ -129,6 +129,7 @@ class DashboardState:
     csv_path: str | None = None
     config_text: str | None = None
     config_rows: list[tuple[str, str]] = field(default_factory=list)
+    parsed: dict[str, Any] = field(default_factory=dict)
 
 
 class SystemMonitor:
@@ -516,6 +517,7 @@ def build_dashboard_state(
     gpu_temp_history: list[float] | None = None,
     gpu_power_history: list[float] | None = None,
     csv_path: str | None = None,
+    config_extra: list[tuple[str, str]] | None = None,
 ) -> DashboardState:
     surface_text: str | None = None
     dataset_text: str | None = None
@@ -564,7 +566,6 @@ def build_dashboard_state(
         mk = manifest.get("model_kwargs") or {}
         config_pairs: list[tuple[str, str]] = []
         for key, label, source in [
-            ("batch_size", "batch", None),
             ("context_len", "context", mk),
             ("n_block", "n_block", mk),
             ("h_dim", "h_dim", mk),
@@ -591,7 +592,13 @@ def build_dashboard_state(
         train_w = (manifest.get("dataset_summary") or {}).get("train", {}).get("window_count")
         if train_w:
             config_rows.append(("windows", f"{train_w:,}"))
-        config_text = "  ".join(f"{k}={v}" for k, v in config_rows[:12])
+    if config_extra:
+        existing_keys = {k for k, _ in config_rows}
+        for k, v in config_extra:
+            if k not in existing_keys:
+                config_rows.append((k, v))
+    if config_rows:
+        config_text = "  ".join(f"{k}={v}" for k, v in config_rows)
 
     child_state: str | None = None
     if child is not None:
@@ -661,6 +668,7 @@ def build_dashboard_state(
             csv_path=csv_path,
             config_text=config_text,
             config_rows=config_rows,
+            parsed=parsed or {},
         )
 
     progress = progress_percent(snapshot)
@@ -745,6 +753,7 @@ def build_dashboard_state(
         csv_path=csv_path,
         config_text=config_text,
         config_rows=config_rows,
+        parsed=parsed or {},
     )
 
 
@@ -795,6 +804,17 @@ def render_plain_dashboard(state: DashboardState) -> str:
             sys_parts.append(f"disk R:{sm['disk_read_mbs']} W:{sm.get('disk_write_mbs', '?')} MB/s")
         if sys_parts:
             lines.append(f"system: {' | '.join(sys_parts)}")
+    pdata = state.parsed
+    if pdata:
+        proc_parts = []
+        if pdata.get("pcpu"):
+            proc_parts.append(f"proc_cpu={pdata['pcpu']}%")
+        if pdata.get("prss_used"):
+            proc_parts.append(f"proc_rss={pdata['prss_used']:.1f}G")
+        if pdata.get("pth"):
+            proc_parts.append(f"threads={pdata['pth']}")
+        if proc_parts:
+            lines.append(f"process: {'  '.join(proc_parts)}")
     if state.loss_history:
         lines.append(f"train loss: {sparkline(state.loss_history, width=60)}  ({min(state.loss_history):.4f} → {max(state.loss_history):.4f})")
     if state.val_loss_history:
@@ -833,6 +853,7 @@ def render_dashboard(
     gpu_temp_history: list[float] | None = None,
     gpu_power_history: list[float] | None = None,
     csv_path: str | None = None,
+    config_extra: list[tuple[str, str]] | None = None,
 ) -> str:
     state = build_dashboard_state(
         snapshot=snapshot,
@@ -850,6 +871,7 @@ def render_dashboard(
         gpu_temp_history=gpu_temp_history,
         gpu_power_history=gpu_power_history,
         csv_path=csv_path,
+        config_extra=config_extra,
     )
     return render_plain_dashboard(state)
 
@@ -1014,11 +1036,22 @@ def build_rich_dashboard(state: DashboardState) -> Any:
     disk_w = sm.get("disk_write_mbs")
     if disk_r is not None:
         sys_lines.append(Text(f" Disk R:{disk_r:.1f} W:{disk_w or 0:.1f} MB/s", style="dim"))
-    res_text = state.resources_text
-    if res_text and res_text != "n/a":
-        sys_lines.append(Text(""))
-        sys_lines.append(Text("Process", style="bold"))
-        sys_lines.append(Text(f" {res_text}", style="dim"))
+    pdata = state.parsed
+    if pdata:
+        proc_parts: list[str] = []
+        proc_pcpu = pdata.get("pcpu")
+        proc_prss = pdata.get("prss_used")
+        proc_pth = pdata.get("pth")
+        if proc_pcpu:
+            proc_parts.append(f"proc_cpu={proc_pcpu}%")
+        if proc_prss:
+            proc_parts.append(f"proc_rss={proc_prss:.1f}G")
+        if proc_pth:
+            proc_parts.append(f"threads={proc_pth}")
+        if proc_parts:
+            sys_lines.append(Text(""))
+            sys_lines.append(Text("Process", style="bold"))
+            sys_lines.append(Text(f" {'  '.join(proc_parts)}", style="dim"))
 
     config_panel_items: list[Any] = []
     if state.config_rows:
@@ -1086,6 +1119,25 @@ def _compute_max_samples(history_seconds: float, poll_seconds: float) -> int:
     return max(10, int(history_seconds / max(0.1, poll_seconds)))
 
 
+def _load_launch_plan_config(snapshot_path: Path) -> list[tuple[str, str]]:
+    launch_plan_path = snapshot_path.parent / "aemo_training_launch_plan.json"
+    plan = load_json(launch_plan_path)
+    if plan is None:
+        return []
+    cmd = plan.get("training_command") or []
+    extra: list[tuple[str, str]] = []
+    for i, arg in enumerate(cmd):
+        if arg == "--batch-size" and i + 1 < len(cmd):
+            extra.append(("batch", cmd[i + 1]))
+        elif arg == "--epochs" and i + 1 < len(cmd):
+            extra.append(("epochs", cmd[i + 1]))
+        elif arg == "--lr" and i + 1 < len(cmd):
+            extra.append(("lr", cmd[i + 1]))
+        elif arg == "--subset-episodes" and i + 1 < len(cmd):
+            extra.append(("subset", cmd[i + 1]))
+    return extra
+
+
 def run_plain_loop(
     *,
     snapshot_path: Path,
@@ -1099,6 +1151,7 @@ def run_plain_loop(
     system_monitor: SystemMonitor | None = None,
     metrics_history: MetricsHistory | None = None,
     csv_path_str: str | None = None,
+    config_extra: list[tuple[str, str]] | None = None,
 ) -> int:
     last_render: str | None = None
     return_code: int | None = None
@@ -1130,6 +1183,7 @@ def run_plain_loop(
                 gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
                 gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
                 csv_path=csv_path_str,
+                config_extra=config_extra,
             )
             if render != last_render:
                 if sys.stdout.isatty():
@@ -1166,6 +1220,7 @@ def run_plain_loop(
         gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
         gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
         csv_path=csv_path_str,
+        config_extra=config_extra,
     )
     if sys.stdout.isatty():
         sys.stdout.write("\033[2J\033[H")
@@ -1186,6 +1241,7 @@ def run_rich_loop(
     system_monitor: SystemMonitor | None = None,
     metrics_history: MetricsHistory | None = None,
     csv_path_str: str | None = None,
+    config_extra: list[tuple[str, str]] | None = None,
 ) -> int:
     console = Console()
     return_code: int | None = None
@@ -1218,6 +1274,7 @@ def run_rich_loop(
                     gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
                     gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
                     csv_path=csv_path_str,
+                    config_extra=config_extra,
                 )
                 live.update(build_rich_dashboard(state), refresh=True)
                 if child is not None and child.poll() is not None:
@@ -1250,6 +1307,7 @@ def run_rich_loop(
             gpu_temp_history=metrics_history.history("gpu_temp_c") if metrics_history else [],
             gpu_power_history=metrics_history.history("gpu_power_w") if metrics_history else [],
             csv_path=csv_path_str,
+            config_extra=config_extra,
         )
         live.update(build_rich_dashboard(final_state), refresh=True)
     return return_code or 0
@@ -1286,6 +1344,8 @@ def main() -> int:
         csv_path = snapshot_path.with_name("dashboard_metrics.csv")
         csv_path_str = str(csv_path)
 
+    config_extra = _load_launch_plan_config(snapshot_path)
+
     max_samples = _compute_max_samples(args.history_seconds, args.poll_seconds)
     metrics_history: MetricsHistory | None = None
     if csv_path is not None:
@@ -1321,6 +1381,7 @@ def main() -> int:
                     system_monitor=system_monitor,
                     metrics_history=metrics_history,
                     csv_path_str=csv_path_str,
+                    config_extra=config_extra,
                 )
             return run_plain_loop(
                 snapshot_path=snapshot_path,
@@ -1334,6 +1395,7 @@ def main() -> int:
                 system_monitor=system_monitor,
                 metrics_history=metrics_history,
                 csv_path_str=csv_path_str,
+                config_extra=config_extra,
             )
 
     if resolved_ui == "rich":
@@ -1349,6 +1411,7 @@ def main() -> int:
             system_monitor=system_monitor,
             metrics_history=metrics_history,
             csv_path_str=csv_path_str,
+            config_extra=config_extra,
         )
     return run_plain_loop(
         snapshot_path=snapshot_path,
@@ -1362,6 +1425,7 @@ def main() -> int:
         system_monitor=system_monitor,
         metrics_history=metrics_history,
         csv_path_str=csv_path_str,
+        config_extra=config_extra,
     )
 
 
