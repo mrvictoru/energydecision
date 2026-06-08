@@ -18,3 +18,4 @@ openpyxl
 xls2xlsx
 scipy
 rich
+psutil
