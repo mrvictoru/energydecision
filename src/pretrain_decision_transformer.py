@@ -546,6 +546,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--checkpoint-interval", type=int, default=1)
     parser.add_argument("--checkpoints-per-epoch", type=int, default=6)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--max-val-batches", type=int, default=1000,
+        help="Maximum validation batches per checkpoint (default: 1000). Reduces DMA burst risk.")
     parser.add_argument("--return-scale", type=float, default=1.0)
     parser.add_argument("--action-loss-weight", type=float, default=1.0)
     parser.add_argument("--state-loss-weight", type=float, default=0.01)
@@ -796,6 +798,7 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "state_loss_weight": args.state_loss_weight,
         "return_loss_weight": args.return_loss_weight,
         "weight_decay": args.weight_decay,
+        "max_val_batches": args.max_val_batches,
         "num_workers": args.num_workers,
         "persistent_workers": args.persistent_workers,
         "prefetch_factor": args.prefetch_factor,
@@ -1247,6 +1250,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         scheduler_kwargs=surface.training_kwargs["scheduler_kwargs"],
         amp_mode=surface.training_kwargs["amp_mode"],
         num_workers=surface.training_kwargs["num_workers"],
+        max_val_batches=surface.training_kwargs["max_val_batches"],
         persistent_workers=surface.training_kwargs["persistent_workers"],
         prefetch_factor=surface.training_kwargs["prefetch_factor"],
         progress_snapshot_path=str(progress_snapshot_path),

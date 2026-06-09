@@ -319,6 +319,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--checkpoint-interval", type=int, default=1)
     parser.add_argument("--checkpoints-per-epoch", type=int, default=4)
+    parser.add_argument("--max-val-batches", type=int, default=1000)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--return-scale", type=float, default=2.0)
     parser.add_argument("--action-loss-weight", type=float, default=0.75)
@@ -421,6 +422,8 @@ def build_training_command(
         str(args.num_workers),
         "--prefetch-factor",
         str(args.prefetch_factor),
+        "--max-val-batches",
+        str(args.max_val_batches),
         "--checkpoint-interval",
         str(args.checkpoint_interval),
         "--checkpoints-per-epoch",

@@ -593,6 +593,7 @@ def train_decision_transformer(
     terminal_monitor_refresh_seconds: float = 1.0,
     progress_snapshot_path: Optional[str] = None,
     return_history: bool = False,
+    max_val_batches: int = 1000,
 ) -> tuple:
     
     # set best_model_path to be save_path with _best.pt suffix if not provided
@@ -719,7 +720,7 @@ def train_decision_transformer(
             torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
             optimizer.step()
 
-    def _run_validation(epoch: int, segment: int) -> Optional[dict[str, float]]:
+    def _run_validation(epoch: int, segment: int, *, max_batches: int | None = None) -> Optional[dict[str, float]]:
         if val_loader is None or val_ds is None:
             return None
         model.eval()
@@ -730,7 +731,9 @@ def train_decision_transformer(
         val_valid_count_sum = 0.0
         val_skipped_batches = 0
         with torch.no_grad():
-            for batch in val_loader:
+            for batch_idx, batch in enumerate(val_loader):
+                if max_batches is not None and batch_idx >= max_batches:
+                    break
                 states = batch["states"].to(device, non_blocking=non_blocking).float()
                 actions = batch["actions"].to(device, non_blocking=non_blocking).float()
                 rtgs = batch["rtgs"].to(device, non_blocking=non_blocking).float()
@@ -934,7 +937,7 @@ def train_decision_transformer(
         ckpt_dir = os.path.dirname(checkpoint_path)
         if ckpt_dir:
             os.makedirs(ckpt_dir, exist_ok=True)
-        val_stats = _run_validation(epoch, segment)
+        val_stats = _run_validation(epoch, segment, max_batches=max_val_batches)
         _maybe_save_best(epoch, segment, train_loss_est=train_loss_est, val_stats=val_stats)
 
         # Record a combined snapshot (useful for plotting training progress).
