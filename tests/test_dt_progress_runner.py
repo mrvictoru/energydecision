@@ -328,6 +328,7 @@ def test_parse_tqdm_line_basic():
     assert result["elapsed"] == "1:05:36"
     assert result["remaining"] == "23:42:21"
     assert abs(result["batch_per_s"] - 2.54) < 0.01
+    assert result["rate_display"] == "2.54 batch/s"
     assert abs(result["loss"] - 0.0175) < 0.0001
     assert abs(result["avg"] - 0.0176) < 0.0001
     assert abs(result["ema"] - 0.0106) < 0.0001
@@ -363,9 +364,39 @@ def test_parse_last_tqdm_line_finds_last_match():
     assert result["batch"] == 10099
 
 
+def test_parse_tqdm_line_s_per_batch_format():
+    line = (
+        "Epoch 1/2:  50%|  | 56772/227086 "
+        "[10:59:50<247765:48:21, 5237.13s/batch, "
+        "loss=0.0030, avg=0.0084, ema=0.0040, lr=3.00e-05, "
+        "skip=0, seg=1/4, cpu=5%, ram=6.6/62.7G, gpu=99%, "
+        "vram=5.3/8.0G, vpeak=4.6G, pcpu=77%, prss=4.1G, pvms=25.3G, pth=118]"
+    )
+    result = progress_runner.parse_tqdm_line(line)
+    assert result is not None
+    assert result["batch"] == 56772
+    assert abs(result["progress_pct"] - 50.0) < 0.1
+    assert result["rate_display"] == "5237.13 s/batch"
+    assert abs(result["batch_per_s"] - (1.0 / 5237.13)) < 0.0001
+
+
 def test_parse_last_tqdm_line_returns_none_when_no_match():
     assert progress_runner._parse_last_tqdm_line(["no match", "also no match"]) is None
     assert progress_runner._parse_last_tqdm_line([]) is None
+
+
+def test_parse_last_tqdm_line_handles_carriage_return_separated_line():
+    cr_line = (
+        "\rEpoch 1/2:   0%|  | 1/227086 [0:00:01<24:00:00,  1.00batch/s, loss=0.10, avg=0.11, ema=0.12, lr=3.00e-05, skip=0, seg=0/4, cpu=5%, ram=7.0/62.7G, gpu=95%, vram=5.0/8.0G, vpeak=4.0G, pcpu=100%, prss=4.0G, pvms=25.0G, pth=118]"
+        "\rEpoch 1/2:  50%|  | 56772/227086 [10:59:50<247765:48:21, 5237.13s/batch, loss=0.0030, avg=0.0084, ema=0.0040, lr=3.00e-05, skip=0, seg=1/4, cpu=5%, ram=6.6/62.7G, gpu=99%, vram=5.3/8.0G, vpeak=4.6G, pcpu=77%, prss=4.1G, pvms=25.3G, pth=118]"
+    )
+    lines = ["some header", cr_line]
+    result = progress_runner._parse_last_tqdm_line(lines)
+    assert result is not None
+    assert result["batch"] == 56772
+    assert abs(result["progress_pct"] - 50.0) < 0.1
+    assert result["rate_display"] == "5237.13 s/batch"
+    assert abs(result["batch_per_s"] - (1.0 / 5237.13)) < 0.0001
 
 
 def test_dashboard_shows_parsed_progress_when_no_snapshot(tmp_path: Path):
@@ -385,6 +416,7 @@ def test_dashboard_shows_parsed_progress_when_no_snapshot(tmp_path: Path):
     assert "loss=0.0175" in state.train_text
     assert "epoch 1/2" in state.progress_text
     assert "batch 10099/227086" in state.progress_text
+    assert "4.0%" in state.progress_text
 
 
 def test_dashboard_shows_waiting_when_no_snapshot_and_no_log(tmp_path: Path):
@@ -432,6 +464,37 @@ def test_dashboard_parsed_overrides_snapshot_train_text(tmp_path: Path):
     )
     assert "loss=0.0175" in state.train_text
     assert "epoch 1/2" in state.progress_text
+
+
+def test_progress_bar_uses_parsed_batch_not_coarse_segment(tmp_path: Path):
+    log_path = tmp_path / "monitor.log"
+    snapshot = {
+        "status": "running",
+        "epoch": 1,
+        "epochs": 2,
+        "segment": 0,
+        "checkpoints_per_epoch": 4,
+        "current_train": {"train_total_avg": 0.01},
+    }
+    tqdm_line = (
+        "Epoch 1/2:  50%|█████     | 113543/227086 [5:00:00<5:00:00,  6.32batch/s, "
+        "loss=0.007, avg=0.008, ema=0.006, lr=3.00e-05, skip=0, seg=0/4, "
+        "cpu=7%, ram=7.3/62.7G, gpu=100%, vram=5.4/8.0G, vpeak=4.6G, "
+        "pcpu=111%, prss=4.1G, pvms=25.3G, pth=118]"
+    )
+    state = progress_runner.build_dashboard_state(
+        snapshot=snapshot,
+        manifest=None,
+        log_path=log_path,
+        log_tail=[tqdm_line],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+    )
+    coarse_pct = progress_runner.progress_percent(snapshot)
+    assert abs(coarse_pct - 12.5) < 0.1
+    assert state.progress_percent is not None
+    assert abs(state.progress_percent - 50.0) < 0.5
 
 
 def test_config_extracted_from_manifest(tmp_path: Path):
@@ -511,3 +574,39 @@ def test_plain_dashboard_shows_val_loss_sparkline(tmp_path: Path):
     )
     rendered = progress_runner.render_plain_dashboard(state)
     assert "val loss:" in rendered
+
+
+def test_staleness_warning_when_log_old(tmp_path: Path):
+    import os
+    log_path = tmp_path / "old.log"
+    log_path.write_text("log\n", encoding="utf-8")
+    old_mtime = log_path.stat().st_mtime - 600
+    os.utime(log_path, (old_mtime, old_mtime))
+    state = progress_runner.build_dashboard_state(
+        snapshot=None,
+        manifest=None,
+        log_path=log_path,
+        log_tail=[SAMPLE_TQDM_LINE],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+    )
+    assert state.log_staleness_text is not None
+    assert "stale" in state.log_staleness_text
+    rendered = progress_runner.render_plain_dashboard(state)
+    assert "WARNING" in rendered
+
+
+def test_no_staleness_when_log_fresh(tmp_path: Path):
+    log_path = tmp_path / "fresh.log"
+    log_path.write_text("log\n", encoding="utf-8")
+    state = progress_runner.build_dashboard_state(
+        snapshot=None,
+        manifest=None,
+        log_path=log_path,
+        log_tail=[SAMPLE_TQDM_LINE],
+        command=["python3", "train.py"],
+        child=None,
+        started_at=0.0,
+    )
+    assert state.log_staleness_text is None

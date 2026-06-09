@@ -54,7 +54,7 @@ TQDM_LINE_RE = re.compile(
     r"(?P<pct>[\d.]+)%\|.*?\|\s*"
     r"(?P<batch>\d+)/(?P<total>\d+)\s*"
     r"\[(?P<elapsed>[\d:]+)<(?P<remaining>[\d:]+),\s*"
-    r"(?P<rate>[\d.]+)batch/s,\s*"
+    r"(?P<rate>[\d.]+)(?P<rate_unit>s?/batch|batch/s),\s*"
     r"(?P<rest>.+)\]"
 )
 
@@ -64,6 +64,12 @@ def parse_tqdm_line(line: str) -> dict[str, Any] | None:
     if not match:
         return None
     rest = match.group("rest")
+    rate_unit = match.group("rate_unit")
+    rate_val = float(match.group("rate"))
+    if rate_unit == "s/batch":
+        batch_per_s = 1.0 / rate_val if rate_val > 0 else 0.0
+    else:
+        batch_per_s = rate_val
     result: dict[str, Any] = {
         "epoch": int(match.group("epoch")),
         "epochs": int(match.group("epochs")),
@@ -72,7 +78,8 @@ def parse_tqdm_line(line: str) -> dict[str, Any] | None:
         "total_batches": int(match.group("total")),
         "elapsed": match.group("elapsed"),
         "remaining": match.group("remaining"),
-        "batch_per_s": float(match.group("rate")),
+        "batch_per_s": batch_per_s,
+        "rate_display": f"{rate_val:.2f} {rate_unit}",
     }
     for key in ("loss", "avg", "ema", "lr"):
         m = re.search(rf"\b{key}=([\d.eE+\-]+)", rest)
@@ -130,6 +137,7 @@ class DashboardState:
     config_text: str | None = None
     config_rows: list[tuple[str, str]] = field(default_factory=list)
     parsed: dict[str, Any] = field(default_factory=dict)
+    log_staleness_text: str | None = None
 
 
 class SystemMonitor:
@@ -494,9 +502,17 @@ def progress_percent(snapshot: dict[str, Any]) -> float | None:
 
 def _parse_last_tqdm_line(log_tail: list[str]) -> dict[str, Any] | None:
     for line in reversed(log_tail):
-        parsed = parse_tqdm_line(line)
-        if parsed is not None:
-            return parsed
+        if "\r" in line:
+            parts = line.split("\r")
+            for part in reversed(parts):
+                if part.strip():
+                    parsed = parse_tqdm_line(part)
+                    if parsed is not None:
+                        return parsed
+        else:
+            parsed = parse_tqdm_line(line)
+            if parsed is not None:
+                return parsed
     return None
 
 
@@ -609,15 +625,26 @@ def build_dashboard_state(
     if log_loss is not None and loss_history is not None:
         loss_history = list(loss_history) + [log_loss]
 
+    log_staleness_text: str | None = None
+    try:
+        log_mtime = log_path.stat().st_mtime
+        log_age_seconds = time.time() - log_mtime
+        if log_age_seconds > 120:
+            log_staleness_text = f"log stale ({format_seconds(log_age_seconds)} since last update)"
+    except OSError:
+        pass
+
     if snapshot is None:
         if parsed is not None:
             status = "running"
-            progress = parsed.get("progress_pct")
             epoch = parsed.get("epoch", "?")
             epochs = parsed.get("epochs", "?")
             segment = parsed.get("seg", "?")
             batch = parsed.get("batch", 0)
             total = parsed.get("total_batches", 0)
+            within_epoch_pct = parsed.get("progress_pct", 0)
+            if isinstance(within_epoch_pct, (int, float)):
+                progress = max(0.0, min(100.0, float(within_epoch_pct)))
             loss_val = parsed.get("loss")
             avg_val = parsed.get("avg")
             ema_val = parsed.get("ema")
@@ -625,7 +652,7 @@ def build_dashboard_state(
             elapsed = parsed.get("elapsed", "?")
             remaining = parsed.get("remaining", "?")
             rate = parsed.get("batch_per_s", 0)
-            progress_text = f"epoch {epoch}/{epochs} seg {segment}  |  batch {batch}/{total}  |  {progress:.1f}%  |  {elapsed}<{remaining}  |  {rate:.2f} batch/s"
+            progress_text = f"epoch {epoch}/{epochs} seg {segment}  |  batch {batch}/{total}  |  {within_epoch_pct:.1f}%  |  {elapsed}<{remaining}  |  {parsed.get('rate_display', f'{rate:.2f} batch/s')}"
             train_parts: list[str] = []
             if loss_val is not None:
                 train_parts.append(f"loss={loss_val:.4f}")
@@ -669,6 +696,7 @@ def build_dashboard_state(
             config_text=config_text,
             config_rows=config_rows,
             parsed=parsed or {},
+            log_staleness_text=log_staleness_text,
         )
 
     progress = progress_percent(snapshot)
@@ -701,7 +729,9 @@ def build_dashboard_state(
         p_elapsed = parsed.get("elapsed", "?")
         p_remaining = parsed.get("remaining", "?")
         p_rate = parsed.get("batch_per_s", 0)
-        progress_text = f"epoch {p_epoch}/{p_epochs} seg {p_seg}  |  batch {p_batch}/{p_total}  |  {p_progress:.1f}%  |  {p_elapsed}<{p_remaining}  |  {p_rate:.2f} batch/s"
+        progress_text = f"epoch {p_epoch}/{p_epochs} seg {p_seg}  |  batch {p_batch}/{p_total}  |  {p_progress:.1f}%  |  {p_elapsed}<{p_remaining}  |  {parsed.get('rate_display', f'{p_rate:.2f} batch/s')}"
+        if isinstance(p_progress, (int, float)):
+            progress = max(0.0, min(100.0, float(p_progress)))
         train_parts = []
         if parsed.get("loss") is not None:
             train_parts.append(f"loss={parsed['loss']:.4f}")
@@ -754,6 +784,7 @@ def build_dashboard_state(
         config_text=config_text,
         config_rows=config_rows,
         parsed=parsed or {},
+        log_staleness_text=log_staleness_text,
     )
 
 
@@ -764,6 +795,8 @@ def render_plain_dashboard(state: DashboardState) -> str:
     lines.append(f"command: {state.command_text}")
     lines.append(f"elapsed: {state.elapsed_text}")
     lines.append(f"log: {state.log_path_text}")
+    if state.log_staleness_text:
+        lines.append(f"  WARNING: {state.log_staleness_text}")
     if state.surface_text:
         lines.append(f"surface: {state.surface_text}")
     if state.dataset_text:
@@ -947,6 +980,9 @@ def build_rich_dashboard(state: DashboardState) -> Any:
         progress_items.append(
             Text(f"  {bar(state.progress_percent / 100, width=30)}  {state.progress_percent:.1f}%", style="bold cyan")
         )
+
+    if state.log_staleness_text:
+        progress_items.append(Text(f"  ⚠ {state.log_staleness_text}", style="bold yellow"))
 
     if state.train_text and state.train_text != "n/a":
         progress_items.append(Text(state.train_text, style=""))
