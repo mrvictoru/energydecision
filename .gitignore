@@ -182,7 +182,8 @@ cython_debug/
 *.zip
 
 # eval artifacts (telemetry + evaluator outputs)
-/eval_output/system_logs/*
-!/eval_output/system_logs/run_full_learning_baseline.sh
-/eval_output/autoresearch/
+/eval_output/training/monitor/*
+!/eval_output/training/monitor/run_full_learning_baseline.sh
+/eval_output/aemo/autoresearch/
+/eval_output/cache/
 opencode.json

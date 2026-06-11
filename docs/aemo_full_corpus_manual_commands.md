@@ -132,11 +132,11 @@ This command evaluates:
 ```bash
 distrobox enter energydecision-gpu -- bash -lc '
 cd /run/host/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision &&
-mkdir -p eval_output/autoresearch/manual_mixed_proxy_baseline_full &&
+mkdir -p eval_output/aemo/autoresearch/manual_mixed_proxy_baseline_full &&
 python3 src/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/manual_mixed_proxy_baseline/aemo_dt_loss_history_surface_manifest.json \
   --evaluation-config configs/aemo_autoresearch_evaluator.example.json \
-  --output-dir eval_output/autoresearch/manual_mixed_proxy_baseline_full
+  --output-dir eval_output/aemo/autoresearch/manual_mixed_proxy_baseline_full
 '
 ```
 
@@ -145,11 +145,11 @@ python3 src/autoresearch_evaluator.py \
 ```bash
 distrobox enter energydecision-gpu -- bash -lc '
 cd /run/host/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision &&
-mkdir -p eval_output/autoresearch/manual_mixed_proxy_best_batch32_full &&
+mkdir -p eval_output/aemo/autoresearch/manual_mixed_proxy_best_batch32_full &&
 python3 src/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/manual_mixed_proxy_best_batch32/aemo_dt_loss_history_surface_manifest.json \
   --evaluation-config configs/aemo_autoresearch_evaluator.example.json \
-  --output-dir eval_output/autoresearch/manual_mixed_proxy_best_batch32_full
+  --output-dir eval_output/aemo/autoresearch/manual_mixed_proxy_best_batch32_full
 '
 ```
 

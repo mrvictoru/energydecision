@@ -121,7 +121,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 > - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
 > To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
 
-**Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
+**Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
 > **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
 
@@ -195,7 +195,7 @@ The following tail-risk metrics are computed by `evaluate_experiment_logs` and i
 | `var_5` | Value-at-Risk at 5%: the 5th percentile of episode returns, representing the worst-case threshold below which only 5% of outcomes fall. |
 | `cvar_5` | Conditional VaR (Expected Shortfall) at 5%: the mean of all episode returns at or below `var_5`, quantifying the expected loss in the tail. |
 
-These metrics appear in evaluation tables (e.g., `eval_output/risk_metrics.csv`) and are also available in the DataFrame returned by `evaluate_experiments()`.
+These metrics appear in evaluation tables (e.g., `eval_output/household/risk_metrics.csv`) and are also available in the DataFrame returned by `evaluate_experiments()`.
 
 ### 7.3 Statistical Comparisons
 
@@ -206,9 +206,9 @@ Two statistical comparison tools are implemented in `src/helper.py`:
 - **Paired comparisons** (`paired_comparison`): given two experiments with matched episodes (same customer/seed index), computes per-episode metric differences and applies the Wilcoxon signed-rank test (requires SciPy, ≥10 paired episodes). Returns `{mean_diff, median_diff, std_diff, wilcoxon_stat, wilcoxon_p}`.
 
 Exported artifacts:
-- `eval_output/risk_metrics.csv` — tail-risk summary (VaR, CVaR) for all experiments.
-- `eval_output/pairwise_summary.csv` — Wilcoxon signed-rank test results for all algorithm pairs.
-- `eval_output/pairwise_significance_heatmap.svg` — visual summary of head-to-head significance.
+- `eval_output/household/risk_metrics.csv` — tail-risk summary (VaR, CVaR) for all experiments.
+- `eval_output/household/pairwise_summary.csv` — Wilcoxon signed-rank test results for all algorithm pairs.
+- `eval_output/household/pairwise_significance_heatmap.svg` — visual summary of head-to-head significance.
 
 > **NOTE:** These statistical analyses are available in `src/helper.py` and demonstrated in `notebooks/test_eval.ipynb`, but are not plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts.
 
@@ -224,7 +224,7 @@ Standard diagnostic plots produced by `evaluate_experiments(..., save_dir=...)`:
 
 ### 8.1 Baseline Comparison
 
-The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C, DDPG, TD3), Oracle (perfect foresight), and Decision Transformer agents on the household environment. The full metrics are stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv).
+The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C, DDPG, TD3), Oracle (perfect foresight), and Decision Transformer agents on the household environment. The full metrics are stored in [eval_output/household/baseline/evaluation_metrics.csv](eval_output/household/baseline/evaluation_metrics.csv).
 
 | Algorithm | Mean Reward | Std Reward | Sharpe | Avg Degradation/Ep | Avg Grid Net (kWh) |
 |-----------|----------:|----------:|------:|-------------------:|-------------------:|
@@ -239,13 +239,13 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 | sac | -3686.60 | 2169.83 | -1.699 | 0.3428 | 4432.64 |
 | ddpg | -4398.31 | 2564.92 | -1.715 | 0.3499 | 4546.06 |
 
-![Mean episode return and variability by agent](eval_output/base/mean_reward.svg)
+![Mean episode return and variability by agent](eval_output/household/baseline/mean_reward.svg)
 
-![Risk vs return for each agent](eval_output/base/risk_return.svg)
+![Risk vs return for each agent](eval_output/household/baseline/risk_return.svg)
 
-![Episode return distribution across customers](eval_output/base/episode_distribution.svg)
+![Episode return distribution across customers](eval_output/household/baseline/episode_distribution.svg)
 
-![Net grid energy balance by agent](eval_output/base/grid_energy.svg)
+![Net grid energy balance by agent](eval_output/household/baseline/grid_energy.svg)
 
 **Key observations:**
 - **Mean episode return ranking:** DT (`dt_rtg_neg1500`, -2454) > Oracle (-2483) > A2C (-2529) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398). After retraining with the episode-level data split fix, DT achieves the best mean return in the base comparison, surpassing even the perfect-foresight Oracle. Other DT RTG prompts (e.g., `dt_rtg_neg200` at -2408) perform even better \u2014 see Section 8.2.
@@ -256,7 +256,7 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 
 ### 8.2 Decision Transformer RTG Sensitivity
 
-The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/dt_compare/evaluation_metrics.csv)) shows how the initial RTG prompt affects policy behavior:
+The DT comparison ([eval_output/household/dt_sensitivity/evaluation_metrics.csv](eval_output/household/dt_sensitivity/evaluation_metrics.csv)) shows how the initial RTG prompt affects policy behavior:
 
 | DT Variant | Mean Reward | Std Reward | Avg Degradation/Ep | Avg Grid Net (kWh) |
 |-----------|----------:|----------:|-------------------:|-------------------:|
@@ -268,13 +268,13 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 | dt_rtg_neg1 | -2831.45 | 2840.23 | 0.1137 | 3875.12 |
 | rule | -3077.26 | 3454.07 | 0.0541 | 3909.03 |
 
-![DT episode return and variability by agent](eval_output/dt_compare/mean_reward.svg)
+![DT episode return and variability by agent](eval_output/household/dt_sensitivity/mean_reward.svg)
 
-![DT sensitivity: Risk vs Return](eval_output/dt_compare/risk_return.svg)
+![DT sensitivity: Risk vs Return](eval_output/household/dt_sensitivity/risk_return.svg)
 
-![DT sensitivity: Episode Return Distribution](eval_output/dt_compare/episode_distribution.svg)
+![DT sensitivity: Episode Return Distribution](eval_output/household/dt_sensitivity/episode_distribution.svg)
 
-![DT sensitivity: Grid Energy and Degradation](eval_output/dt_compare/grid_energy.svg)
+![DT sensitivity: Grid Energy and Degradation](eval_output/household/dt_sensitivity/grid_energy.svg)
 
 **Key observations:**
 - **RTG prompt matters:** `dt_rtg_neg200` and `dt_rtg_neg500` achieve essentially identical best mean returns (\u2248-2408), outperforming all baselines including Oracle (-2483). Moderate prompts (neg200 through neg1500) all outperform Oracle, while the near-zero prompt `dt_rtg_neg1` (-2831) falls below SDP.
@@ -286,7 +286,7 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 
 ### 8.3 Tail-Risk Analysis
 
-The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case performance:
+The tail-risk summary from `eval_output/household/risk_metrics.csv` highlights worst-case performance:
 
 | Algorithm | Mean Reward | VaR 5% | CVaR 5% | Sharpe | Sortino |
 |-----------|----------:|-------:|--------:|------:|-------:|
@@ -312,7 +312,7 @@ The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case 
 
 ### 8.4 Pairwise Statistical Comparisons
 
-The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` quantify algorithm-pair differences. Selected key comparisons:
+The Wilcoxon signed-rank test results from `eval_output/household/pairwise_summary.csv` quantify algorithm-pair differences. Selected key comparisons:
 
 | Comparison (A vs B) | Mean Diff (A\u2212B) | p-value | Interpretation |
 |---------------------|---------------:|--------:|----------------|
@@ -327,7 +327,7 @@ The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` qu
 | oracle vs sac | +1203.21 | 2.2e-6 | Oracle significantly better |
 | sdp vs td3 | +614.81 | 0.0014 | SDP significantly better |
 
-![Pairwise signed significance heatmap (Wilcoxon)](eval_output/pairwise_significance_heatmap.svg)
+![Pairwise signed significance heatmap (Wilcoxon)](eval_output/household/pairwise_significance_heatmap.svg)
 
 **Heatmap reading guide** (row algorithm vs column algorithm):
 - **Color direction:** warm/red = row outperforms column (`mean_diff > 0`); cool/blue = underperformance.
@@ -348,7 +348,7 @@ The utility-scale AEMO environment is now implemented at the workflow level via 
 
 This replay capability is important for two reasons. First, it provides a realistic benchmark trace derived from actual market participation rather than a synthetic heuristic. Second, it allows the same evaluation stack used for household experiments to be applied to utility-scale episodes, including reward, state-of-charge, price, and degradation diagnostics. The broader AEMO benchmark is still being expanded, but the core environment plus historical-station replay path is already operational.
 
-![Representative AEMO dispatch replay showing reward, state of charge, replayed historical actions, and price signals](eval_output/aemo/dispatchreplay_hpr1_20192022.png)
+![Representative AEMO dispatch replay showing reward, state of charge, replayed historical actions, and price signals](eval_output/aemo/notebook/dispatchreplay_hpr1_20192022.png)
 
 The replay graph illustrates a representative utility-scale episode produced by the current notebook workflow. The plotted action trace is sourced from historical station dispatch, while the surrounding panels show how those actions interact with simulated battery state and contemporaneous market prices inside the environment. This demonstrates that the repository has moved beyond a placeholder AEMO design: it can already ingest historical utility-scale data and replay existing station behavior end-to-end.
 
@@ -374,13 +374,13 @@ The comparison includes:
 | Dispatch - Torrens Island | -5.394 | -$5,394 | $0 | $0 | $5,394 | 0.0 | N/A |
 | Pretrain DT (original) | -7.117 | -$5,332 | -$706 | $1,116 | $5,742 | 326.5 | -11.44 |
 
-![Mean reward comparison across all policies](eval_output/autoresearch/comparison_plots/mean_reward_comparison.svg)
+![Mean reward comparison across all policies](eval_output/aemo/autoresearch/comparison_plots/mean_reward_comparison.svg)
 
-![Revenue decomposition: energy, FCAS, and degradation cost](eval_output/autoresearch/comparison_plots/profit_decomposition.svg)
+![Revenue decomposition: energy, FCAS, and degradation cost](eval_output/aemo/autoresearch/comparison_plots/profit_decomposition.svg)
 
-![Risk-return profile](eval_output/autoresearch/comparison_plots/risk_return_comparison.svg)
+![Risk-return profile](eval_output/aemo/autoresearch/comparison_plots/risk_return_comparison.svg)
 
-![Battery dispatch intensity vs degradation](eval_output/autoresearch/comparison_plots/dispatch_comparison.svg)
+![Battery dispatch intensity vs degradation](eval_output/aemo/autoresearch/comparison_plots/dispatch_comparison.svg)
 
 **Caveats on interpretation:**
 
@@ -419,13 +419,13 @@ The initial head-to-head comparison above was limited to 4 episodes per policy (
 | Rule heuristic | -4.82 | -$3,562 | $11,838 | $0 | $15,400 | 799.5 | -0.48 |
 | DT old pretrain (4×128, ctx=1152) | -13.55 | -$10,620 | $27 | $2,328 | $12,975 | 746.0 | -2.20 |
 
-![Mean reward comparison — expanded evaluation (135 episodes per policy)](eval_output/autoresearch/comparison_plots/expanded/mean_reward_comparison.svg)
+![Mean reward comparison — expanded evaluation (135 episodes per policy)](eval_output/aemo/autoresearch/comparison_plots/expanded/mean_reward_comparison.svg)
 
-![Revenue decomposition across all policies](eval_output/autoresearch/comparison_plots/expanded/profit_decomposition.svg)
+![Revenue decomposition across all policies](eval_output/aemo/autoresearch/comparison_plots/expanded/profit_decomposition.svg)
 
-![Risk-return profile — expanded evaluation](eval_output/autoresearch/comparison_plots/expanded/risk_return_comparison.svg)
+![Risk-return profile — expanded evaluation](eval_output/aemo/autoresearch/comparison_plots/expanded/risk_return_comparison.svg)
 
-![Dispatch intensity vs degradation cost](eval_output/autoresearch/comparison_plots/expanded/dispatch_comparison.svg)
+![Dispatch intensity vs degradation cost](eval_output/aemo/autoresearch/comparison_plots/expanded/dispatch_comparison.svg)
 
 **Key observations:**
 

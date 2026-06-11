@@ -86,10 +86,10 @@ When running long GPU training (DT pretrain / optimizer experiments), always col
 
 ### Recommended runner (host-side)
 
-From repo root (host), launch the telemetry-wrapped training script (logs are written under `eval_output/system_logs/<TAG>/`):
+From repo root (host), launch the telemetry-wrapped training script (logs are written under `eval_output/training/monitor/<TAG>/`):
 
 ```bash
-bash eval_output/system_logs/run_full_learning_baseline.sh <TAG>
+bash eval_output/training/monitor/run_full_learning_baseline.sh <TAG>
 ```
 
 This captures:
