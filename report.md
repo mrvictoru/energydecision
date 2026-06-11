@@ -404,6 +404,29 @@ The comparison includes:
 
 8. **GPU resource constraints:** The RTX 3060 Ti (8 GB VRAM) limits the feasible model size and context length. Context length 2016 (full week) causes CUDA OOM even at batch_size=1. Context=1008 fits at batch=1 but training is ~3× slower than context=180.
 
+### 8.6.1 Expanded Evaluation (135 episodes, 5 regions, 2024)
+
+The initial head-to-head comparison above was limited to 4 episodes per policy (2 scenarios × 2 episodes). The following expanded evaluation uses the same evaluator with **27 scenarios** (5 NEM regions × 6 bi-monthly 14-day windows, TAS1 contributing 3 windows), **5 episodes per variant** with random starts, **12-day (288h) episode length**, and **8 parallel workers** (DT parallelized). This gives **135 episodes per policy** — a 34× increase in sample size.
+
+| Policy | Mean Reward | Profit/Ep | Energy Rev | FCAS Rev | Deg Cost | Dispatch (MWh) | Sharpe |
+|--------|:-----------:|:---------:|:----------:|:--------:|:--------:|:--------------:|:------:|
+| PPO (RL) | **+12.82** | **+$12,839** | $3,669 | **$10,628** | $1,458 | 27.1 | **+1.26** |
+| DT full-pretrained (8×512, ctx=180) | -3.11 | -$1,396 | $1,030 | $77 | $2,503 | 110.6 | -0.40 |
+| Rule heuristic | -4.82 | -$3,562 | $11,838 | $0 | $15,400 | 799.5 | -0.48 |
+| DT old pretrain (4×128, ctx=1152) | -13.55 | -$10,620 | $27 | $2,328 | $12,975 | 746.0 | -2.20 |
+
+**Key observations:**
+
+1. **PPO dominates at scale:** With 135 episodes across all regions and seasons, PPO achieves mean_reward = +12.82 and +$12,839/ep profit. Its FCAS revenue ($10,628/ep) is 138× the full-pretrained DT's ($77/ep). PPO is the only policy with positive Sharpe ratio (+1.26).
+
+2. **Full-pretrained DT beats rule but lags PPO:** The full-pretrained DT (mean_reward = -3.11) outperforms the rule baseline (-4.82) by 1.7 points. It keeps degradation costs low ($2,503/ep vs rule's $15,400) and dispatches conservatively (110.6 MWh/ep vs rule's 799.5 MWh/ep). However, it fails to capture FCAS revenue — the single largest revenue stream in the AEMO market.
+
+3. **Old pretrain DT (4×128) is the worst policy:** The original pilot model dispatches 746 MWh/ep — 6.7× the full-pretrained DT — with massive degradation ($12,975/ep) and near-zero energy revenue ($27/ep). Its mean_reward (-13.55) is 4.4× worse than the full-pretrained DT.
+
+4. **Autoresearch hyperparameters transformed the DT:** The improvements from the pilot (4×128, ctx=1152) to full-pretrained (8×512, ctx=180) are dramatic: 6.8× less dispatch (746 → 110.6 MWh), 5.2× less degradation ($12,975 → $2,503), and a 10.4-point improvement in mean_reward (-13.55 → -3.11).
+
+5. **Expanded evaluation confirms earlier findings:** The relative ranking established in the 4-episode head-to-head (PPO > tuned DT > rule > pretrain DT) is robust to a 34× increase in sample size. However, the absolute magnitudes differ because the expanded evaluation covers more regions, seasons, and longer episodes.
+
 ### 8.7 Overall Observations on the Decision Transformer
 
 Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive and uniquely flexible control strategy for battery operation:

@@ -122,3 +122,7 @@ bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell
 20260611-full-eval	aemo	-5.359	keep	full evaluator: rule heuristic baseline
 20260611-full-eval	aemo	-5.394	keep	full evaluator: dispatch Torrens Island (SA1 only, 0 ep in NSW1 — station inactive)
 20260611-full-eval	aemo	-7.117	discard	full evaluator: pretrain DT (original pilot) — worst performer, overly aggressive dispatch (326.5 MWh/ep)
+20260611-expanded-eval	aemo	12.817	keep	expanded evaluator (5 regions, 6 periods, 288h ep, 5 ep/variant, 135 ep total): PPO RL mean_reward=+12.82 — dominates on FCAS ($10,628/ep)
+20260611-expanded-eval	aemo	-3.105	keep	expanded evaluator: DT full-pretrained (8x512, ctx=180, trained on 24+16 ep) mean_reward=-3.11 — beats rule (-4.82), deg=2.5K/ep, but FCAS=$77/ep vs PPO's $10.6K
+20260611-expanded-eval	aemo	-4.819	keep	expanded evaluator: rule heuristic mean_reward=-4.82 — high energy rev ($11.8K) but massive deg ($15.4K)
+20260611-expanded-eval	aemo	-13.550	discard	expanded evaluator: pretrain DT (original 4x128 pilot) mean_reward=-13.55 — worst performer, overly aggressive (746 MWh/ep), deg=$13K/ep
