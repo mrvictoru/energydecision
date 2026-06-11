@@ -8,8 +8,8 @@ This project establishes a comprehensive, reproducible benchmark for residential
 ## Key Components
 
 1.  **Simulation Environments:**
-    *   **Household:** [SolarBatteryEnv](docs/HOUSEHOLD_ENV_README.md) - Residential PV + Battery with ToU tariffs.
-    *   **Grid:** [AEMOBatteryTradingEnv](docs/AEMO_ENV_README.md) - Arbitrage & FCAS in the Australian National Electricity Market.
+    *   **Household:** [Household docs guide](docs/household/README.md) - Start here to find the household environment or degradation deep dive.
+    *   **Grid:** [AEMO docs guide](docs/aemo/README.md) - Start here to find the right AEMO environment, workflow, replay, degradation, or roadmap document.
 
 2.  **Algorithms ([COMPONENTS.md](COMPONENTS.md)):**
     *   **Optimization:** Stochastic Dynamic Programming (SDP) & Multi-Resolution DP (MRDP).
@@ -19,7 +19,6 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
-[![Tests](https://img.shields.io/badge/tests-132%20passing-brightgreen)]()
 
 ### Roadmap
 *   [x] **Core:** Gymnasium environment & Rule-based agents.
@@ -33,7 +32,8 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Risk-sensitive evaluation:** CVaR/VaR tail-risk metrics (`var_5`, `cvar_5`) computed by `evaluate_experiment_logs`.
 *   [x] **Statistical comparisons:** Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired Wilcoxon signed-rank tests (`paired_comparison`) across customers/seeds.
 *   [x] **Conduct data gathering and training on AEMO env:** Run dispatch replay and RL-agent in `AEMOBatteryTradingEnv` to collect trajectories for offline training for DT and evaluation.
-*   [ ] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts.
+*   [x] **Test out autoresearch:** Run the autoresearch loop for DT training.
+*   [x] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts; calibrate against the target held-out scenario before inference.
 *   [ ] **RL Fine-tuning:** Initialize Online RL with DT weights.
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
@@ -45,7 +45,41 @@ This project establishes a comprehensive, reproducible benchmark for residential
 
 ## Installation
 
-### Option 1: Docker (Recommended)
+### Option 1: Distrobox (Recommended for Linux development)
+Sets up a low-friction local-dev shell that works from the repo root.
+
+```bash
+podman build -t energydecision:latest .
+distrobox create --name energydecision --image energydecision:latest
+distrobox enter energydecision
+```
+
+If you want CUDA access for DT training, create a second box with NVIDIA passthrough enabled:
+
+```bash
+distrobox create --name energydecision-gpu --image energydecision:latest --nvidia
+distrobox enter energydecision-gpu
+python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+From inside the box, work from the repository root:
+
+```bash
+cd /path/to/energydecision
+python3 src/pretrain_decision_transformer.py ...
+```
+
+Use normal `data/...` and `models/...` paths from the repo root.
+
+For AEMO DT training, prefer the launcher below instead of calling the wrapper directly. It derives tier
+defaults, writes a launch plan JSON, and re-enters the preferred Distrobox automatically when invoked from
+the host:
+
+```bash
+python3 src/launch_aemo_training.py --run-tier proxy-baseline
+```
+
+### Option 2: Docker (shared / CI workflow)
 Sets up a JupyterLab environment with all dependencies.
 
 ```bash
@@ -61,7 +95,7 @@ docker exec -it test_energy_container /bin/bash
 
 Inside the container the working directory is `/code/src`, so repository-relative paths usually start with `../`.
 
-### Option 2: Local Installation
+### Option 3: Local Installation
 
 ```bash
 git clone <repository-url>
@@ -70,19 +104,32 @@ pip install -r requirements.txt
 pip install -r torch_req.txt
 ```
 
+See `toolbx_guide.md` for the full command sequence and the repo-root path rule.
+
 ## Data Setup
 
 1.  **Household Data:** Download **Ausgrid Solar Home Electricity Data** (July 2010 - June 2013) and place it under `data/household/raw/`.
 2.  **AEMO Data:** Automatically fetched via `src/aemo_data.py` (cached in `data/aemo/`).
+    - The AEMO static generator mapping used by NEMOSIS is the **NEM Registration and Exemption List**.
+    - NEMOSIS' direct download URL is:
+      `https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls`
+    - If that direct link changes, use AEMO's NEM registration / registered participants page to re-download it manually:
+      `https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/participate-in-the-market/registration/registered-participants`
+    - Save the manual file under `data/aemo/manual/` to make it take priority over the runtime cache, or point the code at any local copy with `AEMO_GENERATORS_FILE=/absolute/path/to/file.xls`.
+    - NEMOSIS-managed static downloads now live under `data/aemo/_nemosis_static/`, so a failed fetch should not overwrite your manual copy.
+    - To force dynamic AEMO loads to use only the local cache and never try the network, set `AEMO_CACHE_ONLY=1`. Missing monthly cache files will then fail fast with the expected filename.
+    - If NEMOSIS cannot fetch post-2024-07 monthly MMS files, use the repo tool to stage them into the same cache layout:
+      `python3 src/fetch_aemo_monthly_cache.py --year 2025`
+      By default it downloads `DISPATCHLOAD`, `DISPATCHPRICE`, `DISPATCHREGIONSUM`, and `DISPATCH_UNIT_SCADA` into `data/aemo/`.
 
 ## Reproducing the experiments
 
 The repository now has one canonical notebook location: `notebooks/`. If you are cloning the repo from scratch, the easiest path is:
 
-1. start Docker with `docker compose up --build`
+1. start Distrobox with `distrobox enter energydecision`
 2. open Jupyter at `http://localhost:8888`
 3. run the notebooks from `notebooks/` in the order below
-4. use the CLI training scripts from inside `test_energy_container` when you want long-running DT training outside the notebook UI
+4. use the CLI training scripts from inside the Distrobox shell when you want long-running DT training outside the notebook UI
 
 ### Residential workflow
 
@@ -103,9 +150,10 @@ Use this path to recreate the residential PV + battery experiments.
    - Can also generate rollouts you may want to compare against the rule/SDP baselines.
 
 4. `python3 pretrain_decision_transformer.py ...`
-   - Main residential offline-RL training entrypoint.
-   - Reads logs from `../data/household/logs/`.
-   - Saves DT checkpoints and models under `../models/household/dt/`.
+    - Main residential offline-RL training entrypoint.
+    - Run this from the repo root as `python3 src/pretrain_decision_transformer.py ...`.
+    - Reads logs from `data/household/logs/`.
+    - Saves DT checkpoints and models under `models/household/dt/`.
 
 5. `notebooks/test_eval.ipynb`
    - Main residential evaluation notebook.
@@ -139,10 +187,12 @@ Use this path to recreate the grid-scale AEMO experiments.
    - Builds the DT dataset at `data/aemo_dt/aemo_dt_dataset.parquet`.
    - Writes raw logs to `data/aemo_dt/raw_logs/` and the config/manifest needed for DT training.
 
-5. `python3 pretrain_aemo_decision_transformer.py ...`
-   - Main AEMO offline-RL training entrypoint.
-   - Reads the parquet dataset produced by `notebooks/aemo_simrun.ipynb`.
-   - Saves checkpoints and models under `../models/aemo/dt/`.
+5. `python3 src/launch_aemo_training.py --run-tier ...`
+    - Canonical AEMO offline-RL launcher for CLI runs.
+    - Derives safe defaults from `proxy-smoke`, `proxy-baseline`, or `learning-baseline`.
+    - Re-enters `energydecision-gpu` automatically when available, writes `aemo_training_launch_plan.json`,
+      and launches the live dashboard through `src/dt_progress_runner.py`.
+    - Uses `src/pretrain_aemo_decision_transformer.py` underneath for the actual training job.
 
 6. `notebooks/aemo_eval.ipynb`
    - Main AEMO evaluation notebook.
@@ -159,7 +209,7 @@ If you only want the main AEMO reproduction path, use:
 - `python3 pretrain_decision_transformer.py` -> `models/household/dt/`
 - `notebooks/aemo_sb3train.ipynb` -> `models/aemo_sb3/`
 - `notebooks/aemo_simrun.ipynb` -> `data/aemo_dt/`
-- `python3 pretrain_aemo_decision_transformer.py` -> `models/aemo/dt/`
+- `python3 src/launch_aemo_training.py` -> `models/aemo/dt/`
 - evaluation notebooks -> `eval_output/` (depending on notebook settings)
 
 ### Recreating experiments from code instead of notebooks
@@ -172,10 +222,15 @@ If you prefer scripting over notebooks:
 - AEMO environment starts from `src/AEMOBatteryEnv.py`
 - AEMO notebook helpers live in `src/aemo_notebook_utils.py`
 - AEMO DT training starts from `src/pretrain_aemo_decision_transformer.py`
+- The robust AEMO training harness starts from `src/launch_aemo_training.py`
 
 The `COMPONENTS.md` file is the best code-oriented reference once you want to move beyond the notebook-first workflow.
 
 ## Training Decision Transformers from the CLI
+
+Unless noted otherwise, the command blocks in this section assume you are already inside `/code/src`
+after `docker exec -it test_energy_container /bin/bash`. If you run them from the repository root
+instead, prefix the script path with `src/` and drop the leading `../` from data/model paths.
 
 ### Residential DT training
 
@@ -288,8 +343,47 @@ python3 pretrain_aemo_decision_transformer.py \
     --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv
 ```
 
+### Editable DT training surface
+
+`src/pretrain_decision_transformer.py` is the single sanctioned Decision Transformer experiment surface for constrained DT training changes in the current codebase.
+
+- **Editable surface**: `src/pretrain_decision_transformer.py`
+- **Stable implementation layers**: `src/decision_transformer.py` and `src/transformer_training.py`
+- **Adapters that should stay compatible**: `src/pretrain_aemo_decision_transformer.py` and `src/aemo_notebook_utils.py`
+- **Read-only areas for this workflow**: evaluation logic, environment dynamics, dataset schema, and notebooks
+
+The editable surface exposes only approved, validated knobs:
+
+- Searchable knobs include presets, model variants, DT dimensions, dropout, RoPE settings, batch size, epochs, learning rate, loss weights, AMP mode, and DataLoader worker settings.
+- Frozen invariants include the parquet trajectory schema, the shared DT training engine, the shared model implementation, adapter invocation contracts, and the existing artifact layout (`*.pt`, checkpoint, loss CSVs, metadata sidecars).
+
+Safety and compatibility rules enforced by the shared entrypoint:
+
+- AEMO-shaped DT runs must keep `act_dim` aligned with the action mode (`simple -> 1`, `multi_market -> 3`).
+- Transformer width settings must remain internally consistent (`h_dim` divisible by `n_heads`).
+- Unknown model-config keys and unsupported preset/variant names are rejected early.
+- The editable surface logs a resolved training-surface manifest next to the loss CSV so each run is explicit and reproducible.
+- Output artifact paths remain inside the repository root so the harness cannot redirect writes to arbitrary filesystem locations.
+
+Canonical command for the editable surface:
+
+```bash
+python3 src/pretrain_decision_transformer.py \
+    --surface-preset autoresearch_safe \
+    --data-dir data/household/logs \
+    --patterns train_episode_01 train_episode_02 \
+    --epochs 2 \
+    --batch-size 6 \
+    --lr 2e-5 \
+    --save-path models/household/dt/dt_model.pt \
+    --checkpoint-path models/household/dt/dt_model_checkpoint.pt \
+    --loss-csv-path models/household/dt/dt_model_loss_history.csv
+```
+
 Notes:
 
+- Interactive DT runs now show a built-in live terminal monitor with epoch/batch progress, loss, LR, skipped batches, CPU usage, RAM usage, and GPU/VRAM stats when available.
+- The same live monitor works from the repo root and from the Docker shell under `/code/src` because it is built into the shared DT trainer.
 - `--subset-episodes` controls how many whole episodes are written into each temporary subset parquet.
 - The wrapper now computes one global episode-level train/validation split before writing subset files, so validation stays consistent across all subset stages.
 - The first subset starts fresh; later subsets automatically add `--resume` so optimizer and checkpoint state carry forward.
@@ -309,10 +403,9 @@ energydecision/
 ├── docs/                    # Deep dive documentation, assets, and references
 │   ├── assets/
 │   ├── references/
-│   ├── HOUSEHOLD_ENV_README.md
-│   ├── AEMO_ENV_README.md
+│   ├── aemo/
+│   ├── household/
 │   ├── DP_ALGORITHM_README.md
-│   ├── BATTERY_DEGRADATION_DETAILS.md
 │   └── HELPER_README.md
 ├── notebooks/               # Canonical workflow/demo notebooks
 ├── src/                     # Source code
@@ -576,20 +669,20 @@ pytest tests/ -v --durations=10
 
 ### Test Categories
 
-| Test File | Purpose | Test Count |
-|-----------|---------|------------|
-| `test_environment.py` | SolarBatteryEnv functionality, observation handling | 8 |
-| `test_decision_agent.py` | SDP solver, Oracle agent, policy computation | 8 |
-| `test_performance.py` | Performance benchmarks and optimization validation | 6 |
-| `test_quantile_scenarios.py` | Quantile scenario generation | 22 |
-| `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking | 12 |
-| `test_real_world_degradation.py` | RealWorldBESSDegradationModel unit tests, AEMO env integration, mode switching | 28 |
-| `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases | 16 |
-| `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init | 5 |
-| `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space | 5 |
-| `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons | 22 |
+| Test File | Purpose |
+|-----------|---------|
+| `test_environment.py` | SolarBatteryEnv functionality, observation handling |
+| `test_decision_agent.py` | SDP solver, Oracle agent, policy computation |
+| `test_performance.py` | Performance benchmarks and optimization validation |
+| `test_quantile_scenarios.py` | Quantile scenario generation |
+| `test_aemo_degradation.py` | Rainflow counter, capacity fade, SOC tracking |
+| `test_real_world_degradation.py` | RealWorldBESSDegradationModel unit tests, AEMO env integration, mode switching |
+| `test_episode_visualizer.py` | Env type detection, plotting, saving, edge cases |
+| `test_algorithm_classes.py` | SDP/MRDP/Oracle class imports & init |
+| `test_aemo_env_compatibility.py` | Gymnasium API, SB3 compat, observation space |
+| `test_risk_statistics.py` | CVaR/VaR, bootstrap CIs, paired comparisons |
 
-**Total: 132 tests**
+Run `pytest tests/ -v` to see the current test total for your checkout and environment.
 
 ---
 
@@ -609,7 +702,10 @@ See `requirements.txt` and `torch_req.txt` for complete dependency lists.
 
 ## Documentation
 *   **[COMPONENTS.md](COMPONENTS.md)**: Detailed usage guide for key scripts (`decision.py`, `batterydeg.py`, etc.).
-*   **[Household Environment](docs/HOUSEHOLD_ENV_README.md)**: Physics, Reward Function, and Observation Space.
-*   **[AEMO Environment](docs/AEMO_ENV_README.md)**: Market dynamics, FCAS, and data pipeline.
-*   **[Dispatch Replay Utilities](docs/AEMO_DISPATCH_UTILS.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
-*   **[AEMO DT Workflow](docs/AEMO_DT_WORKFLOW.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.
+*   **[program.md](program.md)**: Repository-specific instructions for an autonomous autoresearch harness operating on the constrained DT training surface.
+*   **[Household docs guide](docs/household/README.md)**: Entry point for the household documentation set.
+*   **[AEMO docs guide](docs/aemo/README.md)**: Entry point for the AEMO documentation set.
+*   **[Household Environment](docs/household/environment.md)**: Physics, reward function, and observation space.
+*   **[AEMO Environment](docs/aemo/environment.md)**: Market dynamics, FCAS, and data pipeline.
+*   **[Dispatch Replay Utilities](docs/aemo/dispatch-replay.md)**: `dispatch_utils` API — selecting DUIDs, resolving sizing, and running replay episodes.
+*   **[AEMO DT Workflow](docs/aemo/workflow.md)**: Notebook-first AEMO offline-data collection, SB3 training, and Decision Transformer workflow.

@@ -6,6 +6,8 @@ The effective integration of battery energy storage is critical for a reliable, 
 
 The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). A core motivation of this repository is to bring **modern transformer-based sequence modeling** to the practical challenge of battery operation, and to evaluate these models against established planning and RL baselines under consistent dynamics and metrics. Rule-based heuristics, dynamic-programming planners (SDP/MRDP), online RL baselines (Stable-Baselines3), and dispatch-replay baselines for the AEMO environment are included primarily as comparators and data-generators for DT training.
 
+> **Key empirical finding:** On the household environment, the DT achieves state-of-the-art results (best mean return, beating Oracle). **On the utility-scale AEMO environment, however, PPO (online RL) is the dominant policy** — achieving mean_reward = +12.82 vs the full-pretrained DT's -3.11 on the expanded 135-episode evaluation. The DT's offline training data lacks the FCAS bidding patterns that PPO exploits for $10,628/ep in ancillary market revenue. These results suggest that environment complexity (1D energy-only vs 3D multi-market bidding) dictates which learning paradigm is most effective, and that training DT on RL-generated trajectories is a promising direction for closing the gap.
+
 ## 1. Introduction
 
 The proliferation of energy storage across the grid—from distributed, behind-the-meter household batteries to grid-scale battery energy storage systems (BESS) participating in wholesale markets—presents both a challenge and an opportunity for modern power systems. While these assets can reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by stochastic demand/generation, time-varying tariffs or market prices, non-linear battery degradation dynamics, and strict physical constraints [6].
@@ -119,7 +121,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 > - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
 > To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
 
-**Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
+**Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
 > **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
 
@@ -167,7 +169,7 @@ DT hyperparameters:
 - Training-time `return_scale` is stored in checkpoints and also written to `*.meta.json` sidecars for consistent inference.
 
 Compute and reproducibility:
-- Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for running a consistent environment.
+- Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for shared Docker workflows, plus a Distrobox guide for lower-friction local development.
 - Figures: `evaluate_experiments(..., save_dir=..., save_format=...)` can save plots (default `save_format='svg'`).
 
 ## 7. Metrics and Analysis
@@ -193,7 +195,7 @@ The following tail-risk metrics are computed by `evaluate_experiment_logs` and i
 | `var_5` | Value-at-Risk at 5%: the 5th percentile of episode returns, representing the worst-case threshold below which only 5% of outcomes fall. |
 | `cvar_5` | Conditional VaR (Expected Shortfall) at 5%: the mean of all episode returns at or below `var_5`, quantifying the expected loss in the tail. |
 
-These metrics appear in evaluation tables (e.g., `eval_output/risk_metrics.csv`) and are also available in the DataFrame returned by `evaluate_experiments()`.
+These metrics appear in evaluation tables (e.g., `eval_output/household/risk_metrics.csv`) and are also available in the DataFrame returned by `evaluate_experiments()`.
 
 ### 7.3 Statistical Comparisons
 
@@ -204,9 +206,9 @@ Two statistical comparison tools are implemented in `src/helper.py`:
 - **Paired comparisons** (`paired_comparison`): given two experiments with matched episodes (same customer/seed index), computes per-episode metric differences and applies the Wilcoxon signed-rank test (requires SciPy, ≥10 paired episodes). Returns `{mean_diff, median_diff, std_diff, wilcoxon_stat, wilcoxon_p}`.
 
 Exported artifacts:
-- `eval_output/risk_metrics.csv` — tail-risk summary (VaR, CVaR) for all experiments.
-- `eval_output/pairwise_summary.csv` — Wilcoxon signed-rank test results for all algorithm pairs.
-- `eval_output/pairwise_significance_heatmap.svg` — visual summary of head-to-head significance.
+- `eval_output/household/risk_metrics.csv` — tail-risk summary (VaR, CVaR) for all experiments.
+- `eval_output/household/pairwise_summary.csv` — Wilcoxon signed-rank test results for all algorithm pairs.
+- `eval_output/household/pairwise_significance_heatmap.svg` — visual summary of head-to-head significance.
 
 > **NOTE:** These statistical analyses are available in `src/helper.py` and demonstrated in `notebooks/test_eval.ipynb`, but are not plotted by default in `evaluate_experiments()`; they can be run as part of a notebook/script workflow or exported as CSV artifacts.
 
@@ -222,7 +224,7 @@ Standard diagnostic plots produced by `evaluate_experiments(..., save_dir=...)`:
 
 ### 8.1 Baseline Comparison
 
-The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C, DDPG, TD3), Oracle (perfect foresight), and Decision Transformer agents on the household environment. The full metrics are stored in [eval_output/base/evaluation_metrics.csv](eval_output/base/evaluation_metrics.csv).
+The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C, DDPG, TD3), Oracle (perfect foresight), and Decision Transformer agents on the household environment. The full metrics are stored in [eval_output/household/baseline/evaluation_metrics.csv](eval_output/household/baseline/evaluation_metrics.csv).
 
 | Algorithm | Mean Reward | Std Reward | Sharpe | Avg Degradation/Ep | Avg Grid Net (kWh) |
 |-----------|----------:|----------:|------:|-------------------:|-------------------:|
@@ -237,13 +239,13 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 | sac | -3686.60 | 2169.83 | -1.699 | 0.3428 | 4432.64 |
 | ddpg | -4398.31 | 2564.92 | -1.715 | 0.3499 | 4546.06 |
 
-![Mean episode return and variability by agent](eval_output/base/mean_reward.svg)
+![Mean episode return and variability by agent](eval_output/household/baseline/mean_reward.svg)
 
-![Risk vs return for each agent](eval_output/base/risk_return.svg)
+![Risk vs return for each agent](eval_output/household/baseline/risk_return.svg)
 
-![Episode return distribution across customers](eval_output/base/episode_distribution.svg)
+![Episode return distribution across customers](eval_output/household/baseline/episode_distribution.svg)
 
-![Net grid energy balance by agent](eval_output/base/grid_energy.svg)
+![Net grid energy balance by agent](eval_output/household/baseline/grid_energy.svg)
 
 **Key observations:**
 - **Mean episode return ranking:** DT (`dt_rtg_neg1500`, -2454) > Oracle (-2483) > A2C (-2529) > SDP (-2598) > MRDP (-2767) > PPO (-2828) > Rule (-3077) > TD3 (-3213) > SAC (-3687) > DDPG (-4398). After retraining with the episode-level data split fix, DT achieves the best mean return in the base comparison, surpassing even the perfect-foresight Oracle. Other DT RTG prompts (e.g., `dt_rtg_neg200` at -2408) perform even better \u2014 see Section 8.2.
@@ -254,7 +256,7 @@ The comparative evaluation covers Rule-based, SDP/MRDP, online RL (PPO, SAC, A2C
 
 ### 8.2 Decision Transformer RTG Sensitivity
 
-The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/dt_compare/evaluation_metrics.csv)) shows how the initial RTG prompt affects policy behavior:
+The DT comparison ([eval_output/household/dt_sensitivity/evaluation_metrics.csv](eval_output/household/dt_sensitivity/evaluation_metrics.csv)) shows how the initial RTG prompt affects policy behavior:
 
 | DT Variant | Mean Reward | Std Reward | Avg Degradation/Ep | Avg Grid Net (kWh) |
 |-----------|----------:|----------:|-------------------:|-------------------:|
@@ -266,13 +268,13 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 | dt_rtg_neg1 | -2831.45 | 2840.23 | 0.1137 | 3875.12 |
 | rule | -3077.26 | 3454.07 | 0.0541 | 3909.03 |
 
-![DT episode return and variability by agent](eval_output/dt_compare/mean_reward.svg)
+![DT episode return and variability by agent](eval_output/household/dt_sensitivity/mean_reward.svg)
 
-![DT sensitivity: Risk vs Return](eval_output/dt_compare/risk_return.svg)
+![DT sensitivity: Risk vs Return](eval_output/household/dt_sensitivity/risk_return.svg)
 
-![DT sensitivity: Episode Return Distribution](eval_output/dt_compare/episode_distribution.svg)
+![DT sensitivity: Episode Return Distribution](eval_output/household/dt_sensitivity/episode_distribution.svg)
 
-![DT sensitivity: Grid Energy and Degradation](eval_output/dt_compare/grid_energy.svg)
+![DT sensitivity: Grid Energy and Degradation](eval_output/household/dt_sensitivity/grid_energy.svg)
 
 **Key observations:**
 - **RTG prompt matters:** `dt_rtg_neg200` and `dt_rtg_neg500` achieve essentially identical best mean returns (\u2248-2408), outperforming all baselines including Oracle (-2483). Moderate prompts (neg200 through neg1500) all outperform Oracle, while the near-zero prompt `dt_rtg_neg1` (-2831) falls below SDP.
@@ -284,7 +286,7 @@ The DT comparison ([eval_output/dt_compare/evaluation_metrics.csv](eval_output/d
 
 ### 8.3 Tail-Risk Analysis
 
-The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case performance:
+The tail-risk summary from `eval_output/household/risk_metrics.csv` highlights worst-case performance:
 
 | Algorithm | Mean Reward | VaR 5% | CVaR 5% | Sharpe | Sortino |
 |-----------|----------:|-------:|--------:|------:|-------:|
@@ -310,7 +312,7 @@ The tail-risk summary from `eval_output/risk_metrics.csv` highlights worst-case 
 
 ### 8.4 Pairwise Statistical Comparisons
 
-The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` quantify algorithm-pair differences. Selected key comparisons:
+The Wilcoxon signed-rank test results from `eval_output/household/pairwise_summary.csv` quantify algorithm-pair differences. Selected key comparisons:
 
 | Comparison (A vs B) | Mean Diff (A\u2212B) | p-value | Interpretation |
 |---------------------|---------------:|--------:|----------------|
@@ -325,7 +327,7 @@ The Wilcoxon signed-rank test results from `eval_output/pairwise_summary.csv` qu
 | oracle vs sac | +1203.21 | 2.2e-6 | Oracle significantly better |
 | sdp vs td3 | +614.81 | 0.0014 | SDP significantly better |
 
-![Pairwise signed significance heatmap (Wilcoxon)](eval_output/pairwise_significance_heatmap.svg)
+![Pairwise signed significance heatmap (Wilcoxon)](eval_output/household/pairwise_significance_heatmap.svg)
 
 **Heatmap reading guide** (row algorithm vs column algorithm):
 - **Color direction:** warm/red = row outperforms column (`mean_diff > 0`); cool/blue = underperformance.
@@ -346,17 +348,109 @@ The utility-scale AEMO environment is now implemented at the workflow level via 
 
 This replay capability is important for two reasons. First, it provides a realistic benchmark trace derived from actual market participation rather than a synthetic heuristic. Second, it allows the same evaluation stack used for household experiments to be applied to utility-scale episodes, including reward, state-of-charge, price, and degradation diagnostics. The broader AEMO benchmark is still being expanded, but the core environment plus historical-station replay path is already operational.
 
-![Representative AEMO dispatch replay showing reward, state of charge, replayed historical actions, and price signals](eval_output/aemo/dispatchreplay_hpr1_20192022.png)
+![Representative AEMO dispatch replay showing reward, state of charge, replayed historical actions, and price signals](eval_output/aemo/notebook/dispatchreplay_hpr1_20192022.png)
 
 The replay graph illustrates a representative utility-scale episode produced by the current notebook workflow. The plotted action trace is sourced from historical station dispatch, while the surrounding panels show how those actions interact with simulated battery state and contemporaneous market prices inside the environment. This demonstrates that the repository has moved beyond a placeholder AEMO design: it can already ingest historical utility-scale data and replay existing station behavior end-to-end.
 
-### 8.6 Overall Observations on the Decision Transformer
+### 8.6 AEMO Autoresearch Full Evaluation
 
-Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive and uniquely flexible control strategy for battery operation:
-1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT outperforms established planners (SDP, MRDP) and standard online RL agents (PPO, SAC). Its best variants (`dt_rtg_neg200`/`dt_rtg_neg500`, mean \u2248 -2408) achieve statistically significant improvements over the perfect-foresight Oracle (mean -2483, p < 0.005). These results hold after correcting the train/val split to prevent window leakage across episodes.
-2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. Moderate RTG prompts (neg200 to neg1500) achieve both strong returns and very low degradation (0.005\u20130.014/ep), while the near-zero prompt (`dt_rtg_neg1`) exhibits significantly higher degradation (0.114/ep) and lower returns.
-3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines. DT moderate-prompt CVaR (\u2248 -9705) is better than A2C (-9966), SDP (-9965), and PPO (-10089).
-4. **Robust to Data Split Correction:** The episode-level split fix had minimal impact on moderate RTG prompts (which retained strong performance), while `dt_rtg_neg1` was most affected \u2014 suggesting the model's core learned policy is robust, and only the extreme-prompt behavior relied on overfitted patterns.
+**Bottom line: PPO (online RL) is the best AEMO policy by a wide margin.** On the expanded 135-episode evaluation, PPO achieves mean_reward = +12.82 and +$12,839/ep profit — 4× better mean_reward than the full-pretrained DT (-3.11) and 16× better than the old pretrain DT (-13.55). PPO also has the only positive Sharpe ratio (+1.26) and dominates FCAS revenue ($10,628/ep vs DT's $77/ep). See Section 8.6.1 for the detailed results. The Decision Transformer results below are included to document the autoresearch optimization trajectory, but PPO remains the strongest AEMO baseline in this repository.
+
+The following results were produced by the [autoresearch program](program.md), which constrained hyperparameter search to the sanctioned experiment surface in `src/pretrain_decision_transformer.py`. The evaluation uses the **full held-out evaluator** (`configs/aemo_autoresearch_evaluator.example.json`) with two 14-day scenarios (NSW1 Jan 2024, SA1 Winter 2024), 144-hour episodes, and two episodes per scenario × battery variant.
+
+The comparison includes:
+- **Tuned DT (autoresearch):** 8×512, drop_p=0.15, context_len=180, trained on the full 24-episode AEMO corpus with learning-baseline settings (return_scale=2.0, discount=0.95, action_loss_weight=0.75, lr=3e-5)
+- **Pretrain DT (original):** 4×128 pilot model trained on 6 proxy episodes (the model before any hyperparameter tuning)
+- **PPO (RL):** Online RL baseline trained on the AEMO environment
+- **Rule heuristic:** Surplus/deficit logic baseline
+- **Dispatch replay (Dalrymple North, Torrens Island):** Historical AEMO station dispatch traces
+
+| Policy | Mean Reward | Profit/Ep | Energy Rev | FCAS Rev | Deg Cost | Dispatch (MWh) | Sharpe |
+|--------|:-----------:|:---------:|:----------:|:--------:|:--------:|:--------------:|:------:|
+| PPO (RL) | **+0.345** | **+$3,125** | $1,071 | $2,821 | $768 | 31.8 | 0.24 |
+| Tuned DT (autoresearch) | -1.256 | -$976 | $638 | $5 | $1,619 | 69.7 | -1.33 |
+| Dispatch - Dalrymple North | -1.426 | +$1,304 | $1,491 | $0 | $187 | 8.0 | N/A |
+| Rule heuristic | -5.359 | -$4,652 | $3,363 | $0 | $8,015 | 406.5 | -2.08 |
+| Dispatch - Torrens Island | -5.394 | -$5,394 | $0 | $0 | $5,394 | 0.0 | N/A |
+| Pretrain DT (original) | -7.117 | -$5,332 | -$706 | $1,116 | $5,742 | 326.5 | -11.44 |
+
+![Mean reward comparison across all policies](eval_output/aemo/autoresearch/comparison_plots/mean_reward_comparison.svg)
+
+![Revenue decomposition: energy, FCAS, and degradation cost](eval_output/aemo/autoresearch/comparison_plots/profit_decomposition.svg)
+
+![Risk-return profile](eval_output/aemo/autoresearch/comparison_plots/risk_return_comparison.svg)
+
+![Battery dispatch intensity vs degradation](eval_output/aemo/autoresearch/comparison_plots/dispatch_comparison.svg)
+
+**Caveats on interpretation:**
+
+- **Reward normalization:** The AEMO environment applies `reward = (energy_revenue + fcas_revenue - degradation_cost + soc_penalty) / 1000`, so `mean_reward` values are in $k units. The `Profit/Ep` column shows raw financial accounting (total revenue - degradation cost, no penalties). The SOC penalty is the main difference — PPO dispatches aggressively and incurs SOC penalties that reduce its environment reward by ~$2,780/ep despite being financially profitable (+$3,125/ep).
+- **Speed of evaluation:** The full evaluator ran quickly (≈15 min total) because each policy evaluates only 2 scenarios × 2 episodes = 4 episodes total, using 4 parallel workers. The dispatch stations had no recorded energy dispatch in the NSW1 Jan 2024 period (0 episodes evaluated there), making those runs near-instant for that scenario.
+- **Data periods:** The test scenarios (Jan 2024, Jul 2024) are outside the PPO model's training distribution (trained on 2021–2023 data), so no data leakage exists. However, market conditions in 2024 differ from the training period, and both DT and PPO may perform differently on in-distribution test sets.
+
+**Key observations:**
+
+1. **Autoresearch improved DT substantially:** The tuned DT (mean_reward = -1.256) outperforms the pretrain DT (-7.117) by **5.7×**, demonstrating the value of the frontier hyperparameters (8×512, drop_p=0.15, context=180). The pretrain model was overly aggressive (326.5 MWh/ep dispatch) and actually lost money on energy trading (-$706/ep energy revenue).
+
+2. **PPO is the strongest AEMO baseline, consistent with prior evaluations:** PPO's mean_reward = +0.345 and positive net profit (+$3,125/ep) is in line with the earlier AEMO comparison notebook (`notebooks/aemo_eval.ipynb`), which evaluated the same RL models on 2021–2023 data across 5 regions and found PPO was the best RL algorithm at mean_reward = +1,619 (raw dollars). That earlier comparison did NOT include Decision Transformer models — this full evaluator run is the first AEMO head-to-head of DT vs RL. The previous DT outperformance over RL was on the household environment (Section 8.1), which uses 1D actions and ToU tariffs, a fundamentally different problem than the AEMO 3D multi-market bidding.
+
+3. **PPO exploits FCAS markets, DT does not:** PPO earns $2,821/ep in FCAS revenue vs DT's $5/ep. This is the single largest gap. The DT was trained on offline data from mixed policy sources (rule, RL, dispatch replay), and those trajectories may not have sufficiently explored FCAS bidding strategies. Training DT on PPO-generated trajectories could close this gap.
+
+4. **Tuned DT is conservative but unprofitable:** The DT dispatches 69.7 MWh/ep (down from 326.5 for pretrain) and keeps degradation costs moderate ($1,619 vs $8,015 for rule). It is less aggressive than PPO (31.8 MWh/ep) and rule (406.5 MWh/ep), but its revenue ($644/ep) fails to cover degradation.
+
+5. **Rule heuristic is the worst learner:** The rule baseline cycles aggressively (406.5 MWh/ep), incurring the highest degradation cost ($8,015/ep). Its mean_reward (-5.359) is only beaten by the pretrain DT and the Torrens Island dispatch (which was mostly idle in the test periods).
+
+5. **Dispatch replay value is limited for 2024 test windows:** Both Dalrymple North and Torrens Island had no recorded energy dispatch activity in the NSW1 January 2024 period, so their baselines are only informative for the SA1 Winter 2024 scenario. Dalrymple North achieved a dispatch-only profit of +$1,304/ep in SA1, demonstrating that real-world station operation can be profitable on energy arbitrage alone.
+
+6. **Context length optimization:** A dedicated proxy-pilot sweep confirmed that context=180 (15 hours of 5-min history) is optimal. Both shorter (120) and longer (288, 360, 576, 1008) contexts regressed validation loss, with the best fair-comparison result at ctx=180, batch=1 yielding val=0.0584.
+
+7. **Dropout optimization:** Frontier sweep 5 tested drop_p values of 0.05, 0.15, and 0.20. **drop_p=0.15** was the best, producing the best proxy total loss at the time (0.109743 on the 8×512 frontier). The current model uses drop_p=0.15.
+
+8. **GPU resource constraints:** The RTX 3060 Ti (8 GB VRAM) limits the feasible model size and context length. Context length 2016 (full week) causes CUDA OOM even at batch_size=1. Context=1008 fits at batch=1 but training is ~3× slower than context=180.
+
+### 8.6.1 Expanded Evaluation (135 episodes, 5 regions, 2024)
+
+The initial head-to-head comparison above was limited to 4 episodes per policy (2 scenarios × 2 episodes). The following expanded evaluation uses the same evaluator with **27 scenarios** (5 NEM regions × 6 bi-monthly 14-day windows, TAS1 contributing 3 windows), **5 episodes per variant** with random starts, **12-day (288h) episode length**, and **8 parallel workers** (DT parallelized). This gives **135 episodes per policy** — a 34× increase in sample size.
+
+| Policy | Mean Reward | Profit/Ep | Energy Rev | FCAS Rev | Deg Cost | Dispatch (MWh) | Sharpe |
+|--------|:-----------:|:---------:|:----------:|:--------:|:--------:|:--------------:|:------:|
+| PPO (RL) | **+12.82** | **+$12,839** | $3,669 | **$10,628** | $1,458 | 27.1 | **+1.26** |
+| DT full-pretrained (8×512, ctx=180) | -3.11 | -$1,396 | $1,030 | $77 | $2,503 | 110.6 | -0.40 |
+| Rule heuristic | -4.82 | -$3,562 | $11,838 | $0 | $15,400 | 799.5 | -0.48 |
+| DT old pretrain (4×128, ctx=1152) | -13.55 | -$10,620 | $27 | $2,328 | $12,975 | 746.0 | -2.20 |
+
+![Mean reward comparison — expanded evaluation (135 episodes per policy)](eval_output/aemo/autoresearch/comparison_plots/expanded/mean_reward_comparison.svg)
+
+![Revenue decomposition across all policies](eval_output/aemo/autoresearch/comparison_plots/expanded/profit_decomposition.svg)
+
+![Risk-return profile — expanded evaluation](eval_output/aemo/autoresearch/comparison_plots/expanded/risk_return_comparison.svg)
+
+![Dispatch intensity vs degradation cost](eval_output/aemo/autoresearch/comparison_plots/expanded/dispatch_comparison.svg)
+
+**Key observations:**
+
+1. **PPO dominates at scale:** With 135 episodes across all regions and seasons, PPO achieves mean_reward = +12.82 and +$12,839/ep profit. Its FCAS revenue ($10,628/ep) is 138× the full-pretrained DT's ($77/ep). PPO is the only policy with positive Sharpe ratio (+1.26).
+
+2. **Full-pretrained DT beats rule but lags PPO:** The full-pretrained DT (mean_reward = -3.11) outperforms the rule baseline (-4.82) by 1.7 points. It keeps degradation costs low ($2,503/ep vs rule's $15,400) and dispatches conservatively (110.6 MWh/ep vs rule's 799.5 MWh/ep). However, it fails to capture FCAS revenue — the single largest revenue stream in the AEMO market.
+
+3. **Old pretrain DT (4×128) is the worst policy:** The original pilot model dispatches 746 MWh/ep — 6.7× the full-pretrained DT — with massive degradation ($12,975/ep) and near-zero energy revenue ($27/ep). Its mean_reward (-13.55) is 4.4× worse than the full-pretrained DT.
+
+4. **Autoresearch hyperparameters transformed the DT:** The improvements from the pilot (4×128, ctx=1152) to full-pretrained (8×512, ctx=180) are dramatic: 6.8× less dispatch (746 → 110.6 MWh), 5.2× less degradation ($12,975 → $2,503), and a 10.4-point improvement in mean_reward (-13.55 → -3.11).
+
+5. **Expanded evaluation confirms earlier findings:** The relative ranking established in the 4-episode head-to-head (PPO > tuned DT > rule > pretrain DT) is robust to a 34× increase in sample size. However, the absolute magnitudes differ because the expanded evaluation covers more regions, seasons, and longer episodes.
+
+### 8.7 Overall Observations on the Decision Transformer
+
+Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive control strategy — but with a critical **environment-dependent caveat**:
+
+- **On the household environment (Sections 8.1–8.4):** With an appropriate RTG prompt, the DT outperforms all baselines including perfect-foresight Oracle and PPO. This is a 1D-action problem with ToU tariffs where degradation-aware cycling has clear optimal strategies.
+- **On the AEMO utility-scale environment (Section 8.6):** PPO (online RL) is the dominant policy by a wide margin. The DT — even after full-pretrained autoresearch optimization — cannot match PPO's FCAS market participation ($77/ep vs $10,628/ep). The DT's offline training data (mixed rule, RL, and dispatch replay) may lack the FCAS bidding patterns needed to learn this skill. Training DT on PPO-generated trajectories is a promising future direction.
+
+Household environment findings:
+1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT outperforms established planners (SDP, MRDP) and standard online RL agents (PPO, SAC). Its best variants (`dt_rtg_neg200`/`dt_rtg_neg500`, mean ≈ -2408) achieve statistically significant improvements over the perfect-foresight Oracle (mean -2483, p < 0.005). These results hold after correcting the train/val split to prevent window leakage across episodes.
+2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. Moderate RTG prompts (neg200 to neg1500) achieve both strong returns and very low degradation (0.005–0.014/ep), while the near-zero prompt (`dt_rtg_neg1`) exhibits significantly higher degradation (0.114/ep) and lower returns.
+3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines. DT moderate-prompt CVaR (≈ -9705) is better than A2C (-9966), SDP (-9965), and PPO (-10089).
+4. **Robust to Data Split Correction:** The episode-level split fix had minimal impact on moderate RTG prompts (which retained strong performance), while `dt_rtg_neg1` was most affected — suggesting the model's core learned policy is robust, and only the extreme-prompt behavior relied on overfitted patterns.
 
 ## 9. Proposed Research Roadmap
 
@@ -380,9 +474,14 @@ where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally 
 - **Risk-Sensitive Control:** Integrate CVaR-style objectives/constraints into the training loop (evaluation-side tail-risk metrics are already implemented; the next step is CVaR-constrained or multi-objective training).
 
 DT-centric near-term extensions (repo-aligned):
-- **Prompt calibration:** use the repo’s `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
+- **Train DT on PPO/RL data:** The full-pretrained DT achieves mean_reward = -3.11 vs PPO's +12.82 on the expanded AEMO evaluation. The single largest gap is FCAS ($77/ep vs $10,628/ep). Training DT on trajectories generated by PPO — or a mixture weighted toward high-FCAS-revenue policies — could close this gap and potentially combine DT's RTG-conditioning flexibility with PPO-style market participation.
+- **Prompt calibration:** use the repo's `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
 - **Training data mixture studies:** systematically vary which behavior policies generate the offline dataset (rule-based vs SDP vs SB3) and evaluate how DT performance changes.
-- **Long-context modeling:** increase `context_len` and/or enable RoPE to better represent weekly/seasonal structure, and evaluate sensitivity to context truncation.
+- **Long-context modeling:** tested context lengths 120–2016 across fair-comparison proxy sweeps. **Context=180 (15 hours) was optimal** — both shorter (120) and longer (288, 360, 576, 1008) contexts regressed validation loss. Longer contexts either OOM'd the 8 GB GPU (ctx=2016) or showed overfitting patterns where the model used extra capacity to memorize rather than generalize. See Section 8.6 for the full evaluation.
+
+Beyond DT-centric work, the AEMO results also highlight the need for:
+- **FCAS-aware offline data collection:** Generate training trajectories that explicitly explore FCAS bidding strategies (e.g., via PPO rollouts) so offline models can learn to capture this revenue stream.
+- **Multi-objective training:** The DT's return-conditioning naturally supports multiple operating points (conservative vs aggressive), but PPO's FCAS proficiency suggests that adding an FCAS-specific auxiliary loss or reward component to the DT objective could improve AEMO performance.
 
 > **NOTE (literature alignment):** Because studies often vary in objective definitions (financial vs energy-efficiency) and in constraint/user-impact handling, robustness studies should explicitly document which objective family and constraint set is being targeted [6].
 
@@ -406,7 +505,15 @@ DT-centric near-term extensions (repo-aligned):
 
 ## 11. Conclusion
 
-This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior. This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
+This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior.
+
+**Key empirical findings:**
+
+- **Household environment:** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation.
+- **AEMO utility-scale environment:** PPO (online RL) is the dominant policy by a wide margin (mean_reward = +12.82 vs full-pretrained DT at -3.11 on 135 episodes). The single largest factor is FCAS market participation: PPO earns $10,628/ep in ancillary market revenue vs DT's $77/ep. The DT's offline training data — sourced from mixed policies that rarely explored FCAS bidding — is the likely cause.
+- **Autoresearch optimization improved the DT substantially:** The full-pretrained DT (8×512, ctx=180) beats the rule baseline (-3.11 vs -4.82) and is dramatically better than the old pretrain model (-13.55). Degradation was reduced 5.2× and dispatch intensity 6.8× through frontier hyperparameter optimization.
+
+This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
 ## References
 
