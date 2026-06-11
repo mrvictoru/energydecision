@@ -3,13 +3,255 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from typing import Optional, Any
+import importlib
 import json
 import os
+import subprocess
+import time
 import torch.nn.functional as F
 from decision_transformer import DecisionTransformer
 import datetime
 import math
 from tqdm.auto import tqdm
+
+
+def _bytes_to_gib(value: float | int) -> float:
+    return float(value) / float(1024**3)
+
+
+class TrainingResourceMonitor:
+    """Collect lightweight system metrics for live DT terminal progress displays."""
+
+    def __init__(self, refresh_seconds: float = 1.0, pid: int | None = None):
+        self.refresh_seconds = max(0.0, float(refresh_seconds))
+        self.pid = os.getpid() if pid is None else int(pid)
+        self._last_snapshot: dict[str, str] = {}
+        self._last_sample_time = 0.0
+        self._prev_cpu_sample: tuple[int, int] | None = None
+        self._prev_proc_cpu_sample: tuple[float, float] | None = None
+        self._nvidia_smi_supported: bool | None = None
+
+    def snapshot(self, *, device: str) -> dict[str, str]:
+        now = time.monotonic()
+        if (
+            self._last_snapshot
+            and self.refresh_seconds > 0.0
+            and (now - self._last_sample_time) < self.refresh_seconds
+        ):
+            return dict(self._last_snapshot)
+
+        metrics: dict[str, str] = {}
+
+        cpu_percent = self._sample_cpu_percent()
+        if cpu_percent is not None:
+            metrics["cpu"] = f"{cpu_percent:.0f}%"
+
+        ram_stats = self._sample_ram_usage()
+        if ram_stats is not None:
+            ram_used_bytes, ram_total_bytes = ram_stats
+            metrics["ram"] = f"{_bytes_to_gib(ram_used_bytes):.1f}/{_bytes_to_gib(ram_total_bytes):.1f}G"
+
+        gpu_stats = self._sample_gpu_stats(device)
+        if gpu_stats is not None:
+            gpu_util = gpu_stats.get("utilization_percent")
+            if gpu_util is not None:
+                metrics["gpu"] = f"{gpu_util:.0f}%"
+
+            vram_used_bytes = gpu_stats.get("vram_used_bytes")
+            vram_total_bytes = gpu_stats.get("vram_total_bytes")
+            peak_vram_bytes = gpu_stats.get("peak_vram_bytes")
+            if vram_used_bytes is not None and vram_total_bytes is not None:
+                metrics["vram"] = f"{_bytes_to_gib(vram_used_bytes):.1f}/{_bytes_to_gib(vram_total_bytes):.1f}G"
+            if peak_vram_bytes is not None:
+                metrics["vpeak"] = f"{_bytes_to_gib(peak_vram_bytes):.1f}G"
+
+        proc_stats = self._sample_process_stats()
+        if proc_stats is not None:
+            metrics.update(proc_stats)
+
+        self._last_snapshot = metrics
+        self._last_sample_time = now
+        return dict(metrics)
+
+    def _sample_cpu_percent(self) -> float | None:
+        try:
+            with open("/proc/stat", "r", encoding="utf-8") as fh:
+                first_line = fh.readline().strip()
+        except OSError:
+            return None
+
+        parts = first_line.split()
+        if len(parts) < 6 or parts[0] != "cpu":
+            return None
+
+        try:
+            values = [int(value) for value in parts[1:]]
+        except ValueError:
+            return None
+
+        total = sum(values)
+        idle = values[3] + (values[4] if len(values) > 4 else 0)
+        current = (total, idle)
+        if self._prev_cpu_sample is None:
+            self._prev_cpu_sample = current
+            return None
+
+        prev_total, prev_idle = self._prev_cpu_sample
+        self._prev_cpu_sample = current
+        total_delta = total - prev_total
+        idle_delta = idle - prev_idle
+        if total_delta <= 0:
+            return None
+        busy_delta = max(0, total_delta - idle_delta)
+        return 100.0 * busy_delta / total_delta
+
+    def _sample_ram_usage(self) -> tuple[int, int] | None:
+        meminfo: dict[str, int] = {}
+        try:
+            with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+                for line in fh:
+                    key, _, raw_value = line.partition(":")
+                    parts = raw_value.strip().split()
+                    if not parts:
+                        continue
+                    meminfo[key] = int(parts[0]) * 1024
+        except (OSError, ValueError):
+            return None
+
+        total = meminfo.get("MemTotal")
+        available = meminfo.get("MemAvailable")
+        if total is None or available is None or total <= 0:
+            return None
+        used = max(0, total - available)
+        return used, total
+
+    def _sample_gpu_stats(self, device: str) -> dict[str, float] | None:
+        if not device.startswith("cuda") or not torch.cuda.is_available():
+            return None
+
+        device_index = self._resolve_cuda_device_index(device)
+        total_vram_bytes = float(torch.cuda.get_device_properties(device_index).total_memory)
+        allocated_bytes = float(torch.cuda.memory_allocated(device_index))
+        reserved_bytes = float(torch.cuda.memory_reserved(device_index))
+        peak_vram_bytes = float(torch.cuda.max_memory_allocated(device_index))
+
+        metrics: dict[str, float] = {
+            "vram_total_bytes": total_vram_bytes,
+            "vram_used_bytes": max(allocated_bytes, reserved_bytes),
+            "peak_vram_bytes": peak_vram_bytes,
+        }
+
+        nvidia_stats = self._query_nvidia_smi(device_index)
+        if nvidia_stats is not None:
+            metrics.update(nvidia_stats)
+        return metrics
+
+    def _sample_process_stats(self) -> dict[str, str] | None:
+        status_path = f"/proc/{self.pid}/status"
+        try:
+            with open(status_path, "r", encoding="utf-8") as fh:
+                status_rows: dict[str, str] = {}
+                for line in fh:
+                    key, _, raw_value = line.partition(":")
+                    if not key:
+                        continue
+                    status_rows[key] = raw_value.strip()
+        except OSError:
+            return None
+
+        def _parse_kib(key: str) -> int | None:
+            raw_value = status_rows.get(key)
+            if not raw_value:
+                return None
+            parts = raw_value.split()
+            if not parts:
+                return None
+            try:
+                return int(float(parts[0])) * 1024
+            except ValueError:
+                return None
+
+        rss_bytes = _parse_kib("VmRSS")
+        vms_bytes = _parse_kib("VmSize")
+        threads = status_rows.get("Threads")
+
+        cpu_times = os.times()
+        proc_cpu_seconds = float(cpu_times.user + cpu_times.system)
+        now = time.monotonic()
+        proc_cpu_percent: float | None = None
+        if self._prev_proc_cpu_sample is not None:
+            prev_cpu_seconds, prev_sample_time = self._prev_proc_cpu_sample
+            elapsed_seconds = now - prev_sample_time
+            if elapsed_seconds > 0:
+                proc_cpu_percent = max(0.0, 100.0 * (proc_cpu_seconds - prev_cpu_seconds) / elapsed_seconds)
+        self._prev_proc_cpu_sample = (proc_cpu_seconds, now)
+
+        metrics: dict[str, str] = {}
+        if proc_cpu_percent is not None:
+            metrics["pcpu"] = f"{proc_cpu_percent:.0f}%"
+        if rss_bytes is not None:
+            metrics["prss"] = f"{_bytes_to_gib(rss_bytes):.1f}G"
+        if vms_bytes is not None:
+            metrics["pvms"] = f"{_bytes_to_gib(vms_bytes):.1f}G"
+        if threads is not None:
+            metrics["pth"] = threads
+        return metrics or None
+
+    def _resolve_cuda_device_index(self, device: str) -> int:
+        if ":" not in device:
+            return int(torch.cuda.current_device())
+        try:
+            return int(device.split(":", 1)[1])
+        except (TypeError, ValueError):
+            return int(torch.cuda.current_device())
+
+    def _query_nvidia_smi(self, device_index: int) -> dict[str, float] | None:
+        if self._nvidia_smi_supported is False:
+            return None
+
+        command = [
+            "nvidia-smi",
+            f"--id={device_index}",
+            "--query-gpu=utilization.gpu,memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+            )
+        except (FileNotFoundError, OSError, subprocess.SubprocessError):
+            self._nvidia_smi_supported = False
+            return None
+
+        first_line = completed.stdout.strip().splitlines()
+        if not first_line:
+            self._nvidia_smi_supported = False
+            return None
+
+        parts = [part.strip() for part in first_line[0].split(",")]
+        if len(parts) != 3:
+            self._nvidia_smi_supported = False
+            return None
+
+        try:
+            utilization_percent = float(parts[0])
+            used_mib = float(parts[1])
+            total_mib = float(parts[2])
+        except ValueError:
+            self._nvidia_smi_supported = False
+            return None
+
+        self._nvidia_smi_supported = True
+        mib = float(1024**2)
+        return {
+            "utilization_percent": utilization_percent,
+            "vram_used_bytes": used_mib * mib,
+            "vram_total_bytes": total_mib * mib,
+        }
 
 
 
@@ -203,6 +445,118 @@ try:
 except (ImportError, AttributeError):  # pragma: no cover - compatibility fallback
     from torch.cuda.amp import GradScaler, autocast  # type: ignore
 
+
+class NullLRScheduler:
+    """No-op scheduler that preserves checkpoint shape when scheduling is disabled."""
+
+    def step(self) -> None:
+        return None
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        _ = state_dict
+
+
+def _load_symbol(path: str) -> Any:
+    module_name, _, attr_name = path.partition(":")
+    if not module_name or not attr_name:
+        if "." not in path:
+            raise ValueError(
+                f"Custom import path {path!r} must be in the form package.module:SymbolName."
+            )
+        module_name, attr_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    try:
+        return getattr(module, attr_name)
+    except AttributeError as exc:
+        raise ValueError(f"Custom import path {path!r} does not expose attribute {attr_name!r}.") from exc
+
+
+def _build_optimizer(
+    *,
+    model: DecisionTransformer,
+    optimizer_name: str,
+    lr: float,
+    weight_decay: float,
+    optimizer_kwargs: Optional[dict[str, Any]],
+    optimizer_class_path: Optional[str],
+) -> Any:
+    kwargs = dict(optimizer_kwargs or {})
+    optimizer_key = optimizer_name.lower()
+    if optimizer_key == "custom":
+        if not optimizer_class_path:
+            raise ValueError("optimizer_name='custom' requires optimizer_class_path.")
+        optimizer_ctor = _load_symbol(optimizer_class_path)
+        kwargs.setdefault("lr", lr)
+        kwargs.setdefault("weight_decay", weight_decay)
+        return optimizer_ctor(model.parameters(), **kwargs)
+    if optimizer_key == "adamw":
+        return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    if optimizer_key == "adam":
+        return torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    if optimizer_key == "sgd":
+        return torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    if optimizer_key == "rmsprop":
+        return torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
+    raise ValueError(f"Unsupported optimizer_name={optimizer_name!r}.")
+
+
+def _build_scheduler(
+    *,
+    optimizer: Any,
+    scheduler_name: str,
+    epochs: int,
+    scheduler_kwargs: Optional[dict[str, Any]],
+    scheduler_class_path: Optional[str],
+) -> Any:
+    kwargs = dict(scheduler_kwargs or {})
+    scheduler_key = scheduler_name.lower()
+    if scheduler_key == "none":
+        return NullLRScheduler()
+    if scheduler_key == "custom":
+        if not scheduler_class_path:
+            raise ValueError("scheduler_name='custom' requires scheduler_class_path.")
+        scheduler_ctor = _load_symbol(scheduler_class_path)
+        return scheduler_ctor(optimizer, **kwargs)
+    if scheduler_key == "steplr":
+        kwargs.setdefault("step_size", 10)
+        kwargs.setdefault("gamma", 0.5)
+        return torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
+    if scheduler_key == "cosineannealinglr":
+        kwargs.setdefault("T_max", max(1, int(epochs)))
+        kwargs.setdefault("eta_min", 0.0)
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **kwargs)
+    if scheduler_key == "exponentiallr":
+        kwargs.setdefault("gamma", 0.95)
+        return torch.optim.lr_scheduler.ExponentialLR(optimizer, **kwargs)
+    raise ValueError(f"Unsupported scheduler_name={scheduler_name!r}.")
+
+
+def _validate_resume_compatibility(
+    *,
+    checkpoint: dict[str, Any],
+    optimizer_name: str,
+    scheduler_name: str,
+    optimizer_class_path: Optional[str],
+    scheduler_class_path: Optional[str],
+) -> None:
+    expected_pairs = (
+        ("optimizer_name", optimizer_name),
+        ("scheduler_name", scheduler_name),
+        ("optimizer_class_path", optimizer_class_path),
+        ("scheduler_class_path", scheduler_class_path),
+    )
+    for key, expected in expected_pairs:
+        if key not in checkpoint:
+            continue
+        if checkpoint.get(key) != expected:
+            raise ValueError(
+                f"Checkpoint {key}={checkpoint.get(key)!r} does not match requested {key}={expected!r}. "
+                "Resume requires the same optimizer/scheduler selection used to create the checkpoint."
+            )
+
 def train_decision_transformer(
     ds: TrajectoryDataset,
     model: DecisionTransformer,
@@ -222,6 +576,12 @@ def train_decision_transformer(
     state_loss_weight: float = 0.01,
     return_loss_weight: float = 0.002,
     weight_decay: float = 1e-4,
+    optimizer_name: str = "adamw",
+    scheduler_name: str = "steplr",
+    optimizer_class_path: Optional[str] = None,
+    optimizer_kwargs: Optional[dict[str, Any]] = None,
+    scheduler_class_path: Optional[str] = None,
+    scheduler_kwargs: Optional[dict[str, Any]] = None,
     return_scale: float = 1.0,
     amp_mode: str = "auto",
     save_best_divergence_ratio: float = 4.0,
@@ -230,7 +590,10 @@ def train_decision_transformer(
     num_workers: int = 2,
     persistent_workers: bool = True,
     prefetch_factor: int = 2,
+    terminal_monitor_refresh_seconds: float = 1.0,
+    progress_snapshot_path: Optional[str] = None,
     return_history: bool = False,
+    max_val_batches: int = 1000,
 ) -> tuple:
     
     # set best_model_path to be save_path with _best.pt suffix if not provided
@@ -357,7 +720,7 @@ def train_decision_transformer(
             torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
             optimizer.step()
 
-    def _run_validation(epoch: int, segment: int) -> Optional[dict[str, float]]:
+    def _run_validation(epoch: int, segment: int, *, max_batches: int | None = None) -> Optional[dict[str, float]]:
         if val_loader is None or val_ds is None:
             return None
         model.eval()
@@ -368,7 +731,9 @@ def train_decision_transformer(
         val_valid_count_sum = 0.0
         val_skipped_batches = 0
         with torch.no_grad():
-            for batch in val_loader:
+            for batch_idx, batch in enumerate(val_loader):
+                if max_batches is not None and batch_idx >= max_batches:
+                    break
                 states = batch["states"].to(device, non_blocking=non_blocking).float()
                 actions = batch["actions"].to(device, non_blocking=non_blocking).float()
                 rtgs = batch["rtgs"].to(device, non_blocking=non_blocking).float()
@@ -499,15 +864,80 @@ def train_decision_transformer(
         extra_str = (" (" + ", ".join(extra) + ")") if extra else ""
         print(f"[BEST] Saved best model weights to {best_model_path} at {tag}{extra_str}")
 
+    def _write_progress_snapshot(
+        *,
+        status: str,
+        epoch: int,
+        segment: int,
+        train_loss_est: Optional[float],
+        val_stats: Optional[dict[str, float]],
+    ) -> None:
+        if not progress_snapshot_path:
+            return
+
+        progress_dir = os.path.dirname(progress_snapshot_path)
+        if progress_dir:
+            os.makedirs(progress_dir, exist_ok=True)
+
+        latest_history = loss_history[-5:]
+        current_train = dict(current_train_snapshot)
+        if train_loss_est is not None:
+            current_train.setdefault("train_total_ema", float(train_loss_est))
+
+        if status == "finished":
+            progress_fraction = 1.0
+        else:
+            completed_epochs = max(0.0, float(epoch - 1))
+            if segment >= 0 and checkpoints_per_epoch > 0:
+                completed_epochs += float(segment + 1) / float(checkpoints_per_epoch)
+            progress_fraction = max(0.0, min(1.0, completed_epochs / float(max(1, epochs))))
+
+        progress_payload = {
+            "schema": "energydecision.dt_progress_snapshot.v1",
+            "status": status,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "elapsed_seconds": round(time.perf_counter() - training_start_monotonic, 3),
+            "progress_fraction": progress_fraction,
+            "epoch": int(epoch),
+            "segment": int(segment),
+            "epochs": int(epochs),
+            "checkpoints_per_epoch": int(checkpoints_per_epoch),
+            "batch_size": int(batch_size),
+            "lr": float(optimizer.param_groups[0]["lr"]),
+            "device": device,
+            "current_train": current_train,
+            "validation": val_stats or {},
+            "best": {
+                "score": float(best_score),
+                "val_loss": float(best_val_loss),
+                "train_loss_est": float(best_train_loss_est),
+            },
+            "resources": terminal_monitor.snapshot(device=device),
+            "checkpoint_path": checkpoint_path,
+            "save_path": save_path,
+            "latest_history": latest_history,
+        }
+        try:
+            with open(progress_snapshot_path, "w", encoding="utf-8") as fh:
+                json.dump(progress_payload, fh, indent=2, sort_keys=True)
+        except OSError as exc:
+            print(f"[WARN] Could not write progress snapshot to {progress_snapshot_path}: {exc}")
+
     # Checkpoint saving function
-    def _save_checkpoint(epoch: int, segment: int = -1, train_loss_est: Optional[float] = None) -> None:
+    def _save_checkpoint(
+        epoch: int,
+        segment: int = -1,
+        train_loss_est: Optional[float] = None,
+        *,
+        status: str = "running",
+    ) -> None:
         if not checkpoint_path:
             return
         nonlocal amp_enabled, first_checkpoint_saved
         ckpt_dir = os.path.dirname(checkpoint_path)
         if ckpt_dir:
             os.makedirs(ckpt_dir, exist_ok=True)
-        val_stats = _run_validation(epoch, segment)
+        val_stats = _run_validation(epoch, segment, max_batches=max_val_batches)
         _maybe_save_best(epoch, segment, train_loss_est=train_loss_est, val_stats=val_stats)
 
         # Record a combined snapshot (useful for plotting training progress).
@@ -537,6 +967,12 @@ def train_decision_transformer(
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
+            "optimizer_name": optimizer_name,
+            "scheduler_name": scheduler_name,
+            "optimizer_class_path": optimizer_class_path,
+            "scheduler_class_path": scheduler_class_path,
+            "optimizer_kwargs": dict(optimizer_kwargs or {}),
+            "scheduler_kwargs": dict(scheduler_kwargs or {}),
             "log_losses": log_losses,
             "train_action_losses": train_action_losses,
             "train_state_losses": train_state_losses,
@@ -568,6 +1004,13 @@ def train_decision_transformer(
             print(f"Checkpoint saved to {checkpoint_path} — epoch {epoch}, segment {segment+1}")
         else:
             print(f"Checkpoint saved to {checkpoint_path} at epoch {epoch}")
+        _write_progress_snapshot(
+            status=status,
+            epoch=epoch,
+            segment=segment,
+            train_loss_est=train_loss_est,
+            val_stats=val_stats,
+        )
 
         # Compact progress print that aligns stored + displayed values.
         msg = f"[PROGRESS] epoch {epoch}"
@@ -650,10 +1093,21 @@ def train_decision_transformer(
     
     # Save return_scale to model for inference consistency
     model.return_scale = return_scale
-    # Set up optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    # Add a learning rate scheduler (StepLR: halve LR every 10 epochs by default)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    optimizer = _build_optimizer(
+        model=model,
+        optimizer_name=optimizer_name,
+        lr=lr,
+        weight_decay=weight_decay,
+        optimizer_kwargs=optimizer_kwargs,
+        optimizer_class_path=optimizer_class_path,
+    )
+    scheduler = _build_scheduler(
+        optimizer=optimizer,
+        scheduler_name=scheduler_name,
+        epochs=epochs,
+        scheduler_kwargs=scheduler_kwargs,
+        scheduler_class_path=scheduler_class_path,
+    )
 
     # AMP setup
     amp_allowed, scaler = _resolve_amp_settings(device, amp_mode)
@@ -663,6 +1117,9 @@ def train_decision_transformer(
     first_checkpoint_saved = False
     if amp_allowed:
         print("[INFO] AMP is enabled once the first checkpoint exists. Set --amp-mode=off to disable.")
+
+    terminal_monitor = TrainingResourceMonitor(refresh_seconds=terminal_monitor_refresh_seconds)
+    training_start_monotonic = time.perf_counter()
 
     # Initialize training state    
     start_epoch = 1
@@ -674,6 +1131,13 @@ def train_decision_transformer(
     if resume and checkpoint_path and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=device)
+        _validate_resume_compatibility(
+            checkpoint=checkpoint,
+            optimizer_name=optimizer_name,
+            scheduler_name=scheduler_name,
+            optimizer_class_path=optimizer_class_path,
+            scheduler_class_path=scheduler_class_path,
+        )
 
         # Ensure return_scale matches the one used when this checkpoint was created.
         ckpt_return_scale = checkpoint.get("return_scale", None)
@@ -771,6 +1235,7 @@ def train_decision_transformer(
                     desc=f"Epoch {epoch}/{epochs}",
                     leave=False,
                     unit="batch",
+                    dynamic_ncols=True,
                 )
                 batch_count = 0
                 train_loss_ema: Optional[float] = None
@@ -837,7 +1302,17 @@ def train_decision_transformer(
 
                     denom = max(1.0, train_valid_count_sum)
                     avg_total_so_far = train_total_loss_sum / denom
-                    progress_bar.set_postfix({"loss": f"{loss_value:.4f}", "avg": f"{avg_total_so_far:.4f}", "skipped": skipped_batches})
+                    postfix: dict[str, str | int] = {
+                        "loss": f"{loss_value:.4f}",
+                        "avg": f"{avg_total_so_far:.4f}",
+                        "ema": f"{float(train_loss_ema):.4f}" if train_loss_ema is not None else "n/a",
+                        "lr": f"{optimizer.param_groups[0]['lr']:.2e}",
+                        "skip": skipped_batches,
+                    }
+                    if checkpoints_per_epoch > 0:
+                        postfix["seg"] = f"{min(segment_idx + 1, checkpoints_per_epoch)}/{checkpoints_per_epoch}"
+                    postfix.update(terminal_monitor.snapshot(device=device))
+                    progress_bar.set_postfix(postfix)
                     # Checkpointing within epoch
                     if checkpoints_per_epoch > 0 and segment_boundaries:
                         while segment_idx < checkpoints_per_epoch and batch_idx + 1 >= segment_boundaries[segment_idx]:
@@ -854,8 +1329,14 @@ def train_decision_transformer(
                                         "batch_idx": float(batch_idx + 1),
                                     }
                                 )
-                                _save_checkpoint(epoch, segment_idx, train_loss_est=train_loss_ema)
+                                _save_checkpoint(
+                                    epoch,
+                                    segment_idx,
+                                    train_loss_est=train_loss_ema,
+                                    status="running",
+                                )
                             segment_idx += 1
+                progress_bar.close()
                 # End of epoch logging
                 denom = max(1.0, train_valid_count_sum)
                 avg_total = train_total_loss_sum / denom
@@ -892,7 +1373,7 @@ def train_decision_transformer(
                             "batch_idx": float(total_batches),
                         }
                     )
-                    _save_checkpoint(epoch, train_loss_est=train_loss_ema)
+                    _save_checkpoint(epoch, train_loss_est=train_loss_ema, status="running")
 
             training_finished = True
 
@@ -969,7 +1450,7 @@ def train_decision_transformer(
     # Final checkpoint to capture finished state
     if checkpoint_path:
         # Use a distinct segment id so we don't append a duplicate "epoch validation" entry.
-        _save_checkpoint(epochs, segment=-2)
+        _save_checkpoint(epochs, segment=-2, status="finished")
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(model.state_dict(), save_path)

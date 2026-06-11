@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from aemo_notebook_utils import (  # noqa: E402
     build_dt_dataset_from_logs,
     default_aemo_dt_model_kwargs,
+    ensure_processed_cache_writable,
     fetch_and_preprocess_aemo_data,
     get_sb3_model_class,
     load_episode_logs_from_parquet,
@@ -417,6 +418,23 @@ def test_fixed_stats_ignore_stale_processed_cache(monkeypatch, tmp_path: Path):
 
     assert baseline.select(pl.col("RRP_normalized").max()).item() == 1.0
     assert locked.select(pl.col("RRP_normalized").max()).item() < 1.0
+
+
+def test_ensure_processed_cache_writable_rejects_locked_file(monkeypatch, tmp_path: Path):
+    cache_path = tmp_path / "processed_SA1_2024-01-01_2024-01-02_0.0833h.parquet"
+    cache_path.write_bytes(b"stub")
+
+    monkeypatch.setattr("aemo_notebook_utils.os.access", lambda path, mode: path != cache_path)
+
+    with pytest.raises(PermissionError, match="not writable"):
+        ensure_processed_cache_writable(
+            cache_dir=tmp_path,
+            region="SA1",
+            start_date=datetime(2024, 1, 1),
+            end_date=datetime(2024, 1, 2),
+            step_duration=5 / 60,
+            needs_write=True,
+        )
 
 
 def test_fixed_stats_handle_zero_span_normalization():
