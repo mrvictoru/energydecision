@@ -187,3 +187,4 @@ cython_debug/
 /eval_output/aemo/autoresearch/
 /eval_output/cache/
 opencode.json
+AGENTS.md
