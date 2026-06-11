@@ -419,6 +419,14 @@ The initial head-to-head comparison above was limited to 4 episodes per policy (
 | Rule heuristic | -4.82 | -$3,562 | $11,838 | $0 | $15,400 | 799.5 | -0.48 |
 | DT old pretrain (4×128, ctx=1152) | -13.55 | -$10,620 | $27 | $2,328 | $12,975 | 746.0 | -2.20 |
 
+![Mean reward comparison — expanded evaluation (135 episodes per policy)](eval_output/autoresearch/comparison_plots/expanded/mean_reward_comparison.svg)
+
+![Revenue decomposition across all policies](eval_output/autoresearch/comparison_plots/expanded/profit_decomposition.svg)
+
+![Risk-return profile — expanded evaluation](eval_output/autoresearch/comparison_plots/expanded/risk_return_comparison.svg)
+
+![Dispatch intensity vs degradation cost](eval_output/autoresearch/comparison_plots/expanded/dispatch_comparison.svg)
+
 **Key observations:**
 
 1. **PPO dominates at scale:** With 135 episodes across all regions and seasons, PPO achieves mean_reward = +12.82 and +$12,839/ep profit. Its FCAS revenue ($10,628/ep) is 138× the full-pretrained DT's ($77/ep). PPO is the only policy with positive Sharpe ratio (+1.26).
