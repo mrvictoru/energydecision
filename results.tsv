@@ -106,3 +106,19 @@ bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell
 609dd24	aemo	-2.295426695845123	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 rmsprop_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/rmsprop_none
 609dd24	aemo	-2.137930759377132	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 adamw_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/adamw_none
 609dd24	aemo	-1.830449334661178	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 muon_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/muon_none
+20260610-ctx-sweep	aemo	0.070363	keep	frontier context sweep: aemo_proxy_frontier, 8x512, drop_p=0.15, ctx=180, b=16, e=2 on proxy pilot — confirms baseline ctx=180
+20260610-ctx-sweep	aemo	0.070160	keep	frontier context sweep: ctx=180 baseline rerun at b=8 for fair comparison
+20260610-ctx-sweep	aemo	0.082855	keep	frontier context sweep: ctx=180 at b=4 for direct comparison with longer context at b=4
+20260610-ctx-sweep	aemo	0.076883	discard	frontier context sweep: ctx=288 b=8 regressed val vs ctx=180 b=8 (0.0769 > 0.0702, +9.5%); OOM at b=16
+20260610-ctx-sweep	aemo	0.090888	discard	frontier context sweep: ctx=360 b=4 regressed val vs ctx=180 b=4 (0.0909 > 0.0829, +9.7%); OOM at b=8
+20260610-ctx-sweep	aemo	0.058406	keep	ultra-long context sweep: ctx=180, b=1 (proxy pilot, 8x512, drop_p=0.15, e=2) — best fair-comparison val so far
+20260610-ctx-sweep	aemo	0.075670	discard	ultra-long context sweep: ctx=576, b=1 — longer context regressed (0.0757 > 0.0584, +29.6% vs ctx=180)
+20260610-ctx-sweep	aemo	0.064366	keep	ultra-long context sweep: ctx=1008, b=1 — slightly better than ctx=576 but still worse than ctx=180 (0.0644 > 0.0584, +10.2%)
+20260610-ctx-sweep	aemo	0.080508	discard	ultra-long context sweep: ctx=1008, b=2 — larger batch regressed vs b=1 at same ctx (0.0805 > 0.0644, +25.0%)
+20260610-ctx-sweep	aemo	n/a	crash	ultra-long context sweep: ctx=2016, b=1 — CUDA OOM on 8GB RTX 3060 Ti (seq len 6048, ~10 GB needed)
+20260611-full-eval	aemo	0.345	keep	full evaluator (NSW1 Jan + SA1 Winter, 144h ep, 2 ep/variant): PPO RL mean_reward=+0.345 (profitable), beats all DT and baselines
+20260611-full-eval	aemo	-1.256	keep	full evaluator: tuned DT (autoresearch) mean_reward=-1.256 — 5.7x better than pretrain DT (-7.117), but worse than PPO
+20260611-full-eval	aemo	-1.426	keep	full evaluator: dispatch Dalrymple North (SA1 only, 0 ep in NSW1 — station inactive)
+20260611-full-eval	aemo	-5.359	keep	full evaluator: rule heuristic baseline
+20260611-full-eval	aemo	-5.394	keep	full evaluator: dispatch Torrens Island (SA1 only, 0 ep in NSW1 — station inactive)
+20260611-full-eval	aemo	-7.117	discard	full evaluator: pretrain DT (original pilot) — worst performer, overly aggressive dispatch (326.5 MWh/ep)

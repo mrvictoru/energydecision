@@ -350,7 +350,61 @@ This replay capability is important for two reasons. First, it provides a realis
 
 The replay graph illustrates a representative utility-scale episode produced by the current notebook workflow. The plotted action trace is sourced from historical station dispatch, while the surrounding panels show how those actions interact with simulated battery state and contemporaneous market prices inside the environment. This demonstrates that the repository has moved beyond a placeholder AEMO design: it can already ingest historical utility-scale data and replay existing station behavior end-to-end.
 
-### 8.6 Overall Observations on the Decision Transformer
+### 8.6 AEMO Autoresearch Full Evaluation
+
+The following results were produced by the [autoresearch program](program.md), which constrained hyperparameter search to the sanctioned experiment surface in `src/pretrain_decision_transformer.py`. The evaluation uses the **full held-out evaluator** (`configs/aemo_autoresearch_evaluator.example.json`) with two 14-day scenarios (NSW1 Jan 2024, SA1 Winter 2024), 144-hour episodes, and two episodes per scenario × battery variant.
+
+The comparison includes:
+- **Tuned DT (autoresearch):** 8×512, drop_p=0.15, context_len=180, trained on the full 24-episode AEMO corpus with learning-baseline settings (return_scale=2.0, discount=0.95, action_loss_weight=0.75, lr=3e-5)
+- **Pretrain DT (original):** 4×128 pilot model trained on 6 proxy episodes (the model before any hyperparameter tuning)
+- **PPO (RL):** Online RL baseline trained on the AEMO environment
+- **Rule heuristic:** Surplus/deficit logic baseline
+- **Dispatch replay (Dalrymple North, Torrens Island):** Historical AEMO station dispatch traces
+
+| Policy | Mean Reward | Profit/Ep | Energy Rev | FCAS Rev | Deg Cost | Dispatch (MWh) | Sharpe |
+|--------|:-----------:|:---------:|:----------:|:--------:|:--------:|:--------------:|:------:|
+| PPO (RL) | **+0.345** | **+$3,125** | $1,071 | $2,821 | $768 | 31.8 | 0.24 |
+| Tuned DT (autoresearch) | -1.256 | -$976 | $638 | $5 | $1,619 | 69.7 | -1.33 |
+| Dispatch - Dalrymple North | -1.426 | +$1,304 | $1,491 | $0 | $187 | 8.0 | N/A |
+| Rule heuristic | -5.359 | -$4,652 | $3,363 | $0 | $8,015 | 406.5 | -2.08 |
+| Dispatch - Torrens Island | -5.394 | -$5,394 | $0 | $0 | $5,394 | 0.0 | N/A |
+| Pretrain DT (original) | -7.117 | -$5,332 | -$706 | $1,116 | $5,742 | 326.5 | -11.44 |
+
+![Mean reward comparison across all policies](eval_output/autoresearch/comparison_plots/mean_reward_comparison.svg)
+
+![Revenue decomposition: energy, FCAS, and degradation cost](eval_output/autoresearch/comparison_plots/profit_decomposition.svg)
+
+![Risk-return profile](eval_output/autoresearch/comparison_plots/risk_return_comparison.svg)
+
+![Battery dispatch intensity vs degradation](eval_output/autoresearch/comparison_plots/dispatch_comparison.svg)
+
+**Caveats on interpretation:**
+
+- **Reward normalization:** The AEMO environment applies `reward = (energy_revenue + fcas_revenue - degradation_cost + soc_penalty) / 1000`, so `mean_reward` values are in $k units. The `Profit/Ep` column shows raw financial accounting (total revenue - degradation cost, no penalties). The SOC penalty is the main difference — PPO dispatches aggressively and incurs SOC penalties that reduce its environment reward by ~$2,780/ep despite being financially profitable (+$3,125/ep).
+- **Speed of evaluation:** The full evaluator ran quickly (≈15 min total) because each policy evaluates only 2 scenarios × 2 episodes = 4 episodes total, using 4 parallel workers. The dispatch stations had no recorded energy dispatch in the NSW1 Jan 2024 period (0 episodes evaluated there), making those runs near-instant for that scenario.
+- **Data periods:** The test scenarios (Jan 2024, Jul 2024) are outside the PPO model's training distribution (trained on 2021–2023 data), so no data leakage exists. However, market conditions in 2024 differ from the training period, and both DT and PPO may perform differently on in-distribution test sets.
+
+**Key observations:**
+
+1. **Autoresearch improved DT substantially:** The tuned DT (mean_reward = -1.256) outperforms the pretrain DT (-7.117) by **5.7×**, demonstrating the value of the frontier hyperparameters (8×512, drop_p=0.15, context=180). The pretrain model was overly aggressive (326.5 MWh/ep dispatch) and actually lost money on energy trading (-$706/ep energy revenue).
+
+2. **PPO is the strongest AEMO baseline, consistent with prior evaluations:** PPO's mean_reward = +0.345 and positive net profit (+$3,125/ep) is in line with the earlier AEMO comparison notebook (`notebooks/aemo_eval.ipynb`), which evaluated the same RL models on 2021–2023 data across 5 regions and found PPO was the best RL algorithm at mean_reward = +1,619 (raw dollars). That earlier comparison did NOT include Decision Transformer models — this full evaluator run is the first AEMO head-to-head of DT vs RL. The previous DT outperformance over RL was on the household environment (Section 8.1), which uses 1D actions and ToU tariffs, a fundamentally different problem than the AEMO 3D multi-market bidding.
+
+3. **PPO exploits FCAS markets, DT does not:** PPO earns $2,821/ep in FCAS revenue vs DT's $5/ep. This is the single largest gap. The DT was trained on offline data from mixed policy sources (rule, RL, dispatch replay), and those trajectories may not have sufficiently explored FCAS bidding strategies. Training DT on PPO-generated trajectories could close this gap.
+
+4. **Tuned DT is conservative but unprofitable:** The DT dispatches 69.7 MWh/ep (down from 326.5 for pretrain) and keeps degradation costs moderate ($1,619 vs $8,015 for rule). It is less aggressive than PPO (31.8 MWh/ep) and rule (406.5 MWh/ep), but its revenue ($644/ep) fails to cover degradation.
+
+5. **Rule heuristic is the worst learner:** The rule baseline cycles aggressively (406.5 MWh/ep), incurring the highest degradation cost ($8,015/ep). Its mean_reward (-5.359) is only beaten by the pretrain DT and the Torrens Island dispatch (which was mostly idle in the test periods).
+
+5. **Dispatch replay value is limited for 2024 test windows:** Both Dalrymple North and Torrens Island had no recorded energy dispatch activity in the NSW1 January 2024 period, so their baselines are only informative for the SA1 Winter 2024 scenario. Dalrymple North achieved a dispatch-only profit of +$1,304/ep in SA1, demonstrating that real-world station operation can be profitable on energy arbitrage alone.
+
+6. **Context length optimization:** A dedicated proxy-pilot sweep confirmed that context=180 (15 hours of 5-min history) is optimal. Both shorter (120) and longer (288, 360, 576, 1008) contexts regressed validation loss, with the best fair-comparison result at ctx=180, batch=1 yielding val=0.0584.
+
+7. **Dropout optimization:** Frontier sweep 5 tested drop_p values of 0.05, 0.15, and 0.20. **drop_p=0.15** was the best, producing the best proxy total loss at the time (0.109743 on the 8×512 frontier). The current model uses drop_p=0.15.
+
+8. **GPU resource constraints:** The RTX 3060 Ti (8 GB VRAM) limits the feasible model size and context length. Context length 2016 (full week) causes CUDA OOM even at batch_size=1. Context=1008 fits at batch=1 but training is ~3× slower than context=180.
+
+### 8.7 Overall Observations on the Decision Transformer
 
 Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive and uniquely flexible control strategy for battery operation:
 1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT outperforms established planners (SDP, MRDP) and standard online RL agents (PPO, SAC). Its best variants (`dt_rtg_neg200`/`dt_rtg_neg500`, mean \u2248 -2408) achieve statistically significant improvements over the perfect-foresight Oracle (mean -2483, p < 0.005). These results hold after correcting the train/val split to prevent window leakage across episodes.
@@ -382,7 +436,7 @@ where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally 
 DT-centric near-term extensions (repo-aligned):
 - **Prompt calibration:** use the repo’s `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
 - **Training data mixture studies:** systematically vary which behavior policies generate the offline dataset (rule-based vs SDP vs SB3) and evaluate how DT performance changes.
-- **Long-context modeling:** increase `context_len` and/or enable RoPE to better represent weekly/seasonal structure, and evaluate sensitivity to context truncation.
+- **Long-context modeling:** tested context lengths 120–2016 across fair-comparison proxy sweeps. **Context=180 (15 hours) was optimal** — both shorter (120) and longer (288, 360, 576, 1008) contexts regressed validation loss. Longer contexts either OOM'd the 8 GB GPU (ctx=2016) or showed overfitting patterns where the model used extra capacity to memorize rather than generalize. See Section 8.6 for the full evaluation.
 
 > **NOTE (literature alignment):** Because studies often vary in objective definitions (financial vs energy-efficiency) and in constraint/user-impact handling, robustness studies should explicitly document which objective family and constraint set is being targeted [6].
 
