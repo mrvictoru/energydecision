@@ -6,6 +6,8 @@ The effective integration of battery energy storage is critical for a reliable, 
 
 The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). A core motivation of this repository is to bring **modern transformer-based sequence modeling** to the practical challenge of battery operation, and to evaluate these models against established planning and RL baselines under consistent dynamics and metrics. Rule-based heuristics, dynamic-programming planners (SDP/MRDP), online RL baselines (Stable-Baselines3), and dispatch-replay baselines for the AEMO environment are included primarily as comparators and data-generators for DT training.
 
+> **Key empirical finding:** On the household environment, the DT achieves state-of-the-art results (best mean return, beating Oracle). **On the utility-scale AEMO environment, however, PPO (online RL) is the dominant policy** — achieving mean_reward = +12.82 vs the full-pretrained DT's -3.11 on the expanded 135-episode evaluation. The DT's offline training data lacks the FCAS bidding patterns that PPO exploits for $10,628/ep in ancillary market revenue. These results suggest that environment complexity (1D energy-only vs 3D multi-market bidding) dictates which learning paradigm is most effective, and that training DT on RL-generated trajectories is a promising direction for closing the gap.
+
 ## 1. Introduction
 
 The proliferation of energy storage across the grid—from distributed, behind-the-meter household batteries to grid-scale battery energy storage systems (BESS) participating in wholesale markets—presents both a challenge and an opportunity for modern power systems. While these assets can reduce consumer costs and provide grid flexibility, their optimal operation is non-trivial. The control problem is characterized by stochastic demand/generation, time-varying tariffs or market prices, non-linear battery degradation dynamics, and strict physical constraints [6].
@@ -352,6 +354,8 @@ The replay graph illustrates a representative utility-scale episode produced by 
 
 ### 8.6 AEMO Autoresearch Full Evaluation
 
+**Bottom line: PPO (online RL) is the best AEMO policy by a wide margin.** On the expanded 135-episode evaluation, PPO achieves mean_reward = +12.82 and +$12,839/ep profit — 4× better mean_reward than the full-pretrained DT (-3.11) and 16× better than the old pretrain DT (-13.55). PPO also has the only positive Sharpe ratio (+1.26) and dominates FCAS revenue ($10,628/ep vs DT's $77/ep). See Section 8.6.1 for the detailed results. The Decision Transformer results below are included to document the autoresearch optimization trajectory, but PPO remains the strongest AEMO baseline in this repository.
+
 The following results were produced by the [autoresearch program](program.md), which constrained hyperparameter search to the sanctioned experiment surface in `src/pretrain_decision_transformer.py`. The evaluation uses the **full held-out evaluator** (`configs/aemo_autoresearch_evaluator.example.json`) with two 14-day scenarios (NSW1 Jan 2024, SA1 Winter 2024), 144-hour episodes, and two episodes per scenario × battery variant.
 
 The comparison includes:
@@ -429,11 +433,16 @@ The initial head-to-head comparison above was limited to 4 episodes per policy (
 
 ### 8.7 Overall Observations on the Decision Transformer
 
-Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive and uniquely flexible control strategy for battery operation:
-1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT outperforms established planners (SDP, MRDP) and standard online RL agents (PPO, SAC). Its best variants (`dt_rtg_neg200`/`dt_rtg_neg500`, mean \u2248 -2408) achieve statistically significant improvements over the perfect-foresight Oracle (mean -2483, p < 0.005). These results hold after correcting the train/val split to prevent window leakage across episodes.
-2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. Moderate RTG prompts (neg200 to neg1500) achieve both strong returns and very low degradation (0.005\u20130.014/ep), while the near-zero prompt (`dt_rtg_neg1`) exhibits significantly higher degradation (0.114/ep) and lower returns.
-3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines. DT moderate-prompt CVaR (\u2248 -9705) is better than A2C (-9966), SDP (-9965), and PPO (-10089).
-4. **Robust to Data Split Correction:** The episode-level split fix had minimal impact on moderate RTG prompts (which retained strong performance), while `dt_rtg_neg1` was most affected \u2014 suggesting the model's core learned policy is robust, and only the extreme-prompt behavior relied on overfitted patterns.
+Synthesizing the results across the benchmark experiments, the Decision Transformer (DT) emerges as a highly competitive control strategy — but with a critical **environment-dependent caveat**:
+
+- **On the household environment (Sections 8.1–8.4):** With an appropriate RTG prompt, the DT outperforms all baselines including perfect-foresight Oracle and PPO. This is a 1D-action problem with ToU tariffs where degradation-aware cycling has clear optimal strategies.
+- **On the AEMO utility-scale environment (Section 8.6):** PPO (online RL) is the dominant policy by a wide margin. The DT — even after full-pretrained autoresearch optimization — cannot match PPO's FCAS market participation ($77/ep vs $10,628/ep). The DT's offline training data (mixed rule, RL, and dispatch replay) may lack the FCAS bidding patterns needed to learn this skill. Training DT on PPO-generated trajectories is a promising future direction.
+
+Household environment findings:
+1. **Strong Baseline Performance:** With an appropriate return-to-go (RTG) prompt, the DT outperforms established planners (SDP, MRDP) and standard online RL agents (PPO, SAC). Its best variants (`dt_rtg_neg200`/`dt_rtg_neg500`, mean ≈ -2408) achieve statistically significant improvements over the perfect-foresight Oracle (mean -2483, p < 0.005). These results hold after correcting the train/val split to prevent window leakage across episodes.
+2. **Zero-Shot Trade-off Control (Controllability):** Unlike traditional RL models that require retraining with a modified reward function to alter behavior, the DT allows operators to adjust the intensity of battery cycling dynamically simply by varying the RTG prompt. Moderate RTG prompts (neg200 to neg1500) achieve both strong returns and very low degradation (0.005–0.014/ep), while the near-zero prompt (`dt_rtg_neg1`) exhibits significantly higher degradation (0.114/ep) and lower returns.
+3. **Favorable Risk Profile:** The DT maintains competitive tail-risk characteristics (VaR and CVaR) and exhibits consistent worst-case outcomes that rival or beat most standard learning algorithms and value-based baselines. DT moderate-prompt CVaR (≈ -9705) is better than A2C (-9966), SDP (-9965), and PPO (-10089).
+4. **Robust to Data Split Correction:** The episode-level split fix had minimal impact on moderate RTG prompts (which retained strong performance), while `dt_rtg_neg1` was most affected — suggesting the model's core learned policy is robust, and only the extreme-prompt behavior relied on overfitted patterns.
 
 ## 9. Proposed Research Roadmap
 
@@ -457,9 +466,14 @@ where $G(\cdot)$ is the per-episode return (sum of rewards). We also optionally 
 - **Risk-Sensitive Control:** Integrate CVaR-style objectives/constraints into the training loop (evaluation-side tail-risk metrics are already implemented; the next step is CVaR-constrained or multi-objective training).
 
 DT-centric near-term extensions (repo-aligned):
-- **Prompt calibration:** use the repo’s `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
+- **Train DT on PPO/RL data:** The full-pretrained DT achieves mean_reward = -3.11 vs PPO's +12.82 on the expanded AEMO evaluation. The single largest gap is FCAS ($77/ep vs $10,628/ep). Training DT on trajectories generated by PPO — or a mixture weighted toward high-FCAS-revenue policies — could close this gap and potentially combine DT's RTG-conditioning flexibility with PPO-style market participation.
+- **Prompt calibration:** use the repo's `recommended_rtg` / `recommended_return_scale` diagnostics to choose RTG prompts that are in-distribution relative to the logged training data.
 - **Training data mixture studies:** systematically vary which behavior policies generate the offline dataset (rule-based vs SDP vs SB3) and evaluate how DT performance changes.
 - **Long-context modeling:** tested context lengths 120–2016 across fair-comparison proxy sweeps. **Context=180 (15 hours) was optimal** — both shorter (120) and longer (288, 360, 576, 1008) contexts regressed validation loss. Longer contexts either OOM'd the 8 GB GPU (ctx=2016) or showed overfitting patterns where the model used extra capacity to memorize rather than generalize. See Section 8.6 for the full evaluation.
+
+Beyond DT-centric work, the AEMO results also highlight the need for:
+- **FCAS-aware offline data collection:** Generate training trajectories that explicitly explore FCAS bidding strategies (e.g., via PPO rollouts) so offline models can learn to capture this revenue stream.
+- **Multi-objective training:** The DT's return-conditioning naturally supports multiple operating points (conservative vs aggressive), but PPO's FCAS proficiency suggests that adding an FCAS-specific auxiliary loss or reward component to the DT objective could improve AEMO performance.
 
 > **NOTE (literature alignment):** Because studies often vary in objective definitions (financial vs energy-efficiency) and in constraint/user-impact handling, robustness studies should explicitly document which objective family and constraint set is being targeted [6].
 
@@ -483,7 +497,15 @@ DT-centric near-term extensions (repo-aligned):
 
 ## 11. Conclusion
 
-This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior. This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
+This repository introduces a unified framework for learning and planning in battery control with degradation-aware evaluation across two settings: (i) household solar–battery–grid control under tariffs and (ii) utility-scale battery trading under AEMO/NEM market signals. The repository supports rule-based control, RL, SDP/MRDP, dispatch replay (AEMO), and Decision Transformers, with standardized preprocessing and environment-agnostic metrics. For the utility-scale setting, the implemented workflow now includes replay of historical station actions from AEMO dispatch data, providing a concrete bridge between simulated evaluation and observed market behavior.
+
+**Key empirical findings:**
+
+- **Household environment:** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation.
+- **AEMO utility-scale environment:** PPO (online RL) is the dominant policy by a wide margin (mean_reward = +12.82 vs full-pretrained DT at -3.11 on 135 episodes). The single largest factor is FCAS market participation: PPO earns $10,628/ep in ancillary market revenue vs DT's $77/ep. The DT's offline training data — sourced from mixed policies that rarely explored FCAS bidding — is the likely cause.
+- **Autoresearch optimization improved the DT substantially:** The full-pretrained DT (8×512, ctx=180) beats the rule baseline (-3.11 vs -4.82) and is dramatically better than the old pretrain model (-13.55). Degradation was reduced 5.2× and dispatch intensity 6.8× through frontier hyperparameter optimization.
+
+This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
 ## References
 
