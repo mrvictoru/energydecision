@@ -596,7 +596,12 @@ def run_rule_episodes(
     degradation_temperature: float,
     random_episode_start: bool,
     base_seed: int,
+    algorithm: str = "rule",
+    fcas_pctile: float = 0.80,
+    fcas_raise_threshold: float | None = None,
+    fcas_lower_threshold: float | None = None,
 ) -> list[pl.DataFrame]:
+    algo = algorithm.lower().strip()
     episodes: list[pl.DataFrame] = []
     for episode_idx in range(num_episodes):
         env = AEMOBatteryTradingEnv(
@@ -615,8 +620,11 @@ def run_rule_episodes(
         )
         agent = AEMOAgent(
             env,
-            algorithm="rule",
+            algorithm=algo,
             reset_seed=base_seed + episode_idx if random_episode_start else None,
+            fcas_pctile=fcas_pctile,
+            fcas_raise_threshold=fcas_raise_threshold,
+            fcas_lower_threshold=fcas_lower_threshold,
         )
         episode_df, _ = agent.run_episode()
         episodes.append(episode_df)

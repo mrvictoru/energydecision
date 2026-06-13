@@ -601,7 +601,10 @@ class AEMOAgent:
                  rtg_value: float = 0.0,
                  dt_gamma: float = 0.99,
                  reset_seed: Optional[int] = None,
-                 reset_options: Optional[Dict[str, Any]] = None):
+                 reset_options: Optional[Dict[str, Any]] = None,
+                 fcas_raise_threshold: float | None = None,
+                 fcas_lower_threshold: float | None = None,
+                 fcas_pctile: float = 0.80):
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
@@ -627,6 +630,13 @@ class AEMOAgent:
                 assume_single_duid_is_generator=assume_single_duid_is_generator,
                 dispatch_type=dispatch_type,
             )
+
+        # FCAS rule config
+        self.fcas_raise_threshold = fcas_raise_threshold
+        self.fcas_lower_threshold = fcas_lower_threshold
+        self.fcas_pctile = float(fcas_pctile)
+        self._fcas_norm_max = self._compute_fcas_norm_max()
+        self._init_fcas_thresholds()
 
     @staticmethod
     def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
@@ -820,9 +830,52 @@ class AEMOAgent:
             return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
         return self.dispatch_actions[idx]
 
+    def _compute_fcas_norm_max(self) -> float:
+        if not hasattr(self.env, 'aemo_data') or self.env.aemo_data is None:
+            return 100.0
+        try:
+            df = self.env.aemo_data
+            fcas_cols = [c for c in df.columns if c.startswith('FCAS_') and not c.endswith('_normalized')]
+            if not fcas_cols:
+                return 100.0
+            max_vals = []
+            for c in fcas_cols:
+                mv = df[c].max()
+                if mv is not None and not (isinstance(mv, float) and (mv != mv)):
+                    max_vals.append(float(mv))
+            return max(max_vals) if max_vals else 100.0
+        except Exception:
+            return 100.0
+
+    def _init_fcas_thresholds(self) -> None:
+        self._fcas_raise_thresh: float | None = self.fcas_raise_threshold
+        self._fcas_lower_thresh: float | None = self.fcas_lower_threshold
+        if self._fcas_raise_thresh is not None and self._fcas_lower_thresh is not None:
+            return
+        if not hasattr(self.env, 'aemo_data') or self.env.aemo_data is None:
+            if self._fcas_raise_thresh is None: self._fcas_raise_thresh = 30.0
+            if self._fcas_lower_thresh is None: self._fcas_lower_thresh = 25.0
+            return
+        try:
+            import numpy as np
+            df = self.env.aemo_data
+            if 'FCAS_RAISEREG' in df.columns and self._fcas_raise_thresh is None:
+                prices = df['FCAS_RAISEREG'].to_numpy()
+                prices = prices[~np.isnan(prices)]
+                self._fcas_raise_thresh = float(np.percentile(prices, self.fcas_pctile * 100))
+            if 'FCAS_LOWERREG' in df.columns and self._fcas_lower_thresh is None:
+                prices = df['FCAS_LOWERREG'].to_numpy()
+                prices = prices[~np.isnan(prices)]
+                self._fcas_lower_thresh = float(np.percentile(prices, self.fcas_pctile * 100))
+            if self._fcas_raise_thresh is None: self._fcas_raise_thresh = 30.0
+            if self._fcas_lower_thresh is None: self._fcas_lower_thresh = 25.0
+        except Exception:
+            if self._fcas_raise_thresh is None: self._fcas_raise_thresh = 30.0
+            if self._fcas_lower_thresh is None: self._fcas_lower_thresh = 25.0
+
     def choose_action(self, obs):
-        if self.algorithm == 'rule':
-            return self.rule_based_action(obs)
+        if self.algorithm in ('rule', 'fcas_rule'):
+            return self.fcas_rule_based_action(obs) if self.algorithm == 'fcas_rule' else self.rule_based_action(obs)
         if self.algorithm == 'dispatch':
             return self._dispatch_action()
         if self.algorithm == 'rl':
@@ -963,6 +1016,53 @@ class AEMOAgent:
             fcas_lower = np.float32(0.0)
             return np.array([np.float32(action_val), fcas_raise, fcas_lower], dtype=np.float32)
         return np.array([np.float32(action_val)], dtype=np.float32)
+
+    def fcas_rule_based_action(self, obs):
+        if obs is None or len(obs) < 17:
+            return [np.float32(0.0)]
+        # obs: [time(5), RRP, DEMAND, FCAS(8), GEN(2), SOC] — normalized [0,1]
+        price_norm = float(obs[5])
+        soc_norm = float(obs[-1])
+        fcas_norm = [float(obs[7 + i]) for i in range(8)]
+        _F = ['RAISEREG','LOWERREG','RAISE6SEC','LOWER6SEC','RAISE60SEC','LOWER60SEC','RAISE5MIN','LOWER5MIN']
+
+        # Energy dispatch (normalized thresholds from raw $30/$120 ÷ RRP max ~16600)
+        charge_thresh_n = 0.060  # ~$30 / 500
+        discharge_thresh_n = 0.80  # ~$120 / 150 ... actually let me use raw values
+        # Denormalize RRP: norm = raw / max, so raw = norm * max. Use obs[5] as normalized RRP
+        # Actually the existing rule uses raw obs values, so let's denomralize
+        rrp_max = getattr(self.env, '_raw_col_bounds', {}).get('RRP', (-100, 500))[1]
+        rrp_min = getattr(self.env, '_raw_col_bounds', {}).get('RRP', (-100, 500))[0]
+        price_raw = price_norm * (rrp_max - rrp_min) + rrp_min
+        charge_price = 30.0
+        discharge_price = 120.0
+
+        noise = np.random.normal(0.0, 0.01)
+        safe_low, safe_high = 0.10, 0.90
+        if soc_norm <= safe_low:
+            action = 0.5
+        elif soc_norm >= safe_high:
+            action = -0.5
+        else:
+            if price_raw <= charge_price:
+                action = 0.6
+            elif price_raw >= discharge_price:
+                action = -0.6
+            else:
+                action = 0.0
+        action_val = float(np.clip(action + noise, -1.0, 1.0))
+
+        if getattr(self.env, 'action_mode', 'simple') != 'multi_market':
+            return np.array([np.float32(action_val)], dtype=np.float32)
+
+        # FCAS bidding — denormalise FCAS prices using _fcas_norm_max
+        # obs FCAS entries are normalised as raw / _fcas_norm_max
+        fcas_raise_raw = fcas_norm[0] * self._fcas_norm_max  # RAISEREG
+        fcas_lower_raw = fcas_norm[1] * self._fcas_norm_max  # LOWERREG
+
+        fcas_raise = 1.0 if fcas_raise_raw >= self._fcas_raise_thresh and soc_norm > 0.15 else 0.0
+        fcas_lower = 1.0 if fcas_lower_raw >= self._fcas_lower_thresh and soc_norm < 0.85 else 0.0
+        return np.array([np.float32(action_val), np.float32(fcas_raise), np.float32(fcas_lower)], dtype=np.float32)
 
     def run_episode(self, render: bool = False, display_progress: bool = False):
         obs, info = _reset_env(self.env, seed=self.reset_seed, options=self.reset_options)
