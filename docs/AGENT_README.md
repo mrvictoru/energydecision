@@ -23,6 +23,7 @@ This document describes the agent-related modules that manage policy logic, opti
 - **Purpose**: Specializes in interacting with `AEMOBatteryTradingEnv`; added after AEMO env development.
 - **Features**:
   - **rule**: price-based arbitrage action using FCAS-aware observation slices
+  - **fcas_rule**: extends rule with percentile-based FCAS bidding on RAISEREG/LOWERREG; thresholds computed from env's `aemo_data` at init time
   - **dispatch**: replays real AEMO dispatch data (via `fetch_aemo_unit_dispatch()`) by translating `TOTALCLEARED` into normalized actions
   - **rl/dt**: forwards obs to provided RL or Decision Transformer models similar to `Agent` but with AEMO observation layout
   - **DT buffering**: replicates `Agent`'s buffer logic to support `DecisionTransformer.get_action` (same context_len handling)
@@ -86,6 +87,11 @@ episode_df, incident_df = agent.run_episode()
 
 ### `AEMOAgent` Specific Methods
 
+- **Constructor additions for `fcas_rule`**:
+  - `fcas_pctile` (float, default 0.80): percentile for computing FCAS bid thresholds from training data.
+  - `fcas_raise_threshold` (float, optional): explicit raw price threshold for RAISEREG bidding (overrides percentile).
+  - `fcas_lower_threshold` (float, optional): explicit raw price threshold for LOWERREG bidding (overrides percentile).
+
 - `set_dispatch_data(dispatch_data, dispatch_duid=None, dispatch_duid_gen=None, dispatch_duid_load=None, assume_single_duid_is_generator=True)`
   - **Args**: accepts the raw dispatch dataframe from `fetch_aemo_unit_dispatch()` plus optional DUID filters for separating generation/load streams.
   - **Returns**: `None`. Side effect is populating `self.dispatch_actions` with a resampled, normalized action trace used by the `dispatch` algorithm.
@@ -106,13 +112,17 @@ episode_df, incident_df = agent.run_episode()
 
 - `choose_action(obs)`
   - **Args**: `obs` is either raw AEMO observation (rule/dispatch) or normalized vector (RL/DT).
-  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0); for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
+  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0); for `fcas_rule`, same shape as `rule` but bids RAISEREG/LOWERREG when current price exceeds data-driven percentile thresholds (default p80) and SOC headroom permits; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
 
 - `rule_based_action(obs)`
   - **Args**: expects raw AEMO observation `[time⁵, RRP, TOTALDEMAND, FCAS×8, GEN×2, SOC]`; returns zero action when inputs are missing.
   - **Returns**: `[np.float32]` scaled action for energy-only environments, or a `np.ndarray` shaped `(3,)` `[dispatch, fcas_raise_bid, fcas_lower_bid]` when the environment is in multi-market mode (FCAS bids default to 0.0). The value is chosen by comparing the energy price to `charge_price`/`discharge_price` thresholds, enforcing SOC limits, and adding Gaussian noise for smoothing.
 
+- `fcas_rule_based_action(obs)`
+  - **Args**: expects normalized AEMO observation `[time⁵, RRP, DEMAND, FCAS×8, GEN×2, SOC]` (all in [0,1] range); returns zero action when inputs are missing.
+  - **Returns**: `np.ndarray` shaped `(1,)` for simple mode or `(3,)` `[dispatch, fcas_raise, fcas_lower]` for multi-market mode. Energy dispatch uses the same logic as `rule_based_action` but denormalises the RRP using env's `_raw_col_bounds`. FCAS bidding compares denormalised RAISEREG/LOWERREG prices against thresholds computed from the training data at init time (default p80 percentile). Bids are 1.0 when price exceeds threshold and SOC headroom permits (raise >15%, lower <85%), else 0.0. Constructor params: `fcas_pctile` (default 0.80), `fcas_raise_threshold`, `fcas_lower_threshold` (explicit overrides).
+
 - `run_episode(render=False, display_progress=False)`
-  - **Args**: same knobs as `Agent.run_episode` but also interprets `algorithm in ['rule','dispatch']` as using `raw_obs` for logs.
+  - **Args**: same knobs as `Agent.run_episode` but also interprets `algorithm in ['rule','fcas_rule','dispatch']` as using `raw_obs` for logs.
   - **Returns**: `(episode_df, incident_df)` where `episode_df` mirrors the same columns as `Agent` but logs both normalized and raw AEMO observations; `incident_df` is currently an empty `pl.DataFrame()` placeholder (no degradation tracking yet).
   - **Behaviour**: if `algorithm == 'dt'`, initializes DT buffers with the shorter AEMO state/action dims. The loop calls `choose_action`, steps the env, logs, updates DT buffers with the returned actions/RTGs, and tracks dispatch playback when relevant.
