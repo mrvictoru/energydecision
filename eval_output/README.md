@@ -32,9 +32,6 @@ eval_output/
 │       │   └── pilot_pretrain_baseline/ ← Pilot pretrain baseline eval
 │       └── sweeps/           ← Optimizer and hyperparameter sweep evals
 │
-├── cache/             ← Non-graphic compute caches (NOT eval output)
-│   └── reference_rollouts/  ← Cached reference policy rollouts
-│
-└── training/          ← Training monitor logs (NOT eval output)
-    └── monitor/       ← Telemetry logs from DT training runs
+└── cache/             ← Non-graphic compute caches (NOT eval output)
+    └── reference_rollouts/  ← Cached reference policy rollouts
 ```

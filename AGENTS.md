@@ -47,7 +47,7 @@ The launcher derives tier defaults, writes a launch plan, and re-enters Distrobo
 - **Xid79 / GPU lost** crashes have occurred. After PCIe clock cap, no recurrence.
 - For long GPU runs, always use the telemetry wrapper:
   ```bash
-  bash eval_output/training/monitor/run_full_learning_baseline.sh <TAG>
+  bash scripts/run_full_learning_baseline.sh <TAG>
   ```
   It captures nvidia_smi, dmon, vmstat, iostat, kernel log. Writes `SAFE_TO_SHUTDOWN.txt` on completion and `CRASH_DETECTED.txt` on Xid79. Only shut down after `SAFE_TO_SHUTDOWN.txt` exists.
 

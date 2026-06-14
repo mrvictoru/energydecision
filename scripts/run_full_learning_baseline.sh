@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TAG="${1:-full_learning_baseline_$(date +%Y%m%d_%H%M%S)}"
-LOGDIR="eval_output/system_logs/${TAG}"
+LOGDIR="system_logs/${TAG}"
 mkdir -p "$LOGDIR"
 
 MON_SECS="${MON_SECS:-86400}"  # default: 24h

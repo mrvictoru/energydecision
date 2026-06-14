@@ -73,10 +73,33 @@ Use normal `data/...` and `models/...` paths from the repo root.
 
 For AEMO DT training, prefer the launcher below instead of calling the wrapper directly. It derives tier
 defaults, writes a launch plan JSON, and re-enters the preferred Distrobox automatically when invoked from
-the host:
+the host.
 
+**From the host (auto-enters distrobox):**
 ```bash
 python3 src/launch_aemo_training.py --run-tier proxy-baseline
+```
+
+**From inside the GPU distrobox (manual):**
+```bash
+distrobox enter energydecision-gpu
+cd /path/to/energydecision
+python3 src/launch_aemo_training.py --run-tier proxy-baseline --runtime-mode allow-host
+```
+
+**Note:** The launcher automatically wraps the training in a live dashboard (`src/dt_progress_runner.py`)
+that shows loss curves, GPU/CPU stats, and sparklines.
+
+**Attaching to a running training from another terminal:**
+```bash
+python3 src/dt_progress_runner.py --attach \
+  --progress-snapshot-path models/aemo/dt/<run-tag>/<tier>/aemo_dt_loss_history_progress.json \
+  --surface-manifest-path models/aemo/dt/<run-tag>/<tier>/aemo_dt_loss_history_surface_manifest.json
+```
+
+**GPU + system telemetry wrapper** (monitors nvidia-smi, dmon, kernel logs, CPU/IO):
+```bash
+bash scripts/run_proxy_gpu_test.sh <optional-tag>
 ```
 
 ### Option 2: Docker (shared / CI workflow)
