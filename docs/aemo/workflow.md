@@ -261,25 +261,40 @@ for the proxy tier than to repeatedly launch the full learning-baseline subset p
 accepts an explicit validation parquet via `--val-dataset-path`, so you can keep the AEMO entrypoint while
 holding the train/validation pair constant.
 
-The repository now includes a reproducible pilot builder that refreshes the fixed split from the full
-AEMO dataset using a curated set of week-long cross-region episode slices:
+The repository includes a two-stage pilot builder that creates a stratified FCAS-rich fixed split from
+the 2,425-episode FCAS dataset:
 
 ```bash
-python3 src/build_aemo_autoresearch_pilot.py
+# Step 1: generate stratified spec and build pilot parquet files
+python3 src/build_aemo_fcas_pilot_spec.py --build-pilot
+
+# Step 1a: or generate spec only (inspect before building)
+python3 src/build_aemo_fcas_pilot_spec.py
+
+# Step 2 (manual, only if customizing): build from a custom spec
+python3 src/build_aemo_autoresearch_pilot.py \
+  --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
+  --output-dir data/aemo_dt_fcas/autoresearch_pilot \
+  --spec-path data/aemo_dt_fcas/autoresearch_pilot_spec.json
 ```
 
-That command rewrites:
+The spec generator (`build_aemo_fcas_pilot_spec.py`) reconstructs episode metadata from the 2,405 raw
+log files, filters to medium/long horizon only (≥16K steps), then stratifies by source policy (PPO, A2C,
+DDPG, SAC, TD3, FCAS rule) to match the full dataset's diversity. The output is 8 train + 4 val episodes,
+each sliced to 2,016 steps starting at step 288.
 
-- `data/aemo_dt/autoresearch_pilot/aemo_dt_train_pilot.parquet`
-- `data/aemo_dt/autoresearch_pilot/aemo_dt_val_pilot.parquet`
-- `data/aemo_dt/autoresearch_pilot/aemo_dt_autoresearch_pilot_manifest.json`
+These commands rewrite:
+
+- `data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_train_pilot.parquet`
+- `data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_val_pilot.parquet`
+- `data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_autoresearch_pilot_manifest.json`
 
 Use the generated split like this:
 
 ```bash
 python3 src/pretrain_aemo_decision_transformer.py \
-  --dataset-path data/aemo_dt/autoresearch_pilot/aemo_dt_train_pilot.parquet \
-  --val-dataset-path data/aemo_dt/autoresearch_pilot/aemo_dt_val_pilot.parquet \
+  --dataset-path data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_train_pilot.parquet \
+  --val-dataset-path data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_val_pilot.parquet \
   --surface-preset aemo_proxy \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
   --epochs 1 \
@@ -298,13 +313,17 @@ For the proxy tier, prefer **best validation action loss** as the ranking metric
 
 For simulator checks, use:
 
-- `configs/aemo_autoresearch_evaluator.mini.json` for quick pilot screening
-- `configs/aemo_autoresearch_evaluator.example.json` for the fuller held-out comparison
+- `configs/aemo_autoresearch_evaluator.mini.json` for quick pilot screening (FCAS-aware, 5-min steps, 2 regions)
+- `configs/aemo_autoresearch_evaluator.example.json` for the fuller held-out comparison (4 regions, 2 batteries, 6 policies)
+- `configs/aemo_autoresearch_evaluator.expanded.json` for full season sweep (5 regions × 6 months, 1 battery)
 
-Both evaluator configs can share cached non-DT reference rollouts through `reference_cache_dir`, so fixed
-baselines like `rule`, dispatch replay, and unchanged SB3 references do not need to rerun for every pilot
-experiment.
-They also now include `heldout.parallel_workers` with `parallelize_candidate_dt=false`, so evaluator
+**Important: The `mini` evaluator now uses `fcas_rule` as reference** instead of the old `rule`.
+The paired comparison reports `candidate_dt vs fcas_rule` — this reveals whether the DT learned FCAS bidding.
+Old `rule` is still included in `example` and `expanded` configs for historical comparison.
+
+All evaluator configs share cached non-DT reference rollouts through `reference_cache_dir`, so fixed
+baselines like `rule`, `fcas_rule`, dispatch replay, and unchanged SB3 references do not need to rerun for every pilot experiment.
+They also include `heldout.parallel_workers` with `parallelize_candidate_dt=false`, so evaluator
 rollouts run in parallel by default for reference policies while DT candidate rollouts stay serial unless
 you explicitly opt in.
 

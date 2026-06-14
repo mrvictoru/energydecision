@@ -529,6 +529,10 @@ def run_policy_episodes(
             degradation_temperature=degradation_temperature,
             random_episode_start=random_episode_start,
             base_seed=base_seed,
+            algorithm=str(policy_cfg.get("algorithm", "rule")),
+            fcas_pctile=float(policy_cfg.get("fcas_pctile", 0.80)),
+            fcas_raise_threshold=policy_cfg.get("fcas_raise_threshold"),
+            fcas_lower_threshold=policy_cfg.get("fcas_lower_threshold"),
         )
 
     if policy_kind == "sb3":

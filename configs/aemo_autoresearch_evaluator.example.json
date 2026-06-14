@@ -3,7 +3,7 @@
   "target_return": 0.0,
   "bootstrap_iterations": 1000,
   "bootstrap_seed": 42,
-  "reference_policy": "rule",
+  "reference_policy": "fcas_rule",
   "reference_cache_dir": "eval_output/autoresearch/reference_cache/full",
   "condition_thresholds": {
     "negative_price_threshold": 0.0,
@@ -22,13 +22,19 @@
     "episodes_per_variant": 2,
     "random_episode_start": false,
     "fit_global_stats": true,
-    "parallel_workers": 4,
+    "parallel_workers": 8,
     "parallelize_candidate_dt": false,
     "battery_variants": [
       {
         "name": "medium",
         "capacity_mwh": 10.0,
         "max_power_mw": 5.0,
+        "init_soc_ratio": 0.5
+      },
+      {
+        "name": "small",
+        "capacity_mwh": 2.0,
+        "max_power_mw": 1.0,
         "init_soc_ratio": 0.5
       }
     ],
@@ -44,6 +50,18 @@
         "region": "SA1",
         "start_date": "2024-07-01",
         "end_date": "2024-07-14"
+      },
+      {
+        "label": "qld1_jan_2024",
+        "region": "QLD1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "vic1_jan_2024",
+        "region": "VIC1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
       }
     ]
   },
@@ -56,6 +74,11 @@
     {
       "name": "rule",
       "kind": "rule"
+    },
+    {
+      "name": "fcas_rule",
+      "kind": "rule",
+      "algorithm": "fcas_rule"
     },
     {
       "name": "dispatch_dalrymple_north",
