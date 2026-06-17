@@ -1,0 +1,473 @@
+from __future__ import annotations
+
+import copy
+import inspect
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Sequence
+
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.distributions import Independent, Normal, TransformedDistribution
+from torch.distributions.transforms import TanhTransform
+
+from decision_transformer import DecisionTransformer
+
+
+def _reset_env(env, seed: int | None = None, options: dict[str, Any] | None = None):
+    if options is None:
+        return env.reset(seed=seed)
+
+    reset_sig = inspect.signature(env.reset)
+    if "options" in reset_sig.parameters:
+        return env.reset(seed=seed, options=options)
+    return env.reset(seed=seed, **options)
+
+
+@dataclass(frozen=True)
+class GRPOPrompt:
+    seed: int | None = None
+    options: dict[str, Any] | None = None
+    rtg_value: float = 0.0
+    max_steps: int | None = None
+
+
+@dataclass
+class GRPORolloutBatch:
+    states: torch.Tensor
+    actions: torch.Tensor
+    rtgs: torch.Tensor
+    timesteps: torch.Tensor
+    attention_mask: torch.Tensor
+    sampled_actions: torch.Tensor
+    old_log_probs: torch.Tensor
+    ref_log_probs: torch.Tensor
+    advantages: torch.Tensor
+    rewards: torch.Tensor
+    returns: torch.Tensor
+    prompt_indices: torch.Tensor
+
+    @property
+    def num_steps(self) -> int:
+        return int(self.sampled_actions.shape[0])
+
+    @property
+    def num_episodes(self) -> int:
+        return int(self.returns.shape[0])
+
+
+def load_pretrained_dt_for_grpo(
+    model_kwargs: dict[str, Any],
+    checkpoint_path: str | Path,
+    *,
+    device: str = "cpu",
+) -> tuple[DecisionTransformer, DecisionTransformer]:
+    model = DecisionTransformer(**model_kwargs)
+    model.load_from_checkpoint(str(Path(checkpoint_path).resolve()), map_location=device)
+    model.to(device)
+    model.train()
+
+    reference_model = copy.deepcopy(model)
+    reference_model.to(device)
+    reference_model.eval()
+    for parameter in reference_model.parameters():
+        parameter.requires_grad_(False)
+    return model, reference_model
+
+
+def compute_group_relative_advantages(
+    returns: Sequence[float] | np.ndarray,
+    group_size: int,
+    *,
+    eps: float = 1e-8,
+) -> np.ndarray:
+    values = np.asarray(list(returns), dtype=np.float32)
+    if values.size == 0:
+        return np.zeros(0, dtype=np.float32)
+    if group_size <= 0:
+        raise ValueError("group_size must be positive.")
+    if values.size % group_size != 0:
+        raise ValueError("returns length must be divisible by group_size.")
+
+    grouped = values.reshape(-1, group_size)
+    means = grouped.mean(axis=1, keepdims=True)
+    stds = grouped.std(axis=1, keepdims=True)
+    centered = grouped - means
+    safe_stds = np.where(stds > eps, stds, 1.0)
+    advantages = centered / safe_stds
+    zero_var_mask = (stds <= eps).reshape(-1)
+    if zero_var_mask.any():
+        advantages[zero_var_mask] = centered[zero_var_mask]
+    return advantages.reshape(-1).astype(np.float32)
+
+
+def _build_dt_context(
+    *,
+    model: DecisionTransformer,
+    state_buffer: list[np.ndarray],
+    action_buffer: list[np.ndarray],
+    rtg_buffer: list[float],
+    timestep_buffer: list[int],
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    context_len = int(model.context_len)
+    state_dim = int(model.state_dim)
+    act_dim = int(model.act_dim)
+    buffer_len = len(state_buffer)
+
+    buffer_states = (
+        np.array(state_buffer, dtype=np.float32)
+        if buffer_len > 0
+        else np.zeros((0, state_dim), dtype=np.float32)
+    )
+    buffer_actions = (
+        np.array(action_buffer, dtype=np.float32)
+        if buffer_len > 0
+        else np.zeros((0, act_dim), dtype=np.float32)
+    )
+    buffer_rtgs = np.array(rtg_buffer, dtype=np.float32) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
+    buffer_timesteps = (
+        np.array(timestep_buffer, dtype=np.int64)
+        if buffer_len > 0
+        else np.zeros(0, dtype=np.int64)
+    )
+
+    if buffer_len < context_len:
+        pad_len = context_len - buffer_len
+        states = np.vstack([np.zeros((pad_len, state_dim), dtype=np.float32), buffer_states])
+        actions = np.vstack([np.zeros((pad_len, act_dim), dtype=np.float32), buffer_actions])
+        rtgs = np.concatenate([np.zeros(pad_len, dtype=np.float32), buffer_rtgs])
+        timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), buffer_timesteps])
+        attention_mask = np.concatenate(
+            [np.zeros(pad_len, dtype=np.bool_), np.ones(buffer_len, dtype=np.bool_)]
+        )
+    else:
+        states = buffer_states[-context_len:]
+        actions = buffer_actions[-context_len:]
+        rtgs = buffer_rtgs[-context_len:]
+        timesteps = buffer_timesteps[-context_len:]
+        attention_mask = np.ones(context_len, dtype=np.bool_)
+
+    return_scale = float(getattr(model, "return_scale", 1.0))
+    if not np.isfinite(return_scale) or abs(return_scale) < 1e-12:
+        raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
+    if return_scale != 1.0:
+        rtgs = rtgs / return_scale
+
+    max_time = getattr(model.embed_timestep, "num_embeddings", None)
+    if max_time is not None and max_time > 0:
+        timesteps = np.clip(timesteps, 0, int(max_time) - 1)
+
+    states_t = torch.tensor(np.nan_to_num(states), dtype=torch.float32, device=device).unsqueeze(0)
+    actions_t = torch.tensor(np.nan_to_num(actions), dtype=torch.float32, device=device).unsqueeze(0)
+    rtgs_t = torch.tensor(np.nan_to_num(rtgs), dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)
+    timesteps_t = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
+    mask_t = torch.tensor(attention_mask, dtype=torch.bool, device=device).unsqueeze(0)
+    return states_t, actions_t, rtgs_t, timesteps_t, mask_t
+
+
+def _diagonal_tanh_normal(action_mean: torch.Tensor, log_std: torch.Tensor) -> TransformedDistribution:
+    std = log_std.exp().view(1, 1, -1).expand_as(action_mean)
+    base = Independent(Normal(loc=action_mean, scale=std), 1)
+    return TransformedDistribution(base, [TanhTransform(cache_size=1)])
+
+
+def _episode_max_steps(env, prompt: GRPOPrompt) -> int:
+    if prompt.max_steps is not None:
+        return max(1, int(prompt.max_steps))
+    if hasattr(env, "max_step"):
+        return max(1, int(getattr(env, "max_step")))
+    if hasattr(env, "_max_episode_steps") and getattr(env, "_max_episode_steps") is not None:
+        return max(1, int(getattr(env, "_max_episode_steps")))
+    if hasattr(env, "df"):
+        return max(1, int(len(env.df)))
+    return 1_000
+
+
+class GRPOTrainer:
+    def __init__(
+        self,
+        model: DecisionTransformer,
+        *,
+        reference_model: DecisionTransformer | None = None,
+        device: str = "cpu",
+        lr: float = 1e-5,
+        clip_ratio: float = 0.2,
+        kl_coeff: float = 0.02,
+        entropy_coeff: float = 0.0,
+        initial_log_std: float = -1.0,
+        trainable_log_std: bool = True,
+        grad_clip_norm: float = 1.0,
+    ) -> None:
+        self.model = model.to(device)
+        self.device = torch.device(device)
+        self.reference_model = copy.deepcopy(model) if reference_model is None else reference_model
+        self.reference_model = self.reference_model.to(device)
+        self.reference_model.eval()
+        for parameter in self.reference_model.parameters():
+            parameter.requires_grad_(False)
+
+        act_dim = int(self.model.act_dim)
+        self.log_std = nn.Parameter(torch.full((act_dim,), float(initial_log_std), device=self.device))
+        self.log_std.requires_grad_(bool(trainable_log_std))
+
+        params: list[nn.Parameter] = [p for p in self.model.parameters() if p.requires_grad]
+        if self.log_std.requires_grad:
+            params.append(self.log_std)
+        self.optimizer = torch.optim.Adam(params, lr=lr)
+
+        self.clip_ratio = float(clip_ratio)
+        self.kl_coeff = float(kl_coeff)
+        self.entropy_coeff = float(entropy_coeff)
+        self.grad_clip_norm = float(grad_clip_norm)
+
+    def _action_distributions(
+        self,
+        states: torch.Tensor,
+        actions: torch.Tensor,
+        rtgs: torch.Tensor,
+        timesteps: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> tuple[TransformedDistribution, TransformedDistribution]:
+        _, _, action_preds = self.model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+        _, _, ref_preds = self.reference_model(
+            states, rtgs, timesteps, actions, attention_mask=attention_mask
+        )
+        action_mean = action_preds[:, -1:, :]
+        ref_mean = ref_preds[:, -1:, :]
+        current_dist = _diagonal_tanh_normal(action_mean, self.log_std)
+        ref_dist = _diagonal_tanh_normal(ref_mean, self.log_std.detach())
+        return current_dist, ref_dist
+
+    def collect_rollouts(
+        self,
+        env_factory: Callable[[], Any],
+        *,
+        prompts: Sequence[GRPOPrompt],
+        group_size: int = 4,
+        dt_gamma: float = 0.99,
+    ) -> GRPORolloutBatch:
+        if not prompts:
+            raise ValueError("prompts must be non-empty.")
+        if group_size <= 0:
+            raise ValueError("group_size must be positive.")
+
+        states_records: list[torch.Tensor] = []
+        actions_records: list[torch.Tensor] = []
+        rtg_records: list[torch.Tensor] = []
+        timestep_records: list[torch.Tensor] = []
+        mask_records: list[torch.Tensor] = []
+        sampled_action_records: list[torch.Tensor] = []
+        old_log_prob_records: list[float] = []
+        ref_log_prob_records: list[float] = []
+        reward_records: list[float] = []
+        prompt_index_records: list[int] = []
+        returns: list[float] = []
+        episode_steps: list[int] = []
+
+        self.model.eval()
+        for prompt_index, prompt in enumerate(prompts):
+            for _ in range(group_size):
+                env = env_factory()
+                obs, _ = _reset_env(env, seed=prompt.seed, options=prompt.options)
+                obs = np.asarray(obs, dtype=np.float32)
+
+                state_buffer = [obs.copy()]
+                action_buffer = [np.zeros(int(self.model.act_dim), dtype=np.float32)]
+                rtg_buffer = [float(prompt.rtg_value)]
+                timestep_buffer = [int(getattr(env, "current_step", 0))]
+                max_steps = _episode_max_steps(env, prompt)
+
+                episode_return = 0.0
+                step_count = 0
+                terminated = False
+                truncated = False
+
+                while not (terminated or truncated) and step_count < max_steps:
+                    context = _build_dt_context(
+                        model=self.model,
+                        state_buffer=state_buffer,
+                        action_buffer=action_buffer,
+                        rtg_buffer=rtg_buffer,
+                        timestep_buffer=timestep_buffer,
+                        device=self.device,
+                    )
+                    states_t, actions_t, rtgs_t, timesteps_t, mask_t = context
+                    with torch.no_grad():
+                        current_dist, ref_dist = self._action_distributions(
+                            states_t, actions_t, rtgs_t, timesteps_t, mask_t
+                        )
+                        sampled_action = current_dist.rsample()
+                        old_log_prob = float(current_dist.log_prob(sampled_action).item())
+                        ref_log_prob = float(ref_dist.log_prob(sampled_action).item())
+
+                    action_np = sampled_action.squeeze(0).squeeze(0).detach().cpu().numpy().astype(np.float32)
+                    next_obs, reward, terminated, truncated, _ = env.step(action_np)
+                    next_obs = np.asarray(next_obs, dtype=np.float32)
+
+                    states_records.append(states_t.squeeze(0).detach().cpu())
+                    actions_records.append(actions_t.squeeze(0).detach().cpu())
+                    rtg_records.append(rtgs_t.squeeze(0).detach().cpu())
+                    timestep_records.append(timesteps_t.squeeze(0).detach().cpu())
+                    mask_records.append(mask_t.squeeze(0).detach().cpu())
+                    sampled_action_records.append(sampled_action.squeeze(0).squeeze(0).detach().cpu())
+                    old_log_prob_records.append(old_log_prob)
+                    ref_log_prob_records.append(ref_log_prob)
+                    reward_records.append(float(reward))
+                    prompt_index_records.append(prompt_index)
+
+                    episode_return += float(reward)
+                    step_count += 1
+
+                    action_buffer[-1] = action_np
+                    if dt_gamma == 1.0:
+                        next_rtg = rtg_buffer[-1] - float(reward)
+                    else:
+                        next_rtg = (rtg_buffer[-1] - float(reward)) / float(dt_gamma)
+                    state_buffer.append(next_obs.copy())
+                    action_buffer.append(np.zeros(int(self.model.act_dim), dtype=np.float32))
+                    rtg_buffer.append(float(next_rtg))
+                    timestep_buffer.append(int(getattr(env, "current_step", step_count)))
+
+                    if len(state_buffer) > int(self.model.context_len):
+                        state_buffer = state_buffer[-int(self.model.context_len):]
+                        action_buffer = action_buffer[-int(self.model.context_len):]
+                        rtg_buffer = rtg_buffer[-int(self.model.context_len):]
+                        timestep_buffer = timestep_buffer[-int(self.model.context_len):]
+
+                returns.append(float(episode_return))
+                episode_steps.append(step_count)
+
+        advantages_per_episode = compute_group_relative_advantages(returns, group_size)
+        step_advantages: list[float] = []
+        for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
+            step_advantages.extend([advantage] * step_count)
+
+        batch = GRPORolloutBatch(
+            states=torch.stack(states_records).to(self.device),
+            actions=torch.stack(actions_records).to(self.device),
+            rtgs=torch.stack(rtg_records).to(self.device),
+            timesteps=torch.stack(timestep_records).to(self.device),
+            attention_mask=torch.stack(mask_records).to(self.device),
+            sampled_actions=torch.stack(sampled_action_records).to(self.device),
+            old_log_probs=torch.tensor(old_log_prob_records, dtype=torch.float32, device=self.device),
+            ref_log_probs=torch.tensor(ref_log_prob_records, dtype=torch.float32, device=self.device),
+            advantages=torch.tensor(step_advantages, dtype=torch.float32, device=self.device),
+            rewards=torch.tensor(reward_records, dtype=torch.float32, device=self.device),
+            returns=torch.tensor(returns, dtype=torch.float32, device=self.device),
+            prompt_indices=torch.tensor(prompt_index_records, dtype=torch.long, device=self.device),
+        )
+        self.model.train()
+        return batch
+
+    def update(
+        self,
+        batch: GRPORolloutBatch,
+        *,
+        update_epochs: int = 1,
+        minibatch_size: int = 128,
+    ) -> dict[str, float]:
+        if batch.num_steps == 0:
+            raise ValueError("Cannot update with an empty rollout batch.")
+
+        metrics = {
+            "loss": 0.0,
+            "policy_loss": 0.0,
+            "kl_loss": 0.0,
+            "entropy_bonus": 0.0,
+        }
+        update_steps = 0
+        indices = torch.arange(batch.num_steps, device=self.device)
+
+        for _ in range(max(1, int(update_epochs))):
+            shuffled = indices[torch.randperm(batch.num_steps, device=self.device)]
+            for start in range(0, batch.num_steps, max(1, int(minibatch_size))):
+                mb_idx = shuffled[start : start + max(1, int(minibatch_size))]
+                states = batch.states[mb_idx]
+                actions = batch.actions[mb_idx]
+                rtgs = batch.rtgs[mb_idx]
+                timesteps = batch.timesteps[mb_idx]
+                attention_mask = batch.attention_mask[mb_idx]
+                sampled_actions = batch.sampled_actions[mb_idx]
+                old_log_probs = batch.old_log_probs[mb_idx]
+                ref_log_probs = batch.ref_log_probs[mb_idx]
+                advantages = batch.advantages[mb_idx]
+
+                current_dist, _ = self._action_distributions(
+                    states, actions, rtgs, timesteps, attention_mask
+                )
+                current_log_probs = current_dist.log_prob(sampled_actions.unsqueeze(1)).squeeze(-1)
+                log_ratio = current_log_probs - old_log_probs
+                ratio = log_ratio.exp()
+                unclipped = ratio * advantages
+                clipped = torch.clamp(
+                    ratio,
+                    1.0 - self.clip_ratio,
+                    1.0 + self.clip_ratio,
+                ) * advantages
+                policy_loss = -torch.min(unclipped, clipped).mean()
+
+                ref_gap = ref_log_probs - current_log_probs
+                kl_loss = (torch.exp(ref_gap) - ref_gap - 1.0).mean()
+
+                base_entropy = current_dist.base_dist.entropy().mean()
+                loss = policy_loss + self.kl_coeff * kl_loss - self.entropy_coeff * base_entropy
+
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+                if self.log_std.requires_grad:
+                    torch.nn.utils.clip_grad_norm_([self.log_std], self.grad_clip_norm)
+                self.optimizer.step()
+
+                metrics["loss"] += float(loss.detach().cpu().item())
+                metrics["policy_loss"] += float(policy_loss.detach().cpu().item())
+                metrics["kl_loss"] += float(kl_loss.detach().cpu().item())
+                metrics["entropy_bonus"] += float(base_entropy.detach().cpu().item())
+                update_steps += 1
+
+        if update_steps > 0:
+            for key in metrics:
+                metrics[key] /= float(update_steps)
+        metrics["log_std_mean"] = float(self.log_std.detach().mean().cpu().item())
+        return metrics
+
+    def train(
+        self,
+        env_factory: Callable[[], Any],
+        *,
+        prompts: Sequence[GRPOPrompt],
+        iterations: int = 1,
+        group_size: int = 4,
+        update_epochs: int = 1,
+        minibatch_size: int = 128,
+        dt_gamma: float = 0.99,
+    ) -> list[dict[str, float]]:
+        history: list[dict[str, float]] = []
+        for iteration in range(max(1, int(iterations))):
+            batch = self.collect_rollouts(
+                env_factory,
+                prompts=prompts,
+                group_size=group_size,
+                dt_gamma=dt_gamma,
+            )
+            metrics = self.update(
+                batch,
+                update_epochs=update_epochs,
+                minibatch_size=minibatch_size,
+            )
+            metrics.update(
+                {
+                    "iteration": iteration + 1,
+                    "episodes_collected": float(batch.num_episodes),
+                    "steps_collected": float(batch.num_steps),
+                    "mean_return": float(batch.returns.mean().detach().cpu().item()),
+                    "max_return": float(batch.returns.max().detach().cpu().item()),
+                    "min_return": float(batch.returns.min().detach().cpu().item()),
+                    "mean_reward": float(batch.rewards.mean().detach().cpu().item()),
+                    "mean_advantage": float(batch.advantages.mean().detach().cpu().item()),
+                }
+            )
+            history.append(metrics)
+        return history
