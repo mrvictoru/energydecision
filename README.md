@@ -15,6 +15,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Optimization:** Stochastic Dynamic Programming (SDP) & Multi-Resolution DP (MRDP).
     *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 (via Stable-Baselines3).
     *   **Offline RL:** Decision Transformers (DT).
+    *   **Post-training:** GRPO fine-tuning for pretrained DT policies.
     *   **Baselines:** Rule-based heuristics & Oracle (perfect foresight).
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
 
@@ -34,7 +35,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Conduct data gathering and training on AEMO env:** Run dispatch replay and RL-agent in `AEMOBatteryTradingEnv` to collect trajectories for offline training for DT and evaluation.
 *   [x] **Test out autoresearch:** Run the autoresearch loop for DT training.
 *   [x] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts; calibrate against the target held-out scenario before inference.
-*   [ ] **RL Fine-tuning:** Initialize Online RL with DT weights.
+*   [x] **RL Fine-tuning:** GRPO post-training support for pretrained DT weights.
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
@@ -182,6 +183,10 @@ Use this path to recreate the residential PV + battery experiments.
    - Main residential evaluation notebook.
    - Compares baselines, SB3 agents, and DT policies.
    - Writes plots/reports to `eval_output/` as configured in the notebook.
+
+6. `notebooks/dt_grpo_posttraining.ipynb`
+   - Demonstrates GRPO post-training starting from a pretrained household DT checkpoint.
+   - Saves the GRPO-updated weights under `models/household/dt/`.
 
 If you only want to recreate the core residential benchmark, the minimum useful sequence is:
 
