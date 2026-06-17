@@ -4,8 +4,11 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+import gymnasium as gym
 import polars as pl
 import pytest
+import torch
+from stable_baselines3 import PPO
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -16,6 +19,7 @@ from aemo_notebook_utils import (  # noqa: E402
     fetch_and_preprocess_aemo_data,
     get_sb3_model_class,
     load_episode_logs_from_parquet,
+    fine_tune_ppo_from_dt_on_aemo,
     fetch_and_preprocess_aemo_scenarios,
     fit_aemo_global_stats,
     make_multi_scenario_aemo_env_fns,
@@ -25,8 +29,11 @@ from aemo_notebook_utils import (  # noqa: E402
     resolve_dispatch_replay_runs,
     resolve_dispatch_run_region,
     resolve_battery_variants,
+    run_dt_episodes,
     should_run_dispatch_for_scenario,
+    train_sb3_model_on_aemo,
     validate_aemo_dt_dimensions,
+    warm_start_ppo_from_dt_episodes,
     write_combined_episode_logs,
 )
 from AEMOBatteryEnv import AEMODataPreprocessor  # noqa: E402
@@ -229,6 +236,160 @@ def test_resolve_battery_variants_derives_label_soc_and_cost():
 def test_get_sb3_model_class_supports_expected_algorithms():
     assert get_sb3_model_class("ppo").__name__ == "PPO"
     assert get_sb3_model_class("sac").__name__ == "SAC"
+
+
+def test_run_dt_episodes_loads_model_and_collects_logs(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    class FakeAgent:
+        def __init__(self, env, **kwargs):
+            captured.setdefault("envs", []).append(env)
+            captured.setdefault("kwargs", []).append(kwargs)
+
+        def run_episode(self):
+            return _episode_df(0), pl.DataFrame()
+
+    def fake_load_dt_model(**kwargs):
+        captured["load_kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr("aemo_notebook_utils.load_dt_model", fake_load_dt_model)
+    monkeypatch.setattr("aemo_notebook_utils.AEMOAgent", FakeAgent)
+    monkeypatch.setattr("aemo_notebook_utils.create_aemo_env", lambda **kwargs: {"env_kwargs": kwargs})
+
+    episodes = run_dt_episodes(
+        processed_data=pl.DataFrame({"x": [1]}),
+        battery_variant={"name": "medium", "capacity_mwh": 4.0, "max_power_mw": 2.0, "init_soc_ratio": 0.5},
+        model_path="model.pt",
+        model_config_path="model.json",
+        num_episodes=2,
+        max_step=16,
+        step_duration=0.5,
+        rtg_value=10.0,
+        dt_gamma=0.95,
+        base_seed=100,
+    )
+
+    assert len(episodes) == 2
+    assert captured["load_kwargs"] == {
+        "model_path": "model.pt",
+        "model_config_path": "model.json",
+        "device": "auto",
+    }
+    assert [kwargs["reset_seed"] for kwargs in captured["kwargs"]] == [100, 101]
+    assert all(kwargs["algorithm"] == "dt" for kwargs in captured["kwargs"])
+    assert all(kwargs["rtg_value"] == 10.0 for kwargs in captured["kwargs"])
+    assert all(kwargs["dt_gamma"] == 0.95 for kwargs in captured["kwargs"])
+
+
+def test_train_sb3_model_on_aemo_forwards_model_hooks(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "aemo_notebook_utils.make_aemo_env_fns",
+        lambda **kwargs: [lambda: "env"],
+    )
+    monkeypatch.setattr(
+        "aemo_notebook_utils.create_aemo_env",
+        lambda **kwargs: "eval_env",
+    )
+
+    def fake_train_model(**kwargs):
+        captured.update(kwargs)
+        return "model", {"Post_training": {"mean_reward": 1.0, "std_reward": 0.0}}
+
+    monkeypatch.setattr("aemo_notebook_utils.train_model", fake_train_model)
+
+    model, eval_result = train_sb3_model_on_aemo(
+        processed_data=pl.DataFrame({"x": [1]}),
+        algorithm="ppo",
+        battery_variants=[{"name": "medium", "capacity_mwh": 4.0, "max_power_mw": 2.0, "init_soc_ratio": 0.5}],
+        episodes_per_variant=1,
+        max_step=12,
+        step_duration=0.5,
+        model_kwargs_override={"n_steps": 32},
+        model_post_create_fn=lambda model: model,
+    )
+
+    assert model == "model"
+    assert eval_result["Post_training"]["mean_reward"] == 1.0
+    assert captured["model_class"].__name__ == "PPO"
+    assert captured["model_kwargs_override"] == {"n_steps": 32}
+    assert callable(captured["model_post_create_fn"])
+
+
+class _TinyBoxEnv(gym.Env):
+    metadata = {}
+
+    def __init__(self):
+        self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(18,), dtype=float)
+        self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=float)
+
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
+        return self.observation_space.sample(), {}
+
+    def step(self, action):
+        return self.observation_space.sample(), 0.0, True, False, {}
+
+
+def test_warm_start_ppo_from_dt_episodes_updates_policy():
+    model = PPO("MlpPolicy", _TinyBoxEnv(), n_steps=8, batch_size=4, policy_kwargs={"net_arch": [32, 32]})
+    initial_weights = model.policy.action_net.weight.detach().clone()
+    episodes = [_episode_df(0), _episode_df(20)]
+
+    summary = warm_start_ppo_from_dt_episodes(
+        model=model,
+        episodes=episodes,
+        epochs=2,
+        batch_size=2,
+        learning_rate=1e-3,
+        max_batches=4,
+    )
+
+    assert summary["episode_count"] == 2.0
+    assert summary["sample_count"] == 4.0
+    assert summary["batch_count"] > 0
+    assert not torch.allclose(initial_weights, model.policy.action_net.weight.detach())
+
+
+def test_fine_tune_ppo_from_dt_on_aemo_uses_dt_seed_rollouts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    seed_path = tmp_path / "dt_seed_logs.parquet"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "aemo_notebook_utils.run_dt_episodes",
+        lambda **kwargs: [_episode_df(0)],
+    )
+    monkeypatch.setattr(
+        "aemo_notebook_utils.warm_start_ppo_from_dt_episodes",
+        lambda **kwargs: {"actor_loss": 0.1, "value_loss": 0.2, "batch_count": 1.0},
+    )
+
+    def fake_train_sb3_model_on_aemo(**kwargs):
+        captured.update(kwargs)
+        kwargs["model_post_create_fn"]("fake_model")
+        return "trained_model", {"Post_training": {"mean_reward": 2.0, "std_reward": 0.1}}
+
+    monkeypatch.setattr("aemo_notebook_utils.train_sb3_model_on_aemo", fake_train_sb3_model_on_aemo)
+
+    model, eval_result, manifest = fine_tune_ppo_from_dt_on_aemo(
+        processed_data=pl.DataFrame({"x": [1]}),
+        dt_model_path="dt.pt",
+        dt_model_config_path="dt.json",
+        battery_variants=[{"name": "medium", "capacity_mwh": 4.0, "max_power_mw": 2.0, "init_soc_ratio": 0.5}],
+        seed_episodes_per_variant=1,
+        max_step=12,
+        step_duration=0.5,
+        seed_logs_output_path=seed_path,
+    )
+
+    assert model == "trained_model"
+    assert eval_result["Post_training"]["mean_reward"] == 2.0
+    assert captured["algorithm"] == "ppo"
+    assert manifest["seed_episode_count"] == 1
+    assert manifest["warm_start"]["actor_loss"] == 0.1
+    assert seed_path.exists()
 
 
 def test_validate_aemo_dt_dimensions_rejects_bad_state_dim():

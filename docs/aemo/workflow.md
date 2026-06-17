@@ -415,6 +415,26 @@ Default rollout outputs go under:
 6. Build the DT dataset and manifest.
 7. Optionally launch DT training from the notebook.
 
+## DT → PPO online fine-tuning
+
+The next hybrid step is now supported in the helper module: seed PPO with a
+pretrained Decision Transformer, then continue optimizing online in AEMO.
+
+Recommended flow:
+
+1. Train or select a DT checkpoint plus its model-config JSON.
+2. Run DT seed rollouts on the same battery variants you want PPO to fine-tune on.
+3. Warm-start PPO with supervised losses on those DT rollout actions and discounted returns.
+4. Continue PPO `learn()` online on fresh AEMO episodes.
+
+Use `fine_tune_ppo_from_dt_on_aemo(...)` in `<repo_root>/src/aemo_notebook_utils.py`.
+It will:
+
+- load the DT checkpoint
+- collect DT rollout parquet logs
+- initialize PPO from those rollouts
+- continue PPO training with the existing AEMO SB3 pipeline
+
 ## Helper module notes
 
 `<repo_root>/src/aemo_notebook_utils.py` contains the reusable notebook helpers for:
@@ -427,3 +447,4 @@ Default rollout outputs go under:
 - DT model-config writing
 - DT training launch
 - SB3 online training
+- DT-seeded PPO fine-tuning

@@ -179,7 +179,18 @@ def get_chunk_size(total_items, max_envs):
             return i
     return 1
 
-def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model=False):
+def train_model(
+    model_class,
+    vec_env,
+    eval_env_fn,
+    test_timesteps=40000,
+    total_timesteps=4000000,
+    n_trials=10,
+    n_jobs=10,
+    default_model=False,
+    model_kwargs_override=None,
+    model_post_create_fn=None,
+):
     """
     Trains a reinforcement learning model using Stable Baselines3, with hyperparameter tuning via Optuna,
     and evaluates its performance before and after training.
@@ -268,6 +279,8 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         for arg in optional_args:
             if arg in best_params:
                 model_args[arg] = best_params[arg]
+        if model_kwargs_override:
+            model_args.update(model_kwargs_override)
 
         # If we were given a list of env_fns, create the first chunk SubprocVecEnv to construct the model.
         initial_vec = None
@@ -285,13 +298,26 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         model = model_class(**filtered_args)
     else:
         # default model construction
+        model_args = {
+            "policy": "MlpPolicy",
+            "verbose": 0,
+        }
+        if model_kwargs_override:
+            model_args.update(model_kwargs_override)
+        valid_args = inspect.signature(model_class.__init__).parameters
+        filtered_args = {k: v for k, v in model_args.items() if k in valid_args}
         if is_env_list:
             chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
             first_chunk_fns = list(next(chunked(env_fns, chunk_size)))
             initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
-            model = model_class("MlpPolicy", initial_vec, verbose=0)
+            model = model_class(env=initial_vec, **filtered_args)
         else:
-            model = model_class("MlpPolicy", vec_env, verbose=0)
+            model = model_class(env=vec_env, **filtered_args)
+
+    if model_post_create_fn is not None:
+        updated_model = model_post_create_fn(model)
+        if updated_model is not None:
+            model = updated_model
 
     # Close the small tuning vec if we created one
     if tuning_vec is not None:

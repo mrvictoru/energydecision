@@ -10,12 +10,14 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 import polars as pl
+import torch
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from AEMOBatteryEnv import AEMOBatteryTradingEnv, AEMODataPreprocessor
 from aemo_data import fetch_aemo_data_bundle, resolve_battery_duids
 from decision import AEMOAgent, run_sb3_model_on_vec_env
+from decision_transformer import DecisionTransformer
 from dispatch_utils import (
     list_dispatch_candidates,
     resolve_dispatch_selection,
@@ -649,6 +651,23 @@ def load_sb3_model(
     return model_cls.load(str(Path(model_path).resolve()), env=env, device=device)
 
 
+def load_dt_model(
+    *,
+    model_path: str | Path,
+    model_config_path: str | Path,
+    device: str = "auto",
+) -> DecisionTransformer:
+    resolved_device = device
+    if resolved_device == "auto":
+        resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
+    model_kwargs = json.loads(Path(model_config_path).read_text())
+    model = DecisionTransformer(**model_kwargs)
+    model.load_from_checkpoint(str(Path(model_path).resolve()), map_location=resolved_device)
+    model.to(resolved_device)
+    model.eval()
+    return model
+
+
 def run_sb3_episodes(
     *,
     processed_data: pl.DataFrame,
@@ -700,6 +719,268 @@ def run_sb3_episodes(
         flat.filter(pl.col("episode_id") == episode_id)
         for episode_id in sorted(flat["episode_id"].unique().to_list())
     ]
+
+
+def run_dt_episodes(
+    *,
+    processed_data: pl.DataFrame,
+    battery_variant: dict[str, Any],
+    model_path: str | Path,
+    model_config_path: str | Path,
+    num_episodes: int,
+    max_step: int,
+    step_duration: float,
+    action_mode: str = "multi_market",
+    degradation_mode: str = "real_world",
+    degradation_chemistry: str = "LFP",
+    degradation_temperature: float = 30.0,
+    random_episode_start: bool = True,
+    rtg_value: float = 0.0,
+    dt_gamma: float = 1.0,
+    base_seed: int = 8964,
+    device: str = "auto",
+) -> list[pl.DataFrame]:
+    resolved_variant = resolve_battery_variants([battery_variant])[0]
+    model = load_dt_model(
+        model_path=model_path,
+        model_config_path=model_config_path,
+        device=device,
+    )
+    episodes: list[pl.DataFrame] = []
+    for episode_idx in range(num_episodes):
+        env = create_aemo_env(
+            processed_data=processed_data,
+            battery_variant=resolved_variant,
+            max_step=max_step,
+            step_duration=step_duration,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+        )
+        agent = AEMOAgent(
+            env,
+            algorithm="dt",
+            model=model,
+            rtg_value=rtg_value,
+            dt_gamma=dt_gamma,
+            reset_seed=base_seed + episode_idx if random_episode_start else None,
+        )
+        episode_df, _ = agent.run_episode()
+        episodes.append(episode_df)
+    return episodes
+
+
+def _discounted_returns_from_rewards(
+    rewards: Sequence[float],
+    *,
+    discount: float,
+) -> np.ndarray:
+    returns = np.zeros(len(rewards), dtype=np.float32)
+    running = 0.0
+    for idx in range(len(rewards) - 1, -1, -1):
+        running = float(rewards[idx]) + float(discount) * running
+        returns[idx] = running
+    return returns
+
+
+def warm_start_ppo_from_dt_episodes(
+    *,
+    model: PPO,
+    episodes: Sequence[pl.DataFrame],
+    discount: float = 0.99,
+    epochs: int = 5,
+    batch_size: int = 256,
+    learning_rate: float = 1e-4,
+    value_loss_weight: float = 0.5,
+    max_batches: int | None = None,
+) -> dict[str, float]:
+    if not isinstance(model, PPO):
+        raise TypeError("warm_start_ppo_from_dt_episodes currently supports PPO models only.")
+    if not episodes:
+        raise ValueError("At least one DT rollout episode is required for PPO warm start.")
+
+    observations: list[list[float]] = []
+    actions: list[list[float]] = []
+    returns: list[float] = []
+    for episode in episodes:
+        rewards = episode["reward"].to_list()
+        episode_returns = _discounted_returns_from_rewards(rewards, discount=discount)
+        observations.extend(_to_float_list(row) for row in episode["norm_observation"].to_list())
+        actions.extend(_to_float_list(row) for row in episode["action"].to_list())
+        returns.extend(float(value) for value in episode_returns)
+
+    device = model.device
+    obs_tensor = torch.as_tensor(np.asarray(observations, dtype=np.float32), device=device)
+    action_tensor = torch.as_tensor(np.asarray(actions, dtype=np.float32), device=device)
+    return_tensor = torch.as_tensor(np.asarray(returns, dtype=np.float32), device=device)
+
+    optimizer = torch.optim.Adam(model.policy.parameters(), lr=learning_rate)
+    model.policy.set_training_mode(True)
+
+    total_batches = 0
+    actor_loss_total = 0.0
+    value_loss_total = 0.0
+    sample_count = int(obs_tensor.shape[0])
+
+    for _ in range(max(1, int(epochs))):
+        permutation = torch.randperm(sample_count, device=device)
+        for start in range(0, sample_count, max(1, int(batch_size))):
+            if max_batches is not None and total_batches >= max_batches:
+                break
+            batch_indices = permutation[start : start + max(1, int(batch_size))]
+            batch_obs = obs_tensor[batch_indices]
+            batch_actions = action_tensor[batch_indices]
+            batch_returns = return_tensor[batch_indices]
+
+            features = model.policy.extract_features(batch_obs)
+            latent_pi, latent_vf = model.policy.mlp_extractor(features)
+            pred_actions = model.policy.action_net(latent_pi)
+            pred_values = model.policy.value_net(latent_vf).squeeze(-1)
+
+            actor_loss = torch.nn.functional.mse_loss(pred_actions, batch_actions)
+            value_loss = torch.nn.functional.mse_loss(pred_values, batch_returns)
+            loss = actor_loss + float(value_loss_weight) * value_loss
+
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
+
+            actor_loss_total += float(actor_loss.detach().cpu().item())
+            value_loss_total += float(value_loss.detach().cpu().item())
+            total_batches += 1
+        if max_batches is not None and total_batches >= max_batches:
+            break
+
+    if hasattr(model.policy, "log_std"):
+        target_std = np.std(np.asarray(actions, dtype=np.float32), axis=0)
+        target_std = np.clip(target_std, 1e-3, 1.0)
+        target_log_std = torch.log(torch.as_tensor(target_std, dtype=torch.float32, device=device))
+        if tuple(target_log_std.shape) == tuple(model.policy.log_std.shape):
+            with torch.no_grad():
+                model.policy.log_std.copy_(target_log_std)
+
+    model.policy.set_training_mode(False)
+    divisor = max(1, total_batches)
+    return {
+        "episode_count": float(len(episodes)),
+        "sample_count": float(sample_count),
+        "batch_count": float(total_batches),
+        "actor_loss": actor_loss_total / divisor,
+        "value_loss": value_loss_total / divisor,
+    }
+
+
+def fine_tune_ppo_from_dt_on_aemo(
+    *,
+    processed_data: pl.DataFrame,
+    dt_model_path: str | Path,
+    dt_model_config_path: str | Path,
+    battery_variants: Sequence[dict[str, Any]],
+    seed_episodes_per_variant: int,
+    max_step: int,
+    step_duration: float,
+    action_mode: str = "multi_market",
+    degradation_mode: str = "real_world",
+    degradation_chemistry: str = "LFP",
+    degradation_temperature: float = 30.0,
+    random_episode_start: bool = True,
+    dt_rtg_value: float = 0.0,
+    dt_gamma: float = 1.0,
+    dt_seed_base: int = 8964,
+    device: str = "auto",
+    warm_start_discount: float = 0.99,
+    warm_start_epochs: int = 5,
+    warm_start_batch_size: int = 256,
+    warm_start_learning_rate: float = 1e-4,
+    warm_start_value_loss_weight: float = 0.5,
+    warm_start_max_batches: int | None = None,
+    seed_logs_output_path: str | Path | None = None,
+    eval_battery_variant: dict[str, Any] | None = None,
+    test_timesteps: int = 40_000,
+    total_timesteps: int = 400_000,
+    n_trials: int = 10,
+    n_jobs: int = 10,
+    default_model: bool = True,
+    ppo_model_kwargs: dict[str, Any] | None = None,
+):
+    dt_seed_episodes: list[pl.DataFrame] = []
+    for variant_idx, battery_variant in enumerate(resolve_battery_variants(battery_variants)):
+        dt_seed_episodes.extend(
+            run_dt_episodes(
+                processed_data=processed_data,
+                battery_variant=battery_variant,
+                model_path=dt_model_path,
+                model_config_path=dt_model_config_path,
+                num_episodes=seed_episodes_per_variant,
+                max_step=max_step,
+                step_duration=step_duration,
+                action_mode=action_mode,
+                degradation_mode=degradation_mode,
+                degradation_chemistry=degradation_chemistry,
+                degradation_temperature=degradation_temperature,
+                random_episode_start=random_episode_start,
+                rtg_value=dt_rtg_value,
+                dt_gamma=dt_gamma,
+                base_seed=dt_seed_base + (variant_idx * max(1, seed_episodes_per_variant)),
+                device=device,
+            )
+        )
+
+    combined_seed_logs_path = None
+    if seed_logs_output_path is not None:
+        combined_seed_logs_path = Path(seed_logs_output_path)
+        write_combined_episode_logs(
+            episodes=dt_seed_episodes,
+            output_path=combined_seed_logs_path,
+        )
+
+    warm_start_summary: dict[str, float] = {}
+
+    def _warm_start(model: PPO):
+        warm_start_summary.update(
+            warm_start_ppo_from_dt_episodes(
+                model=model,
+                episodes=dt_seed_episodes,
+                discount=warm_start_discount,
+                epochs=warm_start_epochs,
+                batch_size=warm_start_batch_size,
+                learning_rate=warm_start_learning_rate,
+                value_loss_weight=warm_start_value_loss_weight,
+                max_batches=warm_start_max_batches,
+            )
+        )
+        return model
+
+    model, eval_result = train_sb3_model_on_aemo(
+        processed_data=processed_data,
+        algorithm="ppo",
+        battery_variants=battery_variants,
+        episodes_per_variant=seed_episodes_per_variant,
+        max_step=max_step,
+        step_duration=step_duration,
+        action_mode=action_mode,
+        degradation_mode=degradation_mode,
+        degradation_chemistry=degradation_chemistry,
+        degradation_temperature=degradation_temperature,
+        random_episode_start=random_episode_start,
+        eval_battery_variant=eval_battery_variant,
+        test_timesteps=test_timesteps,
+        total_timesteps=total_timesteps,
+        n_trials=n_trials,
+        n_jobs=n_jobs,
+        default_model=default_model,
+        model_kwargs_override=ppo_model_kwargs,
+        model_post_create_fn=_warm_start,
+    )
+
+    manifest = {
+        "seed_episode_count": len(dt_seed_episodes),
+        "seed_logs_output_path": str(combined_seed_logs_path) if combined_seed_logs_path is not None else None,
+        "warm_start": warm_start_summary,
+    }
+    return model, eval_result, manifest
 
 
 def write_combined_episode_logs(
@@ -1239,6 +1520,8 @@ def train_sb3_model_on_aemo(
     n_trials: int = 10,
     n_jobs: int = 10,
     default_model: bool = True,
+    model_kwargs_override: dict[str, Any] | None = None,
+    model_post_create_fn: Callable[[Any], Any] | None = None,
 ):
     """Train an SB3 model on AEMO environments assembled from battery variants.
 
@@ -1288,4 +1571,6 @@ def train_sb3_model_on_aemo(
         n_trials=n_trials,
         n_jobs=n_jobs,
         default_model=default_model,
+        model_kwargs_override=model_kwargs_override,
+        model_post_create_fn=model_post_create_fn,
     )
