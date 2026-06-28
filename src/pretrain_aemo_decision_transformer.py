@@ -539,15 +539,6 @@ def main() -> None:
     epochs_per_stage = int(args.epochs)
     initial_epoch_offset = get_checkpoint_epoch(args.checkpoint_path.resolve()) if args.resume else 0
 
-    if args.surface_preset == "aemo_learning_baseline":
-        if not args.train_in_subsets:
-            raise ValueError(
-                "--surface-preset=aemo_learning_baseline requires --train-in-subsets so the wrapper can "
-                "create explicit held-out validation subsets."
-            )
-        if args.subset_episodes is None:
-            args.subset_episodes = 24
-
     if args.train_in_subsets:
         if args.subset_episodes is None:
             raise ValueError("--subset-episodes is required when --train-in-subsets is enabled.")

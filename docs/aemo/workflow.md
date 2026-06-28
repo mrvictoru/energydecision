@@ -185,8 +185,10 @@ The helper validates the AEMO dimensions before writing the final DT dataset:
 
 By default the notebook writes:
 
-- DT dataset parquet  
+- DT dataset parquet (legacy path)  
   `<repo_root>/data/aemo_dt/aemo_dt_dataset.parquet`
+- FCAS-rich dataset parquet (current recommended)  
+  `<repo_root>/data/aemo_dt_fcas/aemo_fcas_dataset.parquet`
 - dataset manifest  
   `<repo_root>/data/aemo_dt/aemo_dt_manifest.json`
 - raw logs directory  
@@ -218,12 +220,13 @@ Use `src/pretrain_aemo_decision_transformer.py` subset mode for large runs:
 
 ```bash
 python3 src/pretrain_aemo_decision_transformer.py \
-  --dataset-path data/aemo_dt/aemo_dt_dataset.parquet \
+  --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
   --surface-preset aemo_learning_baseline \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
   --train-in-subsets \
   --subset-episodes 24 \
   --epochs-per-subset 1 \
+  --batch-size 16 \
   --num-workers 0
 ```
 
@@ -353,7 +356,7 @@ You can then point the broader training tier at the refreshed dataset:
 ```bash
 python3 src/launch_aemo_training.py \
   --run-tier learning-baseline \
-  --dataset-path data/aemo_dt/aemo_dt_8week_dataset.parquet
+  --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet
 ```
 
 If you want the live progress dashboard to update during a long subset epoch instead of only at the end,

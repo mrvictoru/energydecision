@@ -17,7 +17,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Offline RL:** Decision Transformers (DT).
     *   **Post-training:** GRPO fine-tuning for pretrained DT policies.
     *   **Baselines:** Rule-based heuristics & Oracle (perfect foresight).
-    *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, dispatch-replay, RL, and Decision Transformer inference modes.
+    *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, `fcas_rule` (percentile-based FCAS bidding), dispatch-replay, RL, and Decision Transformer inference modes.
 
 ## Status
 
@@ -35,7 +35,9 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **Conduct data gathering and training on AEMO env:** Run dispatch replay and RL-agent in `AEMOBatteryTradingEnv` to collect trajectories for offline training for DT and evaluation.
 *   [x] **Test out autoresearch:** Run the autoresearch loop for DT training.
 *   [x] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts; calibrate against the target held-out scenario before inference.
-*   [x] **RL Fine-tuning:** GRPO post-training support for pretrained DT weights.
+*   [x] **FCAS-aware offline data collection:** Generate a 2,425-episode FCAS-rich dataset (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) from PPO, TD3, A2C, DDPG, SAC, and `fcas_rule` policies.
+*   [x] **FCAS-rich DT training:** Retrain DT on the FCAS-rich dataset — DT now achieves **+$1,522/ep profit**, beating PPO (+$1,444/ep) on the example evaluator (Section 8.6.2 of `report.md`).
+*   [x] **RL Fine-tuning:** GRPO post-training support for pretrained DT weights (on `copilot/online-rl-fine-tuning` branch).
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
@@ -209,22 +211,28 @@ Use this path to recreate the grid-scale AEMO experiments.
    - Trains AEMO SB3 agents (`PPO`, `A2C`, `DDPG`, `SAC`, `TD3`).
    - Saves trained models and rollout logs under `models/aemo_sb3/`.
 
-4. `notebooks/aemo_simrun.ipynb`
-   - Main AEMO offline-data notebook.
-   - Fetches/caches market data, runs rule-based, dispatch-replay, and optional SB3 behavior policies.
-   - Builds the DT dataset at `data/aemo_dt/aemo_dt_dataset.parquet`.
-   - Writes raw logs to `data/aemo_dt/raw_logs/` and the config/manifest needed for DT training.
+4. `notebooks/aemo_simrun.ipynb` / `src/generate_fcas_dataset.py`
+    - Main AEMO offline-data notebook (`aemo_simrun.ipynb`) and dedicated FCAS dataset generator (`generate_fcas_dataset.py`).
+    - Fetches/caches market data, runs rule-based, `fcas_rule`, dispatch-replay, and SB3 behavior policies.
+    - Builds the original DT dataset at `data/aemo_dt/aemo_dt_dataset.parquet` (162 episodes).
+    - Builds the FCAS-rich dataset at `data/aemo_dt_fcas/aemo_fcas_dataset.parquet` (2,425 episodes, 78.4M rows, 3.1 GB) — this is the current recommended training corpus.
+    - Writes raw logs to `data/aemo_dt/raw_logs/` and the config/manifest needed for DT training.
 
 5. `python3 src/launch_aemo_training.py --run-tier ...`
-    - Canonical AEMO offline-RL launcher for CLI runs.
-    - Derives safe defaults from `proxy-smoke`, `proxy-baseline`, or `learning-baseline`.
-    - Re-enters `energydecision-gpu` automatically when available, writes `aemo_training_launch_plan.json`,
-      and launches the live dashboard through `src/dt_progress_runner.py`.
-    - Uses `src/pretrain_aemo_decision_transformer.py` underneath for the actual training job.
+     - Canonical AEMO offline-RL launcher for CLI runs.
+     - Derives safe defaults from `proxy-smoke`, `proxy-baseline`, or `learning-baseline`.
+     - Re-enters `energydecision-gpu` automatically when available, writes `aemo_training_launch_plan.json`,
+       and launches the live dashboard through `src/dt_progress_runner.py`.
+     - Uses `src/pretrain_aemo_decision_transformer.py` underneath for the actual training job.
 
-6. `notebooks/aemo_eval.ipynb`
-   - Main AEMO evaluation notebook.
-   - Use it to compare AEMO baselines, SB3 models, and DT policies after training.
+6. `python3 src/autoresearch_evaluator.py --surface-manifest-path ... --evaluation-config ...`
+    - Standalone sim-run validation for DT checkpoints.
+    - Compares DT against PPO, rule, `fcas_rule`, and dispatch-replay baselines on held-out scenarios.
+    - Three configs balance speed vs. breadth: `mini` (~2 min), `example` (~15 min), `expanded` (~60 min).
+
+7. `notebooks/aemo_eval.ipynb`
+    - Main AEMO evaluation notebook.
+    - Use it to compare AEMO baselines, SB3 models, and DT policies after training.
 
 If you only want the main AEMO reproduction path, use:
 
@@ -236,8 +244,9 @@ If you only want the main AEMO reproduction path, use:
 - `notebooks/test_sb3train.ipynb` -> `models/household/sb3/`
 - `python3 pretrain_decision_transformer.py` -> `models/household/dt/`
 - `notebooks/aemo_sb3train.ipynb` -> `models/aemo_sb3/`
-- `notebooks/aemo_simrun.ipynb` -> `data/aemo_dt/`
+- `notebooks/aemo_simrun.ipynb` / `src/generate_fcas_dataset.py` -> `data/aemo_dt/` and `data/aemo_dt_fcas/`
 - `python3 src/launch_aemo_training.py` -> `models/aemo/dt/`
+- `python3 src/autoresearch_evaluator.py` -> `eval_output/autoresearch/`
 - evaluation notebooks -> `eval_output/` (depending on notebook settings)
 
 ### Recreating experiments from code instead of notebooks
@@ -251,6 +260,9 @@ If you prefer scripting over notebooks:
 - AEMO notebook helpers live in `src/aemo_notebook_utils.py`
 - AEMO DT training starts from `src/pretrain_aemo_decision_transformer.py`
 - The robust AEMO training harness starts from `src/launch_aemo_training.py`
+- FCAS dataset generation starts from `src/generate_fcas_dataset.py`
+- Dispatch replay generation starts from `src/generate_dispatch_replays.py`
+- Sim-run validation starts from `src/autoresearch_evaluator.py`
 
 The `COMPONENTS.md` file is the best code-oriented reference once you want to move beyond the notebook-first workflow.
 
@@ -330,24 +342,24 @@ Notes:
 
 #### Train from AEMO trajectories
 
-After running `notebooks/aemo_simrun.ipynb`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset without keeping the notebook kernel busy:
+After running `notebooks/aemo_simrun.ipynb` or `src/generate_fcas_dataset.py`, use the AEMO-specific wrapper to train from the exported AEMO parquet dataset. The **FCAS-rich dataset** is the current recommended corpus:
 
 ```bash
 docker exec -it test_energy_container /bin/bash
 
 python3 pretrain_aemo_decision_transformer.py \
-    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --dataset-path ../data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
     --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
     --epochs 2 \
-    --batch-size 6 \
-    --lr 2e-5 \
+    --batch-size 16 \
+    --lr 3e-5 \
     --val-split 0.1 \
     --seed 8964 \
     --save-path ../models/aemo/dt/aemo_dt_model.pt \
     --checkpoint-path ../models/aemo/dt/aemo_dt_checkpoint.pt \
     --loss-csv-path ../models/aemo/dt/aemo_dt_loss_history.csv \
     --amp-mode "auto" \
-    --num-workers 2 \
+    --num-workers 0 \
     --prefetch-factor 2
 ```
 
@@ -357,13 +369,13 @@ For large AEMO datasets, enable episode-based subset training so the combined pa
 
 ```bash
 python3 pretrain_aemo_decision_transformer.py \
-    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --dataset-path ../data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
     --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
     --train-in-subsets \
     --subset-episodes 24 \
     --epochs-per-subset 1 \
-    --batch-size 24 \
-    --num-workers 4 \
+    --batch-size 16 \
+    --num-workers 0 \
     --prefetch-factor 2 \
     --amp-mode "auto" \
     --save-path ../models/aemo/dt/aemo_dt_model.pt \
