@@ -364,13 +364,13 @@ For large AEMO datasets, enable episode-based subset training so the combined pa
 
 ```bash
 python3 pretrain_aemo_decision_transformer.py \
-    --dataset-path ../data/aemo_dt/aemo_dt_dataset.parquet \
+    --dataset-path ../data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
     --model-config ../configs/aemo_decision_transformer_model_kwargs.json \
     --train-in-subsets \
     --subset-episodes 24 \
     --epochs-per-subset 1 \
-    --batch-size 24 \
-    --num-workers 4 \
+    --batch-size 16 \
+    --num-workers 0 \
     --prefetch-factor 2 \
     --amp-mode "auto" \
     --save-path ../models/aemo/dt/aemo_dt_model.pt \
