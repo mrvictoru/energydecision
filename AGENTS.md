@@ -3,7 +3,7 @@
 ## Two tracks, never compare across them
 
 - **Household**: ausgrid solar-battery (SolarBatteryEnv) — DT beats Oracle (SOTA)
-- **AEMO / grid-scale**: NEM market + FCAS (AEMOBatteryTradingEnv) — PPO dominates (+12.82), DT lags (-3.11) mainly because DT training data has no FCAS examples ($77/ep vs $10,628/ep)
+- **AEMO / grid-scale**: NEM market + FCAS (AEMOBatteryTradingEnv) — PPO dominates on the expanded 135-episode eval (+12.82 vs -3.11) when DT is trained on FCAS-poor data. When retrained on the FCAS-rich dataset (2,425 eps, 905 PPO-generated), **DT achieves +$1,522/ep profit, beating PPO (+$1,444/ep)** on the example evaluator (16 eps, 4 regions). FCAS revenue improves 18× ($77 → $1,383/ep).
 
 ## Repo structure quirks
 
@@ -32,11 +32,12 @@ The launcher derives tier defaults, writes a launch plan, and re-enters Distrobo
 
 | Finding | Detail |
 |---------|--------|
-| **Best DT hyperparams** | 8×512, ctx=180, drop_p=0.15, batch=16, lr=3e-5, epochs=2, discount=0.95, return_scale=2.0 |
+| **Best DT hyperparams (expanded eval)** | 8×512, ctx=180, drop_p=0.15, batch=16, lr=3e-5, epochs=2, discount=0.95, return_scale=2.0 |
+| **Best DT hyperparams (FCAS-rich)** | 8×384, ctx=180, drop_p=0.15, batch=64, lr=3e-5, epochs=2, discount=0.95, return_scale=2.0 |
 | **Context sweep** | ctx=180 best on pilot data. Longer ctx (288, 576, 1008) regressed. ctx=2016 is now feasible with 22GB (retest with FCAS data). |
 | **Proxy metric** | AEMO proxy tier: `best_val_action_loss` (lower better). Broader tiers: `best_val_total_loss`. |
 | **RTG matters** | Evaluate with multiple rtg values (0, 5, 10, 15, 20). The DT responds to RTG prompt. |
-| **FCAS is the gap** | PPO earns $10,628/ep in FCAS. DT earns $77/ep. Training data lacks FCAS-active examples. |
+| **FCAS gap closed** | On FCAS-rich data: DT earns $1,383/ep FCAS (18× improvement from $77/ep). PPO earns $1,616/ep. Gap is now 14%, not 138×. |
 | **Loss weights** | `action_loss_weight=0.75` gave best proxy. Lower (0.3–0.4) drives total loss down but hurts action quality. |
 | **Batch size** | 16 is the sweet spot for 8×512 on this hardware. |
 | **Checkpoint resume** | --context-length must match checkpoint. |
