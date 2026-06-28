@@ -491,11 +491,23 @@ class AEMOBatteryTradingEnv(gym.Env):
                 shape=(1,),
                 dtype=np.float32
             )
+        elif self.action_mode == 'full_fcas':
+            # Full FCAS action: [battery_dispatch, bid_RAISEREG, bid_LOWERREG,
+            #   bid_RAISE6SEC, bid_LOWER6SEC, bid_RAISE60SEC, bid_LOWER60SEC,
+            #   bid_RAISE5MIN, bid_LOWER5MIN]
+            # battery_dispatch: [-1, 1], each FCAS bid: [0, 1]
+            # Order matches self._fcas_services
+            low = np.array([-1.0] + [0.0] * 8, dtype=np.float32)
+            high = np.array([1.0] + [1.0] * 8, dtype=np.float32)
+            self.action_space = spaces.Box(
+                low=low,
+                high=high,
+                shape=(9,),
+                dtype=np.float32
+            )
         else:
-            # Multi-market action: [battery_dispatch, fcas_raise_bid, fcas_lower_bid]
-            # battery_dispatch: [-1, 1]
-            # fcas_raise_bid: [0, 1] (fraction of FCAS MW capability to bid)
-            # fcas_lower_bid: [0, 1] (fraction of FCAS MW capability to bid)
+            # Legacy multi-market action (3-dim, deprecated — use full_fcas)
+            # [battery_dispatch, fcas_raise_bid, fcas_lower_bid]
             self.action_space = spaces.Box(
                 low=np.array([-1.0, 0.0, 0.0], dtype=np.float32),
                 high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
@@ -565,12 +577,16 @@ class AEMOBatteryTradingEnv(gym.Env):
         # Parse action
         if self.action_mode == 'simple':
             battery_dispatch = float(action[0])
-            fcas_raise_bid = 0.0
-            fcas_lower_bid = 0.0
-        else:
+            fcas_bids = {}
+        elif self.action_mode == 'full_fcas':
             battery_dispatch = float(action[0])
-            fcas_raise_bid = float(action[1])
-            fcas_lower_bid = float(action[2])
+            fcas_bids = {svc: max(0.0, float(action[i + 1]))
+                         for i, svc in enumerate(self._fcas_services)}
+        else:
+            # Legacy multi_market (3-dim, deprecated)
+            battery_dispatch = float(action[0])
+            fcas_bids = {'RAISEREG': float(action[1]),
+                         'LOWERREG': float(action[2])}
         
         # Get current market data
         current_idx = self.episode_start_idx + self.current_step
@@ -661,12 +677,12 @@ class AEMOBatteryTradingEnv(gym.Env):
         degradation_cost = step_degradation * self.battery_life_cost
         
         # Calculate reward
-        reward, energy_revenue, fcas_revenue = self._calculate_reward(
+        reward, energy_revenue, fcas_revenue, fcas_revenue_by_service = self._calculate_reward(
             market_data, actual_power, actual_energy,
-            fcas_raise_bid, fcas_lower_bid, old_soc, new_soc,
+            fcas_bids, old_soc, new_soc,
             degradation_cost
         )
-        
+
         # Check termination
         self.current_step += 1
         terminated = bool(
@@ -675,23 +691,23 @@ class AEMOBatteryTradingEnv(gym.Env):
             or (self.total_degradation >= 1.0)
         )
         truncated = False
-        
+
         # Track episode
         self.episode_rewards.append(reward)
-        self.episode_actions.append(battery_dispatch)
+        self.episode_actions.append(float(battery_dispatch))
         self.episode_soc.append(self.battery_soc)
-        
+
         # Get next observation
         obs = self._get_observation()
-        
+
         info = self._make_reward_info(
             battery_soc=self.battery_soc,
             battery_dispatch=actual_power,
             energy_price=market_data.get('RRP', 0),
             energy_revenue=energy_revenue,
             fcas_revenue=fcas_revenue,
-            fcas_raise_bid=fcas_raise_bid,
-            fcas_lower_bid=fcas_lower_bid,
+            fcas_bids=fcas_bids,
+            fcas_revenue_by_service=fcas_revenue_by_service,
             actual_energy=actual_energy,
             degradation_cost=degradation_cost,
             current_step=self.current_step,
@@ -854,28 +870,41 @@ class AEMOBatteryTradingEnv(gym.Env):
             return 0.0, str(exc)
 
     def _calculate_reward(self, market_data, actual_power: float, actual_energy: float,
-                         fcas_raise_bid: float, fcas_lower_bid: float,
+                         fcas_bids: dict,
                          old_soc: float, new_soc: float,
-                         degradation_cost: float = 0.0) -> Tuple[float, float, float]:
-        """Calculate reward for this step."""
+                         degradation_cost: float = 0.0) -> Tuple[float, float, float, dict]:
+        """Calculate reward for this step.
+
+        Returns (normalized_reward, energy_revenue, fcas_revenue, fcas_revenue_by_service).
+        ``fcas_revenue_by_service`` maps each FCAS service name to its revenue ($).
+        """
         # Energy market revenue
         energy_price = market_data.get('RRP', 0)  # $/MWh
-        
+
         if actual_power < 0:  # Discharging (selling)
             energy_revenue = abs(actual_energy) * energy_price
         else:  # Charging (buying)
             energy_revenue = -abs(actual_energy) * energy_price
-        
-        # FCAS revenue (simplified)
-        # In reality, revenue depends on enablement (MW) × price ($/MW/h) × duration
-        fcas_revenue = 0.0
-        if self.action_mode == 'multi_market':
-            requested_raise_mw = max(0.0, float(fcas_raise_bid)) * float(self.max_battery_flow)
-            requested_lower_mw = max(0.0, float(fcas_lower_bid)) * float(self.max_battery_flow)
 
-            # Simplified FCAS enablement model:
-            # bids are fractions of inverter power capability (MW), then capped by
-            # one-step SOC headroom so the enabled regulation service is physically feasible.
+        # FCAS revenue
+        fcas_revenue = 0.0
+        fcas_revenue_by_service: dict[str, float] = {}
+
+        if self.action_mode == 'full_fcas' and fcas_bids:
+            # Co-optimized enablement for all 8 FCAS services
+            enabled_mw = self._compute_fcas_enablement(fcas_bids, actual_power, old_soc)
+            for service in self._fcas_services:
+                if service in enabled_mw:
+                    price = market_data.get(f'FCAS_{service}', 0)
+                    svc_rev = enabled_mw[service] * price * self.step_duration
+                    fcas_revenue_by_service[service] = svc_rev
+                    fcas_revenue += svc_rev
+
+        elif self.action_mode == 'multi_market' and fcas_bids:
+            # Legacy 3-dim: only RAISEREG / LOWERREG
+            requested_raise_mw = max(0.0, fcas_bids.get('RAISEREG', 0.0)) * float(self.max_battery_flow)
+            requested_lower_mw = max(0.0, fcas_bids.get('LOWERREG', 0.0)) * float(self.max_battery_flow)
+
             if self.step_duration > 0:
                 available_raise_mw = max(0.0, float(self.battery_soc) / float(self.step_duration))
                 available_lower_mw = max(
@@ -886,31 +915,90 @@ class AEMOBatteryTradingEnv(gym.Env):
                 available_raise_mw = float(self.max_battery_flow)
                 available_lower_mw = float(self.max_battery_flow)
 
-            fcas_raise_capacity = min(requested_raise_mw, float(self.max_battery_flow), available_raise_mw)
-            fcas_lower_capacity = min(requested_lower_mw, float(self.max_battery_flow), available_lower_mw)
-            
-            # Get FCAS prices ($/MW/h)
+            raise_cap = min(requested_raise_mw, float(self.max_battery_flow), available_raise_mw)
+            lower_cap = min(requested_lower_mw, float(self.max_battery_flow), available_lower_mw)
+
             raisereg_price = market_data.get('FCAS_RAISEREG', 0)
             lowerreg_price = market_data.get('FCAS_LOWERREG', 0)
-            
-            # Calculate revenue for this step
-            fcas_revenue = (fcas_raise_capacity * raisereg_price * self.step_duration +
-                           fcas_lower_capacity * lowerreg_price * self.step_duration)
-        
+
+            svc_rev_raise = raise_cap * raisereg_price * self.step_duration
+            svc_rev_lower = lower_cap * lowerreg_price * self.step_duration
+            fcas_revenue_by_service['RAISEREG'] = svc_rev_raise
+            fcas_revenue_by_service['LOWERREG'] = svc_rev_lower
+            fcas_revenue = svc_rev_raise + svc_rev_lower
+
         # SOC violation penalty
         soc_penalty = 0.0
         if self.battery_soc < 0.1 * self.battery_capacity or self.battery_soc > 0.9 * self.battery_capacity:
             soc_penalty = -10.0  # Small penalty for operating at extremes
-        
+
         # Total reward
         reward = energy_revenue + fcas_revenue - degradation_cost + soc_penalty
-        
+
         # Track totals
         self.total_revenue += energy_revenue + fcas_revenue
         self.total_degradation_cost += degradation_cost
 
         normalized_reward = reward / 1000.0
-        return normalized_reward, energy_revenue, fcas_revenue
+        return normalized_reward, energy_revenue, fcas_revenue, fcas_revenue_by_service
+
+    def _compute_fcas_enablement(self, fcas_bids: dict, actual_power: float, old_soc: float) -> dict:
+        """Compute co-optimized FCAS enablement (MW) for all 8 services.
+
+        Proportional scaling is applied when the sum of bids in a direction
+        (raise or lower) exceeds the headroom available after the energy
+        dispatch has been applied.
+
+        Args:
+            fcas_bids: ``{service: bid_fraction}`` in [0, 1].
+            actual_power: MW actually dispatched this step (positive = charging,
+                negative = discharging, post-SOC clipping).
+            old_soc: SoC before this step (MWh).
+
+        Returns:
+            ``{service: enabled_mw}`` for all 8 services.
+        """
+        raise_services = ['RAISEREG', 'RAISE6SEC', 'RAISE60SEC', 'RAISE5MIN']
+        lower_services = ['LOWERREG', 'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN']
+
+        # Total headroom (MW) from physical state
+        if self.step_duration > 0:
+            max_raise = min(float(self.max_battery_flow),
+                            float(old_soc) / float(self.step_duration))
+            max_lower = min(float(self.max_battery_flow),
+                            float(self.battery_capacity - old_soc) / float(self.step_duration))
+        else:
+            max_raise = float(self.max_battery_flow)
+            max_lower = float(self.max_battery_flow)
+
+        # Energy dispatch already uses some headroom
+        # actual_power < 0 → discharging → uses raise headroom
+        # actual_power > 0 → charging  → uses lower headroom
+        raise_used = max(0.0, -actual_power)   # MW of raise headroom consumed
+        lower_used = max(0.0, actual_power)    # MW of lower headroom consumed
+
+        raise_headroom = max(0.0, max_raise - raise_used)
+        lower_headroom = max(0.0, max_lower - lower_used)
+
+        # Raw bid MW per service
+        raise_bids_mw = {s: max(0.0, fcas_bids.get(s, 0.0)) * float(self.max_battery_flow)
+                         for s in raise_services}
+        lower_bids_mw = {s: max(0.0, fcas_bids.get(s, 0.0)) * float(self.max_battery_flow)
+                         for s in lower_services}
+
+        total_raise_bid = sum(raise_bids_mw.values())
+        total_lower_bid = sum(lower_bids_mw.values())
+
+        # Proportional scaling
+        raise_scale = raise_headroom / total_raise_bid if total_raise_bid > raise_headroom else 1.0
+        lower_scale = lower_headroom / total_lower_bid if total_lower_bid > lower_headroom else 1.0
+
+        enabled: dict[str, float] = {}
+        for s in raise_services:
+            enabled[s] = raise_bids_mw[s] * raise_scale
+        for s in lower_services:
+            enabled[s] = lower_bids_mw[s] * lower_scale
+        return enabled
 
     def _make_reward_info(self,
                           battery_soc: float,
@@ -918,11 +1006,11 @@ class AEMOBatteryTradingEnv(gym.Env):
                           energy_price: float,
                           energy_revenue: float,
                           fcas_revenue: float,
-                          fcas_raise_bid: float,
-                          fcas_lower_bid: float,
-                          actual_energy: float,
-                          degradation_cost: float,
-                          current_step: int,
+                          fcas_bids: dict | None = None,
+                          fcas_revenue_by_service: dict | None = None,
+                          actual_energy: float = 0.0,
+                          degradation_cost: float = 0.0,
+                          current_step: int = 0,
                           step_degradation: float = 0.0,
                           total_degradation: float = 0.0,
                           capacity_mwh: float = 0.0,
@@ -930,15 +1018,20 @@ class AEMOBatteryTradingEnv(gym.Env):
                           rainflow_num_cycles: int = 0,
                           calendar_degradation: float = 0.0,
                           cycle_degradation: float = 0.0) -> Dict[str, float]:
-        """Return a compact reward/info dict for debugging and tracking."""
-        return {
+        """Return a compact reward/info dict for debugging and tracking.
+
+        For ``full_fcas`` mode, individual per-service bid and revenue fields are
+        included (``fcas_<SERVICE>_bid``, ``fcas_<SERVICE>_revenue``) for easy
+        CSV analysis. ``fcas_raise_bid`` / ``fcas_lower_bid`` are kept for
+        backward compatibility (they correspond to the legacy ``multi_market``
+        RAISEREG / LOWERREG bids).
+        """
+        info: Dict[str, float] = {
             'battery_soc': battery_soc,
             'battery_dispatch': battery_dispatch,
             'energy_price': energy_price,
             'energy_revenue': energy_revenue,
             'fcas_revenue': fcas_revenue,
-            'fcas_raise_bid': fcas_raise_bid,
-            'fcas_lower_bid': fcas_lower_bid,
             'actual_energy': actual_energy,
             'degradation_cost': degradation_cost,
             'step_degradation': step_degradation,
@@ -952,6 +1045,19 @@ class AEMOBatteryTradingEnv(gym.Env):
             'total_degradation_cost': self.total_degradation_cost,
             'current_step': current_step,
         }
+
+        # Per-service FCAS bid and revenue (flat fields for CSV)
+        bids = fcas_bids or {}
+        revs = fcas_revenue_by_service or {}
+        for service in self._fcas_services:
+            info[f'fcas_{service}_bid'] = float(bids.get(service, 0.0))
+            info[f'fcas_{service}_revenue'] = float(revs.get(service, 0.0))
+
+        # Legacy aliases for backward compatibility
+        info['fcas_raise_bid'] = float(bids.get('RAISEREG', 0.0))
+        info['fcas_lower_bid'] = float(bids.get('LOWERREG', 0.0))
+
+        return info
     
     def render(self):
         """Render the environment."""

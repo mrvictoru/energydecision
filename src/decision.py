@@ -722,21 +722,25 @@ class AEMOAgent:
             return df.group_by_dynamic('SETTLEMENTDATE', every=every, label='left', closed='left').agg(aggs)
 
         df = dispatch_data
+        # All 8 FCAS services, ordered to match env's _fcas_services
+        FCAS_SERVICES_DISP = [
+            'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
+            'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN',
+        ]
+
         if 'DUID' in df.columns and (dispatch_duid_gen or dispatch_duid_load):
             gen_df = None
             load_df = None
             if dispatch_duid_gen:
-                gen_df = _prep(df.filter(pl.col('DUID') == dispatch_duid_gen)).rename({
-                    'TOTALCLEARED': 'GEN_MW',
-                    'RAISEREG': 'GEN_RAISEREG',
-                    'LOWERREG': 'GEN_LOWERREG',
-                })
+                gen_pre = _prep(df.filter(pl.col('DUID') == dispatch_duid_gen))
+                gen_rename = {'TOTALCLEARED': 'GEN_MW'}
+                gen_rename.update({svc: f'GEN_{svc}' for svc in FCAS_SERVICES_DISP if svc in gen_pre.columns})
+                gen_df = gen_pre.rename(gen_rename)
             if dispatch_duid_load:
-                load_df = _prep(df.filter(pl.col('DUID') == dispatch_duid_load)).rename({
-                    'TOTALCLEARED': 'LOAD_MW',
-                    'RAISEREG': 'LOAD_RAISEREG',
-                    'LOWERREG': 'LOAD_LOWERREG',
-                })
+                load_pre = _prep(df.filter(pl.col('DUID') == dispatch_duid_load))
+                load_rename = {'TOTALCLEARED': 'LOAD_MW'}
+                load_rename.update({svc: f'LOAD_{svc}' for svc in FCAS_SERVICES_DISP if svc in load_pre.columns})
+                load_df = load_pre.rename(load_rename)
 
             merged = gen_df if gen_df is not None else load_df
             if merged is None:
@@ -747,11 +751,10 @@ class AEMOAgent:
             required_cols = {
                 'GEN_MW': 0.0,
                 'LOAD_MW': 0.0,
-                'GEN_RAISEREG': 0.0,
-                'LOAD_RAISEREG': 0.0,
-                'GEN_LOWERREG': 0.0,
-                'LOAD_LOWERREG': 0.0,
             }
+            for svc in FCAS_SERVICES_DISP:
+                required_cols[f'GEN_{svc}'] = 0.0
+                required_cols[f'LOAD_{svc}'] = 0.0
             missing_exprs = [
                 pl.lit(default_value).alias(col_name)
                 for col_name, default_value in required_cols.items()
@@ -761,11 +764,16 @@ class AEMOAgent:
                 merged = merged.with_columns(missing_exprs)
             merged = merged.fill_null(0.0)
 
-            dispatch_res = merged.with_columns([
+            sum_exprs = [
                 (pl.col('LOAD_MW').fill_null(0.0) - pl.col('GEN_MW').fill_null(0.0)).alias('NET_MW'),
-                (pl.col('GEN_RAISEREG').fill_null(0.0) + pl.col('LOAD_RAISEREG').fill_null(0.0)).alias('RAISEREG_MW'),
-                (pl.col('GEN_LOWERREG').fill_null(0.0) + pl.col('LOAD_LOWERREG').fill_null(0.0)).alias('LOWERREG_MW'),
-            ]).select(['SETTLEMENTDATE', 'NET_MW', 'RAISEREG_MW', 'LOWERREG_MW'])
+            ]
+            for svc in FCAS_SERVICES_DISP:
+                sum_exprs.append(
+                    (pl.col(f'GEN_{svc}').fill_null(0.0) + pl.col(f'LOAD_{svc}').fill_null(0.0))
+                    .alias(f'{svc}_MW')
+                )
+            select_cols = ['SETTLEMENTDATE', 'NET_MW'] + [f'{svc}_MW' for svc in FCAS_SERVICES_DISP]
+            dispatch_res = merged.with_columns(sum_exprs).select(select_cols)
         else:
             if 'DUID' in df.columns and dispatch_duid:
                 df = df.filter(pl.col('DUID') == dispatch_duid)
@@ -775,11 +783,16 @@ class AEMOAgent:
             if 'TOTALCLEARED' not in dispatch_res.columns:
                 return None
             sign = -1.0 if assume_single_duid_is_generator else 1.0
-            dispatch_res = dispatch_res.with_columns([
+            sum_exprs = [
                 (pl.lit(sign) * pl.col('TOTALCLEARED')).alias('NET_MW'),
-                pl.col('RAISEREG').fill_null(0.0).alias('RAISEREG_MW') if 'RAISEREG' in dispatch_res.columns else pl.lit(0.0).alias('RAISEREG_MW'),
-                pl.col('LOWERREG').fill_null(0.0).alias('LOWERREG_MW') if 'LOWERREG' in dispatch_res.columns else pl.lit(0.0).alias('LOWERREG_MW'),
-            ]).select(['SETTLEMENTDATE', 'NET_MW', 'RAISEREG_MW', 'LOWERREG_MW'])
+            ]
+            for svc in FCAS_SERVICES_DISP:
+                if svc in dispatch_res.columns:
+                    sum_exprs.append(pl.col(svc).fill_null(0.0).alias(f'{svc}_MW'))
+                else:
+                    sum_exprs.append(pl.lit(0.0).alias(f'{svc}_MW'))
+            select_cols = ['SETTLEMENTDATE', 'NET_MW'] + [f'{svc}_MW' for svc in FCAS_SERVICES_DISP]
+            dispatch_res = dispatch_res.with_columns(sum_exprs).select(select_cols)
 
         dispatch_res = dispatch_res.with_columns(
             pl.col('SETTLEMENTDATE').cast(pl.Datetime('us'), strict=False)
@@ -794,15 +807,14 @@ class AEMOAgent:
 
         total_nonzero = (
             aligned['NET_MW'].abs().sum()
-            + aligned['RAISEREG_MW'].abs().sum()
-            + aligned['LOWERREG_MW'].abs().sum()
+            + sum(aligned[f'{svc}_MW'].abs().sum() for svc in FCAS_SERVICES_DISP)
         )
         if total_nonzero == 0.0:
             warnings.warn(
                 "Dispatch actions are all zero after aligning with the environment grid. "
                 "Possible causes:\n"
                 "  1. TOTALCLEARED is zero for all intervals (battery was not dispatched for energy).\n"
-                "  2. RAISEREG/LOWERREG are zero (battery did not provide regulation FCAS).\n"
+                "  2. All 8 FCASenablement columns are zero (battery did not provide FCAS).\n"
                 "  3. Timestamp mismatch between dispatch data and environment data.\n"
                 "Check that the selected DUID was actively dispatched during the date range. "
                 "For batteries that only provide contingency FCAS (RAISE6SEC, LOWER6SEC, etc.), "
@@ -817,17 +829,36 @@ class AEMOAgent:
         if self.dispatch_action_mode == 'simple':
             return a0.reshape(-1, 1)
 
-        raise_bid = np.clip(aligned['RAISEREG_MW'].to_numpy() / float(self.env.max_battery_flow), 0.0, 1.0).astype(np.float32)
-        lower_bid = np.clip(aligned['LOWERREG_MW'].to_numpy() / float(self.env.max_battery_flow), 0.0, 1.0).astype(np.float32)
-        return np.stack([a0, raise_bid, lower_bid], axis=1).astype(np.float32)
+        env_action_mode = getattr(self.env, 'action_mode', 'multi_market')
+        if env_action_mode == 'full_fcas':
+            # Return all 8 FCAS service bid fractions
+            fcas_cols = []
+            for svc in FCAS_SERVICES_DISP:
+                bid = np.clip(
+                    aligned[f'{svc}_MW'].to_numpy() / float(self.env.max_battery_flow),
+                    0.0, 1.0,
+                ).astype(np.float32)
+                fcas_cols.append(bid)
+            return np.stack([a0] + fcas_cols, axis=1).astype(np.float32)
+        else:
+            # Legacy multi_market (3-dim): only RAISEREG / LOWERREG
+            raise_bid = np.clip(
+                aligned['RAISEREG_MW'].to_numpy() / float(self.env.max_battery_flow),
+                0.0, 1.0,
+            ).astype(np.float32)
+            lower_bid = np.clip(
+                aligned['LOWERREG_MW'].to_numpy() / float(self.env.max_battery_flow),
+                0.0, 1.0,
+            ).astype(np.float32)
+            return np.stack([a0, raise_bid, lower_bid], axis=1).astype(np.float32)
 
     def _dispatch_action(self) -> np.ndarray:
         if self.dispatch_actions is None:
-            return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
+            return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(self.env.action_space.shape[0], dtype=np.float32)
         episode_start = int(getattr(self.env, 'episode_start_idx', 0))
         idx = episode_start + int(self.env.current_step)
         if idx < 0 or idx >= len(self.dispatch_actions):
-            return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(3, dtype=np.float32)
+            return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(self.env.action_space.shape[0], dtype=np.float32)
         return self.dispatch_actions[idx]
 
     def _compute_fcas_norm_max(self) -> float:
@@ -847,31 +878,61 @@ class AEMOAgent:
         except Exception:
             return 100.0
 
+    # All 8 FCAS services (same order as env._fcas_services)
+    _FCAS_SERVICES = [
+        'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
+        'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN',
+    ]
+
     def _init_fcas_thresholds(self) -> None:
+        # Legacy thresholds for multi_market (RAISEREG / LOWERREG only)
         self._fcas_raise_thresh: float | None = self.fcas_raise_threshold
         self._fcas_lower_thresh: float | None = self.fcas_lower_threshold
-        if self._fcas_raise_thresh is not None and self._fcas_lower_thresh is not None:
-            return
+
+        # Per-service thresholds for full_fcas (same p80 percentile)
+        self._fcas_thresholds: dict[str, float] = {}
+        for svc in self._FCAS_SERVICES:
+            if svc == 'RAISEREG':
+                explicit = self.fcas_raise_threshold
+            elif svc == 'LOWERREG':
+                explicit = self.fcas_lower_threshold
+            else:
+                explicit = None
+            self._fcas_thresholds[svc] = float(explicit) if explicit is not None else 0.0
+
         if not hasattr(self.env, 'aemo_data') or self.env.aemo_data is None:
             if self._fcas_raise_thresh is None: self._fcas_raise_thresh = 30.0
             if self._fcas_lower_thresh is None: self._fcas_lower_thresh = 25.0
+            for svc in self._FCAS_SERVICES:
+                if self._fcas_thresholds[svc] == 0.0:
+                    self._fcas_thresholds[svc] = 30.0 if svc.startswith('RAISE') else 25.0
             return
         try:
             import numpy as np
             df = self.env.aemo_data
-            if 'FCAS_RAISEREG' in df.columns and self._fcas_raise_thresh is None:
-                prices = df['FCAS_RAISEREG'].to_numpy()
-                prices = prices[~np.isnan(prices)]
-                self._fcas_raise_thresh = float(np.percentile(prices, self.fcas_pctile * 100))
-            if 'FCAS_LOWERREG' in df.columns and self._fcas_lower_thresh is None:
-                prices = df['FCAS_LOWERREG'].to_numpy()
-                prices = prices[~np.isnan(prices)]
-                self._fcas_lower_thresh = float(np.percentile(prices, self.fcas_pctile * 100))
-            if self._fcas_raise_thresh is None: self._fcas_raise_thresh = 30.0
-            if self._fcas_lower_thresh is None: self._fcas_lower_thresh = 25.0
+            for svc in self._FCAS_SERVICES:
+                col = f'FCAS_{svc}'
+                if col in df.columns and self._fcas_thresholds[svc] == 0.0:
+                    prices = df[col].to_numpy()
+                    prices = prices[~np.isnan(prices)]
+                    if len(prices) > 0:
+                        self._fcas_thresholds[svc] = float(np.percentile(prices, self.fcas_pctile * 100))
+                    else:
+                        self._fcas_thresholds[svc] = 30.0 if svc.startswith('RAISE') else 25.0
+                elif self._fcas_thresholds[svc] == 0.0:
+                    self._fcas_thresholds[svc] = 30.0 if svc.startswith('RAISE') else 25.0
+
+            # Set legacy thresholds from the per-service thresholds
+            if self._fcas_raise_thresh is None:
+                self._fcas_raise_thresh = self._fcas_thresholds.get('RAISEREG', 30.0)
+            if self._fcas_lower_thresh is None:
+                self._fcas_lower_thresh = self._fcas_thresholds.get('LOWERREG', 25.0)
         except Exception:
             if self._fcas_raise_thresh is None: self._fcas_raise_thresh = 30.0
             if self._fcas_lower_thresh is None: self._fcas_lower_thresh = 25.0
+            for svc in self._FCAS_SERVICES:
+                if self._fcas_thresholds[svc] == 0.0:
+                    self._fcas_thresholds[svc] = 30.0 if svc.startswith('RAISE') else 25.0
 
     def choose_action(self, obs):
         if self.algorithm in ('rule', 'fcas_rule'):
@@ -1011,7 +1072,10 @@ class AEMOAgent:
                 action = 0.0
 
         action_val = float(np.clip(action + noise, -1.0, 1.0))
-        if getattr(self.env, 'action_mode', 'simple') == 'multi_market':
+        action_mode = getattr(self.env, 'action_mode', 'simple')
+        if action_mode == 'full_fcas':
+            return np.array([np.float32(action_val)] + [np.float32(0.0)] * 8, dtype=np.float32)
+        elif action_mode == 'multi_market':
             fcas_raise = np.float32(0.0)
             fcas_lower = np.float32(0.0)
             return np.array([np.float32(action_val), fcas_raise, fcas_lower], dtype=np.float32)
@@ -1052,7 +1116,21 @@ class AEMOAgent:
                 action = 0.0
         action_val = float(np.clip(action + noise, -1.0, 1.0))
 
-        if getattr(self.env, 'action_mode', 'simple') != 'multi_market':
+        action_mode = getattr(self.env, 'action_mode', 'simple')
+        if action_mode == 'full_fcas':
+            # All 8 FCAS services with per-service p80 thresholds
+            bids = []
+            for i, svc in enumerate(self._FCAS_SERVICES):
+                raw_price = fcas_norm[i] * self._fcas_norm_max
+                thresh = self._fcas_thresholds.get(svc, 30.0)
+                if svc.startswith('RAISE'):
+                    bid = 1.0 if raw_price >= thresh and soc_norm > 0.15 else 0.0
+                else:
+                    bid = 1.0 if raw_price >= thresh and soc_norm < 0.85 else 0.0
+                bids.append(np.float32(bid))
+            return np.array([np.float32(action_val)] + bids, dtype=np.float32)
+
+        if action_mode != 'multi_market':
             return np.array([np.float32(action_val)], dtype=np.float32)
 
         # FCAS bidding — denormalise FCAS prices using _fcas_norm_max

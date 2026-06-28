@@ -72,7 +72,7 @@ def default_aemo_dt_model_kwargs(
     context_len: int = 288,
     max_timestep: int = 2016,
 ) -> dict[str, Any]:
-    act_dim = 3 if action_mode == "multi_market" else 1
+    act_dim = {"simple": 1, "multi_market": 3, "full_fcas": 9}.get(action_mode, 1)
     return {
         "state_dim": 18,
         "act_dim": act_dim,
@@ -1203,12 +1203,12 @@ def validate_aemo_dt_dimensions(manifest: dict[str, Any], *, action_mode: str) -
 
     Validation rules:
     - ``state_dims`` must be exactly ``[18]``
-    - ``act_dims`` must be ``[3]`` for ``multi_market`` and ``[1]`` for ``simple``
+    - ``act_dims`` must match action_mode: ``[1]`` simple, ``[3]`` multi_market, ``[9]`` full_fcas
 
     Raises:
         ValueError: If the manifest dimensions do not match the selected action mode.
     """
-    expected_act_dim = 3 if action_mode == "multi_market" else 1
+    expected_act_dim = {"simple": 1, "multi_market": 3, "full_fcas": 9}.get(action_mode, 1)
     if manifest["state_dims"] != [18]:
         raise ValueError(
             f"AEMO DT dataset expected state_dim=18, found {manifest['state_dims']}."

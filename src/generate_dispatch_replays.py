@@ -1,11 +1,26 @@
 """Generate dispatch replay episodes for all active battery stations across
 2023, 2024, and 2025 windows, with correct real-life battery sizing.
 
+.. deprecated::
+    This script uses the legacy ``multi_market`` action mode (3-dim, energy
+    + RAISEREG/LOWERREG only).  It cannot capture contingency FCAS revenue
+    (RAISE6SEC, LOWER6SEC, RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN).
+    For full FCAS support, use ``src/convert_dispatch_to_episodes.py``
+    instead, which produces episode logs directly from AEMO DISPATCHLOAD
+    data without running the environment.
+
 Usage:
     python3 src/generate_dispatch_replays.py                     # full run
     python3 src/generate_dispatch_replays.py --window 2024       # single window
     python3 src/generate_dispatch_replays.py --station hornsdale # single station
 """
+import warnings as _warnings
+_warnings.warn(
+    "generate_dispatch_replays.py is legacy (energy-only dispatch replay). "
+    "Use convert_dispatch_to_episodes.py for full 8-service FCAS support.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from __future__ import annotations
 
