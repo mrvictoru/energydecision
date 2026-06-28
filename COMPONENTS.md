@@ -113,7 +113,7 @@ env = create_aemo_env_from_data(
     init_battery_level=5.0,
     max_step=288,
     step_duration=0.5,
-    action_mode="multi_market",
+    action_mode="full_fcas",  # 'simple', 'multi_market' (legacy), or 'full_fcas' (recommended)
 )
 
 obs, info = env.reset()

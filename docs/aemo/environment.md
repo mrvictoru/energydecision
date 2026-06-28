@@ -31,7 +31,8 @@ The flowchart below illustrates how the `AEMOBatteryTradingEnv` processes action
 graph TD;
     A[Agent Action] --> B{Action Space Mode}
     B -- Simple Mode --> B1[Energy Dispatch]
-    B -- Multi-Market --> B2[Energy Dispatch + FCAS Bids]
+    B -- Multi-Market --> B2[Energy Dispatch + RAISEREG/LOWERREG]
+    B -- Full FCAS --> B3[Energy Dispatch + 8×FCAS bids]
     
     B1 --> C[Apply Physical Constraints]
     B2 --> C
@@ -74,7 +75,7 @@ env = create_aemo_env_from_data(
     region="NSW1",
     battery_capacity=10.0,   # MWh
     max_battery_flow=5.0,    # MW
-    action_mode='simple',    # 'simple' or 'multi_market'
+    action_mode='simple',    # 'simple', 'multi_market', or 'full_fcas'
     degradation_mode='real_world',    # 'real_world', 'rainflow', or 'simple'
     degradation_chemistry='LFP',      # 'NMC' or 'LFP' (for real_world mode)
     degradation_temperature=25.0,     # °C for the degradation model
@@ -122,11 +123,18 @@ The action represents the **normalized requested capability allocation**. It is 
 - `0` = idle
 - `+1` = maximum charge (buy from grid)
 
-**Multi-Market Mode** (energy + FCAS):
+**Multi-Market Mode** (energy + RAISEREG/LOWERREG only, *legacy*):
 - 3D continuous action space:
   - `action[0]`: Battery energy dispatch in `[-1, 1]`
-    - `action[1]`: FCAS raise bid capability in `[0, 1]` (fraction of `max_battery_flow` in MW dedicated to raise support)
-    - `action[2]`: FCAS lower bid capability in `[0, 1]` (fraction of `max_battery_flow` in MW dedicated to lower support)
+  - `action[1]`: FCAS raise bid capability in `[0, 1]` (fraction of `max_battery_flow` in MW dedicated to raise support)
+  - `action[2]`: FCAS lower bid capability in `[0, 1]` (fraction of `max_battery_flow` in MW dedicated to lower support)
+
+**Full FCAS Mode** (energy + all 8 FCAS services, *recommended*):
+- 9D continuous action space:
+  - `action[0]`: Battery energy dispatch in `[-1, 1]`
+  - `action[1..8]`: Per-service FCAS bid fractions (one per service) in `[0, 1]`
+  - Order matches `_fcas_services`: `[RAISEREG, LOWERREG, RAISE6SEC, LOWER6SEC, RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN]`
+- Uses co-optimized enablement model: the sum of raise-service bids + energy discharge is proportionally scaled to fit within available SOC headroom, and similarly for lower-service bids + energy charge.
 
 ### Reward Function
 
@@ -137,15 +145,15 @@ reward = energy_revenue - energy_cost + fcas_revenue - degradation_cost - penalt
 Components:
 - **Energy revenue**: Discharge power × RRP × time (when discharging)
 - **Energy cost**: Charge power × RRP × time (when charging)
-- **FCAS revenue**: Simplified FCAS enablement in MW × FCAS price ($/MW/h) × time (multi-market mode)
+- **FCAS revenue**: Per-service FCAS enablement (MW) × FCAS price ($/MW/h) × duration summed across all bid services. In `multi_market` mode only RAISEREG/LOWERREG contribute. In `full_fcas` mode all 8 services contribute.
 - **Degradation cost**: Based on depth of discharge and cycle count
 - **Penalties**: SOC constraint violations
 
-In the simplified FCAS model, bid fractions are converted to MW using
+In the simplified FCAS model (`multi_market`), bid fractions are converted to MW using
 `max_battery_flow`, then capped by one-step SOC headroom before settlement.
-This keeps FCAS revenue dimensionally consistent with AEMO FCAS prices and
-avoids inflating revenue by treating battery energy capacity (MWh) as power
-capability (MW).
+In the co-optimized model (`full_fcas`), total raise enablement (discharge + all raise services)
+and total lower enablement (charge + all lower services) are each proportionally scaled
+to fit within their respective SOC headroom limits.
 
 Reward is normalized to approximately [-1, 1] range for training stability.
 
@@ -289,7 +297,7 @@ AEMOBatteryTradingEnv(
     max_step=1000,                  # Steps per episode
     step_duration=0.5,              # Hours (30 min)
     battery_life_cost=1_000_000.0,  # USD
-    action_mode='simple',           # or 'multi_market'
+    action_mode='simple',           # or 'multi_market', 'full_fcas'
     degradation_mode='real_world',  # 'real_world', 'rainflow', or 'simple'
     degradation_chemistry='LFP',    # 'NMC' or 'LFP' (real_world mode only)
     degradation_temperature=25.0,   # °C ambient temperature for degradation
@@ -342,7 +350,7 @@ create_aemo_env_from_data(
     - **Args**: optional Gym seed and `options` dict (supports `return_raw_obs` override).
     - **Returns**: `(obs, info)` where `obs` is the normalized observation vector (plus raw if `return_raw_obs`) and `info` is an empty dict (populated later by `step`). Random episode start index is chosen within cached data.
 - `step(action)`
-    - **Args**: normalized action ([-1,1]) or 3-vector depending on `action_mode`. Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
+    - **Args**: normalized action ([-1,1]) or 3-vector (`multi_market`) or 9-vector (`full_fcas`) depending on `action_mode`. Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
     - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `step_degradation`, `total_degradation`, `capacity_mwh`, `rainflow_cumulative_deg`, `rainflow_num_cycles`, `calendar_degradation`, `cycle_degradation`, `total_revenue`, `total_degradation_cost`, and the latest `market_data` row.
 - `render()`
     - **Returns**: currently a placeholder (prints human-friendly summary when implemented). Use `render_mode='human'` to enable future output.

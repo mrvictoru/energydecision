@@ -57,7 +57,8 @@ Environment: `src/AEMOBatteryEnv.py` defines `AEMOBatteryTradingEnv`, a Gymnasiu
 - **Observation space:** a fixed 18-dimensional vector (time features, normalized energy price and demand, normalized FCAS service prices, generation mix, and normalized SOC). `AEMODataPreprocessor` adds normalization columns (e.g., `RRP_normalized`, `DEMAND_normalized`, `FCAS_*_normalized`).
 - **Action space:**
 	- `action_mode='simple'`: 1D action in [-1, 1] for energy-only charge/discharge.
-	- `action_mode='multi_market'`: 3D action `[battery_dispatch, fcas_raise_bid, fcas_lower_bid]` with dispatch in [-1,1] and FCAS bids in [0,1].
+	- `action_mode='multi_market'`: 3D action `[battery_dispatch, fcas_raise_bid, fcas_lower_bid]` with dispatch in [-1,1] and FCAS bids in [0,1] (legacy, only RAISEREG/LOWERREG).
+	- `action_mode='full_fcas'`: 9D action `[battery_dispatch, 8 × FCAS bid]` for all 8 FCAS services with co-optimized enablement model (recommended).
 - **Units and scale:** default capacity/flow are specified in MWh/MW (grid-scale), distinct from the household environment (kWh/kW).
 - **Degradation:** supports `degradation_mode='rainflow'` using the same `DegradationModel` + `RainflowCounter` primitives as the household environment, tracking `step_degradation`, `total_degradation`, and capacity fade.
 - **Historical dispatch replay:** utility-scale notebooks and helpers can resolve a station name or DUID to the battery unit(s) active in a selected historical window, load AEMO `DISPATCHLOAD` records, and replay those observed actions inside the environment as a benchmark trajectory.
@@ -118,8 +119,8 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 
 > **NOTE (multi-env DT, repo-backed):** DT input/output dimensions must match the environment.
 > - Household: default config uses `state_dim=12` and `act_dim=1`.
-> - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3`.
-> To train DT for AEMO multi-market bidding, you must log trajectories with the 3D action and use a DT config with `act_dim=3`.
+> - AEMO: `AEMOBatteryTradingEnv` observations are 18D; in `action_mode='simple'` the action is 1D, while `action_mode='multi_market'` requires `act_dim=3` and `action_mode='full_fcas'` requires `act_dim=9`.
+> To train DT for AEMO multi-market bidding, you must log trajectories with the correct action dimension and use a DT config with matching `act_dim`.
 
 **Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
@@ -255,7 +256,7 @@ The household environment was the original benchmark for this repository. The DT
 
 ### 8.2 Utility-Scale AEMO Battery Trading (Primary Focus)
 
-The AEMO environment evaluates grid-scale battery trading in Australia's National Electricity Market (NEM), with energy spot pricing and optional Frequency Control Ancillary Services (FCAS). The action space is 3D (`multi_market`): energy dispatch, FCAS raise bid, and FCAS lower bid.
+The AEMO environment evaluates grid-scale battery trading in Australia's National Electricity Market (NEM), with energy spot pricing and optional Frequency Control Ancillary Services (FCAS). The action space is 3D (`multi_market`, legacy) or 9D (`full_fcas`, recommended): energy dispatch plus per-service FCAS bids for all 8 services.
 
 #### 8.2.1 Closing the Gap — FCAS-Rich Dataset Training
 
@@ -292,7 +293,7 @@ The evaluation uses the **example evaluator** (`configs/aemo_autoresearch_evalua
 
 4. **Rule-based baselines are unprofitable:** Both the old rule (-$2,477/ep) and fcas_rule (-$3,569/ep) lose money, with the fcas_rule suffering from excessive cycling ($4,764/ep degradation). Neither approaches DT or PPO profitability.
 
-5. **Dispatch replay shows real-world energy-only profit:** Dalrymple North achieves +$1,304/ep but only from energy arbitrage (zero FCAS revenue, as DISPATCHLOAD does not capture FCAS enablement). Torrens Island shows zero actions because it historically provided only contingency FCAS, which the `multi_market` action space cannot represent.
+5. **Dispatch replay shows real-world energy-only profit:** Dalrymple North achieves +$1,304/ep but only from energy arbitrage (zero FCAS revenue, as DISPATCHLOAD does not capture FCAS enablement in the legacy `multi_market` action space). Torrens Island shows zero actions because it historically provided only contingency FCAS. The new `full_fcas` action mode (9-dim) and `convert_dispatch_to_episodes.py` now support capturing all 8 FCAS services from AEMO data.
 
 6. **Context=180 remains optimal:** This model uses the same context length confirmed by prior proxy sweeps. Longer contexts (288, 576, 1008) regressed validation loss in earlier experiments. Context=2016 is now feasible on 22 GB VRAM and warrants re-testing with FCAS data.
 

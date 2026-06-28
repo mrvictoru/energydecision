@@ -69,7 +69,7 @@ episode_df, incident_df = agent.run_episode()
 
 - `choose_action(obs)`
   - **Args**: `obs` is the current observation shipped from `SolarBatteryEnv.reset()`/`step()` (raw + cyclical features). The method is tolerant of `list` inputs for rule-based modes but prefers `numpy.ndarray` when passing into SB3 or Decision Transformer models.
-  - **Returns**: a normalized action or list of actions in `[-1, 1]`. Rule/DP/oracle modes wrap the result in a 1-element list; when interacting with AEMO multi-market environments rule-based policies may instead return a 3-element action vector `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0). RL returns the SB3 `model.predict` output (scalar or vector) and DT returns the action produced by `model.get_action` after padding its context.
+  - **Returns**: a normalized action or list of actions in `[-1, 1]`. Rule/DP/oracle modes wrap the result in a 1-element list; when interacting with AEMO multi-market environments rule-based policies may instead return a 3-element action vector `[dispatch, fcas_raise_bid, fcas_lower_bid]` (`multi_market`) or a 9-element action vector (energy + 8 FCAS bids) for `full_fcas` mode. RL returns the SB3 `model.predict` output (scalar or vector) and DT returns the action produced by `model.get_action` after padding its context.
   - **Behaviour**: routes to the heuristic, solver, RL, or DT helper according to `algorithm`. DT requires buffering of `(state, action, RTG, timestep)` and applies return-scale clipping before inference.
 
 - `rule_based_action(obs)`
@@ -99,7 +99,7 @@ episode_df, incident_df = agent.run_episode()
 
 - `_build_dispatch_actions(dispatch_data, dispatch_duid=None, dispatch_duid_gen=None, dispatch_duid_load=None, assume_single_duid_is_generator=True)`
   - **Args**: same inputs as `set_dispatch_data`. Internally groups data by `SETTLEMENTDATE` to the env cadence, coalesces generator/load rows when both sides are supplied, and otherwise falls back to single-stream replay from `TOTALCLEARED`.
-  - **Returns**: `np.ndarray` shaped `(steps, 1)` for simple mode or `(steps, 3)` when FCAS bids are requested; values are clipped to `[-1, 1]` relative to `env.max_battery_flow`. Returns `None` when there is no dispatch data or when the env lacks `aemo_data`.
+  - **Returns**: `np.ndarray` shaped `(steps, 1)` for simple mode, `(steps, 3)` for legacy `multi_market`, or `(steps, 9)` for `full_fcas` mode; values are clipped to `[-1, 1]` relative to `env.max_battery_flow`. Returns `None` when there is no dispatch data or when the env lacks `aemo_data`.
 
 ### Dispatch Unit Discovery
 
@@ -112,15 +112,15 @@ episode_df, incident_df = agent.run_episode()
 
 - `choose_action(obs)`
   - **Args**: `obs` is either raw AEMO observation (rule/dispatch) or normalized vector (RL/DT).
-  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0); for `fcas_rule`, same shape as `rule` but bids RAISEREG/LOWERREG when current price exceeds data-driven percentile thresholds (default p80) and SOC headroom permits; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
+  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0), or a 9-element array for `full_fcas` mode; for `fcas_rule`, same shape as `rule` but bids all 8 services when current price exceeds data-driven percentile thresholds (default p80) and SOC headroom permits; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
 
 - `rule_based_action(obs)`
   - **Args**: expects raw AEMO observation `[time⁵, RRP, TOTALDEMAND, FCAS×8, GEN×2, SOC]`; returns zero action when inputs are missing.
-  - **Returns**: `[np.float32]` scaled action for energy-only environments, or a `np.ndarray` shaped `(3,)` `[dispatch, fcas_raise_bid, fcas_lower_bid]` when the environment is in multi-market mode (FCAS bids default to 0.0). The value is chosen by comparing the energy price to `charge_price`/`discharge_price` thresholds, enforcing SOC limits, and adding Gaussian noise for smoothing.
+  - **Returns**: `[np.float32]` scaled action for energy-only environments, a `np.ndarray` shaped `(3,)` `[dispatch, fcas_raise_bid, fcas_lower_bid]` for legacy `multi_market` mode (FCAS bids default to 0.0), or a `(9,)` array with all 8 FCAS zeros for `full_fcas` mode. The value is chosen by comparing the energy price to `charge_price`/`discharge_price` thresholds, enforcing SOC limits, and adding Gaussian noise for smoothing.
 
 - `fcas_rule_based_action(obs)`
   - **Args**: expects normalized AEMO observation `[time⁵, RRP, DEMAND, FCAS×8, GEN×2, SOC]` (all in [0,1] range); returns zero action when inputs are missing.
-  - **Returns**: `np.ndarray` shaped `(1,)` for simple mode or `(3,)` `[dispatch, fcas_raise, fcas_lower]` for multi-market mode. Energy dispatch uses the same logic as `rule_based_action` but denormalises the RRP using env's `_raw_col_bounds`. FCAS bidding compares denormalised RAISEREG/LOWERREG prices against thresholds computed from the training data at init time (default p80 percentile). Bids are 1.0 when price exceeds threshold and SOC headroom permits (raise >15%, lower <85%), else 0.0. Constructor params: `fcas_pctile` (default 0.80), `fcas_raise_threshold`, `fcas_lower_threshold` (explicit overrides).
+  - **Returns**: `np.ndarray` shaped `(1,)` for simple mode, `(3,)` `[dispatch, fcas_raise, fcas_lower]` for legacy `multi_market` mode, or `(9,)` for `full_fcas` mode. Energy dispatch uses the same logic as `rule_based_action` but denormalises the RRP using env's `_raw_col_bounds`. In `multi_market` mode, FCAS bidding compares denormalised RAISEREG/LOWERREG prices against thresholds computed from the training data at init time (default p80 percentile). In `full_fcas` mode, all 8 services are thresholded at their respective p80 prices. Bids are 1.0 when price exceeds threshold and SOC headroom permits (raise >15%, lower <85%), else 0.0. Constructor params: `fcas_pctile` (default 0.80), `fcas_raise_threshold`, `fcas_lower_threshold` (explicit overrides).
 
 - `run_episode(render=False, display_progress=False)`
   - **Args**: same knobs as `Agent.run_episode` but also interprets `algorithm in ['rule','fcas_rule','dispatch']` as using `raw_obs` for logs.

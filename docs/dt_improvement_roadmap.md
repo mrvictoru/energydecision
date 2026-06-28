@@ -94,7 +94,7 @@ The mini evaluator now supports `rtg_value` per policy config. Sweep RTG values 
 Weight the FCAS action dimensions higher in the loss:
 - Split action head conceptually: `energy_dispatch`, `fcas_raise`, `fcas_lower`
 - Use per-dimension loss weighting in `action_loss_weight`
-- Action dimensions 0=energy, 1=fcas_raise, 2=fcas_lower (multi_market mode)
+- Action dimensions 0=energy, 1-8=8 FCAS services (full_fcas mode)
 
 #### 2.5 Longer Context Window
 **Effort**: Low | **Expected Impact**: Medium | **Status**: 🔲 Not started

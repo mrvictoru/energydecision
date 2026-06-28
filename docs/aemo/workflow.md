@@ -178,7 +178,8 @@ The notebook writes parquet logs that are then merged into the schema expected b
 The helper validates the AEMO dimensions before writing the final DT dataset:
 
 - observation space: **18D**
-- `multi_market` → `act_dim=3`
+- `multi_market` → `act_dim=3` (legacy, deprecated)
+- `full_fcas` → `act_dim=9` (recommended)
 - `simple` → `act_dim=1`
 
 ## Output artifacts from `notebooks/aemo_simrun.ipynb`

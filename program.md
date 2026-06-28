@@ -105,6 +105,7 @@ The harness may also improve the code inside the editable surface if the change 
 - AEMO-shaped DT runs must keep `act_dim` aligned with `action_mode`:
   - `simple -> 1`
   - `multi_market -> 3`
+  - `full_fcas -> 9`
 - Transformer width must remain internally consistent:
   - `h_dim` must be divisible by `n_heads`
 - Unknown model-config keys, unsupported presets, and unsupported variants should be rejected early.
