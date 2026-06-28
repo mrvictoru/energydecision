@@ -39,7 +39,7 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
 )
 APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
 APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none", "custom")
-ACTION_MODE_TO_ACT_DIM = {"simple": 1, "multi_market": 3}
+ACTION_MODE_TO_ACT_DIM = {"simple": 1, "multi_market": 3, "full_fcas": 9}
 VALID_AEMO_ACT_DIMS = frozenset(ACTION_MODE_TO_ACT_DIM.values())
 AEMO_STATE_DIM = 18
 SEARCHABLE_KNOBS = (
@@ -853,7 +853,7 @@ def resolve_training_surface(
             )
     if model_kwargs["state_dim"] == AEMO_STATE_DIM and model_kwargs["act_dim"] not in VALID_AEMO_ACT_DIMS:
         raise ValueError(
-            "AEMO DT configs must use act_dim=1 for simple mode or act_dim=3 for multi_market mode."
+            "AEMO DT configs must use act_dim=1 for simple, act_dim=3 for multi_market, or act_dim=9 for full_fcas mode."
         )
     preset = SURFACE_PRESETS[args.surface_preset]
     return ResolvedTrainingSurface(
