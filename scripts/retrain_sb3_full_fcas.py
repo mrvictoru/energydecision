@@ -114,18 +114,6 @@ def main():
         for algo in algorithms:
             train_one(algo, processed, region, tt, test_tt)
 
-    regions = [s["region"] for s in SCENARIOS]
-    if args.region:
-        regions = [args.region]
-
-    for region in regions:
-        print(f"\n{'#'*60}")
-        print(f"# Loading data for {region}")
-        print(f"{'#'*60}")
-        processed = find_processed_data(region)
-        for algo in algorithms:
-            train_one(algo, processed, region)
-
     print(f"\n{'='*60}")
     print("All training complete!")
     print(f"{'='*60}")
