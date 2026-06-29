@@ -56,35 +56,35 @@ BATTERIES: dict[str, dict[str, float]] = {
 # Battery distribution: how many episodes per battery variant
 POLICIES: dict[str, dict[str, Any]] = {
     "ppo": {
-        "model": "ppo_aemo_model.zip",
+        "model": "ppo_aemo_fcas_model.zip",
         "algorithm": "PPO",
         "total_episodes": 180,
         "batteries": {"medium": 0.60, "small": 0.25, "large": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "td3": {
-        "model": "td3_aemo_model.zip",
+        "model": "td3_aemo_fcas_model.zip",
         "algorithm": "TD3",
         "total_episodes": 60,
         "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "a2c": {
-        "model": "a2c_aemo_model.zip",
+        "model": "a2c_aemo_fcas_model.zip",
         "algorithm": "A2C",
         "total_episodes": 60,
         "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "ddpg": {
-        "model": "ddpg_aemo_model.zip",
+        "model": "ddpg_aemo_fcas_model.zip",
         "algorithm": "DDPG",
         "total_episodes": 60,
         "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "sac": {
-        "model": "sac_aemo_model.zip",
+        "model": "sac_aemo_fcas_model.zip",
         "algorithm": "SAC",
         "total_episodes": 60,
         "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
