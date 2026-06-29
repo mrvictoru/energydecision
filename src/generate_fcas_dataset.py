@@ -157,7 +157,7 @@ def generate_episodes(
     from aemo_notebook_utils import run_sb3_episodes, run_rule_episodes
 
     is_rule = _is_rule_based(policy_name)
-    deg_kw = dict(action_mode="multi_market", degradation_mode="real_world",
+    deg_kw = dict(action_mode="full_fcas", degradation_mode="real_world",
                    degradation_chemistry="LFP", degradation_temperature=30.0)
 
     if is_rule:
