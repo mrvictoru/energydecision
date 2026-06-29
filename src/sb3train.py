@@ -5,6 +5,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO, A2C, DDPG, SAC, TD3
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+
+
+def _vec_env(env_fns, start_method="forkserver"):
+    """Create a VecEnv. Uses DummyVecEnv when SINGLE_PROCESS_TRAINING is set."""
+    import os
+    if os.environ.get("SINGLE_PROCESS_TRAINING", "").lower() in ("1", "true", "yes"):
+        return DummyVecEnv(env_fns)
+    return SubprocVecEnv(env_fns, start_method=start_method)
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
@@ -274,7 +282,7 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         if is_env_list:
             chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
             first_chunk_fns = list(next(chunked(env_fns, chunk_size)))
-            initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
+            initial_vec = _vec_env(first_chunk_fns, start_method="forkserver")
             model_args["env"] = initial_vec
         else:
             model_args["env"] = vec_env
@@ -288,7 +296,7 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         if is_env_list:
             chunk_size = get_chunk_size(len(env_fns), MAX_ENVS)
             first_chunk_fns = list(next(chunked(env_fns, chunk_size)))
-            initial_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
+            initial_vec = _vec_env(first_chunk_fns, start_method="forkserver")
             model = model_class("MlpPolicy", initial_vec, verbose=0)
         else:
             model = model_class("MlpPolicy", vec_env, verbose=0)
@@ -317,7 +325,7 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         if 'initial_vec' in locals() and initial_vec is not None:
             current_vec = initial_vec
         else:
-            current_vec = SubprocVecEnv(first_chunk_fns, start_method="forkserver")
+            current_vec = _vec_env(first_chunk_fns, start_method="forkserver")
 
         # train on the first chunk
         chunk_steps = min(remaining, per_chunk_timesteps)
@@ -331,7 +339,7 @@ def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_t
         for chunk_fns in chunks_iter:
             if remaining <= 0:
                 break
-            new_vec = SubprocVecEnv(list(chunk_fns), start_method="forkserver")
+            new_vec = _vec_env(list(chunk_fns), start_method="forkserver")
             num_envs = new_vec.num_envs if hasattr(new_vec, 'num_envs') else len(chunk_fns)
             chunk_steps = min(remaining, per_chunk_timesteps)
             print(f"Chunk {chunk_idx}: envs={num_envs}, steps={chunk_steps}")
