@@ -1,7 +1,10 @@
 """Retrain all SB3 models with full_fcas action mode.
 
+Trains ONE model per algorithm on ALL 5 AEMO regions combined,
+matching the original notebook workflow.
+
 Run from repo root:
-    bash scripts/retrain_sb3_full_fcas.sh
+    SINGLE_PROCESS_TRAINING=1 python3 scripts/retrain_sb3_full_fcas.py
 """
 from __future__ import annotations
 
@@ -16,11 +19,11 @@ from aemo_notebook_utils import train_sb3_model_on_aemo
 
 # Regions with 2021-2023 training data (same as original FCAS dataset)
 SCENARIOS = [
-    {"region": "NSW1", "start_date": "2021-01-01", "end_date": "2023-04-01"},
-    {"region": "QLD1", "start_date": "2021-01-01", "end_date": "2023-04-01"},
-    {"region": "SA1",  "start_date": "2022-04-01", "end_date": "2023-12-01"},
-    {"region": "TAS1", "start_date": "2021-01-01", "end_date": "2023-04-01"},
-    {"region": "VIC1", "start_date": "2021-04-01", "end_date": "2023-12-01"},
+    {"label": "nsw1", "region": "NSW1", "start_date": "2021-01-01", "end_date": "2023-04-01"},
+    {"label": "qld1", "region": "QLD1", "start_date": "2021-01-01", "end_date": "2023-04-01"},
+    {"label": "sa1",  "region": "SA1",  "start_date": "2022-04-01", "end_date": "2023-12-01"},
+    {"label": "tas1", "region": "TAS1", "start_date": "2021-01-01", "end_date": "2023-04-01"},
+    {"label": "vic1", "region": "VIC1", "start_date": "2021-04-01", "end_date": "2023-12-01"},
 ]
 
 BATTERIES = [
@@ -37,54 +40,11 @@ STEP_DURATION = 5 / 60  # 5 minutes
 EPISODE_HOURS = 24 * 7  # 1 week
 MAX_STEP = int(EPISODE_HOURS / STEP_DURATION)
 
-# Training configuration
-TOTAL_TIMESTEPS = 200_000  # moderate for demonstration
+TOTAL_TIMESTEPS = 200_000
 TEST_TIMESTEPS = 20_000
 EPISODES_PER_VARIANT = 1
-N_TRIALS = 0  # no optuna, just default
+N_TRIALS = 0
 N_JOBS = 1
-
-
-def find_processed_data(region: str) -> pl.DataFrame:
-    """Find and load the processed data file for a region."""
-    candidates = sorted(CACHE_DIR.glob(f"processed_{region}_*_*_0.0833h.parquet"))
-    if not candidates:
-        raise FileNotFoundError(f"No processed data for {region} in {CACHE_DIR}")
-    path = candidates[0]
-    print(f"  Loading {path.name} ({path.stat().st_size // 1_000_000} MB)")
-    return pl.read_parquet(str(path))
-
-
-def train_one(algorithm: str, processed_data: pl.DataFrame, region: str, total_timesteps: int, test_timesteps: int) -> None:
-    """Train one SB3 model and save to models/aemo_sb3/."""
-    out_path = MODELS_DIR / f"{algorithm.lower()}_aemo_fcas_model.zip"
-    print(f"\n{'='*60}")
-    print(f"Training {algorithm} on {region} with full_fcas...")
-    print(f"  Timesteps: {total_timesteps}")
-    print(f"  3 battery variants, {EPISODE_HOURS}h episodes")
-    print(f"{'='*60}")
-
-    model, _ = train_sb3_model_on_aemo(
-        processed_data=processed_data,
-        algorithm=algorithm,
-        battery_variants=BATTERIES,
-        episodes_per_variant=EPISODES_PER_VARIANT,
-        max_step=MAX_STEP,
-        step_duration=STEP_DURATION,
-        action_mode="full_fcas",
-        degradation_mode="real_world",
-        degradation_chemistry="LFP",
-        degradation_temperature=30.0,
-        random_episode_start=True,
-        test_timesteps=test_timesteps,
-        total_timesteps=total_timesteps,
-        n_trials=N_TRIALS,
-        n_jobs=N_JOBS,
-        default_model=True,
-    )
-
-    model.save(str(out_path))
-    print(f"  Saved: {out_path}")
 
 
 def main():
@@ -92,8 +52,6 @@ def main():
     parser = argparse.ArgumentParser(description="Retrain SB3 models with full_fcas")
     parser.add_argument("--algorithms", type=str, default="PPO,A2C,DDPG,SAC,TD3",
                         help="Comma-separated list of algorithms")
-    parser.add_argument("--region", type=str, default=None,
-                        help="Single region (default: all 5)")
     parser.add_argument("--timesteps", type=int, default=TOTAL_TIMESTEPS,
                         help="Total training timesteps")
     args = parser.parse_args()
@@ -102,20 +60,69 @@ def main():
     tt = args.timesteps
     test_tt = max(20_000, tt // 10)
 
-    regions = [s["region"] for s in SCENARIOS]
-    if args.region:
-        regions = [args.region]
+    # Step 1: Load and combine ALL 5 regions into one dataset
+    print("Loading and combining all 5 regions...")
+    frames = []
+    for scenario in SCENARIOS:
+        candidates = sorted(CACHE_DIR.glob(
+            f"processed_{scenario['region']}_*_*_0.0833h.parquet"
+        ))
+        if candidates:
+            path = candidates[0]
+            df = pl.read_parquet(str(path))
+            df = df.with_columns(pl.lit(scenario["label"]).alias("scenario_label"))
+            frames.append(df)
+            print(f"  {scenario['label']}: {path.name} ({df.height} rows)")
+        else:
+            print(f"  {scenario['label']}: no cached data found, skipping")
 
-    for region in regions:
-        print(f"\n{'#'*60}")
-        print(f"# Loading data for {region}")
-        print(f"{'#'*60}")
-        processed = find_processed_data(region)
-        for algo in algorithms:
-            train_one(algo, processed, region, tt, test_tt)
+    if not frames:
+        print("ERROR: No cached processed data found for any region.")
+        sys.exit(1)
+
+    combined = pl.concat(frames, how="diagonal_relaxed").sort(["SETTLEMENTDATE", "scenario_label"])
+    # Fill nulls from diagonal_relaxed concat (some regions lack GEN_solar, etc.)
+    numeric_cols = [c for c in combined.columns if c not in {"SETTLEMENTDATE", "scenario_label"}]
+    combined = combined.with_columns([
+        pl.col(c).fill_null(0.0) for c in numeric_cols if c != "scenario_label"
+    ])
+    print(f"\nCombined dataset: {combined.height} rows across {len(frames)} regions")
+    print(f"  Columns: {[c for c in combined.columns if not c.endswith('_normalized')]}")
+
+    # Step 2: Train ONE model per algorithm on ALL regions combined
+    for algo in algorithms:
+        out_path = MODELS_DIR / f"{algo.lower()}_aemo_fcas_model.zip"
+        print(f"\n{'='*60}")
+        print(f"Training {algo} on ALL 5 regions combined with full_fcas...")
+        print(f"  Timesteps: {tt}")
+        print(f"  3 battery variants, {EPISODE_HOURS}h episodes")
+        print(f"  Output: {out_path}")
+        print(f"{'='*60}")
+
+        model, _ = train_sb3_model_on_aemo(
+            processed_data=combined,
+            algorithm=algo,
+            battery_variants=BATTERIES,
+            episodes_per_variant=EPISODES_PER_VARIANT,
+            max_step=MAX_STEP,
+            step_duration=STEP_DURATION,
+            action_mode="full_fcas",
+            degradation_mode="real_world",
+            degradation_chemistry="LFP",
+            degradation_temperature=30.0,
+            random_episode_start=True,
+            test_timesteps=test_tt,
+            total_timesteps=tt,
+            n_trials=N_TRIALS,
+            n_jobs=N_JOBS,
+            default_model=True,
+        )
+
+        model.save(str(out_path))
+        print(f"✅ {algo} saved: {out_path}")
 
     print(f"\n{'='*60}")
-    print("All training complete!")
+    print("All models trained on combined 5-region data!")
     print(f"{'='*60}")
 
 
