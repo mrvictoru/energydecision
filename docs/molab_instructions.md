@@ -46,24 +46,11 @@ if USE_PILOT:
     dataset = load_dataset("mrvictoru/AEMO_simulated_trade", "pilot", split="train")
     val_dataset = load_dataset("mrvictoru/AEMO_simulated_trade", "pilot", split="validation")
 else:
-    # Download 8 chunks from HF and concatenate
-    from huggingface_hub import hf_hub_download
-    import polars as pl
-    repo = "mrvictoru/AEMO_simulated_trade"
-    chunks = []
-    for i in range(8):
-        local = hf_hub_download(repo_id=repo, filename=f"full_fcas_chunks/part_{i:02d}.parquet", repo_type="dataset")
-        chunks.append(pl.read_parquet(local))
-    df = pl.concat(chunks)
+    dataset = load_dataset("mrvictoru/AEMO_simulated_trade", "full_fcas", split="train")
     val_dataset = None  # use internal split
 
-# Convert to TrajectoryDataset format
-episodes = df.group_by("episode_id").agg(
-    pl.col("step").len().alias("n_steps"),
-    pl.col("norm_observation").alias("obs"),
-    pl.col("action").alias("act"),
-    pl.col("reward").alias("rew"),
-)
+# Convert HF dataset to polars DataFrame
+df = pl.from_arrow(dataset.data.table)
 ```
 
 **The HF dataset must contain these configurations:**
