@@ -33,24 +33,28 @@ import micropip  # or use MoLab's built-in package manager
 
 #### Cell 2: HF Dataset Download
 
-Download the FCAS dataset from HuggingFace. Support both pilot and full configurations:
+Download the FCAS dataset from HuggingFace. Support both pilot and full configurations (the pilot split will need to be created separately):
 
 ```python
-from datasets import load_dataset
 import polars as pl
+from huggingface_hub import hf_hub_download
 
-# Config toggle — user selects before running
+repo = "mrvictoru/AEMO_simulated_trade"
 USE_PILOT = True  # Set False for full training (multi-session)
 
 if USE_PILOT:
-    dataset = load_dataset("mrvictoru/AEMO_simulated_trade", "pilot", split="train")
-    val_dataset = load_dataset("mrvictoru/AEMO_simulated_trade", "pilot", split="validation")
+    # Download pilot subset (8 train + 4 val)
+    train_path = hf_hub_download(repo_id=repo, filename="pilot/train.parquet", repo_type="dataset")
+    val_path = hf_hub_download(repo_id=repo, filename="pilot/val.parquet", repo_type="dataset")
+    df = pl.read_parquet(train_path)
+    val_df = pl.read_parquet(val_path)
 else:
-    dataset = load_dataset("mrvictoru/AEMO_simulated_trade", "full_fcas", split="train")
-    val_dataset = None  # use internal split
+    # Download full FCAS dataset
+    path = hf_hub_download(repo_id=repo, filename="aemo_fcas_dataset.parquet", repo_type="dataset")
+    df = pl.read_parquet(path)
 
-# Convert HF dataset to polars DataFrame
-df = pl.from_arrow(dataset.data.table)
+# Convert to polars DataFrame
+print(f"Loaded {df.height:,} rows")
 ```
 
 **The HF dataset must contain these configurations:**
