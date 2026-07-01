@@ -9,8 +9,9 @@ from typing import Any, Callable, Sequence
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import Independent, Normal, TransformedDistribution
-from torch.distributions.transforms import TanhTransform
+from torch.distributions.transforms import SigmoidTransform, TanhTransform
 
 from decision_transformer import DecisionTransformer
 
@@ -173,6 +174,54 @@ def _diagonal_tanh_normal(action_mean: torch.Tensor, log_std: torch.Tensor) -> T
     return TransformedDistribution(base, [TanhTransform(cache_size=1)])
 
 
+def _mixed_action_distribution(
+    action_mean: torch.Tensor,
+    log_std: torch.Tensor,
+    act_dim: int,
+) -> TransformedDistribution:
+    """Create a per-dimension mixed-bounds distribution.
+
+    - Dim 0 (energy dispatch): ``TanhTransform`` → ``[-1, 1]``
+    - Dims ``1..act_dim-1`` (FCAS bids): ``SigmoidTransform`` → ``[0, 1]``
+
+    Falls back to ``_diagonal_tanh_normal`` when ``act_dim <= 1``.
+    """
+    if act_dim <= 1:
+        return _diagonal_tanh_normal(action_mean, log_std)
+
+    dim0_mean = action_mean[..., :1]
+    dim0_std = log_std[:1].exp().view(1, 1, 1).expand_as(dim0_mean)
+    dim0_base = Independent(Normal(loc=dim0_mean, scale=dim0_std), 1)
+    dim0_dist = TransformedDistribution(dim0_base, [TanhTransform(cache_size=1)])
+
+    fcas_mean = action_mean[..., 1:]
+    fcas_std = log_std[1:].exp().view(1, 1, -1).expand_as(fcas_mean)
+    fcas_base = Independent(Normal(loc=fcas_mean, scale=fcas_std), 1)
+    fcas_dist = TransformedDistribution(fcas_base, [SigmoidTransform(cache_size=1)])
+
+    class _Mixed:
+        def __init__(self, d0, fc):
+            self.d0 = d0
+            self.fc = fc
+
+        def rsample(self) -> torch.Tensor:
+            return torch.cat([self.d0.rsample(), self.fc.rsample()], dim=-1)
+
+        def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+            d0_lp = self.d0.log_prob(value[..., :1])
+            fc_lp = self.fc.log_prob(value[..., 1:])
+            return d0_lp + fc_lp
+
+        @property
+        def base_dist(self):
+            return self
+
+        def entropy(self) -> torch.Tensor:
+            return self.d0.entropy() + self.fc.entropy()
+
+    return _Mixed(dim0_dist, fcas_dist)
+
+
 def _episode_max_steps(env, prompt: GRPOPrompt) -> int:
     if prompt.max_steps is not None:
         return max(1, int(prompt.max_steps))
@@ -199,6 +248,7 @@ class GRPOTrainer:
         initial_log_std: float = -1.0,
         trainable_log_std: bool = True,
         grad_clip_norm: float = 1.0,
+        action_bounds: tuple[float, float] | None = None,
     ) -> None:
         self.model = model.to(device)
         self.device = torch.device(device)
@@ -208,8 +258,10 @@ class GRPOTrainer:
         for parameter in self.reference_model.parameters():
             parameter.requires_grad_(False)
 
-        act_dim = int(self.model.act_dim)
-        self.log_std = nn.Parameter(torch.full((act_dim,), float(initial_log_std), device=self.device))
+        self._act_dim = int(self.model.act_dim)
+        self.log_std = nn.Parameter(
+            torch.full((self._act_dim,), float(initial_log_std), device=self.device)
+        )
         self.log_std.requires_grad_(bool(trainable_log_std))
 
         params: list[nn.Parameter] = [p for p in self.model.parameters() if p.requires_grad]
@@ -236,8 +288,8 @@ class GRPOTrainer:
         )
         action_mean = action_preds[:, -1:, :]
         ref_mean = ref_preds[:, -1:, :]
-        current_dist = _diagonal_tanh_normal(action_mean, self.log_std)
-        ref_dist = _diagonal_tanh_normal(ref_mean, self.log_std.detach())
+        current_dist = _mixed_action_distribution(action_mean, self.log_std, self._act_dim)
+        ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
         return current_dist, ref_dist
 
     def collect_rollouts(
@@ -248,6 +300,17 @@ class GRPOTrainer:
         group_size: int = 4,
         dt_gamma: float = 0.99,
     ) -> GRPORolloutBatch:
+        """Collect rollouts, grouping episodes by prompt (RTG) for advantage.
+
+        The episode collection order is restructured so that each group
+        contains one episode per prompt (i.e. one per RTG value).  This
+        allows ``compute_group_relative_advantages`` to compare different
+        RTG-conditioned behaviours within the same group.
+
+        With ``len(prompts)`` RTG values and ``group_size`` repeats:
+        Total episodes = ``group_size * len(prompts)``
+        Groups of size ``len(prompts)`` where each group has one episode per RTG.
+        """
         if not prompts:
             raise ValueError("prompts must be non-empty.")
         if group_size <= 0:
@@ -266,9 +329,13 @@ class GRPOTrainer:
         returns: list[float] = []
         episode_steps: list[int] = []
 
+        num_rtgs = len(prompts)
+
         self.model.eval()
-        for prompt_index, prompt in enumerate(prompts):
-            for _ in range(group_size):
+        # Restructured: outer loop over groups, inner loop over RTG prompts
+        # Each group contains one episode per RTG value
+        for group_idx in range(group_size):
+            for prompt_index, prompt in enumerate(prompts):
                 env = env_factory()
                 obs, _ = _reset_env(env, seed=prompt.seed, options=prompt.options)
                 obs = np.asarray(obs, dtype=np.float32)
@@ -303,6 +370,9 @@ class GRPOTrainer:
                         ref_log_prob = float(ref_dist.log_prob(sampled_action).item())
 
                     action_np = sampled_action.squeeze(0).squeeze(0).detach().cpu().numpy().astype(np.float32)
+                    # Clamp FCAS bids (dims 1+) to [0, 1] for full_fcas mode
+                    if len(action_np) > 1:
+                        action_np[1:] = np.clip(action_np[1:], 0.0, 1.0)
                     next_obs, reward, terminated, truncated, _ = env.step(action_np)
                     next_obs = np.asarray(next_obs, dtype=np.float32)
 
@@ -338,8 +408,8 @@ class GRPOTrainer:
 
                 returns.append(float(episode_return))
                 episode_steps.append(step_count)
-
-        advantages_per_episode = compute_group_relative_advantages(returns, group_size)
+        # Compute advantages across RTG prompts within each group
+        advantages_per_episode = compute_group_relative_advantages(returns, num_rtgs)
         step_advantages: list[float] = []
         for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
             step_advantages.extend([advantage] * step_count)
