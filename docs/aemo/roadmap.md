@@ -19,8 +19,8 @@
 
 ### 2. RTG prompt calibration
 
-- Sweep RTG values (0, 5, 10, 15, 20) on the best checkpoint
-- RTG sensitivity was observed in household DT — test on AEMO
+- Sweep RTG values around the optimal (auto-set from `model.return_scale`) using `sample_rtg_values()` in `src/grpo_posttraining.py`. The optimal RTG is always included; remaining values come from a distribution (Gaussian, uniform, or lognormal) centered on the optimum.
+- RTG sensitivity was observed in household DT — the GRPO fine-tuning step on the `copilot/online-rl-fine-tuning` branch now uses adaptive RTG sampling to explore this.
 
 ### 3. FCAS-weighted loss
 

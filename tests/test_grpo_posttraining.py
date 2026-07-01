@@ -12,6 +12,7 @@ from grpo_posttraining import (  # noqa: E402
     GRPOPrompt,
     GRPOTrainer,
     compute_group_relative_advantages,
+    sample_rtg_values,
 )
 
 
@@ -118,3 +119,49 @@ def test_grpo_train_updates_log_std_and_reports_metrics():
     assert "mean_return" in metrics
     assert "kl_loss" in metrics
     assert not torch.allclose(starting_log_std, trainer.log_std.detach())
+
+
+def test_sample_rtg_values_always_includes_optimum():
+    values = sample_rtg_values(optimum=5.0, spread=1.0, count=4, distribution="gaussian", seed=42)
+    assert len(values) == 4
+    assert 5.0 in values
+    assert all(isinstance(v, float) for v in values)
+
+
+def test_sample_rtg_values_count_clamps_to_one():
+    values = sample_rtg_values(optimum=2.0, spread=0.5, count=1, distribution="gaussian", seed=0)
+    assert values == [2.0]
+
+
+def test_sample_rtg_values_zero_count_returns_only_optimum():
+    """count=0 still returns the optimum (always included) — no other samples generated."""
+    values = sample_rtg_values(optimum=2.0, spread=0.5, count=0)
+    assert values == [2.0]
+
+
+def test_sample_rtg_values_gaussian_centers_on_optimum():
+    """Samples should be roughly centered on the optimum (mean ≈ optimum)."""
+    values = sample_rtg_values(
+        optimum=10.0, spread=2.0, count=200, distribution="gaussian", seed=123
+    )
+    others = [v for v in values if v != 10.0]
+    assert abs(np.mean(others) - 10.0) < 0.5  # sample mean within 0.5 of optimum
+    # Standard deviation should be close to the input spread
+    assert abs(np.std(others) - 2.0) < 0.5
+
+
+def test_sample_rtg_values_uniform_stays_in_range():
+    values = sample_rtg_values(
+        optimum=0.0, spread=5.0, count=100, distribution="uniform", seed=7
+    )
+    others = [v for v in values if v != 0.0]
+    assert all(-5.0 <= v <= 5.0 for v in others)
+
+
+def test_sample_rtg_values_lognormal_positive():
+    values = sample_rtg_values(
+        optimum=5.0, spread=0.5, count=100, distribution="lognormal", seed=3
+    )
+    others = [v for v in values if v != 5.0]
+    assert all(v > 0 for v in others)
+    # Mean of lognormal is exp(mu + sigma^2/2) where mu = ln(5)

@@ -74,7 +74,7 @@ env = create_aemo_env_from_data(
     region="NSW1",
     battery_capacity=10.0,   # MWh
     max_battery_flow=5.0,    # MW
-    action_mode='simple',    # 'simple' or 'multi_market'
+    action_mode='simple',    # 'simple', 'multi_market', or 'full_fcas'
     degradation_mode='real_world',    # 'real_world', 'rainflow', or 'simple'
     degradation_chemistry='LFP',      # 'NMC' or 'LFP' (for real_world mode)
     degradation_temperature=25.0,     # °C for the degradation model
@@ -289,7 +289,7 @@ AEMOBatteryTradingEnv(
     max_step=1000,                  # Steps per episode
     step_duration=0.5,              # Hours (30 min)
     battery_life_cost=1_000_000.0,  # USD
-    action_mode='simple',           # or 'multi_market'
+    action_mode='simple',           # or 'multi_market' or 'full_fcas'
     degradation_mode='real_world',  # 'real_world', 'rainflow', or 'simple'
     degradation_chemistry='LFP',    # 'NMC' or 'LFP' (real_world mode only)
     degradation_temperature=25.0,   # °C ambient temperature for degradation
@@ -342,7 +342,7 @@ create_aemo_env_from_data(
     - **Args**: optional Gym seed and `options` dict (supports `return_raw_obs` override).
     - **Returns**: `(obs, info)` where `obs` is the normalized observation vector (plus raw if `return_raw_obs`) and `info` is an empty dict (populated later by `step`). Random episode start index is chosen within cached data.
 - `step(action)`
-    - **Args**: normalized action ([-1,1]) or 3-vector depending on `action_mode`. Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
+    - **Args**: normalized action. For `action_mode='simple'` it's a scalar in `[-1, 1]`; for `action_mode='multi_market'` it's a 3-vector; for `action_mode='full_fcas'` it's a 9-vector (energy + 8 FCAS services). Converts to MW dispatch/FCAS enablements, updates SOC, computes revenue/degradation, records metrics, and advances `current_step`.
     - **Returns**: tuple `(obs, reward, terminated, truncated, info)`, with `info` containing `energy_revenue`, `fcas_revenue`, `step_degradation`, `total_degradation`, `capacity_mwh`, `rainflow_cumulative_deg`, `rainflow_num_cycles`, `calendar_degradation`, `cycle_degradation`, `total_revenue`, `total_degradation_cost`, and the latest `market_data` row.
 - `render()`
     - **Returns**: currently a placeholder (prints human-friendly summary when implemented). Use `render_mode='human'` to enable future output.

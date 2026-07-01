@@ -74,12 +74,12 @@ Training the DT on this data directly addresses the FCAS gap.
 - Key question: does the DT learn to replicate PPO's FCAS bidding?
 
 #### 2.2 RTG Prompt Calibration
-**Effort**: Low | **Expected Impact**: Medium | **Status**: 🔲 Not started
+**Effort**: Low | **Expected Impact**: Medium | **Status**: ✅ Done (GRPO branch)
 
-The mini evaluator now supports `rtg_value` per policy config. Sweep RTG values (0, 5, 10, 15, 20) on the DT trained on FCAS data. A higher RTG might elicit stronger FCAS participation.
+The mini evaluator now supports `rtg_value` per policy config. GRPO fine-tuning uses `sample_rtg_values()` (`src/grpo_posttraining.py`) to sample RTG values from a distribution centered on the optimal RTG (auto-set from `model.return_scale`), with configurable spread, count, and distribution type (`gaussian`/`uniform`/`lognormal`). Group-relative advantages compare different RTG-conditioned strategies within each group, enabling adaptive RTG sweep.
 
-- Run `mini_fcas` evaluator with different RTG values
-- If the DT responds to RTG, this is a zero-effort improvement
+- See `notebooks/aemo_dt_grpo_posttraining.ipynb` for the GRPO fine-tuning workflow
+- RTG calibration for evaluation is documented in `docs/aemo/roadmap.md`
 
 #### 2.3 Scale Up Training Data (Mix Policies)
 **Effort**: Done | **Expected Impact**: High | **Status**: ✅ Done

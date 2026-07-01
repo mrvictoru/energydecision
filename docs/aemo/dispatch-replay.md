@@ -184,7 +184,7 @@ Key parameters:
 | `num_episodes` | `1` | Number of independent episodes |
 | `output_dir` | `None` | Directory for parquet log files (skipped if `None`) |
 | `run_tag` | `"dispatch"` | Prefix for output file names |
-| `action_mode` | `"multi_market"` | Environment action mode |
+| `action_mode` | `"full_fcas"` | Environment action mode (`simple`, `multi_market`, or `full_fcas`) |
 
 Output files (when `output_dir` is provided):
 - `{run_tag}_dispatch_logs.parquet` — all episode logs with `episode_id` column

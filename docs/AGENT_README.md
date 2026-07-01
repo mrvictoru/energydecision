@@ -112,7 +112,7 @@ episode_df, incident_df = agent.run_episode()
 
 - `choose_action(obs)`
   - **Args**: `obs` is either raw AEMO observation (rule/dispatch) or normalized vector (RL/DT).
-  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0); for `fcas_rule`, same shape as `rule` but bids RAISEREG/LOWERREG when current price exceeds data-driven percentile thresholds (default p80) and SOC headroom permits; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
+  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` for `action_mode='multi_market'`, or a 9-element vector for `action_mode='full_fcas'` (energy + 8 FCAS services); for `fcas_rule`, same shape as `rule` but bids RAISEREG/LOWERREG (or all 8 services in `full_fcas`) when current price exceeds data-driven percentile thresholds (default p80) and SOC headroom permits; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
 
 - `rule_based_action(obs)`
   - **Args**: expects raw AEMO observation `[time⁵, RRP, TOTALDEMAND, FCAS×8, GEN×2, SOC]`; returns zero action when inputs are missing.
