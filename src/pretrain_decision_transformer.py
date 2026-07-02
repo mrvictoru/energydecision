@@ -231,7 +231,7 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "checkpoints_per_epoch": 1,
             "discount": 0.95,
             "return_scale": 2.0,
-            "action_loss_weight": 0.75,
+            "action_loss_weight": 0.999,
             "return_loss_weight": 0.0,
         },
     ),
@@ -259,7 +259,7 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "checkpoints_per_epoch": 4,
             "discount": 0.95,
             "return_scale": 2.0,
-            "action_loss_weight": 0.75,
+            "action_loss_weight": 0.999,
             "return_loss_weight": 0.0,
         },
     ),
@@ -287,7 +287,7 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
             "checkpoints_per_epoch": 4,
             "discount": 0.95,
             "return_scale": 2.0,
-            "action_loss_weight": 0.75,
+            "action_loss_weight": 0.999,
             "return_loss_weight": 0.0,
         },
         requires_explicit_validation=True,
@@ -550,7 +550,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Maximum validation batches per checkpoint (default: 1000). Reduces DMA burst risk.")
     parser.add_argument("--return-scale", type=float, default=1.0)
     parser.add_argument("--action-loss-weight", type=float, default=1.0)
-    parser.add_argument("--state-loss-weight", type=float, default=0.01)
+    parser.add_argument("--state-loss-weight", type=float, default=0.002)
     parser.add_argument("--return-loss-weight", type=float, default=0.002)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
 
