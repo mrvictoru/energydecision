@@ -22,10 +22,12 @@
 - Sweep RTG values (0, 5, 10, 15, 20) on the best checkpoint
 - RTG sensitivity was observed in household DT — test on AEMO
 
-### 3. FCAS-weighted loss
+### 3. Loss weight calibration
 
-- Weight FCAS action dimensions (1, 2) higher in training loss
-- Prevents the model from learning only energy dispatch
+- Grid sweep (June 2026) found: `action_loss_weight=0.999, state_loss_weight=0.002, return_loss_weight=0.0001` gives best evaluator results (mean_reward > 0 on mini evaluator).
+- Near-zero state/return weights mean the model focuses almost entirely on action prediction accuracy.
+- See `results.tsv` `20260702-lw-sweep` entries for the full sweep.
+- The MoLab-trained model uses these weights — see HF model card.
 
 ### 4. Context sweep
 

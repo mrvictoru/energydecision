@@ -38,7 +38,7 @@ The launcher derives tier defaults, writes a launch plan, and re-enters Distrobo
 | **Proxy metric** | AEMO proxy tier: `best_val_action_loss` (lower better). Broader tiers: `best_val_total_loss`. |
 | **RTG matters** | Evaluate with multiple rtg values (0, 5, 10, 15, 20). The DT responds to RTG prompt. |
 | **FCAS gap closed** | On FCAS-rich data: DT earns $1,383/ep FCAS (18× improvement from $77/ep). PPO earns $1,616/ep. Gap is now 14%, not 138×. |
-| **Loss weights** | `action_loss_weight=0.75` gave best proxy. Lower (0.3–0.4) drives total loss down but hurts action quality. |
+| **Loss weights (June 2026)** | Grid sweep found `action_loss_weight=0.999, state_loss_weight=0.002, return_loss_weight=0.0001` gives best evaluator results (mean_reward > 0 on mini evaluator). Near-zero state/return weights mean the model focuses almost entirely on action prediction accuracy. |
 | **Batch size** | 16 is the sweet spot for 8×512 on this hardware. |
 | **Checkpoint resume** | --context-length must match checkpoint. |
 
