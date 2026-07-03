@@ -132,3 +132,4 @@ bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell
 20260702-lw-sweep	aemo	0.036760	keep	loss-weight grid sweep: aw=0.5 sw=0.02 — best action loss, evaluator mean_reward=+0.192
 20260702-lw-sweep	aemo	0.053356	keep	loss-weight grid sweep: baseline (aw=0.75 sw=0.01) — evaluator mean_reward=+0.194
 20260702-molab	aemo	+1.522	keep	MoLab DT training: 8x384, ctx=180, aw=0.999 sw=0.002 rw=0.0001, batch=128, lr=3e-5, 2 epochs — trained on RTX 6000 Pro, uploaded to HF
+a0399f6	aemo	GRPO-tuned DT vs dispatch_replay	keep	GRPO-tuned DT mean_reward=+1.32/step, profit=,973/ep, FCAS=,697/ep vs dispatch profit=63/ep, FCAS=10/ep (42x). DT mean_diff=+2.70/step vs dispatch (reference). SA1 4-season dispatch-matched eval.

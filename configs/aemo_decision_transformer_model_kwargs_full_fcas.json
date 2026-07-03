@@ -1,0 +1,10 @@
+{
+  "act_dim": 9,
+  "context_len": 180,
+  "drop_p": 0.15,
+  "h_dim": 384,
+  "max_timestep": 100000,
+  "n_block": 8,
+  "n_heads": 8,
+  "state_dim": 18
+}

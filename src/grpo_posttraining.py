@@ -58,6 +58,11 @@ class GRPORolloutBatch:
         return int(self.returns.shape[0])
 
 
+def _is_legacy_dt(model: DecisionTransformer) -> bool:
+    """Detect if model was converted to LegacyDecisionTransformer by load_from_checkpoint."""
+    return hasattr(model, "embed_return") and hasattr(model, "embed_action")
+
+
 def load_pretrained_dt_for_grpo(
     model_kwargs: dict[str, Any],
     checkpoint_path: str | Path,
@@ -217,7 +222,10 @@ def _mixed_action_distribution(
             return self
 
         def entropy(self) -> torch.Tensor:
-            return self.d0.entropy() + self.fc.entropy()
+            # Sample-based entropy: E[-log π(a)] ≈ -log π(a) for a ~ π
+            # More stable than TransformedDistribution.entropy() which is often NotImplemented
+            sample = self.rsample()
+            return -self.log_prob(sample).detach()
 
     return _Mixed(dim0_dist, fcas_dist)
 
@@ -324,6 +332,19 @@ class GRPOTrainer:
         self.entropy_coeff = float(entropy_coeff)
         self.grad_clip_norm = float(grad_clip_norm)
 
+    @staticmethod
+    def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask):
+        """Call model.forward with correct argument order, normalizing return order.
+
+        Modern:  forward(state, rtg, timestep, actions, mask) -> (return_preds, state_preds, act_preds)
+        Legacy:  forward(states, actions, returns_to_go, timesteps, mask) -> (act_preds, state_preds, return_preds)
+        """
+        if _is_legacy_dt(model):
+            act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+        else:
+            _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+        return act_preds
+
     def _action_distributions(
         self,
         states: torch.Tensor,
@@ -332,9 +353,11 @@ class GRPOTrainer:
         timesteps: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> tuple[TransformedDistribution, TransformedDistribution]:
-        _, _, action_preds = self.model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
-        _, _, ref_preds = self.reference_model(
-            states, rtgs, timesteps, actions, attention_mask=attention_mask
+        action_preds = self._forward_dt(
+            self.model, states, rtgs, timesteps, actions, attention_mask
+        )
+        ref_preds = self._forward_dt(
+            self.reference_model, states, rtgs, timesteps, actions, attention_mask
         )
         action_mean = action_preds[:, -1:, :]
         ref_mean = ref_preds[:, -1:, :]
