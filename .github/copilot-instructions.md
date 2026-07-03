@@ -74,7 +74,7 @@
   - Docker Compose shell: the working directory is `/code/src`, so scripts are bare names and repo paths usually use `../data/...` and `../models/...`.
 - **Prefer `src/launch_aemo_training.py` for AEMO CLI runs.** It encodes the canonical tiers (`proxy-smoke`, `proxy-baseline`, `learning-baseline`) and writes a launch plan.
 - **Treat `src/pretrain_decision_transformer.py` as the sanctioned DT surface.** Avoid changing the surrounding DT/model/training stack unless the task explicitly requires it.
-- **AEMO action dimensions are mode-dependent.** `simple` uses `act_dim=1`; `multi_market` uses `act_dim=3`; keep `h_dim` divisible by `n_heads`.
+- **AEMO action dimensions are mode-dependent.** `simple` uses `act_dim=1`; `multi_market` uses `act_dim=3`; `full_fcas` uses `act_dim=9`; keep `h_dim` divisible by `n_heads`.
 - **Keep artifacts in the repo-standard layout.** Household logs, AEMO datasets, DT outputs, and evaluation output should stay in their documented directories.
 - **AEMO subset training is episode-based.** Split by episode before writing subset parquet files, then resume checkpoints across subset stages.
 - **The live DT progress UI reads trainer snapshots.** Use `src/dt_progress_runner.py --attach` to monitor an existing job.

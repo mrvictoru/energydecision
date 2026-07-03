@@ -38,7 +38,7 @@ The launcher derives tier defaults, writes a launch plan, and re-enters Distrobo
 | **Proxy metric** | AEMO proxy tier: `best_val_action_loss` (lower better). Broader tiers: `best_val_total_loss`. |
 | **RTG matters** | Evaluate with multiple rtg values (0, 5, 10, 15, 20). The DT responds to RTG prompt. |
 | **FCAS gap closed** | On FCAS-rich data: DT earns $1,383/ep FCAS (18× improvement from $77/ep). PPO earns $1,616/ep. Gap is now 14%, not 138×. |
-| **Loss weights** | `action_loss_weight=0.75` gave best proxy. Lower (0.3–0.4) drives total loss down but hurts action quality. |
+| **Loss weights (June 2026)** | Grid sweep found `action_loss_weight=0.999, state_loss_weight=0.002, return_loss_weight=0.0001` gives best evaluator results (mean_reward > 0 on mini evaluator). Near-zero state/return weights mean the model focuses almost entirely on action prediction accuracy. |
 | **Batch size** | 16 is the sweet spot for 8×512 on this hardware. |
 | **Checkpoint resume** | --context-length must match checkpoint. |
 
@@ -98,10 +98,11 @@ Prewarming: `python3 src/prewarm_aemo_cache.py --evaluation-config configs/aemo_
 
 ## Action dimensions (AEMO)
 
-| action_mode | act_dim |
-|-------------|---------|
-| simple      | 1       |
-| multi_market| 3       |
+| action_mode | act_dim | Description |
+|-------------|---------|-------------|
+| simple      | 1       | Energy-only charge/discharge |
+| multi_market| 3       | Legacy: energy + RAISEREG/LOWERREG (deprecated) |
+| full_fcas   | 9       | Energy + all 8 FCAS services (recommended) |
 
 `h_dim` must be divisible by `n_heads`.
 
@@ -140,6 +141,15 @@ python3 src/generate_fcas_dataset.py --policies ppo,td3,a2c,ddpg,sac
 python3 src/generate_fcas_dataset.py --mode assemble
 ```
 Output: `data/aemo_dt_fcas/aemo_fcas_dataset.parquet`
+
+`src/convert_dispatch_to_episodes.py` converts raw AEMO DISPATCHLOAD + DISPATCHPRICE data directly into episode logs without running the simulator environment. Unlike the legacy `generate_dispatch_replays.py` (energy-only), it captures **all 8 FCAS services** from actual AEMO-cleared values and computes revenue using historical market prices:
+```bash
+python3 src/convert_dispatch_to_episodes.py \
+    --station dalrymple_north \
+    --start-date 2024-01-01 \
+    --end-date 2024-07-01 \
+    --output data/aemo_dispatch_episodes/dalrymple_north_2024h1.parquet
+```
 
 ## Priorities for DT improvement (from `docs/dt_improvement_roadmap.md`)
 

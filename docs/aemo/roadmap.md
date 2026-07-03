@@ -22,10 +22,12 @@
 - Sweep RTG values around the optimal (auto-set from `model.return_scale`) using `sample_rtg_values()` in `src/grpo_posttraining.py`. The optimal RTG is always included; remaining values come from a distribution (Gaussian, uniform, or lognormal) centered on the optimum.
 - RTG sensitivity was observed in household DT — the GRPO fine-tuning step on the `copilot/online-rl-fine-tuning` branch now uses adaptive RTG sampling to explore this.
 
-### 3. FCAS-weighted loss
+### 3. Loss weight calibration
 
-- Weight FCAS action dimensions (1, 2) higher in training loss
-- Prevents the model from learning only energy dispatch
+- Grid sweep (June 2026) found: `action_loss_weight=0.999, state_loss_weight=0.002, return_loss_weight=0.0001` gives best evaluator results (mean_reward > 0 on mini evaluator).
+- Near-zero state/return weights mean the model focuses almost entirely on action prediction accuracy.
+- See `results.tsv` `20260702-lw-sweep` entries for the full sweep.
+- The MoLab-trained model uses these weights — see HF model card.
 
 ### 4. Context sweep
 

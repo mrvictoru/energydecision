@@ -106,6 +106,7 @@ bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell
 609dd24	aemo	-2.295426695845123	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 rmsprop_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/rmsprop_none
 609dd24	aemo	-2.137930759377132	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 adamw_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/adamw_none
 609dd24	aemo	-1.830449334661178	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 muon_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/muon_none
+<<<<<<< Updated upstream
 20260610-ctx-sweep	aemo	0.070363	keep	frontier context sweep: aemo_proxy_frontier, 8x512, drop_p=0.15, ctx=180, b=16, e=2 on proxy pilot — confirms baseline ctx=180
 20260610-ctx-sweep	aemo	0.070160	keep	frontier context sweep: ctx=180 baseline rerun at b=8 for fair comparison
 20260610-ctx-sweep	aemo	0.082855	keep	frontier context sweep: ctx=180 at b=4 for direct comparison with longer context at b=4
@@ -126,3 +127,8 @@ bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell
 20260611-expanded-eval	aemo	-3.105	keep	expanded evaluator: DT full-pretrained (8x512, ctx=180, trained on 24+16 ep) mean_reward=-3.11 — beats rule (-4.82), deg=2.5K/ep, but FCAS=$77/ep vs PPO's $10.6K
 20260611-expanded-eval	aemo	-4.819	keep	expanded evaluator: rule heuristic mean_reward=-4.82 — high energy rev ($11.8K) but massive deg ($15.4K)
 20260611-expanded-eval	aemo	-13.550	discard	expanded evaluator: pretrain DT (original 4x128 pilot) mean_reward=-13.55 — worst performer, overly aggressive (746 MWh/ep), deg=$13K/ep
+20260702-lw-sweep	aemo	0.033682	keep	loss-weight grid sweep: aw=0.5 sw=0.0 — best proxy total loss, evaluator mean_reward=+0.200
+20260702-lw-sweep	aemo	0.035861	keep	loss-weight grid sweep: aw=0.5 sw=0.005 — best balance (reward=+0.198, state_loss=0.95)
+20260702-lw-sweep	aemo	0.036760	keep	loss-weight grid sweep: aw=0.5 sw=0.02 — best action loss, evaluator mean_reward=+0.192
+20260702-lw-sweep	aemo	0.053356	keep	loss-weight grid sweep: baseline (aw=0.75 sw=0.01) — evaluator mean_reward=+0.194
+20260702-molab	aemo	+1.522	keep	MoLab DT training: 8x384, ctx=180, aw=0.999 sw=0.002 rw=0.0001, batch=128, lr=3e-5, 2 epochs — trained on RTX 6000 Pro, uploaded to HF
