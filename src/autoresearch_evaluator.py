@@ -655,6 +655,192 @@ def _aggregate_safety_metrics_by_policy(cohort_safety: dict[str, dict[str, Any]]
     return aggregate
 
 
+def _comparison_config(evaluation_config: dict[str, Any]) -> dict[str, Any]:
+    raw = evaluation_config.get("comparison", {})
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _policy_names(policies: Sequence[dict[str, Any]]) -> list[str]:
+    return [str(policy["name"]) for policy in policies]
+
+
+def _find_policy(policies: Sequence[dict[str, Any]], policy_name: str) -> dict[str, Any]:
+    for policy in policies:
+        if str(policy["name"]) == policy_name:
+            return policy
+    raise ValueError(f"Policy {policy_name!r} is not defined in evaluation_config.policies.")
+
+
+def _strict_required_policies(
+    *,
+    policies: Sequence[dict[str, Any]],
+    comparison_cfg: dict[str, Any],
+) -> list[str]:
+    configured = comparison_cfg.get("required_policy_names")
+    if configured:
+        return [str(name) for name in configured]
+    return _policy_names(policies)
+
+
+def _validate_dispatch_comparison_config(
+    *,
+    heldout_cfg: dict[str, Any],
+    comparison_cfg: dict[str, Any],
+    policies: Sequence[dict[str, Any]],
+) -> None:
+    action_mode = str(heldout_cfg.get("action_mode", "multi_market"))
+    has_dispatch = any(str(policy.get("kind", "")).lower() == "dispatch" for policy in policies)
+
+    if has_dispatch and bool(comparison_cfg.get("require_full_fcas_dispatch", False)) and action_mode != "full_fcas":
+        raise ValueError(
+            "comparison.require_full_fcas_dispatch=true requires heldout.action_mode='full_fcas'."
+        )
+
+    if not bool(comparison_cfg.get("use_dispatch_asset_sizing", False)):
+        return
+
+    dispatch_ref_name = comparison_cfg.get("dispatch_reference_policy_name")
+    if dispatch_ref_name is None:
+        dispatch_policies = [policy for policy in policies if str(policy.get("kind", "")).lower() == "dispatch"]
+        if len(dispatch_policies) != 1:
+            raise ValueError(
+                "comparison.use_dispatch_asset_sizing=true requires comparison.dispatch_reference_policy_name "
+                "when there is not exactly one dispatch policy."
+            )
+        dispatch_ref_name = str(dispatch_policies[0]["name"])
+
+    dispatch_policy = _find_policy(policies, str(dispatch_ref_name))
+    if str(dispatch_policy.get("kind", "")).lower() != "dispatch":
+        raise ValueError(
+            "comparison.dispatch_reference_policy_name must point to a policy with kind='dispatch'."
+        )
+
+
+def _resolve_runtime_battery_variants(
+    *,
+    scenario: dict[str, Any],
+    heldout_cfg: dict[str, Any],
+    comparison_cfg: dict[str, Any],
+    policies: Sequence[dict[str, Any]],
+    cache_dir: Path,
+) -> list[dict[str, Any]]:
+    base_variants = resolve_battery_variants(heldout_cfg.get("battery_variants", []))
+    if not base_variants:
+        raise ValueError("evaluation_config.heldout.battery_variants must be non-empty.")
+
+    if not bool(comparison_cfg.get("use_dispatch_asset_sizing", False)):
+        return base_variants
+
+    dispatch_ref_name = comparison_cfg.get("dispatch_reference_policy_name")
+    if dispatch_ref_name is None:
+        dispatch_policies = [policy for policy in policies if str(policy.get("kind", "")).lower() == "dispatch"]
+        dispatch_ref_name = str(dispatch_policies[0]["name"])
+    dispatch_policy = _find_policy(policies, str(dispatch_ref_name))
+
+    template_variant = base_variants[0]
+    should_run, dispatch_region = should_run_dispatch_for_scenario(
+        scenario_region=str(scenario["region"]),
+        dispatch_station=dispatch_policy.get("station_name"),
+        dispatch_duid=dispatch_policy.get("dispatch_duid"),
+        start_date=scenario["start_date"],
+        end_date=scenario["end_date"],
+    )
+    if not should_run:
+        return []
+
+    selection = build_dispatch_selection(
+        region=dispatch_region or str(scenario["region"]),
+        start_date=scenario["start_date"],
+        end_date=scenario["end_date"],
+        cache_dir=cache_dir,
+        dispatch_station=dispatch_policy.get("station_name"),
+        dispatch_duid=dispatch_policy.get("dispatch_duid"),
+        dispatch_index=int(dispatch_policy.get("dispatch_index", 0)),
+        battery_capacity=float(template_variant["battery_capacity"]),
+        max_battery_flow=float(template_variant["max_battery_flow"]),
+        init_soc=float(template_variant["init_soc"]),
+        init_soc_ratio=template_variant.get("init_soc_ratio"),
+    )
+    battery_life_cost = resolve_dispatch_battery_life_cost(
+        dispatch_run=dispatch_policy,
+        station_capacity_mwh=float(selection["battery_capacity"]),
+    )
+    station_name = str(selection.get("station_name") or dispatch_policy.get("station_name") or dispatch_ref_name)
+    return [
+        {
+            "label": f"asset_{station_name}",
+            "name": f"asset_{station_name}",
+            "battery_capacity": float(selection["battery_capacity"]),
+            "max_battery_flow": float(selection["max_battery_flow"]),
+            "init_soc": float(selection["init_battery_level"]),
+            "init_soc_ratio": float(
+                np.clip(
+                    float(selection["init_battery_level"]) / float(selection["battery_capacity"])
+                    if float(selection["battery_capacity"]) > 0
+                    else 0.5,
+                    0.0,
+                    1.0,
+                )
+            ),
+            "battery_life_cost": float(battery_life_cost),
+            "dispatch_station_name": station_name,
+            "dispatch_region": str(selection.get("region") or dispatch_region or scenario["region"]),
+        }
+    ]
+
+
+def _cohort_suffix(cohort_key: str) -> str:
+    return str(cohort_key).split("::", 1)[1]
+
+
+def _apply_strict_policy_intersection(
+    *,
+    aggregate_logs: dict[str, list[pl.DataFrame]],
+    cohort_logs: dict[str, list[pl.DataFrame]],
+    required_policy_names: Sequence[str],
+) -> tuple[dict[str, list[pl.DataFrame]], dict[str, list[pl.DataFrame]], dict[str, Any]]:
+    policy_sets_by_cohort: dict[str, set[str]] = {}
+    for cohort_key in cohort_logs:
+        policy_name, cohort_suffix = str(cohort_key).split("::", 1)
+        policy_sets_by_cohort.setdefault(cohort_suffix, set()).add(policy_name)
+
+    required = {str(name) for name in required_policy_names}
+    matched_suffixes = sorted(
+        cohort_suffix
+        for cohort_suffix, present_policies in policy_sets_by_cohort.items()
+        if required.issubset(present_policies)
+    )
+    if not matched_suffixes:
+        raise RuntimeError(
+            "Strict policy intersection produced no comparable cohorts. "
+            "Check scenario coverage, dispatch availability, and required_policy_names."
+        )
+
+    matched_suffix_set = set(matched_suffixes)
+    filtered_cohort_logs = {
+        cohort_key: logs
+        for cohort_key, logs in cohort_logs.items()
+        if _cohort_suffix(cohort_key) in matched_suffix_set
+    }
+    filtered_aggregate_logs: dict[str, list[pl.DataFrame]] = {}
+    for cohort_key, logs in filtered_cohort_logs.items():
+        policy_name = str(cohort_key).split("::", 1)[0]
+        filtered_aggregate_logs.setdefault(policy_name, []).extend(logs)
+
+    dropped_suffixes = sorted(set(policy_sets_by_cohort) - matched_suffix_set)
+    return filtered_aggregate_logs, filtered_cohort_logs, {
+        "required_policy_names": sorted(required),
+        "matched_cohort_count": len(matched_suffixes),
+        "matched_cohorts": matched_suffixes,
+        "dropped_cohort_count": len(dropped_suffixes),
+        "dropped_cohorts": dropped_suffixes,
+        "policy_coverage_by_cohort": {
+            cohort_suffix: sorted(policy_names)
+            for cohort_suffix, policy_names in sorted(policy_sets_by_cohort.items())
+        },
+    }
+
+
 def evaluate_aemo_heldout(
     *,
     surface_manifest: dict[str, Any],
@@ -664,6 +850,7 @@ def evaluate_aemo_heldout(
     dt_model: DecisionTransformer | None,
 ) -> dict[str, Any]:
     heldout_cfg = dict(evaluation_config.get("heldout", {}))
+    comparison_cfg = _comparison_config(evaluation_config)
     scenarios_raw = heldout_cfg.get("scenarios")
     if not scenarios_raw:
         raise ValueError("evaluation_config.heldout.scenarios must be non-empty.")
@@ -705,11 +892,12 @@ def evaluate_aemo_heldout(
         fixed_stats=fixed_stats,
     )
 
-    battery_variants = resolve_battery_variants(heldout_cfg.get("battery_variants", []))
-    if not battery_variants:
-        raise ValueError("evaluation_config.heldout.battery_variants must be non-empty.")
-
     policies = evaluation_config.get("policies") or [{"name": "candidate_dt", "kind": "dt"}, {"name": "rule", "kind": "rule"}]
+    _validate_dispatch_comparison_config(
+        heldout_cfg=heldout_cfg,
+        comparison_cfg=comparison_cfg,
+        policies=policies,
+    )
     aggregate_logs: dict[str, list[pl.DataFrame]] = {str(policy["name"]): [] for policy in policies}
     cohort_logs: dict[str, list[pl.DataFrame]] = {}
 
@@ -722,6 +910,7 @@ def evaluate_aemo_heldout(
     reference_cache_misses: list[dict[str, Any]] = []
     parallel_workers = max(1, int(heldout_cfg.get("parallel_workers", 1)))
     parallelize_candidate_dt = bool(heldout_cfg.get("parallelize_candidate_dt", False))
+    battery_variants_seen: dict[str, dict[str, Any]] = {}
 
     work_items: list[dict[str, Any]] = []
     for scenario in scenario_manifest:
@@ -732,8 +921,16 @@ def evaluate_aemo_heldout(
             "start_date": _parse_datetime(str(scenario["start_date"])),
             "end_date": _parse_datetime(str(scenario["end_date"])),
         }
-        for battery_variant in battery_variants:
+        runtime_battery_variants = _resolve_runtime_battery_variants(
+            scenario=runtime_scenario,
+            heldout_cfg=heldout_cfg,
+            comparison_cfg=comparison_cfg,
+            policies=policies,
+            cache_dir=cache_dir,
+        )
+        for battery_variant in runtime_battery_variants:
             battery_label = str(battery_variant["label"])
+            battery_variants_seen[battery_label] = battery_variant
             for policy in policies:
                 work_items.append(
                     {
@@ -747,6 +944,10 @@ def evaluate_aemo_heldout(
                         "processed_data": processed_data,
                     }
                 )
+
+    battery_variants = list(battery_variants_seen.values())
+    if not battery_variants:
+        raise RuntimeError("No battery variants were resolved for the requested scenarios.")
 
     def _execute_rollout(item: dict[str, Any]) -> dict[str, Any]:
         policy = dict(item["policy"])
@@ -854,6 +1055,23 @@ def evaluate_aemo_heldout(
                 }
             )
 
+    comparison_scope: dict[str, Any] = {
+        "strict_policy_intersection": bool(comparison_cfg.get("strict_policy_intersection", False)),
+        "require_full_fcas_dispatch": bool(comparison_cfg.get("require_full_fcas_dispatch", False)),
+        "use_dispatch_asset_sizing": bool(comparison_cfg.get("use_dispatch_asset_sizing", False)),
+        "dispatch_reference_policy_name": comparison_cfg.get("dispatch_reference_policy_name"),
+    }
+    if bool(comparison_cfg.get("strict_policy_intersection", False)):
+        aggregate_logs, cohort_logs, intersection_meta = _apply_strict_policy_intersection(
+            aggregate_logs=aggregate_logs,
+            cohort_logs=cohort_logs,
+            required_policy_names=_strict_required_policies(
+                policies=policies,
+                comparison_cfg=comparison_cfg,
+            ),
+        )
+        comparison_scope.update(intersection_meta)
+
     aggregate_logs = {name: logs for name, logs in aggregate_logs.items() if logs}
     if not aggregate_logs:
         raise RuntimeError("Held-out evaluation produced no logs.")
@@ -907,6 +1125,13 @@ def evaluate_aemo_heldout(
     by_cohort_df = pl.DataFrame(by_cohort_rows).sort(["policy_name", "scenario_label", "battery_label"])
     by_cohort_df.write_csv(output_dir / "heldout_metrics_by_scenario.csv")
 
+    if by_cohort_rows:
+        comparison_scope["matched_scenarios"] = sorted({row["scenario_label"] for row in by_cohort_rows})
+        comparison_scope["matched_battery_labels"] = sorted({row["battery_label"] for row in by_cohort_rows})
+    else:
+        comparison_scope["matched_scenarios"] = []
+        comparison_scope["matched_battery_labels"] = []
+
     condition_metrics = {
         name: evaluate_by_conditions(logs, default_aemo_conditions(evaluation_config.get("condition_thresholds")))
         for name, logs in aggregate_logs.items()
@@ -944,6 +1169,7 @@ def evaluate_aemo_heldout(
         "bootstrap_confidence_intervals": bootstrap,
         "paired_comparisons_vs_reference": paired,
         "reference_policy": reference_policy,
+        "comparison_scope": comparison_scope,
         "reference_rollout_cache": {
             "enabled": reference_cache_dir is not None,
             "cache_dir": str(reference_cache_dir) if reference_cache_dir is not None else None,

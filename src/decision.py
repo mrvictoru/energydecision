@@ -1037,8 +1037,12 @@ class AEMOAgent:
                 action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
             action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
             action = action.detach().cpu().numpy()
-            action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0).tolist()
-            return action
+            action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
+            if action.ndim > 1 and action.shape[0] == 1:
+                action = action[0]
+            if action.ndim == 0:
+                action = np.array([float(action)], dtype=np.float32)
+            return action.tolist()
 
         raise ValueError(f"Unsupported algorithm: {self.algorithm}")
 

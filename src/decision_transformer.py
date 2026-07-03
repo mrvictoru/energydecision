@@ -145,6 +145,149 @@ class ModernBlock(nn.Module):
         x = x + self.ffn(self.norm2(x))
         return x
 
+
+class LegacyRMSNorm(nn.Module):
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.eps = eps
+
+    def forward(self, x):
+        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * rms * self.weight
+
+
+class LegacySwiGLU(nn.Module):
+    def __init__(self, dim, hidden_dim=None):
+        super().__init__()
+        hidden_dim = hidden_dim or dim * 4
+        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
+        self.w2 = nn.Linear(dim, hidden_dim, bias=False)
+        self.w3 = nn.Linear(hidden_dim, dim, bias=False)
+
+    def forward(self, x):
+        return self.w3(F.silu(self.w1(x)) * self.w2(x))
+
+
+class LegacyDecisionTransformer(nn.Module):
+    """Compatibility model for older checkpoint exports that use the MoLab-style architecture."""
+
+    def __init__(
+        self,
+        state_dim,
+        act_dim,
+        n_block=8,
+        h_dim=384,
+        context_len=180,
+        n_heads=8,
+        drop_p=0.1,
+        max_timestep=100000,
+        use_rope=False,
+        rope_base=10000.0,
+        rope_max_position=None,
+    ):
+        super().__init__()
+        self.state_dim = state_dim
+        self.act_dim = act_dim
+        self.context_len = context_len
+        self.h_dim = h_dim
+        self.n_heads = n_heads
+        self.drop_p = drop_p
+        self.max_timestep = max_timestep
+        self.use_rope = use_rope
+
+        self.embed_return = nn.Linear(1, h_dim)
+        self.embed_state = nn.Linear(state_dim, h_dim)
+        self.embed_action = nn.Linear(act_dim, h_dim)
+        self.embed_timestep = nn.Embedding(max_timestep, h_dim)
+
+        self.blocks = nn.ModuleList(
+            [
+                LegacyTransformerBlock(h_dim, n_heads, drop_p, use_rope, rope_base, rope_max_position)
+                for _ in range(n_block)
+            ]
+        )
+        self.ln_f = LegacyRMSNorm(h_dim)
+
+        self.predict_return = nn.Linear(h_dim, 1)
+        self.predict_state = nn.Linear(h_dim, state_dim)
+        self.predict_action = nn.Sequential(
+            nn.Linear(h_dim, h_dim),
+            nn.GELU(),
+            nn.Linear(h_dim, act_dim),
+            nn.Tanh(),
+        )
+
+        self.return_scale = nn.Parameter(torch.tensor(2.0), requires_grad=False)
+
+    def forward(self, states, actions, returns_to_go, timesteps, attention_mask=None):
+        B, T, _ = states.shape
+        if returns_to_go.dim() == 2:
+            returns_to_go = returns_to_go.unsqueeze(-1)
+        elif returns_to_go.dim() == 1:
+            returns_to_go = returns_to_go.unsqueeze(0).unsqueeze(-1)
+        elif returns_to_go.dim() == 3 and returns_to_go.shape[-1] != 1:
+            returns_to_go = returns_to_go.unsqueeze(-1)
+
+        time_emb = self.embed_timestep(timesteps)
+        state_emb = self.embed_state(states)
+        action_emb = self.embed_action(actions)
+        return_emb = self.embed_return(returns_to_go)
+
+        stacked = torch.stack([return_emb, state_emb, action_emb], dim=2)
+        x = stacked.permute(0, 2, 1, 3).reshape(B, 3 * T, self.h_dim)
+        x = x + time_emb.repeat_interleave(3, dim=1)
+
+        if attention_mask is not None:
+            attn_mask = attention_mask.repeat_interleave(3, dim=1)
+            attn_mask = attn_mask.unsqueeze(1)
+        else:
+            attn_mask = None
+
+        for block in self.blocks:
+            x = block(x, attn_mask=attn_mask)
+
+        x = self.ln_f(x)
+
+        pred_mask = torch.zeros(3 * T, dtype=torch.bool)
+        pred_mask[0::3] = True
+        pred_mask[1::3] = True
+        act_mask = torch.ones(3 * T, dtype=torch.bool)
+        act_mask[2::3] = False
+
+        x_pred = x[:, pred_mask]
+        x_act = x[:, act_mask]
+
+        return_preds = self.predict_return(x_pred[:, ::2])
+        state_preds = self.predict_state(x_pred[:, 1::2])
+        action_preds = self.predict_action(x_act[:, ::2])
+        return action_preds, state_preds, return_preds
+
+    def get_action(self, states, actions, returns_to_go, timesteps, attention_mask=None):
+        action_preds, _, _ = self.forward(states, actions, returns_to_go, timesteps, attention_mask)
+        return action_preds[:, -1]
+
+
+class LegacyTransformerBlock(nn.Module):
+    def __init__(self, h_dim, n_heads, drop_p=0.1, use_rope=False, rope_base=10000.0, rope_max_position=None):
+        super().__init__()
+        self.ln1 = LegacyRMSNorm(h_dim)
+        self.attn = nn.MultiheadAttention(h_dim, n_heads, dropout=drop_p, batch_first=True)
+        self.ln2 = LegacyRMSNorm(h_dim)
+        self.ffn = LegacySwiGLU(h_dim)
+        self.dropout = nn.Dropout(drop_p)
+        self.use_rope = use_rope
+
+    def forward(self, x, attn_mask=None):
+        h = self.ln1(x)
+        h, _ = self.attn(h, h, h, need_weights=False)
+        x = x + self.dropout(h)
+        h = self.ln2(x)
+        h = self.ffn(h)
+        x = x + self.dropout(h)
+        return x
+
+
 # define the decision transformer
 class DecisionTransformer(nn.Module):
     def __init__(
@@ -166,6 +309,11 @@ class DecisionTransformer(nn.Module):
         self.act_dim = act_dim
         self.h_dim = h_dim
         self.context_len = context_len
+        self.n_heads = n_heads
+        self.n_block = n_block
+        self.drop_p = drop_p
+        self.max_timestep = max_timestep
+        self.rope_enabled = rope_enabled
 
         # transformer blocks
         input_seq_len = 3 * context_len
@@ -313,6 +461,59 @@ class DecisionTransformer(nn.Module):
                     self.return_scale = rs
             except Exception:
                 pass
+
+        legacy_checkpoint = any(
+            key.startswith("embed_return")
+            or key.startswith("embed_state")
+            or key.startswith("embed_action")
+            or key.startswith("predict_return")
+            or key.startswith("predict_state")
+            or key.startswith("predict_action")
+            or key.startswith("blocks.")
+            for key in state.keys()
+        )
+
+        if legacy_checkpoint:
+            legacy_state_dim = self.state_dim
+            legacy_act_dim = self.act_dim
+            legacy_h_dim = self.h_dim
+            legacy_max_timestep = self.max_timestep
+
+            embed_state = state.get("embed_state.weight")
+            if isinstance(embed_state, torch.Tensor) and embed_state.ndim == 2:
+                legacy_state_dim = int(embed_state.shape[1])
+                legacy_h_dim = int(embed_state.shape[0])
+
+            embed_action = state.get("embed_action.weight")
+            if isinstance(embed_action, torch.Tensor) and embed_action.ndim == 2:
+                legacy_act_dim = int(embed_action.shape[1])
+                legacy_h_dim = int(embed_action.shape[0])
+
+            embed_timestep = state.get("embed_timestep.weight")
+            if isinstance(embed_timestep, torch.Tensor) and embed_timestep.ndim == 2:
+                legacy_max_timestep = int(embed_timestep.shape[0])
+                legacy_h_dim = int(embed_timestep.shape[1])
+
+            legacy_model = LegacyDecisionTransformer(
+                state_dim=legacy_state_dim,
+                act_dim=legacy_act_dim,
+                n_block=self.n_block,
+                h_dim=legacy_h_dim,
+                context_len=self.context_len,
+                n_heads=self.n_heads,
+                drop_p=self.drop_p,
+                max_timestep=legacy_max_timestep,
+                use_rope=False,
+            )
+            if isinstance(meta, dict) and "return_scale" in meta:
+                try:
+                    legacy_model.return_scale.data.copy_(torch.tensor(float(meta["return_scale"])))
+                except Exception:
+                    pass
+            legacy_model.load_state_dict(state, strict=False)
+            self.__class__ = LegacyDecisionTransformer
+            self.__dict__.update(legacy_model.__dict__)
+            return
 
         # detect rotary cos buffers and patch local blocks to match checkpoint shape
         cos_keys = [k for k in state.keys() if k.endswith(".rotary.cos")]

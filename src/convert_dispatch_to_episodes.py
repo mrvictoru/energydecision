@@ -192,9 +192,20 @@ def build_observations(aligned: pl.DataFrame, soc: np.ndarray, capacity_mwh: flo
     """
     n = aligned.height
 
+    def _to_datetime(value: Any) -> datetime:
+        if isinstance(value, np.datetime64):
+            try:
+                return datetime.utcfromtimestamp(int(value.astype("datetime64[us]").astype("int64")) / 1e6)
+            except Exception:
+                return datetime.utcfromtimestamp(int(value.astype("int64")) / 1e9)
+        if hasattr(value, "to_pydatetime"):
+            return value.to_pydatetime()
+        return value
+
     timestamps = aligned["SETTLEMENTDATE"].to_numpy()
-    hours = np.array([t.hour for t in timestamps], dtype=np.float32)
-    days_of_year = np.array([t.timetuple().tm_yday for t in timestamps], dtype=np.float32)
+    datetimes = [_to_datetime(t) for t in timestamps]
+    hours = np.array([t.hour for t in datetimes], dtype=np.float32)
+    days_of_year = np.array([t.timetuple().tm_yday for t in datetimes], dtype=np.float32)
 
     hour_sin = np.sin(2 * np.pi * hours / 24.0)
     hour_cos = np.cos(2 * np.pi * hours / 24.0)
@@ -307,15 +318,19 @@ def convert_station_to_episode(
     )
 
     # Fetch DISPATCHLOAD data
-    dispatch_duid = selection.get("dispatch_duid")
+    dispatch_duid = selection.get("dispatch_duid") or selection.get("duid")
     dispatch_duid_gen = selection.get("dispatch_duid_gen")
     dispatch_duid_load = selection.get("dispatch_duid_load")
 
-    duid_list = []
+    duid_list: list[str] = []
     if dispatch_duid:
-        duid_list = [dispatch_duid]
+        duid_list = [str(dispatch_duid)]
     elif dispatch_duid_gen or dispatch_duid_load:
-        duid_list = [d for d in [dispatch_duid_gen, dispatch_duid_load] if d]
+        duid_list = [str(d) for d in [dispatch_duid_gen, dispatch_duid_load] if d]
+    if not duid_list:
+        fallback_duids = selection.get("all_dispatch_duids") or []
+        if fallback_duids:
+            duid_list = [str(d) for d in fallback_duids if d]
 
     if not duid_list:
         print(f"  [{station_name}]: no DUIDs to fetch — skipping")
@@ -323,8 +338,8 @@ def convert_station_to_episode(
 
     print(f"  [{station_name}]: fetching DISPATCHLOAD for {duid_list}...")
     dispatch_data = fetch_aemo_unit_dispatch(
-        start_date=start_date.strftime("%Y-%m-%d %H:%M:%S"),
-        end_date=end_date.strftime("%Y-%m-%d %H:%M:%S"),
+        start_date=start_date,
+        end_date=end_date,
         duids=duid_list,
         cache_dir=cache_dir,
     )
