@@ -297,7 +297,27 @@ The evaluation uses the **example evaluator** (`configs/aemo_autoresearch_evalua
 
 6. **Context=180 remains optimal:** This model uses the same context length confirmed by prior proxy sweeps. Longer contexts (288, 576, 1008) regressed validation loss in earlier experiments. Context=2016 is now feasible on 22 GB VRAM and warrants re-testing with FCAS data.
 
-#### 8.2.2 From Gap to Leadership — The Improvement Trajectory
+#### 8.2.2 Apples-to-Apples Full-FCAS Dispatch Comparison (Current Result)
+
+To test whether the Hugging Face-hosted DT can beat a real operator in the same environment, we ran a stricter benchmark in `action_mode='full_fcas'` using four matched cohorts (SA1 Jan/Mar/Jul/Nov 2024) and dispatch-asset sizing derived from the Dalrymple North BESS metadata. This comparison is deliberately fairer than the earlier replay-only baselines because the DT, the historical dispatch replay policy, and the FCAS rule baseline are all evaluated on the same 9-action FCAS formulation and the same matched battery asset.
+
+| Policy | Mean Reward | Avg Profit/Ep | Avg FCAS Rev/Ep | Interpretation |
+|--------|:-----------:|:-------------:|:----------------:|----------------|
+| **candidate_dt** | **3.06** | **+$5,621** | **$6,595** | Best-performing policy in the strict full-FCAS matched benchmark |
+| dispatch_dalrymple_north | -1.38 | +$964 | $110 | Historical dispatch replay is profitable but far less effective than the DT |
+| fcas_rule | -68.77 | -$65,890 | $30 | Rule-based FCAS control is unstable and economically poor in this matched setup |
+
+The current plots are generated from the evaluator summary and make the comparison explicit:
+
+![Profit comparison across policies](eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/profit_by_experiment.png)
+
+![FCAS revenue comparison across policies](eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/fcas_revenue_by_experiment.png)
+
+![Paired comparison of reward differences](eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/paired_comparison_mean_diff.png)
+
+These results suggest that the DT is not only learning FCAS-aware behavior, but that it can outperform the historical dispatch replay baseline under a matched full-FCAS evaluation. The key message is that apples-to-apples comparison matters: once the replay policy is evaluated in the same environment and action space as the learned policy, the DT's advantage becomes visible.
+
+#### 8.2.3 From Gap to Leadership — The Improvement Trajectory
 
 The following table traces the DT's progression from the original pilot model to the current FCAS-rich result. Each step represents a targeted intervention:
 
