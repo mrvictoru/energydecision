@@ -151,6 +151,17 @@ python3 src/convert_dispatch_to_episodes.py \
     --output data/aemo_dispatch_episodes/dalrymple_north_2024h1.parquet
 ```
 
+## Pretrained DT model (for GRPO fine-tuning)
+
+The best Decision Transformer checkpoint is hosted on HuggingFace:
+
+- **HF repo**: `mrvictoru/energydecision-dt`
+- **Checkpoint**: `aemo_dt_fcas_model.pt` (8×384, ctx=180, aw=0.999, sw=0.002, trained on RTX 6000 Pro)
+- **Download**: `hf_hub_download("mrvictoru/energydecision-dt", "aemo_dt_fcas_model.pt")`
+
+GRPO fine-tuning is on the `copilot/online-rl-fine-tuning` branch (`src/grpo_posttraining.py`).
+The AEMO GRPO notebook (`notebooks/aemo_dt_grpo_posttraining.ipynb`) downloads this model automatically and runs online RL with adaptive RTG sampling.
+
 ## Priorities for DT improvement (from `docs/dt_improvement_roadmap.md`)
 
 1. Train DT on PPO-generated trajectories (addresses FCAS gap)
