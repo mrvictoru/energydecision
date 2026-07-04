@@ -51,7 +51,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--kl-coeff", type=float, default=0.02, help="KL coefficient")
     parser.add_argument("--entropy-coeff", type=float, default=0.0, help="Entropy coefficient")
     parser.add_argument("--initial-log-std", type=float, default=-1.0, help="Initial log std")
-    parser.add_argument("--trainable-log-std", action="store_true", default=True, help="Train log std")
+    parser.add_argument("--no-trainable-log-std", action="store_true", default=False, help="Disable trainable log std")
+    parser.add_argument("--dt-gamma", type=float, default=1.0, help="Discount factor for RTG updates in DT inference (1.0 = undiscounted)")
 
     # RTG sampling
     parser.add_argument("--rtg-count", type=int, default=4, help="Number of RTG values per group")
@@ -243,7 +244,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # --- 4. Baseline evaluation ---
     print(f"[GRPO] Baseline evaluation ({args.baseline_eval_episodes} episodes, rtg=0)...")
     baseline_eval = evaluate_dt_policy(
-        model, make_env, episodes=args.baseline_eval_episodes, rtg_value=0.0, base_seed=args.seed
+        model, make_env, episodes=args.baseline_eval_episodes, rtg_value=0.0,
+        dt_gamma=args.dt_gamma, base_seed=args.seed
     )
     print(f"[GRPO] Baseline mean reward: {float(baseline_eval['reward_sum'].mean()):.2f}")
     print(f"[GRPO] Baseline mean FCAS revenue: {float(baseline_eval['fcas_revenue'].mean()):.2f}")
@@ -278,7 +280,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         kl_coeff=args.kl_coeff,
         entropy_coeff=args.entropy_coeff,
         initial_log_std=args.initial_log_std,
-        trainable_log_std=args.trainable_log_std,
+        trainable_log_std=not args.no_trainable_log_std,
     )
 
     history = trainer.train(
@@ -288,7 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         group_size=args.group_size,
         update_epochs=args.update_epochs,
         minibatch_size=args.minibatch_size,
-        dt_gamma=1.0,
+        dt_gamma=args.dt_gamma,
     )
 
     # Log training history
@@ -298,7 +300,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # --- 6. Post-GRPO evaluation ---
     print(f"[GRPO] Post-GRPO evaluation ({args.baseline_eval_episodes} episodes, rtg=0)...")
     post_grpo_eval = evaluate_dt_policy(
-        model, make_env, episodes=args.baseline_eval_episodes, rtg_value=0.0, base_seed=args.seed + 100
+        model, make_env, episodes=args.baseline_eval_episodes, rtg_value=0.0,
+        dt_gamma=args.dt_gamma, base_seed=args.seed + 100
     )
 
     mean_reward_improvement = float(post_grpo_eval["reward_sum"].mean() - baseline_eval["reward_sum"].mean())
