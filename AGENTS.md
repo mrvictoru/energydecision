@@ -191,6 +191,19 @@ Outputs: `models/aemo/dt/grpo/dt_model_grpo.pt` + surface manifest + loss CSV.
 - Zero safety violations across all policies
 - FCAS rule performs poorly on dispatch-matched asset (8MW/30MW vs its designed 10MW/5MW)
 - **Iteration count matters**: 5 iterations (+1.32/step) outperforms 30 iterations (-1.54/step). Beyond ~5 iterations the policy drifts from the pretrained reference, degrading energy trading ability and increasing degradation costs 3× despite maintaining FCAS revenue.
+- **24h proxy sweep vs 144h training gap**: The 24h episode proxy sweep suggested lr=5e-5, rtgc=2, 15 iters as best, but these findings did not transfer to 144h training. The default (5 iters, lr=1e-5, rtgc=4, 144h) remains the best config. This confirms that training on the same episode length as evaluation is critical.
+
+### GRPO sweep results (24h episodes, NSW1 Jan 2024)
+
+| Sweep | Best value | Reward improvement | Notes |
+|-------|-----------|:------------------:|-------|
+| Iterations | 15 | +0.49 | More helps on 24h, but 5 is best on 144h |
+| KL coeff | 0.02 (default) | +0.44 | Higher KL hurts performance |
+| Entropy coeff | 0.0 (default) | +0.53 | Any positive entropy is worse |
+| Learning rate | 5e-5 | +0.68 | Best on 24h proxy, but 1e-5 best on 144h |
+| RTG count | 2 | +0.47 | More RTG values dilute advantages |
+
+**Lesson**: The 24h proxy metric does NOT reliably predict 144h evaluation performance. Always validate on the target episode length.
 
 ## Priorities for DT improvement (from `docs/dt_improvement_roadmap.md`)
 
