@@ -184,10 +184,21 @@ cython_debug/
 # system telemetry logs (GPU, kernel, CPU/IO monitors)
 /system_logs/
 
-# eval artifacts (evaluator outputs)
-/eval_output/aemo/autoresearch/
-/eval_output/autoresearch/
-/eval_output/cache/
-/eval_output/gpu_test_*/
+# local experiment / evaluation artifacts
+/eval_output/
+/expo/
+/eval_output/aemo_cache_prewarm/
 opencode.json
+
+# editor / temp files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
