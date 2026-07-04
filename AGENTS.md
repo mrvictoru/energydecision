@@ -190,6 +190,7 @@ Outputs: `models/aemo/dt/grpo/dt_model_grpo.pt` + surface manifest + loss CSV.
 - Paired comparison vs dispatch: mean_diff = **+2.70/step** (statistically significant)
 - Zero safety violations across all policies
 - FCAS rule performs poorly on dispatch-matched asset (8MW/30MW vs its designed 10MW/5MW)
+- **Iteration count matters**: 5 iterations (+1.32/step) outperforms 30 iterations (-1.54/step). Beyond ~5 iterations the policy drifts from the pretrained reference, degrading energy trading ability and increasing degradation costs 3× despite maintaining FCAS revenue.
 
 ## Priorities for DT improvement (from `docs/dt_improvement_roadmap.md`)
 
