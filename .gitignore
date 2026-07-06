@@ -214,6 +214,14 @@ opencode.json
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/fcas_revenue_by_experiment.png
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/paired_comparison_mean_diff.png
 
+# keep the final report-ready evaluation artifacts trackable
+/eval_output/final/*
+!/eval_output/final/
+!/eval_output/final/**/
+!/eval_output/final/**/evaluation_summary.json
+!/eval_output/final/**/heldout_metrics.csv
+!/eval_output/final/**/heldout_metrics_by_scenario.csv
+
 # editor / temp files
 *.tmp
 *.temp
