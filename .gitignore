@@ -214,6 +214,9 @@ opencode.json
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/fcas_revenue_by_experiment.png
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/paired_comparison_mean_diff.png
 
+# hide the reference rollout cache from untracked files view
+eval_output/autoresearch/reference_cache/
+
 # keep the final report-ready evaluation artifacts trackable
 /eval_output/final/*
 !/eval_output/final/
