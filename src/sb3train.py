@@ -187,7 +187,7 @@ def get_chunk_size(total_items, max_envs):
             return i
     return 1
 
-def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model=False):
+def train_model(model_class, vec_env, eval_env_fn, test_timesteps=40000, total_timesteps=4000000, n_trials=10, n_jobs=10, default_model=False, **kwargs):
     """
     Trains a reinforcement learning model using Stable Baselines3, with hyperparameter tuning via Optuna,
     and evaluates its performance before and after training.
