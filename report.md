@@ -297,7 +297,7 @@ The evaluation uses the **example evaluator** (`configs/aemo_autoresearch_evalua
 
 6. **Context=180 remains optimal:** This model uses the same context length confirmed by prior proxy sweeps. Longer contexts (288, 576, 1008) regressed validation loss in earlier experiments. Context=2016 is now feasible on 22 GB VRAM and warrants re-testing with FCAS data.
 
-#### 8.2.2 Apples-to-Apples Full-FCAS Dispatch Comparison (Current Result)
+#### 8.2.2 Apples-to-Apples Full-FCAS Dispatch Comparison (v1 Model)
 
 To test whether the Hugging Face-hosted DT can beat a real operator in the same environment, we ran a stricter benchmark in `action_mode='full_fcas'` using four matched cohorts (SA1 Jan/Mar/Jul/Nov 2024) and dispatch-asset sizing derived from the Dalrymple North BESS metadata. This comparison is deliberately fairer than the earlier replay-only baselines because the DT, the historical dispatch replay policy, and the FCAS rule baseline are all evaluated on the same 9-action FCAS formulation and the same matched battery asset.
 
@@ -316,6 +316,48 @@ The current plots are generated from the evaluator summary and make the comparis
 ![Paired comparison of reward differences](eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/paired_comparison_mean_diff.png)
 
 These results suggest that the DT is not only learning FCAS-aware behavior, but that it can outperform the historical dispatch replay baseline under a matched full-FCAS evaluation. The key message is that apples-to-apples comparison matters: once the replay policy is evaluated in the same environment and action space as the learned policy, the DT's advantage becomes visible.
+
+#### 8.2.3 Battery Realism Update (v2 Dataset, July 2026)
+
+The original FCAS dataset used synthetic batteries with a fixed 0.5C (2-hour charge/discharge) ratio — matching no real-world BESS station. A new v2 dataset (`data/aemo_dt_fcas_v2/`) was generated with four battery configurations that match actual Australian NEM stations:
+
+| Battery | Ratio | Real-world match |
+|---------|:-----:|------------------|
+| `medium_1c` | **1.0C** (60 min) | Torrens Island, Waratah, Lake Bonney |
+| `large_07c` | **~0.7C** (86 min) | Hornsdale, Victorian Big Battery |
+| `small_05c` | **0.5C** (120 min) | Kennedy Energy Park |
+| `fast_375c` | **3.75C** (16 min) | Dalrymple North BESS |
+
+All 5 SB3 source models (PPO, TD3, A2C, DDPG, SAC) were retrained on these 4 battery configurations, and a new 2,401-episode dataset was assembled (77M rows, 6 policies × 4 batteries × 3 horizons × 5 regions). A new Decision Transformer was pretrained on this v2 dataset and uploaded to HuggingFace (`mrvictoru/energydecision-dt`, `aemo_dt_fcas_model.pt`).
+
+**v2 model baseline results** on the Q4 2024 held-out multi-station evaluation (1C battery, 5-min resolution):
+
+| Policy | Reward | Profit/ep | FCAS/ep | Deg/ep |
+|--------|:------:|:---------:|:-------:|:------:|
+| **v2 HF DT (baseline)** | -11.60 | **$1,714** | $2,743 | $1,690 |
+| v2 GRPO-tuned DT | -9.70 | $1,885 | **$4,033** | $2,820 |
+| PPO reference | -15.50 | $1,395 | $1,287 | $308 |
+| Dispatch Dalrymple North | -4.18 | $4,660 | $2,287 | $1,020 |
+
+Key observations:
+- The v2 baseline ($1,714/ep) is **2× more profitable** than the old HF model ($874/ep), purely from training on realistic battery configurations.
+- GRPO post-training adds +$171/ep (+10%) profit and +$1,290 (+47%) FCAS, confirming online RL fine-tuning transfers to realistic battery setups.
+- Dispatch replay baselines (Dalrymple North at $4,660/ep, Hornsdale at $67,430/ep) still dominate, reflecting years of operational optimization that offline models cannot replicate from limited data.
+
+#### 8.2.4 GRPO Post-Training Autoresearch
+
+A hyperparameter sweep of 21 GRPO experiments was conducted to find the optimal online RL fine-tuning config:
+
+| Sweep | Best Value | Key Insight |
+|-------|-----------|-------------|
+| Iterations | **5** (144h) | Beyond 5, KL drift degrades performance. 30 iter → -1.54 reward |
+| KL coefficient | 0.02 | Higher KL hurts — default is optimal |
+| Entropy | 0.0 | Any positive entropy worsens results |
+| Learning rate | 1e-5 (144h) / 5e-5 (24h) | 24h proxy does NOT predict 144h performance — train on target episode length |
+| RTG count | 4 (144h) / 2 (24h) | More RTG values dilute advantages on long episodes |
+| Multi-region training | NSW1+SA1+QLD1 | Best result: **+1.60 reward**, $4,357/ep vs dispatch's -1.88 |
+
+**Critical finding**: The 24h proxy metric does NOT reliably predict 144h evaluation performance. Always validate on the target episode length.
 
 #### 8.2.3 From Gap to Leadership — The Improvement Trajectory
 
