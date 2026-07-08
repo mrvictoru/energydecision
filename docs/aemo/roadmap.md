@@ -12,54 +12,116 @@
 - **GPU**: 22GB VRAM (RTX 2080 Ti) — power capped at 205W to prevent Xid79 crashes
 - **Baselines**: rule, fcas_rule, dispatch replay (Dalrymple North, Torrens Island, Hornsdale), PPO reference
 
-## Priorities
+## Principles
 
-### 1. Multi-Round Iterative Self-Improvement (Highest Impact)
+All priorities are classified by **training dependency**:
+- **Phase 1 (GRPO-side)** — modifies only `grpo_posttraining.py` / training scripts. No SB3 retraining, no DT pretraining, no dataset regeneration. Can run entirely on the local RTX 2080 Ti.
+- **Phase 2 (Full retrain)** — requires DT pretraining on MoLab RTX 6000 Pro. These are higher-effort and should only be attempted after Phase 1 improvements are exhausted.
 
-Inspired by DeepSeek-R1's self-improvement pipeline, the key limitation is that GRPO fine-tunes the same model on the same fixed dataset. Each GRPO iteration improves the policy slightly, but without new data the improvements plateau.
+## Phase 1: GRPO-Side Improvements (No Retraining Required)
 
-Proposed pipeline:
+### 1. Periodic Reference Model Sync
+
+**Problem:** After ~5 GRPO iterations, the policy has diverged from the reference model. The KL penalty then fights further improvement, causing the plateau we observed.
+
+**Solution:** Periodically sync the reference model to the current policy. This lets the model continue improving without being pulled back to the original.
+
+```python
+# Every N iterations:
+self.reference_model = copy.deepcopy(self.model)
+self.reference_model.eval()
 ```
-Round 1: GRPO on v2 model → grpo_v1 model (DONE, +$1,885/ep)
-Round 2: Run grpo_v1 on env → generate NEW rollouts
-         Append to training dataset
-         Retrain DT from scratch (MoLab or locally)
-Round 3: GRPO on retrained DT → grpo_v2
-Repeat Rounds 2-3 until convergence
-```
 
-This addresses the fundamental data limitation — the model generates its own improved training data, bootstrapping to higher performance.
+- **Impact**: Enables 20+ stable iterations instead of plateauing at 5
+- **Effort**: ~1h code change in `grpo_posttraining.py`
+- **Risk**: Too-frequent sync defeats the purpose of KL regularization. Start with sync every 5 iterations.
 
 ### 2. Larger Group Sizes for Better Advantage Estimation
 
-- Current: `group_size=4`, `rtg_count=4` → only 4 samples per advantage group
-- Proposed: increase to 8-16 (DeepSeek-R1 uses 64)
-- Trade-off: training time scales linearly (8× = 40 min, 16× = 80 min)
-- Benefit: much lower variance in advantage estimates → stable updates
+**Problem:** The current `group_size=4` with `rtg_count=4` produces only 4 samples per group-relative advantage computation. This is noisy — DeepSeek-R1 uses 64.
+
+**Solution:** Increase `--group-size` to 8 or 16.
+
+- **Impact**: Much lower variance in advantage estimates → more stable gradient updates
+- **Effort**: Just a CLI flag change (`--group-size 8`)
+- **Trade-off**: Training time scales linearly with group size (8× = ~40 min, 16× = ~80 min for 5 iterations)
 
 ### 3. Adaptive RTG Based on Realized Returns
 
-- Currently: RTG is sampled from a fixed distribution around `return_scale`
-- Proposed: after each iteration, use the actual mean return from rollouts as the next iteration's optimal RTG
-- Ensures RTG targets stay realistic and achievable
-- Low effort: ~1h code change
+**Problem:** RTG values are sampled from a fixed Gaussian distribution around `return_scale=1.0`. Values like `[1.0, -1.38, 1.72, -4.69]` include negative targets that may confuse the model (the pretrained DT was trained on positive returns).
 
-### 4. Degradation-Weighted Reward Shaping
+**Solution:** After each GRPO iteration, use the actual mean return from that iteration's rollouts as the next iteration's optimal RTG:
 
-- Current reward: `energy_rev + fcas_rev - deg_cost` (all equal weight)
-- GRPO teaches FCAS bidding but also increases degradation 1.7×
-- Proposed: `modified_reward = energy_rev + fcas_rev - lambda * deg_cost` with lambda > 1
-- Explicitly penalizes battery wear, teaching the model to balance FCAS vs battery life
-- Low effort: ~30min environment change
+```python
+mean_return = float(batch.returns.mean())
+rtg_values = sample_rtg_values(optimum=mean_return, spread=2.0, count=4)
+```
 
-### 5. Dynamic KL / Reference Model Sync
+- **Impact**: RTG targets stay realistic and achievable. The model always sees feasible targets.
+- **Effort**: ~1h code change in `grpo_posttraining.py`
+- **Risk**: Low — if returns are noisy, the RTG may jump around. Smooth with EWMA: `rtg = 0.9 * rtg + 0.1 * mean_return`.
 
-- Current: fixed KL coefficient (0.02), frozen reference model
-- Problem: after 5 iterations, policy drifts → KL penalty fights further improvement
-- Proposed options:
-  a) Adaptive KL: increase coefficient when divergence exceeds threshold
-  b) Periodic reference sync: copy policy → reference every 5 iterations
-- Enables 20+ stable iterations instead of plateauing at 5
+### 4. GRPO-Side Degradation-Weighted Reward
+
+**Problem:** GRPO increases FCAS revenue (+47%) but also increases degradation (+67%). The net profit gain is modest (+$171/ep) because FCAS gains are eaten by battery wear.
+
+**Solution:** Inside the GRPO rollout loop, modify the reward signal to penalize degradation more:
+
+```python
+# In GRPOTrainer.collect_rollouts(), after env.step():
+deg_cost = info.get("current_step_deg_cost", 0.0)
+reward = float(reward) - 0.5 * float(deg_cost)  # extra 50% degradation penalty
+```
+
+This does NOT change the environment's reward — it only changes the signal GRPO sees during training. The model learns to avoid actions that cause degradation, while still pursuing FCAS revenue.
+
+- **Impact**: Explicitly shapes the model toward conservative operation
+- **Effort**: ~30min code change in `grpo_posttraining.py`. No SB3/DT retraining needed.
+- **Risk**: Too high a penalty kills FCAS learning. Start with +50% penalty (weight=1.5).
+
+### 5. Combined Run: All Phase 1 Improvements Together
+
+Once the individual changes are implemented, run a full GRPO training with:
+```bash
+python3 src/run_grpo_multi_region.py \
+  --iterations 20 \
+  --group-size 8 \
+  --kl-coeff 0.02 \
+  --dt-gamma 0.95 \
+  --sync-reference-every 5 \
+  --adaptive-rtg \
+  --deg-penalty-weight 1.5
+```
+
+Expected outcome: stable training for 20+ iterations, higher FCAS revenue, lower degradation.
+
+## Phase 2: Full Retrain (Requires MoLab RTX 6000 Pro)
+
+### 6. Multi-Round Iterative Self-Improvement
+
+Inspired by DeepSeek-R1's self-improvement pipeline. Once Phase 1 GRPO is exhausted:
+
+```
+Round 1: GRPO on v2 model → grpo_v1 (Phase 1)
+Round 2: Run grpo_v1 on env → generate NEW rollouts (2021-2023 data)
+         Append to existing v2 dataset
+         Retrain DT from scratch on combined dataset  ← MoLab
+         GRPO Phase 1 on retrained DT → grpo_v2
+Repeat until convergence
+```
+
+This addresses the fundamental data limitation: the DT can only be as good as its training data. By using GRPO-improved rollouts as training data for the next DT generation, each round bootstraps to higher performance. This is the mechanism behind DeepSeek-R1's breakthrough.
+
+### 7. Full Environment Reward Restructuring
+
+If Phase 1's degradation-weighted GRPO reward is insufficient, a more thorough approach is to change the environment's reward function at the SB3/DT pretraining level:
+- Tighten `battery_life_cost` parameter
+- Add explicit cycle-count penalty
+- Retrain SB3 models on the new reward  ← MoLab
+- Regenerate the v3 pretraining dataset  ← MoLab
+- Retrain DT from scratch  ← MoLab
+
+This is a last resort because it requires the full retraining pipeline.
 
 ## What's Done
 
