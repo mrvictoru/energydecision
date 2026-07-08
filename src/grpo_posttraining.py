@@ -46,6 +46,7 @@ class GRPORolloutBatch:
     ref_log_probs: torch.Tensor
     advantages: torch.Tensor
     rewards: torch.Tensor
+    env_rewards: torch.Tensor
     returns: torch.Tensor
     prompt_indices: torch.Tensor
 
@@ -307,6 +308,7 @@ class GRPOTrainer:
         trainable_log_std: bool = True,
         grad_clip_norm: float = 1.0,
         action_bounds: tuple[float, float] | None = None,
+        degradation_penalty_weight: float = 1.0,
     ) -> None:
         self.model = model.to(device)
         self.device = torch.device(device)
@@ -331,6 +333,50 @@ class GRPOTrainer:
         self.kl_coeff = float(kl_coeff)
         self.entropy_coeff = float(entropy_coeff)
         self.grad_clip_norm = float(grad_clip_norm)
+        self.degradation_penalty_weight = float(degradation_penalty_weight)
+        self._last_prompts: list[GRPOPrompt] = []
+        self._adaptive_rtg_ewma: float | None = None
+
+    def _sync_reference_model(self) -> None:
+        self.reference_model.load_state_dict(copy.deepcopy(self.model.state_dict()))
+        self.reference_model.to(self.device)
+        self.reference_model.eval()
+        for parameter in self.reference_model.parameters():
+            parameter.requires_grad_(False)
+
+    def _shape_reward(self, reward: float, info: dict[str, Any] | None) -> float:
+        if self.degradation_penalty_weight <= 1.0:
+            return float(reward)
+        info_dict = info or {}
+        degradation_cost = float(info_dict.get("degradation_cost", 0.0))
+        extra_weight = self.degradation_penalty_weight - 1.0
+        return float(reward) - extra_weight * degradation_cost
+
+    def _resample_prompts(
+        self,
+        prompts: Sequence[GRPOPrompt],
+        *,
+        optimum: float,
+        spread: float,
+        distribution: str,
+        seed: int | None,
+    ) -> list[GRPOPrompt]:
+        rtg_values = sample_rtg_values(
+            optimum=optimum,
+            spread=spread,
+            count=len(prompts),
+            distribution=distribution,
+            seed=seed,
+        )
+        return [
+            GRPOPrompt(
+                seed=prompt.seed,
+                options=prompt.options,
+                rtg_value=float(rtg_values[idx]),
+                max_steps=prompt.max_steps,
+            )
+            for idx, prompt in enumerate(prompts)
+        ]
 
     @staticmethod
     def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask):
@@ -398,6 +444,7 @@ class GRPOTrainer:
         old_log_prob_records: list[float] = []
         ref_log_prob_records: list[float] = []
         reward_records: list[float] = []
+        env_reward_records: list[float] = []
         prompt_index_records: list[int] = []
         returns: list[float] = []
         episode_steps: list[int] = []
@@ -446,8 +493,10 @@ class GRPOTrainer:
                     # Clamp FCAS bids (dims 1+) to [0, 1] for full_fcas mode
                     if len(action_np) > 1:
                         action_np[1:] = np.clip(action_np[1:], 0.0, 1.0)
-                    next_obs, reward, terminated, truncated, _ = env.step(action_np)
+                    next_obs, reward, terminated, truncated, info = env.step(action_np)
                     next_obs = np.asarray(next_obs, dtype=np.float32)
+                    env_reward = float(reward)
+                    reward = self._shape_reward(env_reward, info)
 
                     states_records.append(states_t.squeeze(0).detach().cpu())
                     actions_records.append(actions_t.squeeze(0).detach().cpu())
@@ -458,6 +507,7 @@ class GRPOTrainer:
                     old_log_prob_records.append(old_log_prob)
                     ref_log_prob_records.append(ref_log_prob)
                     reward_records.append(float(reward))
+                    env_reward_records.append(env_reward)
                     prompt_index_records.append(prompt_index)
 
                     episode_return += float(reward)
@@ -498,6 +548,7 @@ class GRPOTrainer:
             ref_log_probs=torch.tensor(ref_log_prob_records, dtype=torch.float32, device=self.device),
             advantages=torch.tensor(step_advantages, dtype=torch.float32, device=self.device),
             rewards=torch.tensor(reward_records, dtype=torch.float32, device=self.device),
+            env_rewards=torch.tensor(env_reward_records, dtype=torch.float32, device=self.device),
             returns=torch.tensor(returns, dtype=torch.float32, device=self.device),
             prompt_indices=torch.tensor(prompt_index_records, dtype=torch.long, device=self.device),
         )
@@ -586,12 +637,21 @@ class GRPOTrainer:
         update_epochs: int = 1,
         minibatch_size: int = 128,
         dt_gamma: float = 0.99,
+        sync_reference_every: int = 0,
+        adaptive_rtg: bool = False,
+        adaptive_rtg_spread: float = 3.0,
+        adaptive_rtg_dist: str = "gaussian",
+        adaptive_rtg_ewma_alpha: float = 0.1,
+        adaptive_rtg_seed: int | None = None,
     ) -> list[dict[str, float]]:
         history: list[dict[str, float]] = []
+        prompts_for_iteration = list(prompts)
+        self._last_prompts = list(prompts_for_iteration)
+        self._adaptive_rtg_ewma = None
         for iteration in range(max(1, int(iterations))):
             batch = self.collect_rollouts(
                 env_factory,
-                prompts=prompts,
+                prompts=prompts_for_iteration,
                 group_size=group_size,
                 dt_gamma=dt_gamma,
             )
@@ -600,6 +660,30 @@ class GRPOTrainer:
                 update_epochs=update_epochs,
                 minibatch_size=minibatch_size,
             )
+            reference_synced = False
+            if sync_reference_every and (iteration + 1) % int(sync_reference_every) == 0:
+                self._sync_reference_model()
+                reference_synced = True
+
+            adaptive_rtg_optimum = None
+            if adaptive_rtg:
+                realized_mean_return = float(batch.returns.mean().detach().cpu().item())
+                if self._adaptive_rtg_ewma is None:
+                    self._adaptive_rtg_ewma = realized_mean_return
+                else:
+                    alpha = float(adaptive_rtg_ewma_alpha)
+                    self._adaptive_rtg_ewma = ((1.0 - alpha) * self._adaptive_rtg_ewma) + (alpha * realized_mean_return)
+                adaptive_rtg_optimum = float(self._adaptive_rtg_ewma)
+                prompts_for_iteration = self._resample_prompts(
+                    prompts_for_iteration,
+                    optimum=adaptive_rtg_optimum,
+                    spread=adaptive_rtg_spread,
+                    distribution=adaptive_rtg_dist,
+                    seed=None if adaptive_rtg_seed is None else int(adaptive_rtg_seed) + iteration + 1,
+                )
+            self._last_prompts = list(prompts_for_iteration)
+
+            prompt_rtgs = [float(prompt.rtg_value) for prompt in prompts_for_iteration]
             metrics.update(
                 {
                     "iteration": iteration + 1,
@@ -609,7 +693,15 @@ class GRPOTrainer:
                     "max_return": float(batch.returns.max().detach().cpu().item()),
                     "min_return": float(batch.returns.min().detach().cpu().item()),
                     "mean_reward": float(batch.rewards.mean().detach().cpu().item()),
+                    "mean_env_reward": float(batch.env_rewards.mean().detach().cpu().item()),
                     "mean_advantage": float(batch.advantages.mean().detach().cpu().item()),
+                    "reference_synced": float(reference_synced),
+                    "degradation_penalty_weight": float(self.degradation_penalty_weight),
+                    "adaptive_rtg_enabled": float(adaptive_rtg),
+                    "adaptive_rtg_optimum": float(adaptive_rtg_optimum) if adaptive_rtg_optimum is not None else float("nan"),
+                    "prompt_rtg_min": float(min(prompt_rtgs)),
+                    "prompt_rtg_max": float(max(prompt_rtgs)),
+                    "prompt_rtg_mean": float(sum(prompt_rtgs) / len(prompt_rtgs)),
                 }
             )
             history.append(metrics)

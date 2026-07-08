@@ -93,6 +93,12 @@ python3 src/run_grpo_multi_region.py \
   --deg-penalty-weight 1.5
 ```
 
+The Phase 1 options are now wired through the multi-region runner:
+- `--sync-reference-every N` periodically copies the policy weights into the reference model.
+- `--adaptive-rtg` resamples RTG prompts after each iteration using an EWMA-smoothed mean return.
+- `--adaptive-rtg-ewma-alpha` controls the smoothing strength for adaptive RTG updates.
+- `--deg-penalty-weight` applies a degradation-shaped reward penalty to the GRPO training signal without changing the environment reward.
+
 Expected outcome: stable training for 20+ iterations, higher FCAS revenue, lower degradation.
 
 ## Phase 2: Full Retrain (Requires MoLab RTX 6000 Pro)

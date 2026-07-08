@@ -57,6 +57,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rtg-spread", type=float, default=3.0)
     parser.add_argument("--rtg-dist", default="gaussian")
     parser.add_argument("--dt-gamma", type=float, default=1.0)
+    parser.add_argument("--sync-reference-every", type=int, default=0)
+    parser.add_argument("--adaptive-rtg", action="store_true", default=False)
+    parser.add_argument("--adaptive-rtg-ewma-alpha", type=float, default=0.1)
+    parser.add_argument("--deg-penalty-weight", type=float, default=1.0)
 
     parser.add_argument("--action-mode", default="full_fcas")
     parser.add_argument("--battery-capacity", type=float, default=10.0)
@@ -177,8 +181,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         for idx, rtg in enumerate(rtg_values)
     ]
 
-    trainer = GRPOTrainer(model, reference_model=reference_model, device=device, lr=args.lr, kl_coeff=args.kl_coeff, entropy_coeff=args.entropy_coeff)
-    history = trainer.train(make_env, prompts=prompts, iterations=args.iterations, group_size=args.group_size, update_epochs=args.update_epochs, minibatch_size=args.minibatch_size, dt_gamma=args.dt_gamma)
+    print(
+        "[GRPO] Phase 1 config: "
+        f"sync_reference_every={args.sync_reference_every}, "
+        f"adaptive_rtg={args.adaptive_rtg}, "
+        f"deg_penalty_weight={args.deg_penalty_weight}"
+    )
+
+    trainer = GRPOTrainer(
+        model,
+        reference_model=reference_model,
+        device=device,
+        lr=args.lr,
+        kl_coeff=args.kl_coeff,
+        entropy_coeff=args.entropy_coeff,
+        degradation_penalty_weight=args.deg_penalty_weight,
+    )
+    history = trainer.train(
+        make_env,
+        prompts=prompts,
+        iterations=args.iterations,
+        group_size=args.group_size,
+        update_epochs=args.update_epochs,
+        minibatch_size=args.minibatch_size,
+        dt_gamma=args.dt_gamma,
+        sync_reference_every=args.sync_reference_every,
+        adaptive_rtg=args.adaptive_rtg,
+        adaptive_rtg_spread=args.rtg_spread,
+        adaptive_rtg_dist=args.rtg_dist,
+        adaptive_rtg_ewma_alpha=args.adaptive_rtg_ewma_alpha,
+        adaptive_rtg_seed=args.seed,
+    )
 
     # 7. Post-GRPO eval
     print(f"[GRPO] Post-GRPO eval...")
@@ -201,9 +234,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         "schema": "energydecision.dt_training_surface.v1", "run_tag": datetime.now().strftime("%Y%m%d-%H%M%S"),
         "surface_preset": "grpo_multi_region", "model_variant": "full_fcas", "action_mode": "full_fcas",
         "model_kwargs": model_kwargs,
-        "training_kwargs": {"iterations": args.iterations, "lr": args.lr, "kl_coeff": args.kl_coeff, "entropy_coeff": args.entropy_coeff},
+        "training_kwargs": {
+            "iterations": args.iterations,
+            "lr": args.lr,
+            "kl_coeff": args.kl_coeff,
+            "entropy_coeff": args.entropy_coeff,
+            "sync_reference_every": args.sync_reference_every,
+            "adaptive_rtg": args.adaptive_rtg,
+            "adaptive_rtg_ewma_alpha": args.adaptive_rtg_ewma_alpha,
+            "degradation_penalty_weight": args.deg_penalty_weight,
+        },
         "paths": {"save_path": str(save_path), "loss_csv_path": str(loss_csv)},
-        "grpo_config": {"regions": regions, "iterations": args.iterations, "group_size": args.group_size, "rtg_count": args.rtg_count},
+        "grpo_config": {
+            "regions": regions,
+            "iterations": args.iterations,
+            "group_size": args.group_size,
+            "rtg_count": args.rtg_count,
+            "rtg_spread": args.rtg_spread,
+            "rtg_dist": args.rtg_dist,
+            "dt_gamma": args.dt_gamma,
+        },
         "scenario": {"regions": regions, "start_date": args.start_date, "end_date": args.end_date, "episode_hours": args.episode_hours, "action_mode": args.action_mode},
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))

@@ -37,7 +37,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts; calibrate against the target held-out scenario before inference.
 *   [x] **FCAS-aware offline data collection:** Generate a 2,425-episode FCAS-rich dataset (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) from PPO, TD3, A2C, DDPG, SAC, and `fcas_rule` policies.
 *   [x] **FCAS-rich DT training:** Retrain DT on the FCAS-rich dataset — DT now achieves **+$1,522/ep profit**, beating PPO (+$1,444/ep) on the example evaluator (Section 8.6.2 of `report.md`).
-*   [x] **RL Fine-tuning:** GRPO post-training support for pretrained DT weights (on `copilot/online-rl-fine-tuning` branch) with mixed-bound action distribution for `full_fcas` and adaptive RTG sampling.
+*   [x] **RL Fine-tuning:** GRPO post-training support for pretrained DT weights (on `copilot/online-rl-fine-tuning` branch) with mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
@@ -194,6 +194,7 @@ Use this path to recreate the residential PV + battery experiments.
    - GRPO fine-tuning for AEMO DT models trained with `full_fcas` (9-dim) action space.
    - Uses `sample_rtg_values()` to sample RTG prompts from a distribution centered on the optimal RTG (calibrated from `model.return_scale`), with configurable spread, count, and distribution type (`gaussian`/`uniform`/`lognormal`).
    - Group-relative advantages compare different RTG-conditioned strategies within each group.
+   - The CLI entrypoints now also support periodic reference model sync (`--sync-reference-every`), adaptive RTG resampling (`--adaptive-rtg` / `--adaptive-rtg-ewma-alpha`), and degradation-aware reward shaping (`--deg-penalty-weight`).
 
 If you only want to recreate the core residential benchmark, the minimum useful sequence is:
 
