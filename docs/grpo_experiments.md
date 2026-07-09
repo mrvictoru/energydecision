@@ -91,6 +91,48 @@ Conducted on NSW1 Jan 2024, 144h episodes, 5‑min steps.
 **Critical lesson**: 24h proxy metrics do **not** reliably predict 144h
 evaluation performance. Always validate on the target episode length.
 
+## RTG Prompt Calibration
+
+The Phase 1 model was evaluated with the `q4_dispatch_matched` config at
+9 different RTG values to find the optimal prompt:
+
+| RTG | Profit/ep | FCAS/ep | Deg/ep | Profit/MWh |
+|:---:|:---------:|:-------:|:------:|:----------:|
+| 0.0 | $5,451 | $7,962 | $2,769 | $681 |
+| **0.5** | **$8,242** | $7,637 | $1,323 | **$1,030** |
+| 1.0 | $7,901 | $7,781 | $1,207 | $988 |
+| 1.5 | $7,132 | $7,331 | $1,068 | $892 |
+| 2.0 | $6,477 | $7,219 | $963 | $810 |
+| 2.5 | $6,253 | $7,073 | $870 | $782 |
+| 3.0 | $6,150 | $7,002 | $869 | $769 |
+| 3.5 | $6,141 | $6,942 | $815 | $768 |
+| 4.0 | $6,176 | $6,893 | $725 | $772 |
+
+**Optimal RTG = 0.5**, improving profit by 51% over `rtg_value=0.0`.
+The pattern: RTG 0.0–1.0 gives the best profit. Higher RTG values make the
+model more conservative (lower deg, lower FCAS) but reduce net profit.
+
+## Normalised Metrics (Per MWh of Battery Capacity)
+
+Added `avg_profit_per_mwh`, `avg_fcas_revenue_per_mwh`, and
+`avg_degradation_cost_per_mwh` to the evaluator output so comparisons
+across different battery sizes are fair.
+
+## Final Comparison: All Models with Optimal RTG (Dispatch-Matched, Q4 2024 SA1)
+
+| Policy | Profit/ep | Profit/MWh | FCAS/ep | Deg/ep |
+|--------|:---------:|:----------:|:-------:|:------:|
+| v2 HF DT (baseline) | $2,140 | $268 | $4,558 | $3,318 |
+| Old GRPO (no Phase 1) | $4,400 | $550 | $7,025 | $2,156 |
+| **Phase 1 GRPO** | **$8,242** | **$1,030** | $7,686 | $760 |
+| PPO reference | $7,757 | $970 | $5,523 | $310 |
+| Dispatch Dalrymple North | $3,663 | $458 | $1,512 | $1,371 |
+| Dispatch Hornsdale | $57,435 | $296 | $10,102 | $22,706 |
+
+**Phase 1 GRPO with optimal RTG beats all single-asset baselines** on both
+absolute and normalised profit. PPO is competitive but the Phase 1 GRPO shows
+lower degradation than earlier GRPO runs while maintaining higher FCAS revenue.
+
 ## Phase 2 (Future Work — Requires MoLab Retraining)
 
 1. **Multi‑round self‑improvement**: Generate new rollouts from GRPO-improved

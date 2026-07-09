@@ -1401,6 +1401,7 @@ def _summarize_episode_info(df: pl.DataFrame) -> dict[str, Any]:
             "has_energy_revenue": False,
             "has_fcas_revenue": False,
             "has_battery_dispatch": False,
+            "capacity_mwh": None,
             "has_total_revenue": False,
             "has_total_degradation_cost": False,
             "has_total_degradation": False,
@@ -1414,6 +1415,7 @@ def _summarize_episode_info(df: pl.DataFrame) -> dict[str, Any]:
             "energy_revenue_sum": 0.0,
             "fcas_revenue_sum": 0.0,
             "battery_dispatch_abs_sum": 0.0,
+            "capacity_mwh": None,
             "deg_incident": False,
             "total_revenue_end": None,
             "total_degradation_cost_end": None,
@@ -1445,6 +1447,7 @@ def _summarize_episode_info(df: pl.DataFrame) -> dict[str, Any]:
     has_total_revenue = False
     has_total_degradation_cost = False
     has_total_degradation = False
+    capacity_mwh: float | None = None
 
     for info in infos:
         if "grid_energy" in info:
@@ -1484,6 +1487,11 @@ def _summarize_episode_info(df: pl.DataFrame) -> dict[str, Any]:
             has_battery_dispatch = True
             battery_dispatch_abs_sum += abs(_extract_info_value(info, ["battery_dispatch"], 0.0))
 
+        if "capacity_mwh" in info and capacity_mwh is None:
+            cap = _extract_info_value(info, ["capacity_mwh"], None)
+            if cap is not None and float(cap) > 0:
+                capacity_mwh = float(cap)
+
         if "deg_incident" in info or "deg_error" in info:
             if bool(info.get("deg_incident", False)) or bool(info.get("deg_error")):
                 deg_incident = True
@@ -1518,6 +1526,7 @@ def _summarize_episode_info(df: pl.DataFrame) -> dict[str, Any]:
         "energy_revenue_sum": energy_revenue_sum,
         "fcas_revenue_sum": fcas_revenue_sum,
         "battery_dispatch_abs_sum": battery_dispatch_abs_sum,
+        "capacity_mwh": capacity_mwh,
         "deg_incident": deg_incident,
         "total_revenue_end": _last_finite_value(infos, "total_revenue"),
         "total_degradation_cost_end": _last_finite_value(infos, "total_degradation_cost"),
@@ -1594,6 +1603,11 @@ def evaluate_experiment_logs(
             "avg_total_revenue_end": 0.0,
             "avg_total_degradation_cost_end": 0.0,
             "avg_total_degradation_end": 0.0,
+            "avg_capacity_mwh": 0.0,
+            "avg_profit_per_mwh": 0.0,
+            "avg_energy_revenue_per_mwh": 0.0,
+            "avg_fcas_revenue_per_mwh": 0.0,
+            "avg_degradation_cost_per_mwh": 0.0,
             "episodes_evaluated": 0,
             "episodes_with_reward": 0,
             "avg_episode_steps": 0.0,
@@ -1699,6 +1713,7 @@ def evaluate_experiment_logs(
     total_degradation_ends: List[float] = []
     profit_per_episode: List[float] = []
     episode_steps: List[int] = []
+    capacity_values: List[float] = []
 
     for df in logs:
         summary = _summarize_episode_info(df)
@@ -1735,6 +1750,9 @@ def evaluate_experiment_logs(
 
         if summary["has_fcas_revenue"]:
             fcas_revenue_totals.append(float(summary["fcas_revenue_sum"]))
+
+        if summary["capacity_mwh"] is not None:
+            capacity_values.append(float(summary["capacity_mwh"]))
 
         if summary["has_total_revenue"] and summary["total_revenue_end"] is not None:
             total_revenue_ends.append(float(summary["total_revenue_end"]))
@@ -1776,6 +1794,19 @@ def evaluate_experiment_logs(
 
     avg_profit = _mean_or_zero(profit_per_episode)
 
+    # Normalised metrics per MWh of battery capacity
+    avg_capacity = _mean_or_zero(capacity_values)
+    if avg_capacity > 0:
+        norm_profit = avg_profit / avg_capacity
+        norm_energy_rev = avg_energy_revenue / avg_capacity
+        norm_fcas_rev = avg_fcas_revenue / avg_capacity
+        norm_degradation = avg_total_degradation_cost / avg_capacity
+    else:
+        norm_profit = 0.0
+        norm_energy_rev = 0.0
+        norm_fcas_rev = 0.0
+        norm_degradation = 0.0
+
     return {
         "mean_reward": mean_r,
         "median_reward": median_r,
@@ -1812,6 +1843,11 @@ def evaluate_experiment_logs(
         "avg_total_revenue_end": avg_total_revenue,
         "avg_total_degradation_cost_end": avg_total_degradation_cost,
         "avg_total_degradation_end": avg_total_degradation_end,
+        "avg_capacity_mwh": avg_capacity,
+        "avg_profit_per_mwh": norm_profit,
+        "avg_energy_revenue_per_mwh": norm_energy_rev,
+        "avg_fcas_revenue_per_mwh": norm_fcas_rev,
+        "avg_degradation_cost_per_mwh": norm_degradation,
         "episodes_evaluated": int(len(logs)),
         "episodes_with_reward": int(len(total_rewards)),
         "avg_episode_steps": _mean_or_zero([float(s) for s in episode_steps]),
