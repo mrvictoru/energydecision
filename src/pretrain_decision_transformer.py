@@ -35,6 +35,9 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
         "rope_enabled",
         "rope_max_position",
         "rope_base",
+        "n_kv_heads",
+        "qk_norm",
+        "tie_weights",
     }
 )
 APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
@@ -675,6 +678,12 @@ def validate_surface_constraints(model_kwargs: dict[str, Any]) -> None:
         raise ValueError(
             f"{SURFACE_CONSTRAINTS['h_dim_divisible_by_n_heads']}: "
             f"h_dim={model_kwargs['h_dim']}, n_heads={model_kwargs['n_heads']}."
+        )
+    n_kv_heads = model_kwargs.get("n_kv_heads")
+    if n_kv_heads is not None and model_kwargs["n_heads"] % int(n_kv_heads) != 0:
+        raise ValueError(
+            f"n_heads must be divisible by n_kv_heads: "
+            f"n_heads={model_kwargs['n_heads']}, n_kv_heads={n_kv_heads}."
         )
 
 
