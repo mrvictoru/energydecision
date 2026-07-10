@@ -201,8 +201,23 @@ opencode.json
 !/eval_output/final/**/plots/*.svg
 !/eval_output/final/**/plots/*.png
 
+/eval_output/household/**
+!/eval_output/household/
+!/eval_output/household/baseline/
+!/eval_output/household/baseline/evaluation_metrics.csv
+!/eval_output/household/baseline/mean_reward.svg
+!/eval_output/household/risk_metrics.csv
+!/eval_output/household/pairwise_summary.csv
+!/eval_output/household/pairwise_significance_heatmap.svg
+
+/eval_output/autoresearch/**
 !/eval_output/autoresearch/
-eval_output/autoresearch/*
+!/eval_output/autoresearch/example_baseline_full_b64/
+!/eval_output/autoresearch/example_baseline_full_b64/plots/
+!/eval_output/autoresearch/example_baseline_full_b64/plots/mean_reward.svg
+!/eval_output/autoresearch/example_baseline_full_b64/plots/risk_return.svg
+!/eval_output/autoresearch/example_baseline_full_b64/plots/episode_distribution.svg
+!/eval_output/autoresearch/example_baseline_full_b64/plots/grid_energy.svg
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/evaluation_summary.json
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/heldout_metrics.csv
@@ -229,4 +244,3 @@ eval_output/autoresearch/*
 *~
 .DS_Store
 Thumbs.db
-
