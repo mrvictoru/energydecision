@@ -5,6 +5,12 @@ This project establishes a comprehensive, reproducible benchmark for residential
 
 **Goal:** To minimize energy costs and maximize revenue while rigorously accounting for battery degradation under realistic uncertainty.
 
+## Model weight and dataset
+Trained model weight and dataset used can be found in the following huggingface page:
+[Pretrained Decision Transformer v1](https://huggingface.co/mrvictoru/energydecision-dt)
+[GRPO finetuned Decision Transformer v1](https://huggingface.co/mrvictoru/energydecision-dt-grpo)
+[Dataset](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade)
+
 ## Current highlights
 
 - GRPO Phase 1 is now implemented and validated for the AEMO Decision Transformer workflow. The current training stack supports degradation-weighted reward shaping, periodic reference-model syncing, adaptive RTG sampling, and larger rollout groups through the canonical CLI entrypoints.
