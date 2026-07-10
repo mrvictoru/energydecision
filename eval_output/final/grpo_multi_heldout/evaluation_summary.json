@@ -1,0 +1,740 @@
+{
+  "dt_model_device": "cuda",
+  "dt_model_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/models/aemo/dt/grpo_multi/dt_model_grpo_multi.pt",
+  "evaluation_config_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/configs/aemo_autoresearch_evaluator.ppo_compare_heldout.json",
+  "heldout_evaluation": {
+    "aggregate_metrics": [
+      {
+        "avg_actual_energy_per_episode": 3.999930411474593,
+        "avg_actual_energy_per_step": 0.01388864726206456,
+        "avg_battery_dispatch_abs_per_episode": 21.00917189547755,
+        "avg_battery_dispatch_abs_per_step": 0.07294851352596371,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.000212608118487435,
+        "avg_degradation_per_step": 7.382226336369271e-07,
+        "avg_energy_revenue_per_episode": -1086.6601958435103,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 5555.580309909333,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": 4242.642151868323,
+        "avg_total_degradation_cost_end": 226.27796219749715,
+        "avg_total_degradation_cost_per_episode": 226.27796219749715,
+        "avg_total_degradation_end": 0.000212608118487435,
+        "avg_total_revenue_end": 4468.92011406582,
+        "avg_total_revenue_per_episode": 4468.92011406582,
+        "clip_step_rate": 0.0,
+        "cvar_5": 1.4826421518683195,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "candidate_dt",
+        "max_reward": 1.4826421518683195,
+        "mean_reward": 1.4826421518683195,
+        "median_reward": 1.4826421518683195,
+        "pct_5_reward": 1.4826421518683195,
+        "pct_95_reward": 1.4826421518683195,
+        "recommended_raw_rtg_percentile": 0.03317100862348621,
+        "recommended_return_scale": 1.0,
+        "recommended_rtg": 1.4826421518683195,
+        "recommended_rtg_rtg0_percentile": 0.03317100862348621,
+        "recommended_rtg_total_percentile": 1.4826421518683195,
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": 1.4826421518683195,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      },
+      {
+        "avg_actual_energy_per_episode": -4.0,
+        "avg_actual_energy_per_step": -0.013888888888888888,
+        "avg_battery_dispatch_abs_per_episode": 8.0,
+        "avg_battery_dispatch_abs_per_step": 0.027777777777777776,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.0001757364838388236,
+        "avg_degradation_per_step": 6.101961244403597e-07,
+        "avg_energy_revenue_per_episode": 1491.1936333333335,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 31.155784662380995,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": 1335.3137877022639,
+        "avg_total_degradation_cost_end": 187.03563029345068,
+        "avg_total_degradation_cost_per_episode": 187.03563029345068,
+        "avg_total_degradation_end": 0.0001757364838388236,
+        "avg_total_revenue_end": 1522.3494179957145,
+        "avg_total_revenue_per_episode": 1522.3494179957145,
+        "clip_step_rate": 0.0,
+        "cvar_5": -1.3946862122977368,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "dispatch_dalrymple_north",
+        "max_reward": -1.3946862122977368,
+        "mean_reward": -1.3946862122977368,
+        "median_reward": -1.3946862122977368,
+        "pct_5_reward": -1.3946862122977368,
+        "pct_95_reward": -1.3946862122977368,
+        "recommended_raw_rtg_percentile": 0.44465638918737055,
+        "recommended_return_scale": 1.0,
+        "recommended_rtg": -1.3946862122977368,
+        "recommended_rtg_rtg0_percentile": 0.44465638918737055,
+        "recommended_rtg_total_percentile": -1.3946862122977368,
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": -1.3946862122977368,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      },
+      {
+        "avg_actual_energy_per_episode": 3.557652339051872,
+        "avg_actual_energy_per_step": 0.012352959510596777,
+        "avg_battery_dispatch_abs_per_episode": 4283.332943729356,
+        "avg_battery_dispatch_abs_per_step": 14.872683832393598,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.059992623742257306,
+        "avg_degradation_per_step": 0.00020830772132728232,
+        "avg_energy_revenue_per_episode": 359.9855541071212,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 72.38974958507431,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": -63417.53195223152,
+        "avg_total_degradation_cost_end": 63849.90725592372,
+        "avg_total_degradation_cost_per_episode": 63849.90725592372,
+        "avg_total_degradation_end": 0.059992623742257306,
+        "avg_total_revenue_end": 432.37530369219724,
+        "avg_total_revenue_per_episode": 432.37530369219724,
+        "clip_step_rate": 0.0,
+        "cvar_5": -66.29753195223145,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "fcas_rule",
+        "max_reward": -66.29753195223145,
+        "mean_reward": -66.29753195223145,
+        "median_reward": -66.29753195223145,
+        "pct_5_reward": -66.29753195223145,
+        "pct_95_reward": -66.29753195223145,
+        "recommended_raw_rtg_percentile": 20.276637877585582,
+        "recommended_return_scale": 2.0276637877585584,
+        "recommended_rtg": -66.29753195223145,
+        "recommended_rtg_rtg0_percentile": 20.276637877585582,
+        "recommended_rtg_total_percentile": -66.29753195223145,
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": -66.29753195223145,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      },
+      {
+        "avg_actual_energy_per_episode": -3.9998873531364962,
+        "avg_actual_energy_per_step": -0.013888497753946167,
+        "avg_battery_dispatch_abs_per_episode": 225.1134119029822,
+        "avg_battery_dispatch_abs_per_step": 0.7816437913297993,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.0045573621741759225,
+        "avg_degradation_per_step": 1.582417421588862e-05,
+        "avg_energy_revenue_per_episode": 3709.140151691424,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 4626.091243852245,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": 3484.849231847379,
+        "avg_total_degradation_cost_end": 4850.382163696287,
+        "avg_total_degradation_cost_per_episode": 4850.382163696287,
+        "avg_total_degradation_end": 0.0045573621741759225,
+        "avg_total_revenue_end": 8335.231395543666,
+        "avg_total_revenue_per_episode": 8335.231395543666,
+        "clip_step_rate": 0.0,
+        "cvar_5": 1.414849235343354,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "ppo_reference",
+        "max_reward": 1.414849235343354,
+        "mean_reward": 1.414849235343354,
+        "median_reward": 1.414849235343354,
+        "pct_5_reward": 1.414849235343354,
+        "pct_95_reward": 1.414849235343354,
+        "recommended_raw_rtg_percentile": 1.3783033121934556,
+        "recommended_return_scale": 1.0,
+        "recommended_rtg": 1.414849235343354,
+        "recommended_rtg_rtg0_percentile": 1.3783033121934556,
+        "recommended_rtg_total_percentile": 1.414849235343354,
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": 1.414849235343354,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      }
+    ],
+    "battery_variants": [
+      {
+        "battery_capacity": 8.0,
+        "battery_life_cost": 1064295.9629543494,
+        "dispatch_region": "SA1",
+        "dispatch_station_name": "Dalrymple North BESS",
+        "init_soc": 4.0,
+        "init_soc_ratio": 0.5,
+        "label": "asset_Dalrymple North BESS",
+        "max_battery_flow": 30.0,
+        "name": "asset_Dalrymple North BESS"
+      }
+    ],
+    "bootstrap_confidence_intervals": {
+      "candidate_dt": {
+        "ci_lower": 1.4826421518683195,
+        "ci_upper": 1.4826421518683195,
+        "mean": 1.4826421518683193,
+        "std": 2.222669831529484e-16
+      },
+      "dispatch_dalrymple_north": {
+        "ci_lower": -1.3946862122977368,
+        "ci_upper": -1.3946862122977368,
+        "mean": -1.3946862122977366,
+        "std": 2.222669831529484e-16
+      },
+      "fcas_rule": {
+        "ci_lower": -66.29753195223145,
+        "ci_upper": -66.29753195223145,
+        "mean": -66.29753195223145,
+        "std": 0.0
+      },
+      "ppo_reference": {
+        "ci_lower": 1.414849235343354,
+        "ci_upper": 1.414849235343354,
+        "mean": 1.414849235343354,
+        "std": 0.0
+      }
+    },
+    "cache_preflight": [
+      {
+        "cache_exists": true,
+        "cache_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/data/aemo/processed_NSW1_2024-07-01_2024-07-14_0.5000h.parquet",
+        "end_date": "2024-07-14 00:00:00",
+        "index": 0,
+        "label": "nsw1_jul_2024",
+        "region": "NSW1",
+        "start_date": "2024-07-01 00:00:00"
+      },
+      {
+        "cache_exists": true,
+        "cache_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/data/aemo/processed_SA1_2024-07-01_2024-07-14_0.5000h.parquet",
+        "end_date": "2024-07-14 00:00:00",
+        "index": 1,
+        "label": "sa1_jul_2024",
+        "region": "SA1",
+        "start_date": "2024-07-01 00:00:00"
+      },
+      {
+        "cache_exists": true,
+        "cache_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/data/aemo/processed_VIC1_2024-01-01_2024-01-14_0.5000h.parquet",
+        "end_date": "2024-01-14 00:00:00",
+        "index": 2,
+        "label": "vic1_jan_2024",
+        "region": "VIC1",
+        "start_date": "2024-01-01 00:00:00"
+      },
+      {
+        "cache_exists": true,
+        "cache_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/data/aemo/processed_TAS1_2024-01-01_2024-01-14_0.5000h.parquet",
+        "end_date": "2024-01-14 00:00:00",
+        "index": 3,
+        "label": "tas1_jan_2024",
+        "region": "TAS1",
+        "start_date": "2024-01-01 00:00:00"
+      }
+    ],
+    "comparison_scope": {
+      "dispatch_reference_policy_name": "dispatch_dalrymple_north",
+      "dropped_cohort_count": 0,
+      "dropped_cohorts": [],
+      "matched_battery_labels": [
+        "asset_Dalrymple North BESS"
+      ],
+      "matched_cohort_count": 1,
+      "matched_cohorts": [
+        "sa1_jul_2024::asset_Dalrymple North BESS"
+      ],
+      "matched_scenarios": [
+        "sa1_jul_2024"
+      ],
+      "policy_coverage_by_cohort": {
+        "sa1_jul_2024::asset_Dalrymple North BESS": [
+          "candidate_dt",
+          "dispatch_dalrymple_north",
+          "fcas_rule",
+          "ppo_reference"
+        ]
+      },
+      "require_full_fcas_dispatch": true,
+      "required_policy_names": [
+        "candidate_dt",
+        "dispatch_dalrymple_north",
+        "fcas_rule",
+        "ppo_reference"
+      ],
+      "strict_policy_intersection": true,
+      "use_dispatch_asset_sizing": true
+    },
+    "condition_metrics": {
+      "candidate_dt": {
+        "high_soc": {
+          "count": 278,
+          "mean_reward": 0.005920956868550366
+        },
+        "low_soc": {
+          "count": 1,
+          "mean_reward": 0.19293220994747118
+        },
+        "negative_price": {
+          "count": 25,
+          "mean_reward": 0.006835556725557701
+        },
+        "price_spike": {
+          "count": 194,
+          "mean_reward": 0.003390930348113439
+        }
+      },
+      "dispatch_dalrymple_north": {
+        "high_soc": {
+          "count": 0,
+          "mean_reward": 0.0
+        },
+        "low_soc": {
+          "count": 273,
+          "mean_reward": -0.005183444883570731
+        },
+        "negative_price": {
+          "count": 25,
+          "mean_reward": -0.010645692624718475
+        },
+        "price_spike": {
+          "count": 194,
+          "mean_reward": -0.002030881987495877
+        }
+      },
+      "fcas_rule": {
+        "high_soc": {
+          "count": 144,
+          "mean_reward": -1.6798062015955406
+        },
+        "low_soc": {
+          "count": 144,
+          "mean_reward": 1.2194066741494887
+        },
+        "negative_price": {
+          "count": 25,
+          "mean_reward": -0.23706817021649165
+        },
+        "price_spike": {
+          "count": 194,
+          "mean_reward": -0.22783249245864376
+        }
+      },
+      "ppo_reference": {
+        "high_soc": {
+          "count": 22,
+          "mean_reward": -0.015478360889987513
+        },
+        "low_soc": {
+          "count": 207,
+          "mean_reward": 0.026594262221819456
+        },
+        "negative_price": {
+          "count": 25,
+          "mean_reward": 0.009727692753076554
+        },
+        "price_spike": {
+          "count": 194,
+          "mean_reward": 0.024951089939640576
+        }
+      }
+    },
+    "heldout_logs_dir": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/autoresearch/grpo_multi_heldout/heldout_logs",
+    "metrics_by_scenario": [
+      {
+        "avg_actual_energy_per_episode": 3.999930411474593,
+        "avg_actual_energy_per_step": 0.01388864726206456,
+        "avg_battery_dispatch_abs_per_episode": 21.00917189547755,
+        "avg_battery_dispatch_abs_per_step": 0.07294851352596371,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.000212608118487435,
+        "avg_degradation_per_step": 7.382226336369271e-07,
+        "avg_energy_revenue_per_episode": -1086.6601958435103,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 5555.580309909333,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": 4242.642151868323,
+        "avg_total_degradation_cost_end": 226.27796219749715,
+        "avg_total_degradation_cost_per_episode": 226.27796219749715,
+        "avg_total_degradation_end": 0.000212608118487435,
+        "avg_total_revenue_end": 4468.92011406582,
+        "avg_total_revenue_per_episode": 4468.92011406582,
+        "battery_label": "asset_Dalrymple North BESS",
+        "clip_step_rate": 0.0,
+        "cvar_5": 1.4826421518683195,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "candidate_dt::sa1_jul_2024::asset_Dalrymple North BESS",
+        "max_reward": 1.4826421518683195,
+        "mean_reward": 1.4826421518683195,
+        "median_reward": 1.4826421518683195,
+        "pct_5_reward": 1.4826421518683195,
+        "pct_95_reward": 1.4826421518683195,
+        "policy_name": "candidate_dt",
+        "recommended_raw_rtg_percentile": 0.03317100862348621,
+        "recommended_return_scale": 1.0,
+        "recommended_rtg": 1.4826421518683195,
+        "recommended_rtg_rtg0_percentile": 0.03317100862348621,
+        "recommended_rtg_total_percentile": 1.4826421518683195,
+        "scenario_label": "sa1_jul_2024",
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": 1.4826421518683195,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      },
+      {
+        "avg_actual_energy_per_episode": -4.0,
+        "avg_actual_energy_per_step": -0.013888888888888888,
+        "avg_battery_dispatch_abs_per_episode": 8.0,
+        "avg_battery_dispatch_abs_per_step": 0.027777777777777776,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.0001757364838388236,
+        "avg_degradation_per_step": 6.101961244403597e-07,
+        "avg_energy_revenue_per_episode": 1491.1936333333335,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 31.155784662380995,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": 1335.3137877022639,
+        "avg_total_degradation_cost_end": 187.03563029345068,
+        "avg_total_degradation_cost_per_episode": 187.03563029345068,
+        "avg_total_degradation_end": 0.0001757364838388236,
+        "avg_total_revenue_end": 1522.3494179957145,
+        "avg_total_revenue_per_episode": 1522.3494179957145,
+        "battery_label": "asset_Dalrymple North BESS",
+        "clip_step_rate": 0.0,
+        "cvar_5": -1.3946862122977368,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "dispatch_dalrymple_north::sa1_jul_2024::asset_Dalrymple North BESS",
+        "max_reward": -1.3946862122977368,
+        "mean_reward": -1.3946862122977368,
+        "median_reward": -1.3946862122977368,
+        "pct_5_reward": -1.3946862122977368,
+        "pct_95_reward": -1.3946862122977368,
+        "policy_name": "dispatch_dalrymple_north",
+        "recommended_raw_rtg_percentile": 0.44465638918737055,
+        "recommended_return_scale": 1.0,
+        "recommended_rtg": -1.3946862122977368,
+        "recommended_rtg_rtg0_percentile": 0.44465638918737055,
+        "recommended_rtg_total_percentile": -1.3946862122977368,
+        "scenario_label": "sa1_jul_2024",
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": -1.3946862122977368,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      },
+      {
+        "avg_actual_energy_per_episode": 3.557652339051872,
+        "avg_actual_energy_per_step": 0.012352959510596777,
+        "avg_battery_dispatch_abs_per_episode": 4283.332943729356,
+        "avg_battery_dispatch_abs_per_step": 14.872683832393598,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.059992623742257306,
+        "avg_degradation_per_step": 0.00020830772132728232,
+        "avg_energy_revenue_per_episode": 359.9855541071212,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 72.38974958507431,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": -63417.53195223152,
+        "avg_total_degradation_cost_end": 63849.90725592372,
+        "avg_total_degradation_cost_per_episode": 63849.90725592372,
+        "avg_total_degradation_end": 0.059992623742257306,
+        "avg_total_revenue_end": 432.37530369219724,
+        "avg_total_revenue_per_episode": 432.37530369219724,
+        "battery_label": "asset_Dalrymple North BESS",
+        "clip_step_rate": 0.0,
+        "cvar_5": -66.29753195223145,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "fcas_rule::sa1_jul_2024::asset_Dalrymple North BESS",
+        "max_reward": -66.29753195223145,
+        "mean_reward": -66.29753195223145,
+        "median_reward": -66.29753195223145,
+        "pct_5_reward": -66.29753195223145,
+        "pct_95_reward": -66.29753195223145,
+        "policy_name": "fcas_rule",
+        "recommended_raw_rtg_percentile": 20.276637877585582,
+        "recommended_return_scale": 2.0276637877585584,
+        "recommended_rtg": -66.29753195223145,
+        "recommended_rtg_rtg0_percentile": 20.276637877585582,
+        "recommended_rtg_total_percentile": -66.29753195223145,
+        "scenario_label": "sa1_jul_2024",
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": -66.29753195223145,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      },
+      {
+        "avg_actual_energy_per_episode": -3.9998873531364962,
+        "avg_actual_energy_per_step": -0.013888497753946167,
+        "avg_battery_dispatch_abs_per_episode": 225.1134119029822,
+        "avg_battery_dispatch_abs_per_step": 0.7816437913297993,
+        "avg_battery_flow_energy": 0.0,
+        "avg_battery_flow_per_step": 0.0,
+        "avg_degradation_per_episode": 0.0045573621741759225,
+        "avg_degradation_per_step": 1.582417421588862e-05,
+        "avg_energy_revenue_per_episode": 3709.140151691424,
+        "avg_episode_steps": 288.0,
+        "avg_fcas_revenue_per_episode": 4626.091243852245,
+        "avg_grid_export": 0.0,
+        "avg_grid_import": 0.0,
+        "avg_grid_net": 0.0,
+        "avg_profit_per_episode": 3484.849231847379,
+        "avg_total_degradation_cost_end": 4850.382163696287,
+        "avg_total_degradation_cost_per_episode": 4850.382163696287,
+        "avg_total_degradation_end": 0.0045573621741759225,
+        "avg_total_revenue_end": 8335.231395543666,
+        "avg_total_revenue_per_episode": 8335.231395543666,
+        "battery_label": "asset_Dalrymple North BESS",
+        "clip_step_rate": 0.0,
+        "cvar_5": 1.414849235343354,
+        "deg_incident_episode_rate": 0.0,
+        "deg_incident_rate": 0.0,
+        "episodes_evaluated": 1,
+        "episodes_with_reward": 1,
+        "experiment": "ppo_reference::sa1_jul_2024::asset_Dalrymple North BESS",
+        "max_reward": 1.414849235343354,
+        "mean_reward": 1.414849235343354,
+        "median_reward": 1.414849235343354,
+        "pct_5_reward": 1.414849235343354,
+        "pct_95_reward": 1.414849235343354,
+        "policy_name": "ppo_reference",
+        "recommended_raw_rtg_percentile": 1.3783033121934556,
+        "recommended_return_scale": 1.0,
+        "recommended_rtg": 1.414849235343354,
+        "recommended_rtg_rtg0_percentile": 1.3783033121934556,
+        "recommended_rtg_total_percentile": 1.414849235343354,
+        "scenario_label": "sa1_jul_2024",
+        "sharpe_ratio": NaN,
+        "sortino_ratio": NaN,
+        "std_reward": 0.0,
+        "var_5": 1.414849235343354,
+        "violation_episode_rate": 0.0,
+        "violation_step_rate": 0.0
+      }
+    ],
+    "paired_comparisons_vs_reference": {
+      "candidate_dt": {
+        "mean_diff": 2.8773283641660563,
+        "median_diff": 2.8773283641660563,
+        "std_diff": 0.0,
+        "wilcoxon_p": NaN,
+        "wilcoxon_stat": NaN
+      },
+      "fcas_rule": {
+        "mean_diff": -64.90284573993371,
+        "median_diff": -64.90284573993371,
+        "std_diff": 0.0,
+        "wilcoxon_p": NaN,
+        "wilcoxon_stat": NaN
+      },
+      "ppo_reference": {
+        "mean_diff": 2.8095354476410908,
+        "median_diff": 2.8095354476410908,
+        "std_diff": 0.0,
+        "wilcoxon_p": NaN,
+        "wilcoxon_stat": NaN
+      }
+    },
+    "plots_dir": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/autoresearch/grpo_multi_heldout/plots",
+    "reference_policy": "dispatch_dalrymple_north",
+    "reference_rollout_cache": {
+      "cache_dir": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/autoresearch/reference_cache/ppo_compare_heldout",
+      "enabled": true,
+      "hits": [],
+      "misses": [
+        {
+          "battery_label": "asset_Dalrymple North BESS",
+          "cache_key": "2d231414df8e1a94",
+          "path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/autoresearch/reference_cache/ppo_compare_heldout/dispatch-dalrymple-north__sa1-jul-2024__asset-dalrymple-north-bess__2d231414df8e1a94.parquet",
+          "policy_name": "dispatch_dalrymple_north",
+          "scenario_label": "sa1_jul_2024"
+        },
+        {
+          "battery_label": "asset_Dalrymple North BESS",
+          "cache_key": "5e81fd489bc1f914",
+          "path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/autoresearch/reference_cache/ppo_compare_heldout/fcas-rule__sa1-jul-2024__asset-dalrymple-north-bess__5e81fd489bc1f914.parquet",
+          "policy_name": "fcas_rule",
+          "scenario_label": "sa1_jul_2024"
+        },
+        {
+          "battery_label": "asset_Dalrymple North BESS",
+          "cache_key": "1d690992713f3fea",
+          "path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/eval_output/autoresearch/reference_cache/ppo_compare_heldout/ppo-reference__sa1-jul-2024__asset-dalrymple-north-bess__1d690992713f3fea.parquet",
+          "policy_name": "ppo_reference",
+          "scenario_label": "sa1_jul_2024"
+        }
+      ]
+    },
+    "rollout_execution": {
+      "parallel_workers": 8,
+      "parallelize_candidate_dt": false,
+      "work_item_count": 4
+    },
+    "safety_metrics": {
+      "candidate_dt": {
+        "clip_counts": {},
+        "clip_step_count": 0,
+        "clip_step_rate": 0.0,
+        "deg_incident_episode_count": 0,
+        "deg_incident_episode_rate": 0.0,
+        "episodes_evaluated": 1,
+        "total_steps": 288,
+        "violation_counts": {},
+        "violation_episode_count": 0,
+        "violation_episode_rate": 0.0,
+        "violation_step_count": 0,
+        "violation_step_rate": 0.0
+      },
+      "dispatch_dalrymple_north": {
+        "clip_counts": {},
+        "clip_step_count": 0,
+        "clip_step_rate": 0.0,
+        "deg_incident_episode_count": 0,
+        "deg_incident_episode_rate": 0.0,
+        "episodes_evaluated": 1,
+        "total_steps": 288,
+        "violation_counts": {},
+        "violation_episode_count": 0,
+        "violation_episode_rate": 0.0,
+        "violation_step_count": 0,
+        "violation_step_rate": 0.0
+      },
+      "fcas_rule": {
+        "clip_counts": {},
+        "clip_step_count": 0,
+        "clip_step_rate": 0.0,
+        "deg_incident_episode_count": 0,
+        "deg_incident_episode_rate": 0.0,
+        "episodes_evaluated": 1,
+        "total_steps": 288,
+        "violation_counts": {},
+        "violation_episode_count": 0,
+        "violation_episode_rate": 0.0,
+        "violation_step_count": 0,
+        "violation_step_rate": 0.0
+      },
+      "ppo_reference": {
+        "clip_counts": {},
+        "clip_step_count": 0,
+        "clip_step_rate": 0.0,
+        "deg_incident_episode_count": 0,
+        "deg_incident_episode_rate": 0.0,
+        "episodes_evaluated": 1,
+        "total_steps": 288,
+        "violation_counts": {},
+        "violation_episode_count": 0,
+        "violation_episode_rate": 0.0,
+        "violation_step_count": 0,
+        "violation_step_rate": 0.0
+      }
+    },
+    "scenario_manifest": [
+      {
+        "end_date": "2024-07-14 00:00:00",
+        "index": 0,
+        "label": "nsw1_jul_2024",
+        "region": "NSW1",
+        "start_date": "2024-07-01 00:00:00"
+      },
+      {
+        "end_date": "2024-07-14 00:00:00",
+        "index": 1,
+        "label": "sa1_jul_2024",
+        "region": "SA1",
+        "start_date": "2024-07-01 00:00:00"
+      },
+      {
+        "end_date": "2024-01-14 00:00:00",
+        "index": 2,
+        "label": "vic1_jan_2024",
+        "region": "VIC1",
+        "start_date": "2024-01-01 00:00:00"
+      },
+      {
+        "end_date": "2024-01-14 00:00:00",
+        "index": 3,
+        "label": "tas1_jan_2024",
+        "region": "TAS1",
+        "start_date": "2024-01-01 00:00:00"
+      }
+    ]
+  },
+  "pilot_ranking": {
+    "pilot_ranking_guardrail_metric": null,
+    "pilot_ranking_guardrail_value": null,
+    "pilot_ranking_metric": "best_val_total_loss",
+    "pilot_ranking_value": null,
+    "surface_preset": "grpo_multi_region"
+  },
+  "schema": "energydecision.autoresearch_evaluation.v1",
+  "surface_manifest_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/models/aemo/dt/grpo_multi/grpo_surface_manifest.json",
+  "training_summary": {
+    "best_val_action_epoch": null,
+    "best_val_action_loss": null,
+    "best_val_epoch": null,
+    "best_val_return_epoch": null,
+    "best_val_return_loss": null,
+    "best_val_state_epoch": null,
+    "best_val_state_loss": null,
+    "best_val_total_loss": null,
+    "epochs_recorded": 5,
+    "final_epoch": 5,
+    "final_train_total_loss": 0.09198835303282572,
+    "final_val_action_loss": null,
+    "final_val_return_loss": null,
+    "final_val_state_loss": null,
+    "final_val_total_loss": null,
+    "loss_csv_path": "/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision/models/aemo/dt/grpo_multi/grpo_loss_history.csv"
+  }
+}

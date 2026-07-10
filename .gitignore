@@ -187,32 +187,36 @@ cython_debug/
 # local experiment / evaluation artifacts
 /eval_output/
 /expo/
-/eval_output/aemo_cache_prewarm/
+/system_logs/
 opencode.json
 
-# keep the report-required evaluation artifacts trackable
+# keep only a small curated set of evaluation artifacts trackable
 !/eval_output/
-/eval_output/household/**
-!/eval_output/household/
-!/eval_output/household/baseline/
-!/eval_output/household/baseline/evaluation_metrics.csv
-!/eval_output/household/baseline/mean_reward.svg
-!/eval_output/household/risk_metrics.csv
-!/eval_output/household/pairwise_summary.csv
-!/eval_output/household/pairwise_significance_heatmap.svg
-/eval_output/autoresearch/example_baseline_full_b64/**
-!/eval_output/autoresearch/example_baseline_full_b64/
-!/eval_output/autoresearch/example_baseline_full_b64/plots/
-!/eval_output/autoresearch/example_baseline_full_b64/plots/mean_reward.svg
-!/eval_output/autoresearch/example_baseline_full_b64/plots/risk_return.svg
-!/eval_output/autoresearch/example_baseline_full_b64/plots/episode_distribution.svg
-!/eval_output/autoresearch/example_baseline_full_b64/plots/grid_energy.svg
-/eval_output/autoresearch/dispatch_matched_hf_full_fcas/**
+!/eval_output/final/
+!/eval_output/final/**/
+!/eval_output/final/**/evaluation_summary.json
+!/eval_output/final/**/heldout_metrics.csv
+!/eval_output/final/**/heldout_metrics_by_scenario.csv
+!/eval_output/final/**/plots/
+!/eval_output/final/**/plots/*.svg
+!/eval_output/final/**/plots/*.png
+
+!/eval_output/autoresearch/
+eval_output/autoresearch/*
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/
+!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/evaluation_summary.json
+!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/heldout_metrics.csv
+!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/heldout_metrics_by_scenario.csv
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/profit_by_experiment.png
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/fcas_revenue_by_experiment.png
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/paired_comparison_mean_diff.png
+!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.png
+!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.svg
+
+# ignore large generated caches and rollouts
+**/heldout_logs/
+**/reference_cache/
+**/cache/
+**/aemo_cache_prewarm/
+**/*.parquet
 
 # editor / temp files
 *.tmp

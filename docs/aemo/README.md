@@ -1,11 +1,12 @@
 # AEMO documentation guide
 
-Use this page as the entry point for the AEMO-related docs in this repository.
+Use this page as the entry point for the AEMO-related docs in this repository. For the latest repo status, current GRPO findings, and the current evaluation methodology, start with [../README.md](../README.md), [../grpo_experiments.md](../grpo_experiments.md), and [roadmap.md](roadmap.md).
 
 ## Which document should I read?
 
 | If you want to... | Read this | What it covers |
 | --- | --- | --- |
+| See the latest GRPO results and evaluation changes | [../grpo_experiments.md](../grpo_experiments.md) | Dispatch-matched evaluation, RTG calibration, and the latest GRPO findings |
 | Understand the environment itself | [`environment.md`](environment.md) | Observation space, action space, reward, market data, and environment behavior |
 | Run notebook-based offline RL and Decision Transformer experiments | [`workflow.md`](workflow.md) | Dataset creation, notebook flow, SB3 training, DT dataset assembly, and DT training entrypoints |
 | Regenerate the additive 2024 dispatch-heavy dataset | [`recommended_data_generation.md`](recommended_data_generation.md) | One-shot generation command, notebook config, and the current generated-vs-pending dispatch replay status |

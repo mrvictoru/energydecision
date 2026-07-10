@@ -46,10 +46,16 @@ HORIZONS: dict[str, int] = {
 }
 
 # ── Battery variants ────────────────────────────────────────────────
+# Updated to match real-world battery configurations:
+#   medium_1c = 1C  (60 min) — matches Torrens Island, Waratah, etc.
+#   large_07c = ~0.7C (~86 min) — matches Hornsdale, Victorian Big Battery
+#   small_05c = 0.5C (120 min) — legacy, matches Kennedy Energy Park
+#   fast_375c = 3.75C (16 min) — matches Dalrymple North BESS
 BATTERIES: dict[str, dict[str, float]] = {
-    "small":  {"capacity_mwh": 2.0, "max_power_mw": 1.0, "init_soc_ratio": 0.5},
-    "medium": {"capacity_mwh": 10.0, "max_power_mw": 5.0, "init_soc_ratio": 0.5},
-    "large":  {"capacity_mwh": 50.0, "max_power_mw": 25.0, "init_soc_ratio": 0.5},
+    "small_05c":  {"capacity_mwh": 2.0, "max_power_mw": 1.0,  "init_soc_ratio": 0.5},
+    "medium_1c":  {"capacity_mwh": 10.0, "max_power_mw": 10.0, "init_soc_ratio": 0.5},
+    "large_07c":  {"capacity_mwh": 50.0, "max_power_mw": 35.0, "init_soc_ratio": 0.5},
+    "fast_375c":  {"capacity_mwh": 8.0,  "max_power_mw": 30.0, "init_soc_ratio": 0.5},
 }
 
 # ── Policy config: (model_path_suffix, total_episodes, battery_distribution) ──
@@ -59,42 +65,42 @@ POLICIES: dict[str, dict[str, Any]] = {
         "model": "ppo_aemo_fcas_model.zip",
         "algorithm": "PPO",
         "total_episodes": 180,
-        "batteries": {"medium": 0.60, "small": 0.25, "large": 0.15},
+        "batteries": {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "td3": {
         "model": "td3_aemo_fcas_model.zip",
         "algorithm": "TD3",
         "total_episodes": 60,
-        "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
+        "batteries": {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "a2c": {
         "model": "a2c_aemo_fcas_model.zip",
         "algorithm": "A2C",
         "total_episodes": 60,
-        "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
+        "batteries": {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "ddpg": {
         "model": "ddpg_aemo_fcas_model.zip",
         "algorithm": "DDPG",
         "total_episodes": 60,
-        "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
+        "batteries": {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "sac": {
         "model": "sac_aemo_fcas_model.zip",
         "algorithm": "SAC",
         "total_episodes": 60,
-        "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
+        "batteries": {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
     "fcas_rule": {
         "model": None,
         "algorithm": "fcas_rule",
         "total_episodes": 60,
-        "batteries": {"medium": 0.50, "small": 0.30, "large": 0.20},
+        "batteries": {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15},
         "horizon_split": {"short": 0.33, "medium": 0.33, "long": 0.34},
     },
 }
@@ -290,22 +296,25 @@ def assemble_dataset(
     all_ep_files = sorted(raw_logs_dir.rglob("*.parquet"))
     print(f"  Found {len(all_ep_files)} episode files in raw_logs")
 
-    log_groups: dict[str, list[pl.DataFrame]] = defaultdict(list)
+    dataset_frames: list[pl.DataFrame] = []
+    episode_index: list[dict[str, Any]] = []
+    next_episode_id = 0
+
     for path in all_ep_files:
-        # Filename format: {scenario}__{policy}__{horizon}__{battery}__ep{idx}.parquet
         stem = path.stem
         parts = stem.split("__")
-        # parts[0] = scenario (e.g. nsw1_2021_2023)
-        # parts[1] = policy (e.g. ppo, td3)
-        # parts[-1] = epXXX
-        if len(parts) >= 4:
-            policy = parts[1]
-        else:
-            policy = "unknown"
+        policy = parts[1] if len(parts) >= 4 else "unknown"
         df = pl.read_parquet(str(path))
         if "episode_id" not in df.columns:
             df = df.with_columns(pl.lit(0).alias("episode_id"))
-        log_groups[policy].append(df)
+        from aemo_notebook_utils import _normalize_episode_dataframe
+        normalized, manifest_row = _normalize_episode_dataframe(
+            df, source_policy=policy, episode_id=next_episode_id
+        )
+        dataset_frames.append(normalized)
+        episode_index.append(manifest_row)
+        next_episode_id += 1
+        del df, normalized
 
     # 2. Load old rule episodes (keep `keep_old_rule` of them)
     old_dataset_path = root / "data" / "aemo_dt" / "aemo_dt_dataset.parquet"
@@ -319,11 +328,35 @@ def assemble_dataset(
         random.seed(42)
         selected = random.sample(rule_ep_ids, min(keep_old_rule, len(rule_ep_ids)))
         old_rule_sample = old_rule.filter(pl.col("episode_id").is_in(selected))
-        log_groups["old_rule"] = [old_rule_sample]
+        normalized_old, _ = _normalize_episode_dataframe(
+            old_rule_sample, source_policy="old_rule", episode_id=next_episode_id
+        )
+        dataset_frames.append(normalized_old)
+        episode_index.append({"source_policy": "old_rule", "episode_ids": selected})
+        next_episode_id += len(selected)
         print(f"  Added {len(selected)} old rule episodes (from {len(rule_ep_ids)} available)")
 
-    # 3. Build DT dataset
-    dataset, manifest = build_dt_dataset_from_logs(dict(log_groups))
+    # 3. Concatenate dataset
+    if not dataset_frames:
+        raise ValueError("No episodes were collected; dataset would be empty.")
+    dataset = pl.concat(dataset_frames, how="diagonal_relaxed")
+    del dataset_frames
+
+    # Build manifest
+    source_summary: dict[str, dict[str, int]] = {}
+    for entry in episode_index:
+        sp = str(entry["source_policy"])
+        if sp not in source_summary:
+            source_summary[sp] = {"episodes": 0, "rows": 0}
+        source_summary[sp]["episodes"] += 1
+    source_summary["total"] = {"episodes": len(episode_index), "rows": int(dataset.height)}
+
+    manifest = {
+        "episode_count": len(episode_index),
+        "total_rows": int(dataset.height),
+        "source_summary": source_summary,
+        "output_path": str(output_dir / "aemo_fcas_dataset.parquet"),
+    }
 
     # 4. Save
     out_path = output_dir / "aemo_fcas_dataset.parquet"
@@ -380,8 +413,8 @@ def main() -> None:
             processed = load_processed_data(scenario["region"], cache_dir)
             model_path = models_dir / POLICIES[policy_name]["model"]
 
-            battery = dict(BATTERIES["medium"])
-            battery["name"] = "medium"
+            battery = dict(BATTERIES["medium_1c"])
+            battery["name"] = "medium_1c"
 
             n_eps = 2
             max_step = HORIZONS["short"]

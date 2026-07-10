@@ -477,6 +477,7 @@ def run_policy_episodes(
     heldout_cfg: dict[str, Any],
     training_summary: dict[str, Any],
     dt_model: DecisionTransformer | None,
+    comparison_cfg: dict[str, Any] | None = None,
 ) -> list[pl.DataFrame]:
     policy_kind = str(policy_cfg["kind"]).lower()
     episodes_per_variant = int(policy_cfg.get("episodes_per_variant", heldout_cfg.get("episodes_per_variant", 1)))
@@ -576,6 +577,11 @@ def run_policy_episodes(
             init_soc=float(battery_variant["init_soc"]),
             init_soc_ratio=policy_cfg.get("init_soc_ratio"),
         )
+        # When use_dispatch_asset_sizing is disabled, override the selection's
+        # battery with the template battery so all policies compete on the same asset.
+        if comparison_cfg is not None and not bool(comparison_cfg.get("use_dispatch_asset_sizing", True)):
+            selection["battery_capacity"] = float(battery_variant["battery_capacity"])
+            selection["max_battery_flow"] = float(battery_variant["max_battery_flow"])
         battery_life_cost = resolve_dispatch_battery_life_cost(
             dispatch_run=policy_cfg,
             station_capacity_mwh=float(selection["battery_capacity"]),
@@ -983,6 +989,7 @@ def evaluate_aemo_heldout(
                 heldout_cfg=heldout_cfg,
                 training_summary=training_summary,
                 dt_model=dt_model,
+                comparison_cfg=comparison_cfg,
             )
             tagged = _with_episode_metadata(
                 episodes,

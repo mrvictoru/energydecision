@@ -42,6 +42,16 @@ class TinyContinuousEnv:
         return obs, reward, terminated, False, {}
 
 
+class TinyContinuousEnvWithDegradation(TinyContinuousEnv):
+    def __init__(self, target: float = 0.5, max_step: int = 3, degradation_cost: float = 0.25):
+        super().__init__(target=target, max_step=max_step)
+        self.degradation_cost = float(degradation_cost)
+
+    def step(self, action):
+        obs, reward, terminated, truncated, _ = super().step(action)
+        return obs, reward, terminated, truncated, {"degradation_cost": self.degradation_cost}
+
+
 def _build_model() -> DecisionTransformer:
     torch.manual_seed(0)
     return DecisionTransformer(
@@ -119,6 +129,87 @@ def test_grpo_train_updates_log_std_and_reports_metrics():
     assert "mean_return" in metrics
     assert "kl_loss" in metrics
     assert not torch.allclose(starting_log_std, trainer.log_std.detach())
+
+
+def test_grpo_collect_rollouts_applies_degradation_shaping():
+    model = _build_model()
+    trainer = GRPOTrainer(
+        model,
+        device="cpu",
+        trainable_log_std=False,
+        degradation_penalty_weight=1.5,
+    )
+
+    batch = trainer.collect_rollouts(
+        lambda: TinyContinuousEnvWithDegradation(target=0.25, max_step=2, degradation_cost=0.4),
+        prompts=[GRPOPrompt(options={"target": 0.25})],
+        group_size=1,
+    )
+
+    expected_gap = torch.full_like(batch.rewards, 0.2)
+    torch.testing.assert_close(batch.env_rewards - batch.rewards, expected_gap)
+
+
+def test_grpo_train_syncs_reference_model_periodically():
+    model = _build_model()
+    trainer = GRPOTrainer(
+        model,
+        device="cpu",
+        lr=5e-3,
+        trainable_log_std=True,
+        initial_log_std=-0.5,
+    )
+
+    history = trainer.train(
+        lambda: TinyContinuousEnv(),
+        prompts=[
+            GRPOPrompt(options={"target": -0.4}),
+            GRPOPrompt(options={"target": 0.6}),
+        ],
+        iterations=2,
+        group_size=2,
+        update_epochs=1,
+        minibatch_size=4,
+        sync_reference_every=1,
+    )
+
+    assert [row["reference_synced"] for row in history] == pytest.approx([1.0, 1.0])
+    model_state = trainer.model.state_dict()
+    reference_state = trainer.reference_model.state_dict()
+    assert set(model_state.keys()) == set(reference_state.keys())
+    for key in model_state:
+        torch.testing.assert_close(model_state[key], reference_state[key])
+
+
+def test_grpo_train_adapts_prompt_rtgs_between_iterations():
+    model = _build_model()
+    trainer = GRPOTrainer(model, device="cpu", trainable_log_std=False)
+    initial_prompts = [
+        GRPOPrompt(seed=10, options={"target": -0.4}, rtg_value=-1.0, max_steps=3),
+        GRPOPrompt(seed=11, options={"target": 0.6}, rtg_value=1.0, max_steps=3),
+    ]
+
+    history = trainer.train(
+        lambda: TinyContinuousEnv(),
+        prompts=initial_prompts,
+        iterations=2,
+        group_size=1,
+        update_epochs=1,
+        minibatch_size=2,
+        adaptive_rtg=True,
+        adaptive_rtg_spread=0.25,
+        adaptive_rtg_dist="uniform",
+        adaptive_rtg_seed=123,
+    )
+
+    assert len(history) == 2
+    assert history[0]["adaptive_rtg_enabled"] == pytest.approx(1.0)
+    assert trainer._last_prompts[0].seed == initial_prompts[0].seed
+    assert trainer._last_prompts[0].options == initial_prompts[0].options
+    assert len(trainer._last_prompts) == len(initial_prompts)
+    final_rtgs = [prompt.rtg_value for prompt in trainer._last_prompts]
+    initial_rtgs = [prompt.rtg_value for prompt in initial_prompts]
+    assert final_rtgs != initial_rtgs
 
 
 def test_sample_rtg_values_always_includes_optimum():

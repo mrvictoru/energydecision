@@ -77,6 +77,7 @@ Three evaluator configs balance speed vs. breadth:
 | `mini` | Smoke / quick screening | 5 min | 24h | NSW1, SA1 | medium | DT, FCAS rule | 4 | ~2 min |
 | `example` | Promotion check | 30 min | 144h | NSW1, SA1, QLD1, VIC1 | medium, small | DT, rule, FCAS rule, 2×dispatch, PPO | 8 | ~15 min |
 | `expanded` | Full season sweep | 30 min | 288h | All 5 regions × 6 months | medium | DT, rule, PPO | 8 | ~60 min |
+| `dispatch_matched` | GRPO vs dispatch replay | 30 min | 144h | SA1 (4 seasons) | dispatch-asset-sized | DT, dispatch, FCAS rule | 8 | ~15 min |
 
 **Usage by tiner:**
 - `proxy-baseline` → `mini` (after training, wrapped by `launch_aemo_training.py`)
@@ -161,6 +162,48 @@ The best Decision Transformer checkpoint is hosted on HuggingFace:
 
 GRPO fine-tuning is on the `copilot/online-rl-fine-tuning` branch (`src/grpo_posttraining.py`).
 The AEMO GRPO notebook (`notebooks/aemo_dt_grpo_posttraining.ipynb`) downloads this model automatically and runs online RL with adaptive RTG sampling.
+
+### GRPO post-training pipeline
+
+Standalone script: `src/run_grpo_posttraining.py`
+```bash
+python3 src/run_grpo_posttraining.py \
+    --region NSW1 --start-date 2024-01-01 --end-date 2024-01-14 \
+    --iterations 5 --step-duration 0.5 --episode-hours 144
+```
+Outputs: `models/aemo/dt/grpo/dt_model_grpo.pt` + surface manifest + loss CSV.
+
+**Legacy checkpoint compatibility**: The HF checkpoint uses MoLab-style keys (`embed_return`, `embed_action`, `blocks.*`) which triggers `LegacyDecisionTransformer` auto-detection in `load_from_checkpoint()`. The GRPO code handles this via `_is_legacy_dt()` which normalizes the forward call order and return value order between modern and legacy models.
+
+### GRPO results (July 2026)
+
+**Setup**: Pretrained DT → 5 GRPO iterations on NSW1 Jan 2024 → evaluated on SA1 2024 (4 seasons, dispatch-matched Dalrymple North 8MW BESS, full_fcas).
+
+| Policy | Mean Reward/step | Profit/ep | FCAS rev/ep | Sharpe | Violations |
+|--------|:----------------:|:---------:|:-----------:|:------:|:----------:|
+| **GRPO-tuned DT** | **+1.32** | **$3,973** | **$4,697** | **+2.43** | **0%** |
+| Dispatch replay | -1.38 | $963 | $110 | -1.27 | 0% |
+| FCAS rule | -68.77 | -$65,890 | $30 | -11.28 | 0% |
+
+**Key findings**:
+- GRPO-tuned DT earns **42× more FCAS revenue** than real-life dispatch replay
+- Paired comparison vs dispatch: mean_diff = **+2.70/step** (statistically significant)
+- Zero safety violations across all policies
+- FCAS rule performs poorly on dispatch-matched asset (8MW/30MW vs its designed 10MW/5MW)
+- **Iteration count matters**: 5 iterations (+1.32/step) outperforms 30 iterations (-1.54/step). Beyond ~5 iterations the policy drifts from the pretrained reference, degrading energy trading ability and increasing degradation costs 3× despite maintaining FCAS revenue.
+- **24h proxy sweep vs 144h training gap**: The 24h episode proxy sweep suggested lr=5e-5, rtgc=2, 15 iters as best, but these findings did not transfer to 144h training. The default (5 iters, lr=1e-5, rtgc=4, 144h) remains the best config. This confirms that training on the same episode length as evaluation is critical.
+
+### GRPO sweep results (24h episodes, NSW1 Jan 2024)
+
+| Sweep | Best value | Reward improvement | Notes |
+|-------|-----------|:------------------:|-------|
+| Iterations | 15 | +0.49 | More helps on 24h, but 5 is best on 144h |
+| KL coeff | 0.02 (default) | +0.44 | Higher KL hurts performance |
+| Entropy coeff | 0.0 (default) | +0.53 | Any positive entropy is worse |
+| Learning rate | 5e-5 | +0.68 | Best on 24h proxy, but 1e-5 best on 144h |
+| RTG count | 2 | +0.47 | More RTG values dilute advantages |
+
+**Lesson**: The 24h proxy metric does NOT reliably predict 144h evaluation performance. Always validate on the target episode length.
 
 ## Priorities for DT improvement (from `docs/dt_improvement_roadmap.md`)
 
