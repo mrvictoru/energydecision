@@ -12,7 +12,7 @@ Use this page as the main entry point for the repository documentation.
 
 ### AEMO and GRPO
 
-- [aemo/roadmap.md](aemo/roadmap.md) — current AEMO DT and GRPO roadmap, including Phase 1 improvements.
+- [dt_improvement_roadmap.md](dt_improvement_roadmap.md) — consolidated AEMO DT and GRPO roadmap, including Phase 1 improvements and current priorities.
 - [grpo_experiments.md](grpo_experiments.md) — experiment notes, dispatch-matched evaluation, and RTG calibration findings.
 - [aemo/workflow.md](aemo/workflow.md) — end-to-end workflow for generating data and training AEMO models.
 - [aemo/dispatch-replay.md](aemo/dispatch-replay.md) — dispatch-replay generation and inspection.
@@ -36,4 +36,4 @@ Use this page as the main entry point for the repository documentation.
 2. Choose the track you need:
    - AEMO: [aemo/README.md](aemo/README.md)
    - Household: [household/README.md](household/README.md)
-3. For the latest GRPO work, open [grpo_experiments.md](grpo_experiments.md) and [aemo/roadmap.md](aemo/roadmap.md).
+3. For the latest GRPO work, open [grpo_experiments.md](grpo_experiments.md) and [dt_improvement_roadmap.md](dt_improvement_roadmap.md).
