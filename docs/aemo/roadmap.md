@@ -12,6 +12,12 @@
 - **GPU**: 22GB VRAM (RTX 2080 Ti) — power capped at 205W to prevent Xid79 crashes
 - **Baselines**: rule, fcas_rule, dispatch replay (Dalrymple North, Torrens Island, Hornsdale), PPO reference
 
+## Current status (July 2026)
+
+- Phase 1 GRPO-side work is now implemented and validated: degradation-weighted reward shaping, periodic reference-model syncing, adaptive RTG sampling, and larger rollout groups are available in the current CLI workflow.
+- The evaluation framing has been corrected to use dispatch-matched, same-asset comparisons with per-MWh reporting so the results are easier to compare across batteries and policies.
+- The current best RTG prompt for the Phase 1 model is 0.5 on the dispatch-matched setup, and the remaining frontier is reducing degradation while keeping the FCAS gains.
+
 ## Principles
 
 All priorities are classified by **training dependency**:

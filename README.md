@@ -5,6 +5,17 @@ This project establishes a comprehensive, reproducible benchmark for residential
 
 **Goal:** To minimize energy costs and maximize revenue while rigorously accounting for battery degradation under realistic uncertainty.
 
+## Current highlights
+
+- GRPO Phase 1 is now implemented and validated for the AEMO Decision Transformer workflow. The current training stack supports degradation-weighted reward shaping, periodic reference-model syncing, adaptive RTG sampling, and larger rollout groups through the canonical CLI entrypoints.
+- The evaluation story has been corrected to use dispatch-matched, same-asset comparisons with per-MWh reporting so the results are easier to interpret and more faithful to the battery sizes under test.
+- The current best RTG prompt for the Phase 1 model is 0.5 in the dispatch-matched evaluation setup, which materially improves profit while keeping degradation lower than earlier runs.
+
+## Documentation map
+
+- Start with [docs/README.md](docs/README.md) for the docs landing page and topic-based navigation.
+- For the latest AEMO experiment findings, read [docs/grpo_experiments.md](docs/grpo_experiments.md) and [docs/aemo/roadmap.md](docs/aemo/roadmap.md).
+
 ## Key Components
 
 1.  **Simulation Environments:**
@@ -15,7 +26,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
     *   **Optimization:** Stochastic Dynamic Programming (SDP) & Multi-Resolution DP (MRDP).
     *   **Online RL:** PPO, SAC, A2C, DDPG, TD3 (via Stable-Baselines3).
     *   **Offline RL:** Decision Transformers (DT).
-    *   **Post-training:** GRPO fine-tuning for pretrained DT policies — adaptive RTG sampling via `sample_rtg_values()` for group diversity.
+    *   **Post-training:** GRPO fine-tuning for pretrained DT policies with degradation-aware reward shaping, reference-model sync, and adaptive RTG support.
     *   **Baselines:** Rule-based heuristics & Oracle (perfect foresight).
     *   **Grid-Agent:** `AEMOAgent` — specialized agent to interact with `AEMOBatteryTradingEnv`, supports rule-based, `fcas_rule` (percentile-based FCAS bidding), dispatch-replay, RL, and Decision Transformer inference modes.
 
@@ -37,7 +48,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts; calibrate against the target held-out scenario before inference.
 *   [x] **FCAS-aware offline data collection:** Generate a 2,425-episode FCAS-rich dataset (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) from PPO, TD3, A2C, DDPG, SAC, and `fcas_rule` policies.
 *   [x] **FCAS-rich DT training:** Retrain DT on the FCAS-rich dataset — DT now achieves **+$1,522/ep profit**, beating PPO (+$1,444/ep) on the example evaluator (Section 8.6.2 of `report.md`).
-*   [x] **RL Fine-tuning:** GRPO post-training support for pretrained DT weights (on `copilot/online-rl-fine-tuning` branch) with mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
+*   [x] **RL Fine-tuning:** GRPO Phase 1 support for pretrained DT weights is now available through the current CLI workflow, including mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
 *   [ ] **Hyperparameter Tuning:** Optuna for DT.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
