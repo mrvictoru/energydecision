@@ -49,7 +49,7 @@ This project establishes a comprehensive, reproducible benchmark for residential
 *   [x] **FCAS-aware offline data collection:** Generate a 2,425-episode FCAS-rich dataset (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) from PPO, TD3, A2C, DDPG, SAC, and `fcas_rule` policies.
 *   [x] **FCAS-rich DT training:** Retrain DT on the FCAS-rich dataset — DT now achieves **+$1,522/ep profit**, beating PPO (+$1,444/ep) on the example evaluator (Section 8.6.2 of `report.md`).
 *   [x] **RL Fine-tuning:** GRPO Phase 1 support for pretrained DT weights is now available through the current CLI workflow, including mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
-*   [ ] **Hyperparameter Tuning:** Optuna for DT.
+*   [x] **Hyperparameter Tuning:** using Autoresearch for DT.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
 *   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.
