@@ -327,14 +327,19 @@ def assemble_dataset(
         import random
         random.seed(42)
         selected = random.sample(rule_ep_ids, min(keep_old_rule, len(rule_ep_ids)))
-        old_rule_sample = old_rule.filter(pl.col("episode_id").is_in(selected))
-        normalized_old, _ = _normalize_episode_dataframe(
-            old_rule_sample, source_policy="old_rule", episode_id=next_episode_id
-        )
-        dataset_frames.append(normalized_old)
-        episode_index.append({"source_policy": "old_rule", "episode_ids": selected})
-        next_episode_id += len(selected)
-        print(f"  Added {len(selected)} old rule episodes (from {len(rule_ep_ids)} available)")
+        if not selected:
+            print("  Skipping old rule episodes (keep_old_rule=0 or none available)")
+            old_rule_sample = None
+        else:
+            old_rule_sample = old_rule.filter(pl.col("episode_id").is_in(selected))
+        if old_rule_sample is not None:
+            normalized_old, _ = _normalize_episode_dataframe(
+                old_rule_sample, source_policy="old_rule", episode_id=next_episode_id
+            )
+            dataset_frames.append(normalized_old)
+            episode_index.append({"source_policy": "old_rule", "episode_ids": selected})
+            next_episode_id += len(selected)
+            print(f"  Added {len(selected)} old rule episodes (from {len(rule_ep_ids)} available)")
 
     # 3. Concatenate dataset
     if not dataset_frames:
