@@ -48,11 +48,11 @@ SCENARIOS: list[dict[str, Any]] = [
 ]
 
 # ── Episode horizon config ──────────────────────────────────────────
-# Only short horizon is used for GRPO-generated data because:
-# 1. DT context is only 180 timesteps (15 hours), so longer episodes don't add signal
-# 2. Generation is 5-20x faster with short episodes
+# Short and medium horizons are included. Long horizon (26 weeks, 74880 steps)
+# is excluded because it takes ~12 min per episode (45+ hours for a full run).
 HORIZONS: dict[str, int] = {
     "short": 3456,    # 12 days  (288h)
+    "medium": 16128,  # 8 weeks  (1344h)
 }
 
 # ── Battery variants (matches v2 dataset) ────────────────────────────
@@ -68,7 +68,7 @@ BATTERIES: dict[str, dict[str, float]] = {
 # GRPO is the primary contributor
 TOTAL_EPISODES = 180
 BATTERY_DIST = {"medium_1c": 0.40, "large_07c": 0.25, "small_05c": 0.20, "fast_375c": 0.15}
-HORIZON_SPLIT = {"short": 1.0}
+HORIZON_SPLIT = {"short": 0.50, "medium": 0.50}
 
 STEP_DURATION = 5 / 60  # 5 minutes
 POLICY_NAME = "grpo_dt"
