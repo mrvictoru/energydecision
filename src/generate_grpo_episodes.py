@@ -14,7 +14,8 @@ import argparse
 import sys
 import json
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Sequence
@@ -75,6 +76,79 @@ POLICY_NAME = "grpo_dt"
 BASE_SEED = 2026
 
 
+def _worker_generate(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Module-level worker function for ProcessPoolExecutor.
+
+    Each process loads its own model copy to avoid Python GIL contention.
+    """
+    from aemo_notebook_utils import create_aemo_env, resolve_battery_variants
+    from decision import AEMOAgent
+    from grpo_posttraining import load_pretrained_dt_for_grpo
+    import polars as pl
+
+    entry = item["entry"]
+    scenario = item["scenario"]
+    cfg = item["cfg"]  # config dict passed from main
+    region = scenario["region"]
+    label = scenario["label"]
+
+    # Each process loads its own model
+    model, _ = load_pretrained_dt_for_grpo(
+        cfg["model_kwargs"], cfg["checkpoint_path"], device="cuda"
+    )
+    model.eval()
+
+    temp_path = Path(cfg["temp_dir"]) / f"{label}.parquet"
+    processed_data = pl.read_parquet(str(temp_path))
+
+    battery_name = entry["battery"]
+    battery_spec = BATTERIES[battery_name]
+    horizon_name = entry["horizon"]
+    max_step = entry["max_step"]
+    n_eps = entry["num_episodes"]
+    if n_eps < 1:
+        return []
+
+    battery_variant = resolve_battery_variants([{
+        "name": battery_name,
+        "capacity_mwh": battery_spec["capacity_mwh"],
+        "max_power_mw": battery_spec["max_power_mw"],
+        "init_soc_ratio": battery_spec["init_soc_ratio"],
+    }])[0]
+
+    raw_logs_dir = Path(cfg["output_dir"]) / "raw_logs"
+    results = []
+    for ep_idx in range(n_eps):
+        env = create_aemo_env(
+            processed_data=processed_data,
+            battery_variant=battery_variant,
+            max_step=max_step,
+            step_duration=STEP_DURATION,
+            action_mode="full_fcas",
+            degradation_mode="real_world",
+            degradation_chemistry="LFP",
+            degradation_temperature=30.0,
+            random_episode_start=True,
+        )
+        agent = AEMOAgent(
+            env, algorithm="dt", model=model,
+            rtg_value=cfg["rtg_value"], dt_gamma=cfg["dt_gamma"],
+            reset_seed=BASE_SEED + hash(f"{label}_{battery_name}_{horizon_name}_{ep_idx}") % (2**31),
+        )
+        episode_df, _ = agent.run_episode()
+
+        ep_tag = f"{label}__{POLICY_NAME}__{horizon_name}__{battery_name}__ep{ep_idx:03d}"
+        ep_path = raw_logs_dir / label / f"{ep_tag}.parquet"
+        ep_path.parent.mkdir(parents=True, exist_ok=True)
+        episode_df.write_parquet(str(ep_path))
+        results.append({
+            "path": str(ep_path), "scenario": label, "region": region,
+            "policy": POLICY_NAME, "battery": battery_name,
+            "horizon": horizon_name, "max_step": max_step,
+        })
+    return results
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate episodes from GRPO-trained DT")
     parser.add_argument("--output-dir", type=Path, default=repo_root() / "data" / "aemo_dt_fcas_v3",
@@ -126,12 +200,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     cache_dir = args.cache_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load GRPO model
-    print(f"[GRPO] Loading model from {args.model_repo}/{args.model_filename}...")
+    # 1. Resolve checkpoint path
+    print(f"[GRPO] Resolving model from {args.model_repo}/{args.model_filename}...")
     try:
         checkpoint_path = hf_hub_download(repo_id=args.model_repo, filename=args.model_filename)
     except Exception:
-        # Fallback: try the Phase 1 local model
         local_path = root / "models" / "aemo" / "dt" / "grpo_phase1" / "dt_model_grpo_multi.pt"
         if local_path.exists():
             checkpoint_path = str(local_path)
@@ -141,16 +214,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"Model not found on HF ({args.model_repo}/{args.model_filename}) "
                 f"or locally ({local_path})"
             )
+    ckpt_str = str(Path(checkpoint_path).resolve())
 
     model_kwargs = {
         "state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
         "context_len": 180, "n_heads": 8, "drop_p": 0.15, "max_timestep": 100000,
     }
-    model, reference_model = load_pretrained_dt_for_grpo(
-        model_kwargs, checkpoint_path, device=device
-    )
-    model.eval()
-    print(f"[GRPO] Model loaded (return_scale={getattr(model, 'return_scale', 1.0)})")
 
     # 2. Build episode plan
     plan = build_episode_plan(total_episodes=args.total_episodes)
@@ -165,83 +234,42 @@ def main(argv: Sequence[str] | None = None) -> int:
         step_duration=STEP_DURATION,
         refresh=False,
     )
+    # Serialize processed data to temp parquet files for workers
+    temp_data_dir = output_dir / "_temp_data"
+    temp_data_dir.mkdir(parents=True, exist_ok=True)
+    for sm in scenario_manifest:
+        label = sm["label"]
+        path = temp_data_dir / f"{label}.parquet"
+        if not path.exists():
+            processed_by_label[label].write_parquet(str(path))
+
+    # Build shared config dict (passed through work items because spawn doesn't inherit globals)
+    worker_cfg = {
+        "checkpoint_path": ckpt_str,
+        "model_kwargs": model_kwargs,
+        "rtg_value": args.rtg_value,
+        "dt_gamma": args.dt_gamma,
+        "output_dir": str(output_dir.resolve()),
+        "temp_dir": str(temp_data_dir.resolve()),
+    }
 
     all_episodes: list[dict[str, Any]] = []
     raw_logs_dir = output_dir / "raw_logs"
     parallel_workers = max(1, args.parallel_workers)
 
-    def _generate_single(entry: dict[str, Any], scenario: dict[str, Any]) -> list[dict[str, Any]]:
-        """Generate one batch of episodes for a (battery, horizon) combo in one region."""
-        region = scenario["region"]
-        label = scenario["label"]
-        processed_data = processed_by_label[label]
-        battery_name = entry["battery"]
-        battery_spec = BATTERIES[battery_name]
-        horizon_name = entry["horizon"]
-        max_step = entry["max_step"]
-        n_eps = entry["num_episodes"]
-
-        if n_eps < 1:
-            return []
-
-        battery_variant = resolve_battery_variants([{
-            "name": battery_name,
-            "capacity_mwh": battery_spec["capacity_mwh"],
-            "max_power_mw": battery_spec["max_power_mw"],
-            "init_soc_ratio": battery_spec["init_soc_ratio"],
-        }])[0]
-
-        results = []
-        for ep_idx in range(n_eps):
-            env = create_aemo_env(
-                processed_data=processed_data,
-                battery_variant=battery_variant,
-                max_step=max_step,
-                step_duration=STEP_DURATION,
-                action_mode="full_fcas",
-                degradation_mode="real_world",
-                degradation_chemistry="LFP",
-                degradation_temperature=30.0,
-                random_episode_start=True,
-            )
-            agent = AEMOAgent(
-                env,
-                algorithm="dt",
-                model=model,
-                rtg_value=args.rtg_value,
-                dt_gamma=args.dt_gamma,
-                reset_seed=BASE_SEED + hash(f"{label}_{battery_name}_{horizon_name}_{ep_idx}") % (2**31),
-            )
-            episode_df, _ = agent.run_episode()
-
-            ep_tag = f"{label}__{POLICY_NAME}__{horizon_name}__{battery_name}__ep{ep_idx:03d}"
-            ep_path = raw_logs_dir / label / f"{ep_tag}.parquet"
-            ep_path.parent.mkdir(parents=True, exist_ok=True)
-            episode_df.write_parquet(str(ep_path))
-
-            results.append({
-                "path": str(ep_path),
-                "scenario": label,
-                "region": region,
-                "policy": POLICY_NAME,
-                "battery": battery_name,
-                "horizon": horizon_name,
-                "max_step": max_step,
-            })
-        return results
-
     # Build flat work list
     work_items: list[dict[str, Any]] = []
     for scenario in scenario_manifest:
         for entry in plan:
-            work_items.append({"entry": entry, "scenario": scenario})
+            work_items.append({"entry": entry, "scenario": scenario, "cfg": worker_cfg})
 
     total_work = len(work_items)
-    print(f"[GRPO] Generating {total_work} battery×horizon×region combos with {parallel_workers} workers...")
+    print(f"[GRPO] Generating {total_work} combos with {parallel_workers} processes...")
 
-    with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
+    spawn_ctx = mp.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=parallel_workers, mp_context=spawn_ctx) as executor:
         futures = {
-            executor.submit(_generate_single, item["entry"], item["scenario"]): item
+            executor.submit(_worker_generate, item): item
             for item in work_items
         }
         done = 0
