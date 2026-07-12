@@ -42,6 +42,8 @@ def _(mo):
     use_pilot = mo.ui.checkbox(label="Pilot mode (12 episodes, fast)", value=True)
     fresh_start = mo.ui.checkbox(label="Fresh start (delete checkpoint)", value=False)
     use_json_config = mo.ui.checkbox(label="Use JSON config instead of individual controls", value=False)
+    include_base_dataset = mo.ui.checkbox(label="Include base dataset (aemo_fcas_dataset.parquet)", value=True)
+    include_grpo_dataset = mo.ui.checkbox(label="Include GRPO dataset (aemo_fcas_grpo_dataset.parquet)", value=True)
 
     n_block = mo.ui.number(value=8, label="Blocks", full_width=True)
     h_dim = mo.ui.number(value=384, label="Hidden dim", full_width=True)
@@ -94,6 +96,7 @@ def _(mo):
         [
             mo.md("## 🎛️ AEMO Decision Transformer — MoLab Training"),
             mo.hstack([use_pilot, fresh_start, use_json_config], justify="start", gap=2),
+            mo.hstack([include_base_dataset, include_grpo_dataset], justify="start", gap=2),
             mo.hstack([n_block, h_dim, n_heads], justify="start", gap=1),
             mo.hstack([context_len, drop_p], justify="start", gap=1),
             mo.hstack([n_kv_heads, qk_norm, tie_weights], justify="start", gap=2),
@@ -112,6 +115,8 @@ def _(mo):
         epochs_per_session,
         fresh_start,
         h_dim,
+        include_base_dataset,
+        include_grpo_dataset,
         json_config,
         lr,
         n_block,
@@ -129,25 +134,64 @@ def _(mo):
 
 
 @app.cell
-def _(hf_hub_download, Path, use_pilot):
+def _(hf_hub_download, Path, include_base_dataset, include_grpo_dataset, pl, use_pilot):
     REPO_ID = "mrvictoru/AEMO_simulated_trade"
     CACHE_DIR = Path("/workspace")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     if use_pilot.value:
         filename = "aemo_fcas_pilot.parquet"
-    else:
-        filename = "aemo_fcas_dataset.parquet"
+        local_path = CACHE_DIR / filename
 
-    local_path = CACHE_DIR / filename
-    if not local_path.exists():
-        print(f"⬇️ Downloading {filename} from HuggingFace...")
-        hf_hub_download(repo_id=REPO_ID, filename=filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
-    else:
-        print(f"📦 Using cached file: {local_path}")
+        if not local_path.exists():
+            print(f"⬇️ Downloading {filename} from HuggingFace...")
+            hf_hub_download(repo_id=REPO_ID, filename=filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
+        else:
+            print(f"📦 Using cached file: {local_path}")
 
-    df = pl.read_parquet(local_path)
-    print(f"Loaded {len(df):,} rows from {local_path}")
+        df = pl.read_parquet(local_path)
+        print(f"Loaded pilot dataset with {len(df):,} rows from {local_path}")
+    else:
+        base_filename = "aemo_fcas_dataset.parquet"
+        grpo_filename = "aemo_fcas_grpo_dataset.parquet"
+
+        base_path = CACHE_DIR / base_filename
+        grpo_path = CACHE_DIR / grpo_filename
+
+        selected_dfs = []
+
+        if include_base_dataset.value:
+            if not base_path.exists():
+                print(f"⬇️ Downloading {base_filename} from HuggingFace...")
+                hf_hub_download(repo_id=REPO_ID, filename=base_filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
+            else:
+                print(f"📦 Using cached file: {base_path}")
+
+            base_df = pl.read_parquet(base_path)
+            selected_dfs.append(base_df)
+            print(f"Loaded base dataset: {len(base_df):,} rows from {base_path}")
+
+        if include_grpo_dataset.value:
+            if not grpo_path.exists():
+                print(f"⬇️ Downloading {grpo_filename} from HuggingFace...")
+                hf_hub_download(repo_id=REPO_ID, filename=grpo_filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
+            else:
+                print(f"📦 Using cached file: {grpo_path}")
+
+            grpo_df = pl.read_parquet(grpo_path)
+            selected_dfs.append(grpo_df)
+            print(f"Loaded GRPO dataset: {len(grpo_df):,} rows from {grpo_path}")
+
+        if not selected_dfs:
+            raise ValueError("Select at least one dataset checkbox when Pilot mode is disabled.")
+
+        if len(selected_dfs) == 1:
+            df = selected_dfs[0]
+            print(f"Selected dataset rows: {len(df):,}")
+        else:
+            df = pl.concat(selected_dfs, how="vertical")
+            print(f"Combined dataset rows: {len(df):,}")
+
     return (df,)
 
 
