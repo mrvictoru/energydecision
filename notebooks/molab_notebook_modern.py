@@ -92,6 +92,7 @@ def _(mo):
     train_btn = mo.ui.run_button(label="Start Training", kind="success")
     upload_btn = mo.ui.run_button(label="Upload to HuggingFace", kind="info")
     hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="Hugging Face repo", full_width=True)
+    hf_token_input = mo.ui.text(value=os.environ.get("HF_TOKEN", ""), label="Hugging Face token", full_width=True)
 
     mo.vstack(
         [
@@ -106,6 +107,7 @@ def _(mo):
             mo.md("### Actions"),
             mo.hstack([train_btn, upload_btn], justify="start", gap=2),
             hf_repo_id,
+            hf_token_input,
             json_config,
         ]
     )
@@ -131,6 +133,7 @@ def _(mo):
         train_btn,
         upload_btn,
         hf_repo_id,
+        hf_token_input,
         use_json_config,
         use_pilot,
     )
@@ -210,15 +213,176 @@ def _(df, pl):
 
 
 @app.cell
-def _(F, nn, torch, Path, sys):
-    repo_root = Path.cwd().resolve()
-    src_path = repo_root / "src"
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
+def _(F, nn, torch):
+    class RMSNorm(nn.Module):
+        def __init__(self, dim, eps: float = 1e-6):
+            super().__init__()
+            self.eps = eps
+            self.scale = nn.Parameter(torch.ones(dim))
 
-    from decision_transformer import DecisionTransformer as ModernDecisionTransformer
+        def forward(self, x):
+            norm_x = torch.mean(x * x, dim=-1, keepdim=True)
+            x = x * torch.rsqrt(norm_x + self.eps)
+            return x * self.scale
 
-    class DecisionTransformer(ModernDecisionTransformer):
+    class SwiGLU(nn.Module):
+        def __init__(self, dim, hidden_dim, drop_p):
+            super().__init__()
+            self.w1 = nn.Linear(dim, hidden_dim, bias=False)
+            self.w2 = nn.Linear(dim, hidden_dim, bias=False)
+            self.w3 = nn.Linear(hidden_dim, dim, bias=False)
+            self.dropout = nn.Dropout(drop_p)
+
+        def forward(self, x):
+            return self.dropout(self.w3(F.silu(self.w1(x)) * self.w2(x)))
+
+    class RotaryEmbedding(nn.Module):
+        def __init__(self, dim, max_position=4096, base=10000.0):
+            super().__init__()
+            if dim % 2 != 0:
+                raise ValueError("RoPE requires even dimension")
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+            positions = torch.arange(max_position, dtype=torch.float32)
+            freqs = torch.einsum("i,j->ij", positions, inv_freq)
+            self.register_buffer("cos", torch.cos(freqs))
+            self.register_buffer("sin", torch.sin(freqs))
+
+        def forward(self, seq_len):
+            if seq_len > self.cos.shape[0]:
+                raise ValueError("seq_len exceeds RoPE cache")
+            return self.cos[:seq_len], self.sin[:seq_len]
+
+    def apply_rotary_pos_emb(q, k, cos, sin):
+        cos = cos.to(dtype=q.dtype, device=q.device).unsqueeze(0).unsqueeze(0)
+        sin = sin.to(dtype=q.dtype, device=q.device).unsqueeze(0).unsqueeze(0)
+        q_even, q_odd = q[..., ::2], q[..., 1::2]
+        k_even, k_odd = k[..., ::2], k[..., 1::2]
+        q = torch.cat([q_even * cos - q_odd * sin, q_even * sin + q_odd * cos], dim=-1)
+        k = torch.cat([k_even * cos - k_odd * sin, k_even * sin + k_odd * cos], dim=-1)
+        return q, k
+
+    class CausalSelfAttention(nn.Module):
+        def __init__(
+            self,
+            h_dim,
+            max_T,
+            n_heads,
+            drop_p,
+            rope_enabled=False,
+            rope_max_position=4096,
+            rope_base=10000.0,
+            n_kv_heads=None,
+            qk_norm=False,
+        ):
+            super().__init__()
+            assert h_dim % n_heads == 0, "h_dim must be divisible by n_heads"
+            self.n_heads = n_heads
+            self.head_dim = h_dim // n_heads
+            self.drop_p = drop_p
+            self.rope_enabled = rope_enabled
+
+            if n_kv_heads is None:
+                n_kv_heads = n_heads
+            assert n_heads % n_kv_heads == 0, "n_heads must be divisible by n_kv_heads"
+            self.n_kv_heads = n_kv_heads
+            self.n_rep = n_heads // n_kv_heads
+
+            if rope_enabled:
+                if self.head_dim % 2 != 0:
+                    raise ValueError("RoPE requires even head_dim")
+                self.rotary = RotaryEmbedding(self.head_dim, max_position=rope_max_position, base=rope_base)
+
+            self.q_proj = nn.Linear(h_dim, n_heads * self.head_dim, bias=False)
+            self.k_proj = nn.Linear(h_dim, n_kv_heads * self.head_dim, bias=False)
+            self.v_proj = nn.Linear(h_dim, n_kv_heads * self.head_dim, bias=False)
+            self.proj = nn.Linear(h_dim, h_dim, bias=False)
+            self.proj_drop = nn.Dropout(drop_p)
+
+            self.qk_norm = qk_norm
+            if qk_norm:
+                self.q_norm = RMSNorm(self.head_dim)
+                self.k_norm = RMSNorm(self.head_dim)
+
+            mask = torch.tril(torch.ones(max_T, max_T)).view(1, 1, max_T, max_T)
+            self.register_buffer("mask", mask)
+
+        def forward(self, x, key_padding_mask=None):
+            B, T, C = x.shape
+
+            q = self.q_proj(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
+            k = self.k_proj(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
+            v = self.v_proj(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
+
+            if self.qk_norm:
+                q = self.q_norm(q)
+                k = self.k_norm(k)
+
+            if self.rope_enabled:
+                cos, sin = self.rotary(T)
+                q, k = apply_rotary_pos_emb(q, k, cos, sin)
+
+            if self.n_rep > 1:
+                k = k.repeat_interleave(self.n_rep, dim=1)
+                v = v.repeat_interleave(self.n_rep, dim=1)
+
+            causal = self.mask[:, :, :T, :T].bool()
+            if key_padding_mask is not None:
+                kp = key_padding_mask.view(B, 1, 1, T).to(dtype=torch.bool)
+                combined = causal & kp
+                attn_mask = torch.zeros((B, 1, T, T), device=x.device, dtype=q.dtype)
+                attn_mask = attn_mask.masked_fill(~combined, float("-inf"))
+                y = F.scaled_dot_product_attention(
+                    q, k, v,
+                    attn_mask=attn_mask,
+                    dropout_p=self.drop_p if self.training else 0.0,
+                )
+            else:
+                y = F.scaled_dot_product_attention(
+                    q, k, v,
+                    is_causal=True,
+                    dropout_p=self.drop_p if self.training else 0.0,
+                )
+
+            y = y.transpose(1, 2).contiguous().view(B, T, C)
+            y = self.proj_drop(self.proj(y))
+            y = torch.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+            return y
+
+    class ModernBlock(nn.Module):
+        def __init__(
+            self,
+            h_dim,
+            max_T,
+            n_heads,
+            drop_p,
+            rope_enabled=False,
+            rope_max_position=4096,
+            rope_base=10000.0,
+            n_kv_heads=None,
+            qk_norm=False,
+        ):
+            super().__init__()
+            self.norm1 = RMSNorm(h_dim)
+            self.attn = CausalSelfAttention(
+                h_dim,
+                max_T,
+                n_heads,
+                drop_p,
+                rope_enabled=rope_enabled,
+                rope_max_position=rope_max_position,
+                rope_base=rope_base,
+                n_kv_heads=n_kv_heads,
+                qk_norm=qk_norm,
+            )
+            self.norm2 = RMSNorm(h_dim)
+            self.ffn = SwiGLU(h_dim, 4 * h_dim, drop_p)
+
+        def forward(self, x, key_padding_mask=None):
+            x = x + self.attn(self.norm1(x), key_padding_mask)
+            x = x + self.ffn(self.norm2(x))
+            return x
+
+    class DecisionTransformer(nn.Module):
         def __init__(
             self,
             state_dim,
@@ -236,40 +400,127 @@ def _(F, nn, torch, Path, sys):
             qk_norm=False,
             tie_weights=False,
         ):
-            super().__init__(
-                state_dim=state_dim,
-                act_dim=act_dim,
-                n_block=n_block,
-                h_dim=h_dim,
-                context_len=context_len,
-                n_heads=n_heads,
-                drop_p=drop_p,
-                max_timestep=max_timestep,
-                rope_enabled=use_rope,
-                rope_max_position=rope_max_position,
-                rope_base=rope_base,
-                n_kv_heads=n_kv_heads,
-                qk_norm=qk_norm,
-                tie_weights=tie_weights,
+            super().__init__()
+            self.state_dim = state_dim
+            self.act_dim = act_dim
+            self.h_dim = h_dim
+            self.context_len = context_len
+            self.n_heads = n_heads
+            self.n_block = n_block
+            self.drop_p = drop_p
+            self.max_timestep = max_timestep
+            self.rope_enabled = use_rope
+
+            input_seq_len = 3 * context_len
+            self.transformer = nn.ModuleList(
+                [
+                    ModernBlock(
+                        h_dim,
+                        input_seq_len,
+                        n_heads,
+                        drop_p,
+                        rope_enabled=use_rope,
+                        rope_max_position=rope_max_position,
+                        rope_base=rope_base,
+                        n_kv_heads=n_kv_heads,
+                        qk_norm=qk_norm,
+                    )
+                    for _ in range(n_block)
+                ]
             )
+
+            self.embed_ln = RMSNorm(h_dim)
+            self.embed_timestep = nn.Embedding(max_timestep, h_dim)
+            self.embed_rtg = nn.Linear(1, h_dim)
+            self.embed_state = nn.Linear(state_dim, h_dim)
+            self.embed_act = nn.Linear(act_dim, h_dim)
+            self.ln_f = RMSNorm(h_dim)
+
+            self._tie_weights = tie_weights
+            if tie_weights:
+                self.pred_rtg = nn.Linear(1, h_dim, bias=False)
+                self.pred_state = nn.Linear(state_dim, h_dim, bias=False)
+                pred_act_linear = nn.Linear(act_dim, h_dim, bias=False)
+                self.pred_rtg.weight = self.embed_rtg.weight
+                self.pred_state.weight = self.embed_state.weight
+                pred_act_linear.weight = self.embed_act.weight
+                self.pred_act = nn.Sequential(pred_act_linear, nn.Tanh())
+            else:
+                self.pred_rtg = nn.Linear(h_dim, 1, bias=False)
+                self.pred_state = nn.Linear(h_dim, state_dim, bias=False)
+                self.pred_act = nn.Sequential(nn.Linear(h_dim, act_dim, bias=False), nn.Tanh())
+
+            self.return_scale = 1.0
 
         def forward(self, states, actions, returns_to_go, timesteps, attention_mask=None):
-            return super().forward(
-                state=states,
-                rtg=returns_to_go,
-                timestep=timesteps,
-                actions=actions,
-                attention_mask=attention_mask,
-            )
+            B, T, _ = states.shape
+
+            states = torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
+            actions = torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
+            returns_to_go = torch.nan_to_num(returns_to_go, nan=0.0, posinf=0.0, neginf=0.0)
+
+            if returns_to_go.dim() == 1:
+                returns_to_go = returns_to_go.unsqueeze(0).unsqueeze(-1)
+            elif returns_to_go.dim() == 2:
+                returns_to_go = returns_to_go.unsqueeze(-1)
+            elif returns_to_go.dim() == 3 and returns_to_go.shape[-1] != 1:
+                returns_to_go = returns_to_go.unsqueeze(-1)
+
+            timesteps = timesteps.clamp(min=0, max=self.embed_timestep.num_embeddings - 1)
+
+            time_emb = self.embed_timestep(timesteps)
+            state_emb = self.embed_state(states) + time_emb
+            rtg_emb = self.embed_rtg(returns_to_go) + time_emb
+            act_emb = self.embed_act(actions) + time_emb
+
+            h = torch.stack([rtg_emb, state_emb, act_emb], dim=1).permute(0, 2, 1, 3).reshape(B, 3 * T, self.h_dim)
+            h = self.embed_ln(h)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device=h.device)
+                attention_mask = attention_mask > 0
+                stacked_mask = torch.stack([attention_mask, attention_mask, attention_mask], dim=1)
+                stacked_mask = stacked_mask.permute(0, 2, 1).reshape(B, 3 * T)
+            else:
+                stacked_mask = torch.ones(B, 3 * T, dtype=torch.bool, device=h.device)
+
+            for block in self.transformer:
+                h = block(h, key_padding_mask=stacked_mask)
+
+            h = self.ln_f(h)
+            h = h.reshape(B, T, 3, self.h_dim).permute(0, 2, 1, 3)
+
+            if self._tie_weights:
+                return_preds = F.linear(h[:, 2], self.pred_rtg.weight.t())
+                state_preds = F.linear(h[:, 2], self.pred_state.weight.t())
+                act_preds = torch.tanh(F.linear(h[:, 1], self.pred_act[0].weight.t()))
+            else:
+                return_preds = self.pred_rtg(h[:, 2])
+                state_preds = self.pred_state(h[:, 2])
+                act_preds = self.pred_act(h[:, 1])
+
+            return_preds = torch.nan_to_num(return_preds, nan=0.0, posinf=0.0, neginf=0.0)
+            state_preds = torch.nan_to_num(state_preds, nan=0.0, posinf=0.0, neginf=0.0)
+            act_preds = torch.nan_to_num(act_preds, nan=0.0, posinf=0.0, neginf=0.0)
+            return return_preds, state_preds, act_preds
 
         def get_action(self, states, actions, returns_to_go, timesteps, attention_mask=None):
-            action = super().get_action(
-                states=states,
-                actions=actions,
-                rtg=returns_to_go,
-                timesteps=timesteps,
-                attention_mask=attention_mask,
-            )
+            if states.dim() == 2:
+                states = states.unsqueeze(0)
+            if actions.dim() == 2:
+                actions = actions.unsqueeze(0)
+            if returns_to_go.dim() == 1:
+                returns_to_go = returns_to_go.unsqueeze(0).unsqueeze(-1)
+            elif returns_to_go.dim() == 2:
+                returns_to_go = returns_to_go.unsqueeze(-1)
+            if timesteps.dim() == 1:
+                timesteps = timesteps.unsqueeze(0)
+            if attention_mask is not None and attention_mask.dim() == 1:
+                attention_mask = attention_mask.unsqueeze(0)
+
+            _, _, act_preds = self.forward(states, actions, returns_to_go, timesteps, attention_mask=attention_mask)
+            act_preds = torch.nan_to_num(act_preds, nan=0.0, posinf=0.0, neginf=0.0)
+            action = act_preds[0, -1]
             if action.ndim == 1:
                 action = action.unsqueeze(0)
             if action.shape[-1] > 1:
@@ -411,8 +662,10 @@ def _(
 
 @app.cell
 def _(DecisionTransformer, Path, TRAIN_CFG, torch, time):
-    CHECKPOINT_PATH = Path("/workspace/latest_checkpoint.pt")
-    BEST_MODEL_PATH = Path("/workspace/best_model.pt")
+    CHECKPOINT_DIR = Path("/workspace/dt_checkpoints")
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    CHECKPOINT_PATH = CHECKPOINT_DIR / "latest_checkpoint.pt"
+    BEST_MODEL_PATH = CHECKPOINT_DIR / "best_model.pt"
 
     def load_or_create_model(cfg, device):
         model = DecisionTransformer(
@@ -455,7 +708,7 @@ def _(DecisionTransformer, Path, TRAIN_CFG, torch, time):
         torch.save(payload, CHECKPOINT_PATH)
 
     print("✅ Training helpers ready")
-    return (CHECKPOINT_PATH, BEST_MODEL_PATH, load_or_create_model, save_checkpoint)
+    return (CHECKPOINT_DIR, CHECKPOINT_PATH, BEST_MODEL_PATH, load_or_create_model, save_checkpoint)
 
 
 @app.cell
@@ -545,7 +798,7 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, Tr
 
 
 @app.cell
-def _(BEST_MODEL_PATH, HfApi, hf_repo_id, upload_btn):
+def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, HfApi, Path, TRAIN_CFG, hf_repo_id, hf_token_input, os, torch, upload_btn):
     if not upload_btn.value:
         print("Upload button not clicked yet")
         return
@@ -554,14 +807,84 @@ def _(BEST_MODEL_PATH, HfApi, hf_repo_id, upload_btn):
     if not repo_id:
         raise ValueError("Please provide a Hugging Face repo ID.")
 
-    api = HfApi()
-    api.create_repo(repo_id=repo_id, exist_ok=True, repo_type="model")
+    token = (hf_token_input.value or os.environ.get("HF_TOKEN", "")).strip()
+    if not token:
+        raise ValueError("Please provide a Hugging Face token or set the HF_TOKEN environment variable.")
+
+    def _build_upload_model():
+        return DecisionTransformer(
+            state_dim=TRAIN_CFG["state_dim"],
+            act_dim=TRAIN_CFG["act_dim"],
+            n_block=TRAIN_CFG["n_block"],
+            h_dim=TRAIN_CFG["h_dim"],
+            context_len=TRAIN_CFG["context_len"],
+            n_heads=TRAIN_CFG["n_heads"],
+            drop_p=TRAIN_CFG["drop_p"],
+            max_timestep=TRAIN_CFG["max_timestep"],
+            use_rope=TRAIN_CFG.get("use_rope", False),
+            n_kv_heads=TRAIN_CFG.get("n_kv_heads"),
+            qk_norm=TRAIN_CFG.get("qk_norm", False),
+            tie_weights=TRAIN_CFG.get("tie_weights", False),
+        )
+
+    tmp_path = Path("/workspace/best_model.pt")
+    if BEST_MODEL_PATH.exists():
+        print("📂 Loading best model weights...")
+        state_dict = torch.load(BEST_MODEL_PATH, map_location="cpu")
+        model_upload = _build_upload_model()
+        model_upload.load_state_dict(state_dict)
+        best_val_loss = float("inf")
+    elif CHECKPOINT_PATH.exists():
+        print("📂 No best_model.pt found — loading from latest checkpoint...")
+        checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu")
+        model_upload = _build_upload_model()
+        model_upload.load_state_dict(checkpoint["model_state_dict"])
+        best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+    else:
+        raise FileNotFoundError(f"No trained model found. Expected {BEST_MODEL_PATH} or {CHECKPOINT_PATH}")
+
+    torch.save(
+        {
+            "model_state_dict": model_upload.state_dict(),
+            "val_loss": best_val_loss,
+            "config": {
+                k: v
+                for k, v in TRAIN_CFG.items()
+                if k in ("state_dim", "act_dim", "n_block", "h_dim", "n_heads", "context_len", "drop_p", "return_scale", "discount_factor")
+            },
+        },
+        tmp_path,
+    )
+    print(f"💾 Model saved to {tmp_path} ({tmp_path.stat().st_size / 1e6:.1f} MB)")
+
+    api = HfApi(token=token)
+    try:
+        api.repo_info(repo_id=repo_id, repo_type="model", token=token)
+        print(f"📂 Repo {repo_id} already exists")
+    except Exception:
+        print(f"🆕 Creating HF repo {repo_id}...")
+        api.create_repo(repo_id=repo_id, exist_ok=True, repo_type="model")
+
+    print(f"📤 Uploading to {repo_id}/aemo_dt_fcas_model.pt...")
     api.upload_file(
-        path_or_fileobj=str(BEST_MODEL_PATH),
-        path_in_repo=BEST_MODEL_PATH.name,
+        path_or_fileobj=str(tmp_path),
+        path_in_repo="aemo_dt_fcas_model.pt",
         repo_id=repo_id,
         repo_type="model",
+        token=token,
     )
+    print(f"✅ Uploaded best model to HF: {repo_id}/aemo_dt_fcas_model.pt")
+
+    if BEST_MODEL_PATH.exists() and str(BEST_MODEL_PATH) != str(tmp_path):
+        print("📤 Also uploading aemo_dt_fcas_best_checkpoint.pt...")
+        api.upload_file(
+            path_or_fileobj=str(BEST_MODEL_PATH),
+            path_in_repo="aemo_dt_fcas_best_checkpoint.pt",
+            repo_id=repo_id,
+            repo_type="model",
+            token=token,
+        )
+
     print(f"✅ Uploaded model to https://huggingface.co/{repo_id}")
     return
 
