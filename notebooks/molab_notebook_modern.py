@@ -91,6 +91,7 @@ def _(mo):
 
     train_btn = mo.ui.run_button(label="Start Training", kind="success")
     upload_btn = mo.ui.run_button(label="Upload to HuggingFace", kind="info")
+    hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="Hugging Face repo", full_width=True)
 
     mo.vstack(
         [
@@ -104,6 +105,7 @@ def _(mo):
             mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="start", gap=1),
             mo.md("### Actions"),
             mo.hstack([train_btn, upload_btn], justify="start", gap=2),
+            hf_repo_id,
             json_config,
         ]
     )
@@ -128,6 +130,7 @@ def _(mo):
         tie_weights,
         train_btn,
         upload_btn,
+        hf_repo_id,
         use_json_config,
         use_pilot,
     )
@@ -542,15 +545,24 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, Tr
 
 
 @app.cell
-def _(train_losses, val_losses):
-    if train_losses and val_losses:
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(6, 3))
-        ax.plot(train_losses, label="train")
-        ax.plot(val_losses, label="val")
-        ax.legend()
-        ax.set_title("Training loss")
-        plt.show()
+def _(BEST_MODEL_PATH, HfApi, hf_repo_id, upload_btn):
+    if not upload_btn.value:
+        print("Upload button not clicked yet")
+        return
+
+    repo_id = hf_repo_id.value.strip()
+    if not repo_id:
+        raise ValueError("Please provide a Hugging Face repo ID.")
+
+    api = HfApi()
+    api.create_repo(repo_id=repo_id, exist_ok=True, repo_type="model")
+    api.upload_file(
+        path_or_fileobj=str(BEST_MODEL_PATH),
+        path_in_repo=BEST_MODEL_PATH.name,
+        repo_id=repo_id,
+        repo_type="model",
+    )
+    print(f"✅ Uploaded model to https://huggingface.co/{repo_id}")
     return
 
 
