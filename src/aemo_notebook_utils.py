@@ -1060,6 +1060,19 @@ def _normalize_episode_dataframe(
             f"{source_policy} episode {episode_id} has invalid vector sizes: state={state_dim}, action={act_dim}"
         )
 
+    # Pad legacy 3-dim multi_market actions to 9-dim full_fcas
+    # multi_market: [energy, RAISEREG, LOWERREG]
+    # full_fcas:    [energy, RAISEREG, LOWERREG, RAISE6SEC, LOWER6SEC,
+    #                         RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN]
+    if act_dim == 3:
+        working = working.with_columns(
+            pl.col("action").map_elements(
+                lambda a: list(a) + [0.0] * 6,
+                return_dtype=pl.List(pl.Float32),
+            )
+        )
+        act_dim = 9
+
     manifest_row = {
         "episode_id": episode_id,
         "source_policy": source_policy,
