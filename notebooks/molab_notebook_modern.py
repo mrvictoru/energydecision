@@ -1,6 +1,7 @@
 import marimo
 
-app = marimo.App(width="medium")
+__generated_with = "0.23.14"
+app = marimo.App(width="medium", auto_download=["html"])
 
 
 @app.cell
@@ -11,6 +12,7 @@ def _():
     import time
     from pathlib import Path
 
+    import matplotlib.pyplot as plt
     import marimo as mo
     import numpy as np
     import polars as pl
@@ -31,14 +33,33 @@ def _():
         np,
         os,
         pl,
-        sys,
+        plt,
         time,
         torch,
     )
 
 
 @app.cell
-def _(mo):
+def _(Path, torch):
+    CHECKPOINT_DIR = Path("/workspace/dt_checkpoints")
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    CHECKPOINT_PATH = CHECKPOINT_DIR / "latest_checkpoint.pt"
+    BEST_MODEL_PATH = CHECKPOINT_DIR / "best_model.pt"
+
+    ckpt_info = "No local checkpoint found"
+    if CHECKPOINT_PATH.exists():
+        try:
+            _checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu")
+            _epoch = _checkpoint.get("epoch", "?")
+            _best = _checkpoint.get("best_val_loss", float("inf"))
+            ckpt_info = f"Resume ready: epoch={_epoch}, best_val={_best:.6f}"
+        except Exception:
+            ckpt_info = "Checkpoint exists but could not be read"
+    return BEST_MODEL_PATH, CHECKPOINT_DIR, CHECKPOINT_PATH, ckpt_info
+
+
+@app.cell
+def _(json, mo, os):
     use_pilot = mo.ui.checkbox(label="Pilot mode (12 episodes, fast)", value=True)
     fresh_start = mo.ui.checkbox(label="Fresh start (delete checkpoint)", value=False)
     use_json_config = mo.ui.checkbox(label="Use JSON config instead of individual controls", value=False)
@@ -94,23 +115,23 @@ def _(mo):
     hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="Hugging Face repo", full_width=True)
     hf_token_input = mo.ui.text(value=os.environ.get("HF_TOKEN", ""), label="Hugging Face token", full_width=True)
 
-    mo.vstack(
+    resume_from_hf = mo.ui.checkbox(label="Resume from HuggingFace checkpoint", value=False)
+    hf_checkpoint_path = mo.ui.text(value="", label="HF checkpoint filename (e.g. checkpoint_step_500.pt)", full_width=True)
+
+    manual_controls = mo.vstack(
         [
-            mo.md("## 🎛️ AEMO Decision Transformer — MoLab Training"),
-            mo.hstack([use_pilot, fresh_start, use_json_config], justify="start", gap=2),
-            mo.hstack([include_base_dataset, include_grpo_dataset], justify="start", gap=2),
+            mo.md("### Architecture"),
             mo.hstack([n_block, h_dim, n_heads], justify="start", gap=1),
             mo.hstack([context_len, drop_p], justify="start", gap=1),
             mo.hstack([n_kv_heads, qk_norm, tie_weights], justify="start", gap=2),
+            mo.md("### Optimization"),
             mo.hstack([batch_size, epochs_per_session, lr], justify="start", gap=1),
             mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="start", gap=1),
-            mo.md("### Actions"),
-            mo.hstack([train_btn, upload_btn], justify="start", gap=2),
-            hf_repo_id,
-            hf_token_input,
-            json_config,
-        ]
+        ],
+        gap=0.5,
     )
+
+    manual_controls
     return (
         action_loss_weight,
         batch_size,
@@ -119,31 +140,110 @@ def _(mo):
         epochs_per_session,
         fresh_start,
         h_dim,
+        hf_checkpoint_path,
+        hf_repo_id,
+        hf_token_input,
         include_base_dataset,
         include_grpo_dataset,
         json_config,
         lr,
+        manual_controls,
         n_block,
         n_heads,
         n_kv_heads,
         qk_norm,
+        resume_from_hf,
         return_loss_weight,
         state_loss_weight,
         tie_weights,
         train_btn,
         upload_btn,
-        hf_repo_id,
-        hf_token_input,
         use_json_config,
         use_pilot,
     )
 
 
 @app.cell
-def _(hf_hub_download, Path, include_base_dataset, include_grpo_dataset, pl, use_pilot):
+def _(
+    BEST_MODEL_PATH,
+    ckpt_info,
+    fresh_start,
+    hf_checkpoint_path,
+    hf_repo_id,
+    hf_token_input,
+    include_base_dataset,
+    include_grpo_dataset,
+    json_config,
+    manual_controls,
+    mo,
+    resume_from_hf,
+    train_btn,
+    upload_btn,
+    use_json_config,
+    use_pilot,
+):
+    _dataset_section = [
+        mo.md("### Dataset"),
+        mo.hstack([use_pilot, fresh_start, use_json_config], justify="start", gap=2),
+        mo.md(
+            "Pilot mode uses the compact pilot parquet. Full mode lets you combine the base and GRPO datasets."
+        ),
+    ]
+    if not use_pilot.value:
+        _dataset_section.extend(
+            [
+                mo.hstack([include_base_dataset, include_grpo_dataset], justify="start", gap=2),
+                mo.md("When both are enabled, the selected datasets are concatenated vertically before training."),
+            ]
+        )
+
+    _config_section = mo.vstack(
+        [
+            mo.md("### Configuration"),
+            mo.md("JSON mode overrides the individual controls below.") if use_json_config.value else mo.md("Using individual controls for the active training config."),
+            json_config if use_json_config.value else manual_controls,
+        ],
+        gap=0.5,
+    )
+
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    ## AEMO Decision Transformer - Modern Training
+
+    **Local checkpoint**: {ckpt_info}
+
+    **Best model path**: {BEST_MODEL_PATH}
+    """
+            ),
+            mo.vstack(_dataset_section, gap=0.5),
+            _config_section,
+            mo.md("### Checkpoint Resume"),
+            mo.hstack([resume_from_hf, hf_checkpoint_path], justify="start", gap=2),
+            mo.md("### Actions"),
+            mo.hstack([train_btn, upload_btn], justify="start", gap=2),
+            hf_repo_id,
+            hf_token_input,
+        ]
+    )
+    return
+
+
+@app.cell
+def _(
+    Path,
+    hf_hub_download,
+    include_base_dataset,
+    include_grpo_dataset,
+    pl,
+    use_pilot,
+):
     REPO_ID = "mrvictoru/AEMO_simulated_trade"
     CACHE_DIR = Path("/workspace")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    base_df = None
+    grpo_df = None
 
     if use_pilot.value:
         filename = "aemo_fcas_pilot.parquet"
@@ -151,7 +251,7 @@ def _(hf_hub_download, Path, include_base_dataset, include_grpo_dataset, pl, use
 
         if not local_path.exists():
             print(f"⬇️ Downloading {filename} from HuggingFace...")
-            hf_hub_download(repo_id=REPO_ID, filename=filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
+            hf_hub_download(repo_id=REPO_ID, filename=filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False, repo_type="dataset")
         else:
             print(f"📦 Using cached file: {local_path}")
 
@@ -169,7 +269,7 @@ def _(hf_hub_download, Path, include_base_dataset, include_grpo_dataset, pl, use
         if include_base_dataset.value:
             if not base_path.exists():
                 print(f"⬇️ Downloading {base_filename} from HuggingFace...")
-                hf_hub_download(repo_id=REPO_ID, filename=base_filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
+                hf_hub_download(repo_id=REPO_ID, filename=base_filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False, repo_type="dataset")
             else:
                 print(f"📦 Using cached file: {base_path}")
 
@@ -180,7 +280,7 @@ def _(hf_hub_download, Path, include_base_dataset, include_grpo_dataset, pl, use
         if include_grpo_dataset.value:
             if not grpo_path.exists():
                 print(f"⬇️ Downloading {grpo_filename} from HuggingFace...")
-                hf_hub_download(repo_id=REPO_ID, filename=grpo_filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False)
+                hf_hub_download(repo_id=REPO_ID, filename=grpo_filename, local_dir=str(CACHE_DIR), local_dir_use_symlinks=False, repo_type="dataset")
             else:
                 print(f"📦 Using cached file: {grpo_path}")
 
@@ -195,10 +295,28 @@ def _(hf_hub_download, Path, include_base_dataset, include_grpo_dataset, pl, use
             df = selected_dfs[0]
             print(f"Selected dataset rows: {len(df):,}")
         else:
-            df = pl.concat(selected_dfs, how="vertical")
+            # Unify schemas: cast all float-like list columns to Float64 before concat
+            _target_schema = selected_dfs[0].schema
+            print(f"Target schema: {_target_schema}")
+            _aligned = [selected_dfs[0]]
+            for _other in selected_dfs[1:]:
+                _cast_exprs = []
+                for _col_name, _col_type in _other.schema.items():
+                    if _col_name in _target_schema and _target_schema[_col_name] != _col_type:
+                        if isinstance(_col_type, pl.List) and isinstance(_target_schema[_col_name], pl.List):
+                            print(f"  Casting '{_col_name}': {_col_type} → {_target_schema[_col_name]}")
+                            _cast_exprs.append(pl.col(_col_name).cast(_target_schema[_col_name]))
+                        elif pl.Float32 in (getattr(_col_type, "inner", _col_type), _col_type) and pl.Float64 in (getattr(_target_schema[_col_name], "inner", _target_schema[_col_name]), _target_schema[_col_name]):
+                            print(f"  Casting '{_col_name}': {_col_type} → {_target_schema[_col_name]}")
+                            _cast_exprs.append(pl.col(_col_name).cast(_target_schema[_col_name]))
+                if _cast_exprs:
+                    _aligned.append(_other.with_columns(*_cast_exprs))
+                else:
+                    _aligned.append(_other)
+            df = pl.concat(_aligned, how="vertical")
             print(f"Combined dataset rows: {len(df):,}")
-
-    return (df,)
+            print(f"Combined schema: {df.schema}")
+    return base_df, df, grpo_df
 
 
 @app.cell
@@ -209,7 +327,7 @@ def _(df, pl):
         pl.col("reward").sum().alias("total_reward"),
     )
     print(episode_stats.head())
-    return (episode_stats,)
+    return
 
 
 @app.cell
@@ -451,6 +569,13 @@ def _(F, nn, torch):
                 self.pred_act = nn.Sequential(nn.Linear(h_dim, act_dim, bias=False), nn.Tanh())
 
             self.return_scale = 1.0
+            self.apply(self._init_weights)
+
+        def _init_weights(self, module):
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
 
         def forward(self, states, actions, returns_to_go, timesteps, attention_mask=None):
             B, T, _ = states.shape
@@ -540,7 +665,16 @@ def _(np, pl, torch):
             self.act_dim = act_dim
             self.discount_factor = discount_factor
 
-            episodes = df.group_by("episode_id").agg(
+            # Filter out rows with inconsistent action/observation dimensions
+            df_clean = df.filter(
+                (pl.col("action").list.len() == act_dim) &
+                (pl.col("norm_observation").list.len() == state_dim)
+            )
+            n_removed = len(df) - len(df_clean)
+            if n_removed > 0:
+                print(f"⚠️ Filtered out {n_removed:,} rows ({n_removed/len(df)*100:.1f}%) with mismatched dims")
+
+            episodes = df_clean.group_by("episode_id").agg(
                 pl.col("step").len().alias("n_steps"),
                 pl.col("norm_observation").alias("obs"),
                 pl.col("action").alias("act"),
@@ -584,8 +718,35 @@ def _(np, pl, torch):
                 torch.tensor(self.timesteps[idx]),
             )
 
-    print("✅ TrajectoryDataset defined")
+    print("✅ TrajectoryDataset updated with dimension filtering")
     return (TrajectoryDataset,)
+
+
+@app.cell
+def _(base_df, grpo_df, mo, pl):
+    mo.stop(base_df is None and grpo_df is None,
+            mo.md("🔍 Skipping cross-dataset dimension audit in pilot mode."))
+
+    def _describe_lengths(label, dataset):
+        print(f"🔍 Checking action length distribution across {label} dataset...")
+        act_lens = dataset.select(
+            pl.col("action").list.len().alias("act_len")
+        ).group_by("act_len").agg(pl.len().alias("count")).sort("act_len")
+        print(act_lens)
+
+        print(f"\n🔍 Checking observation length distribution across {label} dataset...")
+        obs_lens = dataset.select(
+            pl.col("norm_observation").list.len().alias("obs_len")
+        ).group_by("obs_len").agg(pl.len().alias("count")).sort("obs_len")
+        print(obs_lens)
+
+    if base_df is not None:
+        _describe_lengths("base", base_df)
+
+    if grpo_df is not None:
+        print()
+        _describe_lengths("GRPO", grpo_df)
+    return
 
 
 @app.cell
@@ -607,7 +768,6 @@ def _(
     state_loss_weight,
     tie_weights,
     use_json_config,
-    use_pilot,
 ):
     TRAIN_CFG = {
         "state_dim": 18,
@@ -661,13 +821,16 @@ def _(
 
 
 @app.cell
-def _(DecisionTransformer, Path, TRAIN_CFG, torch, time):
-    CHECKPOINT_DIR = Path("/workspace/dt_checkpoints")
-    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    CHECKPOINT_PATH = CHECKPOINT_DIR / "latest_checkpoint.pt"
-    BEST_MODEL_PATH = CHECKPOINT_DIR / "best_model.pt"
-
-    def load_or_create_model(cfg, device):
+def _(
+    CHECKPOINT_DIR,
+    CHECKPOINT_PATH,
+    DecisionTransformer,
+    TRAIN_CFG,
+    time,
+    torch,
+):
+    def load_or_create_model(cfg, device, fresh=False):
+        """Load from local checkpoint if it exists and fresh=False, otherwise create fresh."""
         model = DecisionTransformer(
             state_dim=cfg["state_dim"],
             act_dim=cfg["act_dim"],
@@ -685,7 +848,91 @@ def _(DecisionTransformer, Path, TRAIN_CFG, torch, time):
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
-        return model, optimizer, scheduler, 0, 0, [], [], float("inf"), None
+
+        start_epoch = 0
+        global_step = 0
+        train_losses = []
+        val_losses = []
+        best_val_loss = float("inf")
+        scaler_state = None
+
+        if not fresh and CHECKPOINT_PATH.exists():
+            try:
+                print(f"📂 Loading checkpoint from {CHECKPOINT_PATH}...")
+                checkpoint = torch.load(CHECKPOINT_PATH, map_location=device)
+                model.load_state_dict(checkpoint["model_state_dict"])
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                start_epoch = checkpoint.get("epoch", 0) + 1
+                global_step = checkpoint.get("global_step", 0)
+                train_losses = checkpoint.get("train_losses", [])
+                val_losses = checkpoint.get("val_losses", [])
+                best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+                scaler_state = checkpoint.get("scaler_state_dict")
+                print(f"✅ Resumed: epoch={start_epoch - 1}, global_step={global_step}, best_val_loss={best_val_loss:.6f}")
+            except Exception as e:
+                print(f"⚠️ Failed to load checkpoint: {e}. Starting fresh.")
+
+        return model, optimizer, scheduler, start_epoch, global_step, train_losses, val_losses, best_val_loss, scaler_state
+
+
+    def load_checkpoint_from_hf(repo_id, filename, device, cfg):
+        """Download a checkpoint from HuggingFace and load it, saving locally."""
+        from huggingface_hub import hf_hub_download
+
+        local_path = hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            repo_type="model",
+        )
+        print(f"📥 Downloaded HF checkpoint: {repo_id}/{filename} → {local_path}")
+
+        checkpoint = torch.load(local_path, map_location=device)
+
+        model = DecisionTransformer(
+            state_dim=cfg["state_dim"],
+            act_dim=cfg["act_dim"],
+            n_block=cfg["n_block"],
+            h_dim=cfg["h_dim"],
+            context_len=cfg["context_len"],
+            n_heads=cfg["n_heads"],
+            drop_p=cfg["drop_p"],
+            max_timestep=cfg["max_timestep"],
+            use_rope=cfg.get("use_rope", False),
+            n_kv_heads=cfg.get("n_kv_heads"),
+            qk_norm=cfg.get("qk_norm", False),
+            tie_weights=cfg.get("tie_weights", False),
+        ).to(device)
+
+        if "model_state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["model_state_dict"])
+            optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            if "optimizer_state_dict" in checkpoint:
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            if "scheduler_state_dict" in checkpoint:
+                scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            start_epoch = checkpoint.get("epoch", 0) + 1
+            global_step = checkpoint.get("global_step", 0)
+            train_losses = checkpoint.get("train_losses", [])
+            val_losses = checkpoint.get("val_losses", [])
+            best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+        else:
+            # Plain state_dict — start fresh training state
+            model.load_state_dict(checkpoint)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            start_epoch, global_step = 0, 0
+            train_losses, val_losses = [], []
+            best_val_loss = float("inf")
+
+        scaler_state = checkpoint.get("scaler_state_dict") if "model_state_dict" in checkpoint else None
+
+        # Persist locally so future resumes don't need HF
+        save_checkpoint(model, optimizer, scheduler, start_epoch - 1, global_step, train_losses, val_losses, best_val_loss)
+
+        return model, optimizer, scheduler, start_epoch, global_step, train_losses, val_losses, best_val_loss, scaler_state
+
 
     def save_checkpoint(model, optimizer, scheduler, epoch, global_step, train_losses, val_losses, best_val_loss, scaler=None):
         payload = {
@@ -705,24 +952,74 @@ def _(DecisionTransformer, Path, TRAIN_CFG, torch, time):
         }
         if scaler is not None:
             payload["scaler_state_dict"] = scaler.state_dict()
+
+        # Always update the latest checkpoint
         torch.save(payload, CHECKPOINT_PATH)
 
+        # Also save a step-specific checkpoint every checkpoint_every_n_batches
+        ckpt_every = TRAIN_CFG.get("checkpoint_every_n_batches", 500)
+        if ckpt_every > 0 and global_step > 0 and global_step % ckpt_every == 0:
+            step_path = CHECKPOINT_DIR / f"checkpoint_step_{global_step}.pt"
+            torch.save(payload, step_path)
+            print(f"💾 Step checkpoint saved: {step_path.name}")
+
+
     print("✅ Training helpers ready")
-    return (CHECKPOINT_DIR, CHECKPOINT_PATH, BEST_MODEL_PATH, load_or_create_model, save_checkpoint)
+    return load_checkpoint_from_hf, load_or_create_model, save_checkpoint
 
 
 @app.cell
-def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, TrajectoryDataset, df, fresh_start, load_or_create_model, save_checkpoint, time, torch, train_btn, use_pilot):
-    if not train_btn.value:
-        print("Training button not clicked yet")
-        return
-
+def _(
+    BEST_MODEL_PATH,
+    CHECKPOINT_DIR,
+    CHECKPOINT_PATH,
+    F,
+    TRAIN_CFG,
+    TrajectoryDataset,
+    df,
+    fresh_start,
+    hf_checkpoint_path,
+    hf_repo_id,
+    load_checkpoint_from_hf,
+    load_or_create_model,
+    mo,
+    resume_from_hf,
+    save_checkpoint,
+    time,
+    torch,
+    train_btn,
+    use_pilot,
+):
+    session_start = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device}")
+    train_losses = []
+    val_losses = []
+    best_val_loss = float("inf")
+    global_step = 0
+    USE_PILOT = use_pilot.value
 
-    if fresh_start.value and CHECKPOINT_PATH.exists():
-        CHECKPOINT_PATH.unlink(missing_ok=True)
+    if not train_btn.value:
+        mo.stop(True, mo.md("> Click **Start Training** to begin or resume training."))
 
+    print("=" * 60)
+    print("🎯 TRAINING SESSION STARTED")
+    print(f"⏰ {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"💻 Device: {device}")
+    print(f"📋 Pilot: {'ON' if use_pilot.value else 'OFF'}")
+    print(f"📐 Model: {TRAIN_CFG['n_block']} blocks, {TRAIN_CFG['h_dim']} dim, {TRAIN_CFG['n_heads']} heads")
+    print(f"📦 Batch: {TRAIN_CFG['batch_size']} | LR: {TRAIN_CFG['lr']:.2e} | Epochs: {TRAIN_CFG['epochs_per_session']}")
+    print("=" * 60)
+
+    # Determine the source of truth
+    _using_remote = resume_from_hf.value and bool(hf_checkpoint_path.value.strip())
+    _using_fresh = fresh_start.value and not _using_remote
+
+    if _using_fresh:
+        print("🧹 Fresh start: deleting all local checkpoints...")
+        for ckpt in CHECKPOINT_DIR.glob("*.pt"):
+            ckpt.unlink(missing_ok=True)
+
+    print("Get Dataset")
     dataset = TrajectoryDataset(
         df,
         context_length=TRAIN_CFG["context_len"],
@@ -733,16 +1030,64 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, Tr
     split = int(len(dataset) * (1 - TRAIN_CFG["val_split"]))
     train_ds, val_ds = torch.utils.data.random_split(dataset, [split, len(dataset) - split])
 
+    print("Split and put dataset to loader")
     train_loader = torch.utils.data.DataLoader(train_ds, batch_size=TRAIN_CFG["batch_size"], shuffle=True, num_workers=0)
     val_loader = torch.utils.data.DataLoader(val_ds, batch_size=TRAIN_CFG["batch_size"], shuffle=False, num_workers=0)
 
-    model, optimizer, scheduler, start_epoch, global_step, train_losses, val_losses, best_val_loss, scaler_state = load_or_create_model(TRAIN_CFG, device)
-    scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
+    print("Loading model")
 
-    for epoch in range(TRAIN_CFG["epochs_per_session"]):
+    if _using_remote:
+        _hf_repo = hf_repo_id.value.strip()
+        _hf_file = hf_checkpoint_path.value.strip()
+        print(f"🌐 Loading checkpoint from HuggingFace: {_hf_repo}/{_hf_file}")
+        model, optimizer, scheduler, start_epoch, global_step, train_losses, val_losses, best_val_loss, scaler_state = load_checkpoint_from_hf(
+            repo_id=_hf_repo,
+            filename=_hf_file,
+            device=device,
+            cfg=TRAIN_CFG,
+        )
+    else:
+        model, optimizer, scheduler, start_epoch, global_step, train_losses, val_losses, best_val_loss, scaler_state = load_or_create_model(
+            TRAIN_CFG, device, fresh=fresh_start.value
+        )
+
+    scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
+    if scaler is not None and scaler_state is not None:
+        try:
+            scaler.load_state_dict(scaler_state)
+            print("✅ Restored GradScaler state")
+        except Exception as e:
+            print(f"⚠️ Could not restore GradScaler: {e}")
+
+    print(f"📊 Starting from epoch={start_epoch}, global_step={global_step}")
+    if train_losses:
+        print(f"   Previous train losses: {[f'{l:.4f}' for l in train_losses[-5:]]}")
+    if val_losses:
+        print(f"   Previous val losses: {[f'{l:.4f}' for l in val_losses[-5:]]}")
+    print(f"   Best val_loss so far: {best_val_loss:.6f}")
+    if scaler is not None:
+        print("   ⚡ AMP mixed precision enabled")
+
+    print("\n" + "=" * 60)
+    print(f"🏋️ TRAINING LOOP ({TRAIN_CFG['epochs_per_session']} epochs)")
+    print("=" * 60)
+    _total_batches = len(train_loader)
+    ckpt_freq = TRAIN_CFG.get("checkpoint_every_n_batches", 500)
+
+    for epoch in range(start_epoch, start_epoch + TRAIN_CFG["epochs_per_session"]):
+        _epoch_start = time.time()
         model.train()
         total_loss = 0.0
-        for states, actions, rtgs, timesteps in train_loader:
+        total_action_loss = 0.0
+        total_state_loss = 0.0
+        total_return_loss = 0.0
+        batches_seen = 0
+
+        print(f"\n{'─' * 60}")
+        print(f"📚 EPOCH {epoch}")
+        print(f"{'─' * 60}")
+
+        for batch_idx, (states, actions, rtgs, timesteps) in enumerate(train_loader):
             states = states.to(device)
             actions = actions.to(device)
             rtgs = rtgs.to(device)
@@ -750,7 +1095,7 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, Tr
             rtgs = rtgs / TRAIN_CFG["return_scale"]
 
             with torch.cuda.amp.autocast(enabled=scaler is not None):
-                action_preds, state_preds, return_preds = model(states, actions, rtgs, timesteps)
+                return_preds, state_preds, action_preds = model(states, actions, rtgs, timesteps)
                 action_loss = F.mse_loss(action_preds, actions)
                 state_loss = F.mse_loss(state_preds, states)
                 return_loss = F.mse_loss(return_preds.squeeze(-1), rtgs)
@@ -773,11 +1118,33 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, Tr
                 optimizer.step()
 
             total_loss += loss.item()
+            total_action_loss += action_loss.item()
+            total_state_loss += state_loss.item()
+            total_return_loss += return_loss.item()
+            batches_seen += 1
+            global_step += 1
 
-        train_losses.append(total_loss / max(1, len(train_loader)))
+            # Save checkpoint every ckpt_freq batches
+            if global_step % ckpt_freq == 0:
+                save_checkpoint(model, optimizer, scheduler, epoch, global_step, train_losses, val_losses, best_val_loss, scaler)
+
+            if batch_idx % 100 == 0:
+                _elapsed = time.time() - session_start
+                print(
+                    f"  Batch {batch_idx:5d}/{_total_batches:5d} | gstep={global_step:6d} "
+                    f"| loss={loss.item():.6f} | act={action_loss.item():.6f} "
+                    f"| state={state_loss.item():.6f} | ret={return_loss.item():.6f} "
+                    f"| {_elapsed:.0f}s"
+                )
+
+        # End of epoch
+        train_losses.append(total_loss / max(1, batches_seen))
+
+        # Validation
         model.eval()
         with torch.no_grad():
             val_loss = 0.0
+            _val_start = time.time()
             for states, actions, rtgs, timesteps in val_loader:
                 states = states.to(device)
                 actions = actions.to(device)
@@ -785,23 +1152,174 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, Path, TRAIN_CFG, Tr
                 timesteps = timesteps.to(device)
                 rtgs = rtgs / TRAIN_CFG["return_scale"]
                 with torch.cuda.amp.autocast(enabled=scaler is not None):
-                    action_preds, _, _ = model(states, actions, rtgs, timesteps)
+                    return_preds, state_preds, action_preds = model(states, actions, rtgs, timesteps)
                     val_loss += F.mse_loss(action_preds, actions).item()
             val_loss /= max(1, len(val_loader))
+            _val_time = time.time() - _val_start
         val_losses.append(val_loss)
-        print(f"Epoch {epoch + 1}: train_loss={train_losses[-1]:.6f} val_loss={val_losses[-1]:.6f}")
-        save_checkpoint(model, optimizer, scheduler, epoch, global_step, train_losses, val_losses, min(best_val_loss, val_loss), scaler)
 
-    torch.save(model.state_dict(), BEST_MODEL_PATH)
-    print(f"Saved best model to {BEST_MODEL_PATH}")
-    return (train_losses, val_losses)
+        _avg_action_loss = total_action_loss / max(1, batches_seen)
+        _avg_state_loss = total_state_loss / max(1, batches_seen)
+        _avg_return_loss = total_return_loss / max(1, batches_seen)
+
+        # Track best model
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), BEST_MODEL_PATH)
+            print(f"🏆 New best model! val_loss={best_val_loss:.6f}")
+
+        _epoch_elapsed = time.time() - _epoch_start
+        _elapsed = time.time() - session_start
+
+        # Save checkpoint at end of epoch
+        save_checkpoint(model, optimizer, scheduler, epoch, global_step, train_losses, val_losses, best_val_loss, scaler)
+
+        print(
+            f"📊 Epoch {epoch + 1} done: train_loss={train_losses[-1]:.6f} "
+            f"val_loss={val_losses[-1]:.6f} "
+            f"| action={_avg_action_loss:.6f} state={_avg_state_loss:.6f} ret={_avg_return_loss:.6f} "
+            f"🕒 {_epoch_elapsed:.1f}s (epoch) / {_elapsed:.1f}s (total) "
+            f"⚡ val in {_val_time:.1f}s"
+        )
+
+        scheduler.step()
+
+    _total_time = time.time() - session_start
+    _hours = int(_total_time // 3600)
+    _minutes = int((_total_time % 3600) // 60)
+    _seconds = _total_time % 60
+    print(f"✅ Training complete! Total time: {_hours}h {_minutes}m {_seconds:.1f}s ({_total_time:.1f}s)")
+    print(f"Latest checkpoint at {CHECKPOINT_PATH}")
+    return (
+        USE_PILOT,
+        best_val_loss,
+        device,
+        global_step,
+        session_start,
+        train_losses,
+        val_losses,
+    )
 
 
 @app.cell
-def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, HfApi, Path, TRAIN_CFG, hf_repo_id, hf_token_input, os, torch, upload_btn):
-    if not upload_btn.value:
-        print("Upload button not clicked yet")
-        return
+def _(USE_PILOT, device, mo, session_start):
+    mo.md(f"""
+    # AEMO Decision Transformer Training Dashboard
+
+    **Session**: `{session_start:.0f}` | **Device**: `{device}` | **Pilot**: `{USE_PILOT}`
+    """)
+    return
+
+
+@app.cell
+def _(mo, np, plt, train_losses, val_losses):
+    if train_losses and val_losses:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+        ax1.plot(train_losses, "b-o", label="Train Loss", markersize=6)
+        ax1.plot(val_losses, "r-s", label="Val Loss", markersize=6)
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss")
+        ax1.set_title("Training and Validation Loss")
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        epochs = list(range(len(train_losses)))
+        x_pos = np.arange(len(epochs))
+        width = 0.35
+        ax2.bar(x_pos - width / 2, train_losses, width, label="Train", color="steelblue")
+        ax2.bar(x_pos + width / 2, val_losses, width, label="Val", color="coral")
+        ax2.set_xlabel("Epoch")
+        ax2.set_ylabel("Loss")
+        ax2.set_title("Loss per Epoch")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        _output = mo.mpl.interactive(fig)
+    else:
+        _output = mo.md(
+            """
+    > Training has not completed an epoch yet. Loss curves will appear here after the first epoch.
+    """
+        )
+
+    _output
+    return
+
+
+@app.cell
+def _(
+    TRAIN_CFG,
+    USE_PILOT,
+    best_val_loss,
+    device,
+    global_step,
+    mo,
+    session_start,
+    time,
+    torch,
+    train_losses,
+    val_losses,
+):
+    _elapsed_hrs = (time.time() - session_start) / 3600
+    _train_loss_str = f"{train_losses[-1]:.6f}" if train_losses else "N/A"
+    _val_loss_str = f"{val_losses[-1]:.6f}" if val_losses else "N/A"
+
+    _summary = mo.md(f"""
+    ## Training Session Summary
+
+    | Metric | Value |
+    |--------|-------|
+    | **Device** | `{device}` |
+    | **Pilot mode** | `{USE_PILOT}` |
+    | **Final train loss** | `{_train_loss_str}` |
+    | **Final val loss** | `{_val_loss_str}` |
+    | **Best val loss** | `{best_val_loss:.6f}` |
+    | **Total epochs** | `{len(train_losses)}` |
+    | **Total steps** | `{global_step}` |
+    | **Training duration** | `{_elapsed_hrs:.2f} hours` |
+
+    ### Configuration
+    - **Model**: DecisionTransformer with {TRAIN_CFG["n_block"]} blocks, {TRAIN_CFG["h_dim"]} hidden dim, {TRAIN_CFG["n_heads"]} heads
+    - **Context length**: {TRAIN_CFG["context_len"]}
+    - **Batch size**: {TRAIN_CFG["batch_size"]}
+    - **Learning rate**: {TRAIN_CFG["lr"]}
+    - **Action loss weight**: {TRAIN_CFG["action_loss_weight"]}
+    """)
+
+    if torch.cuda.is_available():
+        _allocated = torch.cuda.max_memory_allocated() / 1e9
+        _reserved = torch.cuda.max_memory_reserved() / 1e9
+        _gpu_stats = mo.md(f"""
+    | GPU Stat | Value |
+    |----------|-------|
+    | **Max memory allocated** | `{_allocated:.2f} GB` |
+    | **Max memory reserved** | `{_reserved:.2f} GB` |
+    | **Total VRAM** | `{torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB` |
+    """)
+        mo.vstack([_summary, _gpu_stats])
+    else:
+        _summary
+    return
+
+
+@app.cell
+def _(
+    BEST_MODEL_PATH,
+    CHECKPOINT_PATH,
+    DecisionTransformer,
+    HfApi,
+    Path,
+    TRAIN_CFG,
+    hf_repo_id,
+    hf_token_input,
+    mo,
+    os,
+    torch,
+    upload_btn,
+):
+    mo.stop(not upload_btn.value, mo.md("Press **Upload to HuggingFace** to upload the model"))
 
     repo_id = hf_repo_id.value.strip()
     if not repo_id:
@@ -833,20 +1351,20 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, HfApi, Path, TRAIN_
         state_dict = torch.load(BEST_MODEL_PATH, map_location="cpu")
         model_upload = _build_upload_model()
         model_upload.load_state_dict(state_dict)
-        best_val_loss = float("inf")
+        _best_val_loss = float("inf")
     elif CHECKPOINT_PATH.exists():
         print("📂 No best_model.pt found — loading from latest checkpoint...")
         checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu")
         model_upload = _build_upload_model()
         model_upload.load_state_dict(checkpoint["model_state_dict"])
-        best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+        _best_val_loss = checkpoint.get("best_val_loss", float("inf"))
     else:
         raise FileNotFoundError(f"No trained model found. Expected {BEST_MODEL_PATH} or {CHECKPOINT_PATH}")
 
     torch.save(
         {
             "model_state_dict": model_upload.state_dict(),
-            "val_loss": best_val_loss,
+            "val_loss": _best_val_loss,
             "config": {
                 k: v
                 for k, v in TRAIN_CFG.items()
@@ -886,6 +1404,31 @@ def _(BEST_MODEL_PATH, CHECKPOINT_PATH, DecisionTransformer, HfApi, Path, TRAIN_
         )
 
     print(f"✅ Uploaded model to https://huggingface.co/{repo_id}")
+    return
+
+
+@app.cell
+def _(TRAIN_CFG, TrajectoryDataset, df):
+    # Verify the fix works
+    print("🔍 Verifying TrajectoryDataset can now be built without shape errors...")
+
+    test_dataset = TrajectoryDataset(
+        df,
+        context_length=TRAIN_CFG["context_len"],
+        state_dim=TRAIN_CFG["state_dim"],
+        act_dim=TRAIN_CFG["act_dim"],
+        discount_factor=TRAIN_CFG["discount_factor"],
+    )
+
+    print(f"✅ Success! Dataset built with {len(test_dataset)} samples")
+    print(f"   States shape: {test_dataset.states.shape}")
+    print(f"   Actions shape: {test_dataset.actions.shape}")
+    print(f"   RTGs shape: {test_dataset.rtgs.shape}")
+    print(f"   Timesteps shape: {test_dataset.timesteps.shape}")
+
+    # Verify a sample
+    s, a, r, t = test_dataset[0]
+    print(f"\n📋 First sample shapes: states={s.shape}, actions={a.shape}, rtgs={r.shape}, timesteps={t.shape}")
     return
 
 
