@@ -1,188 +1,231 @@
-# Evaluation Guide — Loading & Running Models
+# Evaluation Guide — Standardised Evaluation for AEMO Models
 
-This document covers how to load a trained Decision Transformer model (from
-disk or HuggingFace), run it in the AEMO simulation environment, and evaluate
-its performance against baselines.
+This document defines a **standardised 3-tier evaluation system** so results are
+comparable apple-to-apple across any Decision Transformer model (legacy,
+modern, GRPO-tuned).
 
-## Quick Start: Evaluate a Model Against Baselines
+## Quick Start
 
-The fastest way to evaluate any DT model is the `autoresearch_evaluator.py`
-script. It runs the model on held-out scenarios and compares against dispatch
-replay, PPO, FCAS rule, and other baselines.
+```bash
+# 1. Create a surface manifest (see below)
+# 2. Run the evaluator
+python3 src/autoresearch_evaluator.py \
+  --surface-manifest-path /path/to/manifest.json \
+  --evaluation-config configs/eval_tier_standard.json \
+  --output-dir eval_output/my_eval \
+  --device auto
 
-### 1. Prepare a surface manifest
-
-The evaluator needs a JSON manifest describing the model architecture and
-checkpoint path:
-
-```json
-{
-  "schema": "energydecision.dt_training_surface.v1",
-  "model_kwargs": {
-    "state_dim": 18,
-    "act_dim": 9,
-    "n_block": 8,
-    "h_dim": 384,
-    "context_len": 180,
-    "n_heads": 8,
-    "drop_p": 0.15,
-    "max_timestep": 100000
-  },
-  "paths": {
-    "save_path": "/path/to/model.pt",
-    "loss_csv_path": "/path/to/dummy_loss.csv"
-  }
-}
+# 3. Read results from eval_output/my_eval/evaluation_summary.json
 ```
 
-For HuggingFace models, use `hf_hub_download` to get the local path:
+---
+
+## The 3 Standard Tiers
+
+Every model should be evaluated on all three tiers, from fastest to most thorough.
+This table tells you which config to use and what it tests:
+
+| Tier | Config | Time | Episodes | Regions | Battery | Baselines | What it tests |
+|------|--------|:----:|:--------:|:-------:|:--------|-----------|---------------|
+| **Smoke** | `eval_tier_smoke.json` | ~2 min | 24h (2 reg.) | NSW1, SA1 | 1C (10/10) | dispatch, PPO, FCAS rule | Sanity check — does the model run without errors? |
+| **Standard** | `eval_tier_standard.json` | ~15 min | 144h (5 reg.) | All 5 NEM | 1C (10/10) | dispatch, PPO, FCAS rule | Core benchmark — profit, FCAS, deg vs baselines |
+| **Comprehensive** | `eval_tier_comprehensive.json` | ~30 min | 144h × 2 (7 sc.) | All 5 NEM | 1C + small | dispatch, PPO, FCAS rule | Full profile — cross-region + 2 battery sizes |
+
+### Common properties across all tiers
+
+| Property | Value | Rationale |
+|----------|-------|-----------|
+| **Action mode** | `full_fcas` (9-dim) | Matches all v2+ models |
+| **Step duration** | 0.08333h (5 min) | Matches pretrained data resolution |
+| **Reference policy** | `dispatch_dalrymple_north` | Real operator baseline |
+| **PPO model** | `ppo_aemo_fcas_model.zip` | FCAS-capable PPO |
+| **DT RTG** | `0.5` (default, calibrate per model) | See RTG section below |
+| **Degradation** | `real_world` (LFP, 30°C) | Standard chemistry |
+
+---
+
+## Required: Create a Surface Manifest
+
+The evaluator needs a JSON file describing your model's architecture and
+checkpoint path:
 
 ```python
 from huggingface_hub import hf_hub_download
-checkpoint = hf_hub_download("mrvictoru/energydecision-dt", "aemo_dt_grpo_model.pt")
+from pathlib import Path
+import json
+
+checkpoint = hf_hub_download("mrvictoru/energydecision-dt-v2", "aemo_dt_model.pt")
+
+# For legacy model (w/embed_return):
+model_kwargs_legacy = {
+    "state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
+    "context_len": 180, "n_heads": 8, "drop_p": 0.15,
+    "max_timestep": 100000,
+}
+
+# For modern model (w/GQA, RoPE, embed_rtg):
+model_kwargs_modern = {
+    "state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
+    "context_len": 180, "n_heads": 8, "drop_p": 0.15,
+    "max_timestep": 100000,
+    "rope_enabled": True,
+    "rope_max_position": 540,
+    "rope_base": 10000.0,
+}
+
+manifest = {
+    "schema": "energydecision.dt_training_surface.v1",
+    "model_kwargs": model_kwargs_modern,
+    "paths": {
+        "save_path": checkpoint,
+        "loss_csv_path": "/tmp/dummy_loss.csv",
+    },
+}
+Path("/tmp/manifest.json").write_text(json.dumps(manifest, indent=2))
+Path("/tmp/dummy_loss.csv").write_text("epoch,train_total,train_action,val_total,val_action\n1,0.0,0.0,,\n")
 ```
 
-### 2. Run the evaluator
+---
+
+## Running the 3 Tiers
 
 ```bash
+# Tier 1: Smoke
 python3 src/autoresearch_evaluator.py \
-  --surface-manifest-path /path/to/manifest.json \
-  --evaluation-config configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json \
-  --output-dir eval_output/my_eval \
-  --device auto
+  --surface-manifest-path /tmp/manifest.json \
+  --evaluation-config configs/eval_tier_smoke.json \
+  --output-dir eval_output/smoke
+
+# Tier 2: Standard (core benchmark)
+python3 src/autoresearch_evaluator.py \
+  --surface-manifest-path /tmp/manifest.json \
+  --evaluation-config configs/eval_tier_standard.json \
+  --output-dir eval_output/standard
+
+# Tier 3: Comprehensive (full profile)
+python3 src/autoresearch_evaluator.py \
+  --surface-manifest-path /tmp/manifest.json \
+  --evaluation-config configs/eval_tier_comprehensive.json \
+  --output-dir eval_output/comprehensive
 ```
 
-### 3. Read the results
+---
 
-The output directory contains:
+## Interpreting Results
 
-| File | Contents |
-|------|----------|
-| `evaluation_summary.json` | All metrics in JSON |
-| `heldout_metrics.csv` | Tabular metrics per policy |
-| `plots/mean_reward.svg` | Mean reward comparison bar chart |
-| `plots/risk_return.svg` | Risk-return scatter plot |
-| `plots/episode_distribution.svg` | Return distribution box plot |
-| `plots/grid_energy.svg` | Grid energy & degradation |
+The `evaluation_summary.json` contains `aggregate_metrics` — one object per
+policy. The key fields:
 
-## Evaluating a Single Episode
+| Field | What it means | Target |
+|-------|---------------|:------:|
+| `mean_reward` | Average per-step reward (scaled) | Higher is better |
+| `avg_profit_per_episode` | Total revenue minus degradation cost ($) | Higher is better |
+| `avg_energy_revenue_per_episode` | Energy arbitrage revenue ($) | Higher is better |
+| `avg_fcas_revenue_per_episode` | FCAS market revenue ($) | Higher is better |
+| `avg_total_degradation_cost_per_episode` | Battery wear cost ($) | **Lower** is better |
+| `avg_profit_per_mwh` | Normalised profit ($/MWh capacity) | Higher is better |
+| `sharpe_ratio` | Risk-adjusted return (mean/std) | Higher is better |
+| `paired_comparisons_vs_reference` | Statistical comparison vs dispatch | Positive = beats dispatch |
 
-For interactive debugging, run a single episode with `AEMOAgent`:
+### Reading the output
 
 ```python
-from pathlib import Path
-import torch
-from decision_transformer import DecisionTransformer
-from grpo_posttraining import load_pretrained_dt_for_grpo
-from aemo_notebook_utils import create_aemo_env, fetch_and_preprocess_aemo_scenarios, resolve_battery_variants
-from decision import AEMOAgent
-from datetime import datetime
-
-# 1. Load model
-model_kwargs = {"state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
-                "context_len": 180, "n_heads": 8, "drop_p": 0.15, "max_timestep": 100000}
-model, _ = load_pretrained_dt_for_grpo(model_kwargs, "path/to/model.pt", device="cuda")
-model.eval()
-
-# 2. Load market data
-processed, _ = fetch_and_preprocess_aemo_scenarios(
-    scenarios=[{"label": "test", "region": "NSW1",
-                "start_date": datetime(2024, 10, 1), "end_date": datetime(2024, 10, 14)}],
-    cache_dir=Path("data/aemo"), step_duration=5/60, refresh=False,
-)
-battery = resolve_battery_variants([{"name": "medium_1c", "capacity_mwh": 10.0,
-                                      "max_power_mw": 10.0, "init_soc_ratio": 0.5}])[0]
-env = create_aemo_env(processed_data=processed["test"], battery_variant=battery,
-                      max_step=288, step_duration=5/60, action_mode="full_fcas",
-                      random_episode_start=True)
-
-# 3. Run episode (use rtg_value=0.5 for best results)
-agent = AEMOAgent(env, algorithm="dt", model=model, rtg_value=0.5, dt_gamma=0.95)
-episode_df, _ = agent.run_episode()
-
-# 4. Inspect results
-info = episode_df["info"].struct.unnest()
-print(f"Total reward: {episode_df['reward'].sum():.2f}")
-print(f"Energy revenue: ${info['energy_revenue'].sum():,.0f}")
-print(f"FCAS revenue: ${info['fcas_revenue'].sum():,.0f}")
-print(f"Degradation cost: ${info['degradation_cost'].sum():,.0f}")
+import json
+with open("eval_output/standard/evaluation_summary.json") as f:
+    d = json.load(f)
+for m in d["heldout_evaluation"]["aggregate_metrics"]:
+    print(f'{m["experiment"]:35s} profit=${m["avg_profit_per_episode"]:>8,.0f} '
+          f'fcas=${m["avg_fcas_revenue_per_episode"]:>8,.0f} '
+          f'deg=${m["avg_total_degradation_cost_per_episode"]:>8,.0f} '
+          f'profit/MWh=${m["avg_profit_per_mwh"]:>7,.1f}')
 ```
 
-## Available Evaluation Configs
+---
 
-| Config | Regions | Battery | Baselines | Use Case |
-|--------|---------|---------|-----------|----------|
-| `q4_dispatch_matched.json` | SA1 | Dispatch-matched (Dalrymple North) | dispatch, PPO, FCAS rule | Head-to-head vs real operators |
-| `q4_multi_station.json` | 5 regions | Fixed 1C (10MWh/10MW) | dispatch, PPO, FCAS rule | Cross-region generalisation |
-| `q4_2024_heldout.json` | 5 regions | Fixed 1C | dispatch, PPO, FCAS rule | Held-out Q4 2024 evaluation |
-| `dispatch_matched.json` | SA1 (4 seasons) | Dispatch-matched | dispatch, FCAS rule | Multi-season dispatch comparison |
-| `example.json` | 4 regions | Medium + small | rule, FCAS rule, 2×dispatch, PPO | Full promotion check |
-| `mini.json` | 2 regions | Medium | DT, FCAS rule | Quick smoke test (~2 min) |
+## RTG Calibration
 
-## RTG Prompt Calibration
-
-The RTG value passed to the DT affects performance significantly. For the best
-Phase 1 GRPO model, `rtg_value=0.5` is optimal. To find the best RTG for a
-different model, run the evaluator at multiple values:
+The `rtg_value` passed to the DT affects profit by up to 50%. Always calibrate
+for each new model:
 
 ```bash
-# Test RTG values 0.0, 0.5, 1.0, 1.5, 2.0
 for RTG in 0.0 0.5 1.0 1.5 2.0; do
   python3 -c "
 import json
-with open('configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json') as f:
-    cfg = json.load(f)
+cfg = json.load(open('configs/eval_tier_smoke.json'))
 for p in cfg['policies']:
     if p['kind'] == 'dt':
         p['rtg_value'] = $RTG
-with open('/tmp/eval_cfg_$RTG.json', 'w') as f:
-    json.dump(cfg, f, indent=2)
+json.dump(cfg, open(f'/tmp/eval_smoke_rtg$RTG.json', 'w'), indent=2)
 "
   python3 src/autoresearch_evaluator.py \
-    --surface-manifest-path models/aemo/dt/hf_pretrained_v2/hf_v2_surface_manifest.json \
-    --evaluation-config /tmp/eval_cfg_$RTG.json \
-    --output-dir eval_output/rtg_test/$RTG --device auto
+    --surface-manifest-path /tmp/manifest.json \
+    --evaluation-config /tmp/eval_smoke_rtg$RTG.json \
+    --output-dir eval_output/rtg_sweep/$RTG --device auto
+
+  python3 -c "
+import json
+d = json.load(open(f'eval_output/rtg_sweep/$RTG/evaluation_summary.json'))
+for m in d['heldout_evaluation']['aggregate_metrics']:
+    if m['experiment'] == 'candidate_dt':
+        print(f'RTG=$RTG: profit=\${m[\"avg_profit_per_episode\"]:,.0f}')
+"
 done
 ```
 
-## Loading from HuggingFace
+Use the best RTG for the Standard and Comprehensive tiers.
 
-```python
-from huggingface_hub import hf_hub_download
-from decision_transformer import DecisionTransformer
-from grpo_posttraining import load_pretrained_dt_for_grpo
+**Known optimal values** (starting point):
+- Legacy HF model: `rtg_value=0.0`
+- Phase 1 GRPO on legacy: `rtg_value=0.5`
+- Modern model: calibrate (start with 0.5)
 
-# For the GRPO-tuned model
-checkpoint = hf_hub_download("mrvictoru/energydecision-dt", "aemo_dt_grpo_model.pt")
+---
 
-# For the pretrained baseline
-checkpoint = hf_hub_download("mrvictoru/energydecision-dt", "aemo_dt_fcas_model.pt")
+## GPU Memory Requirements
 
-model_kwargs = {"state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
-                "context_len": 180, "n_heads": 8, "drop_p": 0.15, "max_timestep": 100000}
-model, _ = load_pretrained_dt_for_grpo(model_kwargs, checkpoint, device="cuda")
+| Operation | Memory | Config |
+|-----------|:------:|--------|
+| Evaluating (inference only) | ~1 GB | Single model forward pass |
+| GRPO training (group=4) | ~8 GB | 1 policy + 1 reference model |
+| GRPO training (group=8) | ~14 GB | Larger rollout batch |
+
+### GRPO OOM troubleshooting
+
+If GRPO training OOMs with a modern model:
+
+1. **Reduce `--group-size`** from 8 to 4 (saves ~6 GB, halves rollout memory)
+2. **Reduce `--episode-hours`** from 48 to 24 (fewer steps, smaller batch)
+3. **Check `max_timestep`** — the modern model's `embed_timestep` has 100,000
+   entries × 384 dim = 153 MB. This is fine on 22 GB.
+4. **Check for zombie processes** — `nvidia-smi` may show orphaned GPU processes
+   from previous runs. Kill them with:
+   ```bash
+   ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9
+   ```
+
+### Recommended GRPO config for 22 GB GPU
+
+```bash
+python3 src/run_grpo_multi_region.py \
+  --regions NSW1,SA1,QLD1,VIC1,TAS1 \
+  --battery-configs medium_1c,large_07c,small_05c,fast_375c \
+  --step-duration 0.083333 --episode-hours 48 \
+  --iterations 5 --lr 1e-5 --group-size 4 \
+  --sync-reference-every 5 --deg-penalty-weight 1.5 \
+  --output-dir models/aemo/dt/grpo_modern
 ```
 
-Both checkpoints use the same architecture. The `load_pretrained_dt_for_grpo`
-function handles legacy MoLab-style checkpoints automatically.
+`--group-size 4` instead of 8 saves ~6 GB of VRAM.
 
-## Comparing Two Models
+---
 
-Run the evaluator separately for each model, then compare the
-`evaluation_summary.json` files:
+## Summary: Before & After Comparison
 
-```python
-import json
-for label, path in [("Model A", "eval_output/model_a/evaluation_summary.json"),
-                    ("Model B", "eval_output/model_b/evaluation_summary.json")]:
-    with open(path) as f:
-        d = json.load(f)
-    for m in d['heldout_evaluation']['aggregate_metrics']:
-        if m['experiment'] == 'candidate_dt':
-            print(f"{label}: profit=${m['avg_profit_per_episode']:,.0f} "
-                  f"fcas=${m['avg_fcas_revenue_per_episode']:,.0f} "
-                  f"deg=${m['avg_total_degradation_cost_per_episode']:,.0f}")
-```
-
-For paired statistical comparison, use the `paired_comparisons_vs_reference`
-field in the evaluation summary.
+| Before (inconsistent) | After (standardised) |
+|-----------------------|----------------------|
+| 10 config files, mixed `multi_market`/`full_fcas` | 3 tier configs, all `full_fcas` |
+| Mixed 30-min / 5-min steps | All 5-min (matches data) |
+| Mixed PPO models (`_model.zip` vs `_fcas_model.zip`) | All use `ppo_aemo_fcas_model.zip` |
+| No clear tier guidance | Smoke → Standard → Comprehensive |
+| RTG not mentioned | RTG calibration required, default 0.5 |
+| OOM guidance missing | Memory + group-size advice included |
