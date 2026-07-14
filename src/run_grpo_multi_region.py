@@ -12,6 +12,21 @@ import numpy as np
 import polars as pl
 import torch
 
+from aemo_dt_hf import (
+    MODERN_V2_HF_FILENAME,
+    MODERN_V2_HF_REPO,
+    load_model_kwargs,
+    modern_v2_model_config_path,
+)
+
+# ── Battery configs (matching the v2 dataset) ──────────────────────
+BATTERY_CONFIGS: dict[str, dict[str, float]] = {
+    "small_05c":  {"capacity_mwh": 2.0, "max_power_mw": 1.0,  "init_soc_ratio": 0.5},
+    "medium_1c":  {"capacity_mwh": 10.0, "max_power_mw": 10.0, "init_soc_ratio": 0.5},
+    "large_07c":  {"capacity_mwh": 50.0, "max_power_mw": 35.0, "init_soc_ratio": 0.5},
+    "fast_375c":  {"capacity_mwh": 8.0,  "max_power_mw": 30.0, "init_soc_ratio": 0.5},
+}
+DEFAULT_BATTERY_CONFIGS = "medium_1c,large_07c,small_05c,fast_375c"
 from aemo_notebook_utils import (
     create_aemo_env,
     fetch_and_preprocess_aemo_scenarios,
@@ -35,8 +50,14 @@ def repo_root() -> Path:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Multi-region GRPO post-training for AEMO DT")
 
-    parser.add_argument("--hf-repo", default="mrvictoru/energydecision-dt")
-    parser.add_argument("--hf-filename", default="aemo_dt_fcas_model.pt")
+    parser.add_argument("--hf-repo", default=MODERN_V2_HF_REPO)
+    parser.add_argument("--hf-filename", default=MODERN_V2_HF_FILENAME)
+    parser.add_argument(
+        "--model-config",
+        type=Path,
+        default=modern_v2_model_config_path(),
+        help="Path to the Decision Transformer model kwargs JSON.",
+    )
     parser.add_argument("--output-dir", type=Path, default=repo_root() / "models" / "aemo" / "dt" / "grpo_multi")
 
     # Regions (comma-separated)
@@ -63,6 +84,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--deg-penalty-weight", type=float, default=1.0)
 
     parser.add_argument("--action-mode", default="full_fcas")
+    parser.add_argument("--battery-configs", type=str, default=DEFAULT_BATTERY_CONFIGS,
+                        help="Comma-separated battery config names to randomly sample during training")
     parser.add_argument("--battery-capacity", type=float, default=10.0)
     parser.add_argument("--max-power", type=float, default=5.0)
     parser.add_argument("--step-duration", type=float, default=0.5)
@@ -112,7 +135,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"[GRPO] Downloading DT from {args.hf_repo}/{args.hf_filename}...")
     checkpoint_path = hf_hub_download(repo_id=args.hf_repo, filename=args.hf_filename)
 
-    model_kwargs = {"state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384, "context_len": 180, "n_heads": 8, "drop_p": 0.15, "max_timestep": 100000}
+    model_kwargs = load_model_kwargs(args.model_config)
 
     # 2. Preprocess all regions
     regions = [r.strip() for r in args.regions.split(",")]
@@ -131,6 +154,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         scenarios=scenarios, cache_dir=cache_dir, step_duration=args.step_duration, refresh=False,
     )
 
+    # Parse battery configs to randomly sample during training
+    battery_names = [b.strip() for b in args.battery_configs.split(",")]
+    filtered_batteries = {k: v for k, v in BATTERY_CONFIGS.items() if k in battery_names}
+    if not filtered_batteries:
+        filtered_batteries = {"medium_1c": BATTERY_CONFIGS["medium_1c"]}
+    battery_names_available = list(filtered_batteries.keys())
+    print(f"[GRPO] Battery configs: {battery_names_available}")
+
     battery_variant = resolve_battery_variants([{"name": "medium", "capacity_mwh": args.battery_capacity, "max_power_mw": args.max_power, "init_soc_ratio": 0.5}])[0]
     max_step = max(1, int(round(args.episode_hours / args.step_duration)))
 
@@ -140,12 +171,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         region_data[sm["region"]] = processed_by_label[sm["label"]]
     region_names = list(region_data.keys())
 
-    # 3. Create multi-region env factory
+    # 3. Create multi-region + multi-battery env factory
     def make_env():
         region = random.choice(region_names)
+        bat_name = random.choice(battery_names_available)
+        bat_spec = filtered_batteries[bat_name]
+        bat_variant = resolve_battery_variants([{
+            "name": bat_name,
+            "capacity_mwh": bat_spec["capacity_mwh"],
+            "max_power_mw": bat_spec["max_power_mw"],
+            "init_soc_ratio": bat_spec["init_soc_ratio"],
+        }])[0]
         return create_aemo_env(
             processed_data=region_data[region],
-            battery_variant=battery_variant,
+            battery_variant=bat_variant,
             max_step=max_step,
             step_duration=args.step_duration,
             action_mode=args.action_mode,
@@ -154,6 +193,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # 4. Load model
     print(f"[GRPO] Loading model on {device}...")
+    print(f"[GRPO] Model config: {args.model_config.resolve()}")
     model, reference_model = load_pretrained_dt_for_grpo(model_kwargs, checkpoint_path, device=device)
     optimal_rtg = float(getattr(model, "return_scale", 1.0))
     print(f"[GRPO] return_scale = {optimal_rtg}")
