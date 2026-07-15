@@ -87,7 +87,7 @@ for p in cfg['policies']:
         p['rtg_value'] = $RTG
 json.dump(cfg, open(f'/tmp/eval_smoke_rtg$RTG.json', 'w'), indent=2)
 "
-  python3 src/autoresearch_evaluator.py \
+  python3 scripts/autoresearch_evaluator.py \
     --surface-manifest-path /tmp/modern_manifest.json \
     --evaluation-config /tmp/eval_smoke_rtg$RTG.json \
     --output-dir eval_output/modern_rtg/$RTG --device auto
@@ -102,12 +102,12 @@ for m in d['heldout_evaluation']['aggregate_metrics']:
 done
 
 # 2. Full eval on both surfaces using best RTG
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path /tmp/modern_manifest.json \
   --evaluation-config configs/eval_tier_standard.json \
   --output-dir eval_output/modern_standard --device auto
 
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path /tmp/modern_manifest.json \
   --evaluation-config configs/eval_tier_comprehensive.json \
   --output-dir eval_output/modern_comprehensive --device auto
@@ -154,7 +154,7 @@ as pretraining. No architecture changes needed.
 # Legacy model: downloads from mrvictoru/energydecision-dt automatically
 # Modern model: see symlink note below
 
-python3 src/run_grpo_multi_region.py \
+python3 scripts/run_grpo_multi_region.py \
   --regions NSW1,SA1,QLD1,VIC1,TAS1 \
   --battery-configs medium_1c,large_07c,small_05c,fast_375c \
   --start-date 2024-01-01 --end-date 2024-09-30 \
@@ -196,23 +196,23 @@ After GRPO, evaluate on both surfaces:
 
 ```bash
 # Legacy GRPO model
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/grpo_legacy_multibat/grpo_surface_manifest.json \
   --evaluation-config configs/eval_tier_standard.json \
   --output-dir eval_output/legacy_grpo_standard --device auto
 
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/grpo_legacy_multibat/grpo_surface_manifest.json \
   --evaluation-config configs/eval_tier_comprehensive.json \
   --output-dir eval_output/legacy_grpo_comprehensive --device auto
 
 # Modern GRPO model
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/grpo_modern_multibat/grpo_surface_manifest.json \
   --evaluation-config configs/eval_tier_standard.json \
   --output-dir eval_output/modern_grpo_standard --device auto
 
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/grpo_modern_multibat/grpo_surface_manifest.json \
   --evaluation-config configs/eval_tier_comprehensive.json \
   --output-dir eval_output/modern_grpo_comprehensive --device auto

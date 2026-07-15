@@ -13,16 +13,16 @@ Before starting an autoresearch run, work with the human to:
    - Do not reuse an old experiment branch unless the human explicitly asks for continuation.
 
 2. **Choose one fixed research track**
-   - **Household DT track**: run `src/pretrain_decision_transformer.py` directly on household parquet logs.
-   - **AEMO DT track**: launch through `src/pretrain_aemo_decision_transformer.py`, but still edit only the shared DT training surface in `src/pretrain_decision_transformer.py`.
+   - **Household DT track**: run `scripts/pretrain_decision_transformer.py` directly on household parquet logs.
+   - **AEMO DT track**: launch through `scripts/pretrain_aemo_decision_transformer.py`, but still edit only the shared DT training surface in `scripts/pretrain_decision_transformer.py`.
    - Pick one track per run and keep it fixed. Do not compare metrics across different datasets, tracks, or command shapes.
 
 3. **Read the in-scope files**
    - `README.md`
    - `program.md`
-   - `src/pretrain_decision_transformer.py`
-   - `src/pretrain_aemo_decision_transformer.py`
-   - `src/autoresearch_evaluator.py`
+   - `scripts/pretrain_decision_transformer.py`
+   - `scripts/pretrain_aemo_decision_transformer.py`
+   - `scripts/autoresearch_evaluator.py`
    - the evaluator config chosen for the run
    - `docs/aemo/workflow.md` if you are using the AEMO track
 
@@ -54,7 +54,7 @@ commit	track	metric	status	description
 
 ### Editable surface
 
-- `src/pretrain_decision_transformer.py`
+- `scripts/pretrain_decision_transformer.py`
 
 This is the single sanctioned experiment surface for autoresearch in this repository.
 
@@ -62,9 +62,9 @@ This is the single sanctioned experiment surface for autoresearch in this reposi
 
 - `src/decision_transformer.py`
 - `src/transformer_training.py`
-- `src/pretrain_aemo_decision_transformer.py`
+- `scripts/pretrain_aemo_decision_transformer.py`
 - `src/aemo_notebook_utils.py`
-- `src/autoresearch_evaluator.py`
+- `scripts/autoresearch_evaluator.py`
 - the evaluator config fixed for the run
 - notebooks
 - environment dynamics
@@ -73,7 +73,7 @@ This is the single sanctioned experiment surface for autoresearch in this reposi
 
 ## What the harness may change
 
-Only change knobs already exposed by `src/pretrain_decision_transformer.py`, including:
+Only change knobs already exposed by `scripts/pretrain_decision_transformer.py`, including:
 
 - surface preset / approved model variant selection
 - DT dimensions (`state_dim`, `act_dim`, `n_block`, `h_dim`, `n_heads`, `context_len`, `max_timestep`)
@@ -84,7 +84,7 @@ Only change knobs already exposed by `src/pretrain_decision_transformer.py`, inc
 - split-policy handling already supported by the file
 
 The AEMO wrapper may forward a curated subset of those same knobs, but manual mixed-corpus runs that need
-`--patterns` or other direct-trainer-only flags should call `src/pretrain_decision_transformer.py` directly.
+`--patterns` or other direct-trainer-only flags should call `scripts/pretrain_decision_transformer.py` directly.
 
 The harness may also improve the code inside the editable surface if the change still preserves the existing adapter contract and artifact contract.
 
@@ -99,7 +99,7 @@ The harness may also improve the code inside the editable surface if the change 
 
 ## Hard constraints from the codebase
 
-- `src/pretrain_decision_transformer.py` is the canonical entrypoint.
+- `scripts/pretrain_decision_transformer.py` is the canonical entrypoint.
 - Approved optimizers and schedulers are restricted by the code surface allowlist.
 - Custom optimizer / scheduler paths are only valid when they are already importable in the repo/runtime and do not require new dependencies.
 - AEMO-shaped DT runs must keep `act_dim` aligned with `action_mode`:
@@ -119,7 +119,7 @@ Always keep the training command fixed for the whole run except for intentional 
 Run from the repository root:
 
 ```bash
-python3 src/pretrain_decision_transformer.py \
+python3 scripts/pretrain_decision_transformer.py \
   --surface-preset autoresearch_safe \
   --data-dir data/household/logs \
   --patterns train_episode_01 train_episode_02 \
@@ -136,7 +136,7 @@ python3 src/pretrain_decision_transformer.py \
 Run from the repository root:
 
 ```bash
-python3 src/pretrain_aemo_decision_transformer.py \
+python3 scripts/pretrain_aemo_decision_transformer.py \
   --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
   --epochs 2 \
@@ -164,25 +164,25 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 
 Use the GPU box for DT training commands so the trainer can see CUDA and use `device=cuda` automatically when available.
 
-For AEMO CLI runs, prefer `src/launch_aemo_training.py` over calling the wrapper by hand. The launcher
+For AEMO CLI runs, prefer `scripts/launch_aemo_training.py` over calling the wrapper by hand. The launcher
 derives tier defaults (`proxy-smoke`, `proxy-baseline`, `learning-baseline`), writes a launch plan under
 the run directory, and re-enters the preferred Distrobox automatically when invoked from the host.
 
 ```bash
-python3 src/launch_aemo_training.py --run-tier proxy-baseline
-python3 src/launch_aemo_training.py --run-tier learning-baseline
+python3 scripts/launch_aemo_training.py --run-tier proxy-baseline
+python3 scripts/launch_aemo_training.py --run-tier learning-baseline
 ```
 
 The baked-in `proxy-baseline` defaults now follow the current frontier pilot setting: fixed pilot
 train/validation split, `context_length=180`, `batch_size=16`, `epochs=2`, and a deeper+wider
 transformer (`n_block=8`, `h_dim=384`, `n_heads=8`).
 
-For a separate live dashboard while training runs, use `src/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
+For a separate live dashboard while training runs, use `scripts/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
 If the training process is already running, use `--attach` with the same `--progress-snapshot-path` and no child command:
 
 ```bash
-python3 src/dt_progress_runner.py \
+python3 scripts/dt_progress_runner.py \
   --attach \
   --progress-snapshot-path models/aemo/dt/<run-tag>/aemo_dt_loss_history_progress.json
 ```
@@ -205,14 +205,14 @@ tmux new -s autoresearch
 Ctrl-b %
 
 # pane 2: enter the same GPU box/container and run
-python3 src/dt_progress_runner.py --progress-snapshot-path models/aemo/dt/<run-tag>/aemo_dt_loss_history_progress.json
+python3 scripts/dt_progress_runner.py --progress-snapshot-path models/aemo/dt/<run-tag>/aemo_dt_loss_history_progress.json
 ```
 
 Replace `<run-tag>` with the actual run directory (for example `restart_20260514_pilot/baseline`). Keep the tracker pointed at the same progress snapshot file that the trainer writes so the human can watch the live dashboard while autoresearch is running.
 
 ## Immutable evaluator
 
-Use `src/autoresearch_evaluator.py` as the fixed evaluation entrypoint for autoresearch checkpoints. The autoresearch agent must treat the evaluator script and the chosen evaluator config as read-only for the duration of a run.
+Use `scripts/autoresearch_evaluator.py` as the fixed evaluation entrypoint for autoresearch checkpoints. The autoresearch agent must treat the evaluator script and the chosen evaluator config as read-only for the duration of a run.
 
 For AEMO runs, start from `configs/aemo_autoresearch_evaluator.example.json`, copy it to a run-specific config outside the editable DT training surface, and fix the held-out scenarios, battery variants, dispatch replay stations, baseline policies, and DT `rtg_value` before the search loop begins.
 
@@ -235,7 +235,7 @@ evaluator reruns do not spend the inner loop fetching and preprocessing the same
 The repo now includes a dedicated cache-prewarm helper:
 
 ```bash
-python3 src/prewarm_aemo_cache.py \
+python3 scripts/prewarm_aemo_cache.py \
   --evaluation-config configs/aemo_autoresearch_evaluator.example.json
 ```
 
@@ -247,7 +247,7 @@ When the evaluator includes dispatch replay baselines, choose at least two stati
 Typical command:
 
 ```bash
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/aemo_dt_loss_history_surface_manifest.json \
   --evaluation-config <path-to-fixed-evaluator-config.json> \
   --output-dir eval_output/autoresearch/<run-tag>/<commit>
@@ -356,13 +356,13 @@ Once setup is complete, loop autonomously:
 
 1. Check git state and confirm you are on the intended autoresearch branch.
 2. Re-establish whether the current branch point is a **proxy loop** checkpoint or the **learning baseline** checkpoint.
-3. Make one focused change in `src/pretrain_decision_transformer.py`.
+3. Make one focused change in `scripts/pretrain_decision_transformer.py`.
 4. Commit the change.
 5. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
 6. Read the proxy ranking metric from the loss CSV / surface manifest summary.
 7. Record the result in `results.tsv`.
 8. For AEMO proxy loops, prefer `configs/aemo_autoresearch_evaluator.mini.json` as the first simulator screen.
-9. Run `src/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
+9. Run `scripts/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
 10. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
 11. If the proxy metric improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
 12. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.

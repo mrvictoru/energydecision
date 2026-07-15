@@ -17,21 +17,21 @@ The primary training dataset is the FCAS-rich assembly:
 python3 src/build_aemo_fcas_pilot_spec.py --build-pilot
 
 # Train on pilot
-python3 src/launch_aemo_training.py --run-tier proxy-baseline
+python3 scripts/launch_aemo_training.py --run-tier proxy-baseline
 ```
 
 ## Learning baseline (full dataset)
 
 ```bash
 # Prewarm evaluator caches first (optional, ~30min first time)
-python3 src/prewarm_aemo_cache.py \
+python3 scripts/prewarm_aemo_cache.py \
   --evaluation-config configs/aemo_autoresearch_evaluator.example.json
 
 # Train on full dataset via subset training
-python3 src/launch_aemo_training.py --run-tier learning-baseline
+python3 scripts/launch_aemo_training.py --run-tier learning-baseline
 
 # Run full held-out evaluation
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path models/aemo/dt/<run-tag>/surface_manifest.json \
   --evaluation-config configs/aemo_autoresearch_evaluator.example.json \
   --output-dir eval_output/autoresearch/<run-tag>
@@ -40,7 +40,7 @@ python3 src/autoresearch_evaluator.py \
 ## Standalone training
 
 ```bash
-python3 src/pretrain_aemo_decision_transformer.py \
+python3 scripts/pretrain_aemo_decision_transformer.py \
   --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
   --val-dataset-path data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_val_pilot.parquet \
   --surface-preset aemo_learning_baseline \

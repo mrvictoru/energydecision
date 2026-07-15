@@ -9,7 +9,7 @@ modern, GRPO-tuned).
 ```bash
 # 1. Create a surface manifest (see below)
 # 2. Run the evaluator
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path /path/to/manifest.json \
   --evaluation-config configs/eval_tier_standard.json \
   --output-dir eval_output/my_eval \
@@ -91,19 +91,19 @@ Path("/tmp/dummy_loss.csv").write_text("epoch,train_total,train_action,val_total
 
 ```bash
 # Tier 1: Smoke
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path /tmp/manifest.json \
   --evaluation-config configs/eval_tier_smoke.json \
   --output-dir eval_output/smoke
 
 # Tier 2: Standard (core benchmark)
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path /tmp/manifest.json \
   --evaluation-config configs/eval_tier_standard.json \
   --output-dir eval_output/standard
 
 # Tier 3: Comprehensive (full profile)
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path /tmp/manifest.json \
   --evaluation-config configs/eval_tier_comprehensive.json \
   --output-dir eval_output/comprehensive
@@ -157,7 +157,7 @@ for p in cfg['policies']:
         p['rtg_value'] = $RTG
 json.dump(cfg, open(f'/tmp/eval_smoke_rtg$RTG.json', 'w'), indent=2)
 "
-  python3 src/autoresearch_evaluator.py \
+  python3 scripts/autoresearch_evaluator.py \
     --surface-manifest-path /tmp/manifest.json \
     --evaluation-config /tmp/eval_smoke_rtg$RTG.json \
     --output-dir eval_output/rtg_sweep/$RTG --device auto

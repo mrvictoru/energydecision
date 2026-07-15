@@ -17,13 +17,13 @@ Run from repo root (inside distrobox):
 
 ```bash
 # Full generation (all stations, all windows)
-python3 src/generate_dispatch_replays.py
+python3 scripts/generate_dispatch_replays.py
 
 # Single window
-python3 src/generate_dispatch_replays.py --window 2024
+python3 scripts/generate_dispatch_replays.py --window 2024
 
 # Single station
-python3 src/generate_dispatch_replays.py --station hornsdale
+python3 scripts/generate_dispatch_replays.py --station hornsdale
 ```
 
 Output goes to `data/aemo_dispatch_replays/`.
@@ -101,7 +101,7 @@ After generation, the dispatch replay logs serve as a **held-out real-data
 validation set** for DT evaluation:
 
 ```bash
-python3 src/autoresearch_evaluator.py \
+python3 scripts/autoresearch_evaluator.py \
   --surface-manifest-path data/aemo_dispatch_replays/dispatch_replay_manifest.json \
   --evaluation-config configs/aemo_autoresearch_evaluator.dispatch.json \
   --output-dir eval_output/autoresearch/dispatch_validation

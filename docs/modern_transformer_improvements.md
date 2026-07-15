@@ -188,7 +188,7 @@ for larger models (e.g., 8×768 saves ~18K params).
 2. Verify tests pass: `python3 -m pytest tests/ -v`.
 3. Train the modern DT from scratch on MoLab (RTX 6000 Pro):
    ```bash
-   python3 src/pretrain_aemo_decision_transformer.py \
+   python3 scripts/pretrain_aemo_decision_transformer.py \
      --dataset-path data/aemo_dt_fcas_v2/aemo_fcas_dataset.parquet \
      --model-config configs/aemo_decision_transformer_model_kwargs_full_fcas.json \
      --epochs 2 --batch-size 64 --lr 3e-5

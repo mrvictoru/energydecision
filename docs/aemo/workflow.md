@@ -47,7 +47,7 @@ expects.
 Example:
 
 ```bash
-python3 src/fetch_aemo_monthly_cache.py --year 2025
+python3 scripts/fetch_aemo_monthly_cache.py --year 2025
 ```
 
 Default tables:
@@ -217,10 +217,10 @@ Use two distinct DT training tiers for AEMO:
 
 Do not treat the narrow proxy slice (`aemo_dt_dataset_train_subset_007`) as the main learning baseline. It is useful for smoke tests and cheap sweeps, but not for establishing the branch point that future AEMO experiments should build on.
 
-Use `src/pretrain_aemo_decision_transformer.py` subset mode for large runs:
+Use `scripts/pretrain_aemo_decision_transformer.py` subset mode for large runs:
 
 ```bash
-python3 src/pretrain_aemo_decision_transformer.py \
+python3 scripts/pretrain_aemo_decision_transformer.py \
   --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
   --surface-preset aemo_learning_baseline \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
@@ -232,17 +232,17 @@ python3 src/pretrain_aemo_decision_transformer.py \
 ```
 
 If you are already inside the `energydecision` Distrobox shell at the repo root, run the same
-command as `python3 src/pretrain_aemo_decision_transformer.py` and keep normal `data/...` paths.
+command as `python3 scripts/pretrain_aemo_decision_transformer.py` and keep normal `data/...` paths.
 The wrapper now forwards a small approved set of direct-trainer shape knobs such as `--context-length`,
 `--state-dim`, and `--rope-max-position`, but it still expects one dataset path at a time.
-For manual mixed-corpus runs that rely on `--patterns`, call `src/pretrain_decision_transformer.py`
+For manual mixed-corpus runs that rely on `--patterns`, call `scripts/pretrain_decision_transformer.py`
 directly instead.
 
 For most CLI training runs, prefer the higher-level launcher instead:
 
 ```bash
-python3 src/launch_aemo_training.py --run-tier proxy-baseline
-python3 src/launch_aemo_training.py --run-tier learning-baseline
+python3 scripts/launch_aemo_training.py --run-tier proxy-baseline
+python3 scripts/launch_aemo_training.py --run-tier learning-baseline
 ```
 
 It makes the intended run tier explicit, writes `aemo_training_launch_plan.json` next to the run
@@ -276,7 +276,7 @@ python3 src/build_aemo_fcas_pilot_spec.py --build-pilot
 python3 src/build_aemo_fcas_pilot_spec.py
 
 # Step 2 (manual, only if customizing): build from a custom spec
-python3 src/build_aemo_autoresearch_pilot.py \
+python3 scripts/build_aemo_autoresearch_pilot.py \
   --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
   --output-dir data/aemo_dt_fcas/autoresearch_pilot \
   --spec-path data/aemo_dt_fcas/autoresearch_pilot_spec.json
@@ -296,7 +296,7 @@ These commands rewrite:
 Use the generated split like this:
 
 ```bash
-python3 src/pretrain_aemo_decision_transformer.py \
+python3 scripts/pretrain_aemo_decision_transformer.py \
   --dataset-path data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_train_pilot.parquet \
   --val-dataset-path data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_val_pilot.parquet \
   --surface-preset aemo_proxy \
@@ -355,7 +355,7 @@ That command:
 You can then point the broader training tier at the refreshed dataset:
 
 ```bash
-python3 src/launch_aemo_training.py \
+python3 scripts/launch_aemo_training.py \
   --run-tier learning-baseline \
   --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet
 ```
@@ -388,7 +388,7 @@ running autoresearch; stale root-owned processed parquet files can block later e
 Use the helper below to preflight permissions and warm the fixed evaluator windows before a search session:
 
 ```bash
-python3 src/prewarm_aemo_cache.py \
+python3 scripts/prewarm_aemo_cache.py \
   --evaluation-config configs/aemo_autoresearch_evaluator.example.json
 ```
 

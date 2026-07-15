@@ -151,7 +151,7 @@ def test_extract_candidate_metrics_reads_summary_payload():
 def test_run_grpo_posttraining_defaults_to_modern_v2_paths():
     module = _load_module_with_stubs(
         "run_grpo_posttraining_stub",
-        Path(__file__).resolve().parents[1] / "src" / "run_grpo_posttraining.py",
+        Path(__file__).resolve().parents[1] / "scripts" / "run_grpo_posttraining.py",
     )
 
     args = module.parse_args([])
@@ -164,7 +164,7 @@ def test_run_grpo_posttraining_defaults_to_modern_v2_paths():
 def test_run_grpo_multi_region_defaults_to_modern_v2_paths():
     module = _load_module_with_stubs(
         "run_grpo_multi_region_stub",
-        Path(__file__).resolve().parents[1] / "src" / "run_grpo_multi_region.py",
+        Path(__file__).resolve().parents[1] / "scripts" / "run_grpo_multi_region.py",
     )
 
     args = module.parse_args([])
