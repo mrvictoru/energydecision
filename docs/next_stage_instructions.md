@@ -1,8 +1,26 @@
 # Next Stage: GRPO Fine-Tuning Instructions (Updated)
 
-This document consolidates findings from the evaluation report and provides
-step-by-step instructions for running GRPO fine-tuning on BOTH the legacy and
-modern models with multi-region + multi-battery training.
+## Files the Next Agent Must Read
+
+| # | File | Why |
+|---|------|-----|
+| 1 | **This file** (`docs/next_stage_instructions.md`) | Step-by-step instructions for GRPO + eval |
+| 2 | `docs/grpo_finetuning_guide.md` | GRPO feature reference, battery selection, RTG calibration |
+| 3 | `docs/evaluation_guide.md` | Standardised 3-tier evaluation system |
+| 4 | `docs/grpo_experiments.md` | Previous experiment results for comparison reference |
+| 5 | `scripts/run_grpo_multi_region.py` | The actual GRPO training script (must read its args) |
+| 6 | `src/aemo_dt_hf.py` | Modern v2 model defaults (repo, filename, config path) |
+| 7 | `configs/eval_tier_standard.json` | Standard eval config (primary benchmark) |
+| 8 | `README.md` | Repo overview |
+
+## Summary of What to Do
+
+1. **Kill zombie GPU processes** (pre-flight step, see below)
+2. **Evaluate the pretrained v2 baseline** on both standard and dispatch-matched surfaces
+3. **Calibrate RTG** on the smoke tier (find optimal RTG for this model)
+4. **Run GRPO Phase 1 fine-tuning** with multi-region + multi-battery config
+5. **Re-evaluate the GRPO-tuned model** on both surfaces
+6. **Compare results** against the baseline and the legacy Phase 1 reference
 
 ## Key Findings from Eval Report
 
@@ -165,6 +183,7 @@ python3 scripts/run_grpo_multi_region.py \
   --sync-reference-every 5 \
   --adaptive-rtg --adaptive-rtg-ewma-alpha 0.1 \
   --deg-penalty-weight 1.5 \
+  --mixed-precision \
   --output-dir models/aemo/dt/grpo_modern_multibat
 ```
 
