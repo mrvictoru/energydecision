@@ -31,6 +31,15 @@ python3 src/run_grpo_multi_region.py \
 ## Phase 1 GRPO Features (Recommended Config)
 
 The best results come from enabling all Phase 1 improvements together.
+## ⚠️ Pre-flight: Clean GPU Memory
+
+Before any GRPO training, kill orphaned GPU processes that cause false OOM:
+
+```bash
+ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
+nvidia-smi --query-gpu=memory.used --format=csv,noheader  # should show < 500 MiB
+```
+
 Use `--group-size 4` instead of 8 on a 22 GB GPU to avoid OOM:
 
 ```bash

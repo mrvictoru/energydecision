@@ -181,41 +181,40 @@ Use the best RTG for the Standard and Comprehensive tiers.
 
 ---
 
-## GPU Memory Requirements
+## ⚠️ Pre-flight: Clean GPU Memory (Required Before Each Run)
 
-| Operation | Memory | Config |
-|-----------|:------:|--------|
-| Evaluating (inference only) | ~1 GB | Single model forward pass |
-| GRPO training (group=4) | ~8 GB | 1 policy + 1 reference model |
-| GRPO training (group=8) | ~14 GB | Larger rollout batch |
+**The #1 cause of OOM is orphaned GPU processes, not model size.**
+Python processes that crash or are killed leave GPU memory allocated.
+A single zombie can hold 14+ GB on a 22 GB card.
 
-### GRPO OOM troubleshooting
-
-If GRPO training OOMs with a modern model:
-
-1. **Reduce `--group-size`** from 8 to 4 (saves ~6 GB, halves rollout memory)
-2. **Reduce `--episode-hours`** from 48 to 24 (fewer steps, smaller batch)
-3. **Check `max_timestep`** — the modern model's `embed_timestep` has 100,000
-   entries × 384 dim = 153 MB. This is fine on 22 GB.
-4. **Check for zombie processes** — `nvidia-smi` may show orphaned GPU processes
-   from previous runs. Kill them with:
-   ```bash
-   ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9
-   ```
-
-### Recommended GRPO config for 22 GB GPU
+Always run this **before any training or evaluation**:
 
 ```bash
-python3 src/run_grpo_multi_region.py \
-  --regions NSW1,SA1,QLD1,VIC1,TAS1 \
-  --battery-configs medium_1c,large_07c,small_05c,fast_375c \
-  --step-duration 0.083333 --episode-hours 48 \
-  --iterations 5 --lr 1e-5 --group-size 4 \
-  --sync-reference-every 5 --deg-penalty-weight 1.5 \
-  --output-dir models/aemo/dt/grpo_modern
+# 1. Check what's using GPU memory
+nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader
+
+# 2. Kill ALL Python processes (training scripts restart fresh)
+ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
+
+# 3. Verify GPU is free
+nvidia-smi --query-gpu=memory.used --format=csv,noheader   # expect < 500 MiB
 ```
 
-`--group-size 4` instead of 8 saves ~6 GB of VRAM.
+## GPU Memory (12×768 modern model, ctx=210)
+
+| Operation | group_size | Rollout batch | Total VRAM | On 22 GB? |
+|-----------|:----------:|:-------------:|:----------:|:---------:|
+| Evaluation only | — | — | ~1 GB | ✅ |
+| GRPO training | 4 | ~6 GB | ~13 GB | ✅ Safe (recommended) |
+| GRPO training | 8 | ~12 GB | ~19 GB | ✅ After zombie cleanup |
+| GRPO training | 2 | ~3 GB | ~10 GB | ⛔ Too noisy — skip |
+
+**Do not use `--group-size 2`.** Advantage estimates become unstable.
+`--group-size 4` is the minimum for reliable training.
+
+**No code changes needed.** Gradient checkpointing and mixed precision are
+not required — the 12×768 model fits comfortably at `group_size=4` on a
+22 GB card after cleaning zombies.
 
 ---
 

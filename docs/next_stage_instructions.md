@@ -115,14 +115,45 @@ python3 src/autoresearch_evaluator.py \
 
 ---
 
-## Step 2: GRPO Fine-Tuning (Both Models)
+## ⚠️ Pre-flight: Clean GPU memory
 
-### Legacy Model (mrvictoru/energydecision-dt)
-
-The legacy model uses `run_grpo_multi_region.py` which downloads from
-`mrvictoru/energydecision-dt` by default:
+GRPO OOMs are almost always caused by orphaned GPU processes from previous
+runs, not by the model itself. **Always** run this cleanup **before** any
+GRPO training or evaluation:
 
 ```bash
+# 1. Check what's using GPU memory
+nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader
+
+# 2. Kill all Python processes on GPU (safe: grpo scripts will restart fresh)
+ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
+
+# 3. Verify GPU is clean
+nvidia-smi --query-gpu=memory.used --format=csv,noheader   # expect < 500 MiB
+```
+
+A typical zombie holds 14+ GB. Cleaning before each run prevents spurious OOM.
+
+---
+
+## Step 2: GRPO Fine-Tuning (Both Models)
+
+The modern model is **12×768, ctx=210** — fine-tune with the **same config**
+as pretraining. No architecture changes needed.
+
+### Memory budget (12×768, ctx=210, 22 GB GPU)
+
+| group_size | Rollout batch | Total VRAM | Feasible? |
+|:----------:|:-------------:|:----------:|:---------:|
+| 4 | ~6 GB | ~13 GB | ✅ Safe |
+| 8 | ~12 GB | ~19 GB | ✅ After zombie cleanup |
+
+### Both models: recommended command (group_size=4, safe)
+
+```bash
+# Legacy model: downloads from mrvictoru/energydecision-dt automatically
+# Modern model: see symlink note below
+
 python3 src/run_grpo_multi_region.py \
   --regions NSW1,SA1,QLD1,VIC1,TAS1 \
   --battery-configs medium_1c,large_07c,small_05c,fast_375c \
@@ -134,30 +165,28 @@ python3 src/run_grpo_multi_region.py \
   --sync-reference-every 5 \
   --adaptive-rtg --adaptive-rtg-ewma-alpha 0.1 \
   --deg-penalty-weight 1.5 \
-  --output-dir models/aemo/dt/grpo_legacy_multibat
+  --output-dir models/aemo/dt/grpo_modern_multibat
 ```
 
-### Modern Model (mrvictoru/energydecision-dt-v2)
+### If GPU is clean and you want better advantage estimates (group_size=8)
 
-**Important**: The script downloads from `mrvictoru/energydecision-dt` by
-default. To use the modern v2 model, create a symlink:
+Add `--group-size 8` to the command above. This doubles the rollout batch
+(~19 GB total) but still fits on a clean 22 GB card. Skip if you see OOM.
+
+### Modern Model: Loading from `mrvictoru/energydecision-dt-v2`
+
+The script downloads from `mrvictoru/energydecision-dt` by default. To use
+the modern v2 model instead, create a symlink:
 
 ```bash
-# Find the cached checkpoint path
-python3 -c "
-from huggingface_hub import hf_hub_download
-print(hf_hub_download('mrvictoru/energydecision-dt-v2', 'aemo_dt_model.pt'))
-"
+python3 -c "from huggingface_hub import hf_hub_download; print(hf_hub_download('mrvictoru/energydecision-dt-v2', 'aemo_dt_model.pt'))"
 
-# Symlink it to where the script expects it
 ln -sf /path/to/cached/aemo_dt_model.pt \
   models/aemo/dt/grpo_phase1/dt_model_grpo_multi.pt
 ```
 
-Then run the same GRPO command. The `_is_legacy_dt()` check in the GRPO code
-will return `False` for the modern model, so it uses the correct forward path.
-
-Alternatively, modify the script's HF repo defaults in the source code.
+The GRPO code auto-detects the modern architecture (`_is_legacy_dt()` returns
+``False``) and uses the correct forward path.
 
 ---
 
@@ -208,18 +237,21 @@ the full pretraining distribution.
 
 ---
 
-## GPU Memory Notes
+## GPU Memory Notes (12×768 modern model)
 
-| Group size | VRAM required | Feasible on 22 GB? |
-|:----------:|:-------------:|:------------------:|
-| 8 | ~14 GB | ✅ |
-| 4 | ~8 GB | ✅ (recommended) |
-| 2 | ~5 GB | ✅ (but too noisy) |
+**The #1 cause of OOM is orphaned GPU processes, not model size.** Always
+clean zombies before starting (see Pre-flight section above).
 
-Use `--group-size 4` for stable training on a 22 GB RTX 2080 Ti. If you
-still encounter OOM, check for zombie GPU processes first:
+| group_size | Rollout batch | Total VRAM | On 22 GB? |
+|:----------:|:-------------:|:----------:|:---------:|
+| 4 | ~6 GB | ~13 GB | ✅ Safe |
+| 8 | ~12 GB | ~19 GB | ✅ After zombie cleanup |
+| 2 | ~3 GB | ~10 GB | ✅ (but too noisy — skip) |
 
-```bash
-nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader
-kill -9 <orphaned_pid>
-```
+`--group-size 4` is the recommended default. Upgrade to 8 only after verifying
+GPU memory is clean. `--group-size 2` gives unstable advantage estimates and
+should not be used.
+
+**No code changes needed** — gradient checkpointing, mixed precision, and other
+memory optimisations are not required. The 12×768 model fits comfortably with
+`group_size=4` on a standard 22 GB card once zombie processes are killed.
