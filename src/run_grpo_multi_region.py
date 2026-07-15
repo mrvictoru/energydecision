@@ -82,6 +82,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--adaptive-rtg", action="store_true", default=False)
     parser.add_argument("--adaptive-rtg-ewma-alpha", type=float, default=0.1)
     parser.add_argument("--deg-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--mixed-precision", action="store_true", default=False,
+                        help="Enable mixed precision (fp16/bf16) forward passes to reduce GPU memory")
+    parser.add_argument("--no-cpu-rollout-buffer", action="store_true", default=False,
+                        help="Disable CPU rollout buffer (keep all rollouts on GPU, uses more memory)")
 
     parser.add_argument("--action-mode", default="full_fcas")
     parser.add_argument("--battery-configs", type=str, default=DEFAULT_BATTERY_CONFIGS,
@@ -236,6 +240,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         kl_coeff=args.kl_coeff,
         entropy_coeff=args.entropy_coeff,
         degradation_penalty_weight=args.deg_penalty_weight,
+        mixed_precision=args.mixed_precision,
+        cpu_rollout_buffer=not args.no_cpu_rollout_buffer,
     )
     history = trainer.train(
         make_env,

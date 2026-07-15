@@ -309,6 +309,8 @@ class GRPOTrainer:
         grad_clip_norm: float = 1.0,
         action_bounds: tuple[float, float] | None = None,
         degradation_penalty_weight: float = 1.0,
+        mixed_precision: bool = False,
+        cpu_rollout_buffer: bool = True,
     ) -> None:
         self.model = model.to(device)
         self.device = torch.device(device)
@@ -336,6 +338,9 @@ class GRPOTrainer:
         self.degradation_penalty_weight = float(degradation_penalty_weight)
         self._last_prompts: list[GRPOPrompt] = []
         self._adaptive_rtg_ewma: float | None = None
+        self.mixed_precision = bool(mixed_precision)
+        self.cpu_rollout_buffer = bool(cpu_rollout_buffer)
+        self._amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
     def _sync_reference_model(self) -> None:
         self.reference_model.load_state_dict(copy.deepcopy(self.model.state_dict()))
@@ -379,16 +384,23 @@ class GRPOTrainer:
         ]
 
     @staticmethod
-    def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask):
+    def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask, amp_context=None):
         """Call model.forward with correct argument order, normalizing return order.
 
         Modern:  forward(state, rtg, timestep, actions, mask) -> (return_preds, state_preds, act_preds)
         Legacy:  forward(states, actions, returns_to_go, timesteps, mask) -> (act_preds, state_preds, return_preds)
         """
-        if _is_legacy_dt(model):
-            act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+        if amp_context is not None:
+            with amp_context:
+                if _is_legacy_dt(model):
+                    act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+                else:
+                    _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
         else:
-            _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+            if _is_legacy_dt(model):
+                act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+            else:
+                _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
         return act_preds
 
     def _action_distributions(
@@ -399,11 +411,12 @@ class GRPOTrainer:
         timesteps: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> tuple[TransformedDistribution, TransformedDistribution]:
+        amp_ctx = torch.cuda.amp.autocast(dtype=self._amp_dtype) if self.mixed_precision and 'cuda' in str(self.device) else None
         action_preds = self._forward_dt(
-            self.model, states, rtgs, timesteps, actions, attention_mask
+            self.model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
         )
         ref_preds = self._forward_dt(
-            self.reference_model, states, rtgs, timesteps, actions, attention_mask
+            self.reference_model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
         )
         action_mean = action_preds[:, -1:, :]
         ref_mean = ref_preds[:, -1:, :]
@@ -537,20 +550,21 @@ class GRPOTrainer:
         for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
             step_advantages.extend([advantage] * step_count)
 
+        batch_device = "cpu" if self.cpu_rollout_buffer else self.device
         batch = GRPORolloutBatch(
-            states=torch.stack(states_records).to(self.device),
-            actions=torch.stack(actions_records).to(self.device),
-            rtgs=torch.stack(rtg_records).to(self.device),
-            timesteps=torch.stack(timestep_records).to(self.device),
-            attention_mask=torch.stack(mask_records).to(self.device),
-            sampled_actions=torch.stack(sampled_action_records).to(self.device),
-            old_log_probs=torch.tensor(old_log_prob_records, dtype=torch.float32, device=self.device),
-            ref_log_probs=torch.tensor(ref_log_prob_records, dtype=torch.float32, device=self.device),
-            advantages=torch.tensor(step_advantages, dtype=torch.float32, device=self.device),
-            rewards=torch.tensor(reward_records, dtype=torch.float32, device=self.device),
-            env_rewards=torch.tensor(env_reward_records, dtype=torch.float32, device=self.device),
-            returns=torch.tensor(returns, dtype=torch.float32, device=self.device),
-            prompt_indices=torch.tensor(prompt_index_records, dtype=torch.long, device=self.device),
+            states=torch.stack(states_records).to(batch_device),
+            actions=torch.stack(actions_records).to(batch_device),
+            rtgs=torch.stack(rtg_records).to(batch_device),
+            timesteps=torch.stack(timestep_records).to(batch_device),
+            attention_mask=torch.stack(mask_records).to(batch_device),
+            sampled_actions=torch.stack(sampled_action_records).to(batch_device),
+            old_log_probs=torch.tensor(old_log_prob_records, dtype=torch.float32, device=batch_device),
+            ref_log_probs=torch.tensor(ref_log_prob_records, dtype=torch.float32, device=batch_device),
+            advantages=torch.tensor(step_advantages, dtype=torch.float32, device=batch_device),
+            rewards=torch.tensor(reward_records, dtype=torch.float32, device=batch_device),
+            env_rewards=torch.tensor(env_reward_records, dtype=torch.float32, device=batch_device),
+            returns=torch.tensor(returns, dtype=torch.float32, device=batch_device),
+            prompt_indices=torch.tensor(prompt_index_records, dtype=torch.long, device=batch_device),
         )
         self.model.train()
         return batch
@@ -572,21 +586,34 @@ class GRPOTrainer:
             "entropy_bonus": 0.0,
         }
         update_steps = 0
-        indices = torch.arange(batch.num_steps, device=self.device)
+        indices = torch.arange(batch.num_steps)
+        _batch_on_cpu = self.cpu_rollout_buffer and str(batch.states.device) == "cpu"
 
         for _ in range(max(1, int(update_epochs))):
-            shuffled = indices[torch.randperm(batch.num_steps, device=self.device)]
+            shuffled = indices[torch.randperm(batch.num_steps)]
             for start in range(0, batch.num_steps, max(1, int(minibatch_size))):
                 mb_idx = shuffled[start : start + max(1, int(minibatch_size))]
-                states = batch.states[mb_idx]
-                actions = batch.actions[mb_idx]
-                rtgs = batch.rtgs[mb_idx]
-                timesteps = batch.timesteps[mb_idx]
-                attention_mask = batch.attention_mask[mb_idx]
-                sampled_actions = batch.sampled_actions[mb_idx]
-                old_log_probs = batch.old_log_probs[mb_idx]
-                ref_log_probs = batch.ref_log_probs[mb_idx]
-                advantages = batch.advantages[mb_idx]
+                if _batch_on_cpu:
+                    # Move mini-batch to GPU on-the-fly — saves ~6 GB vs keeping full batch on GPU
+                    states = batch.states[mb_idx].to(self.device)
+                    actions = batch.actions[mb_idx].to(self.device)
+                    rtgs = batch.rtgs[mb_idx].to(self.device)
+                    timesteps = batch.timesteps[mb_idx].to(self.device)
+                    attention_mask = batch.attention_mask[mb_idx].to(self.device)
+                    sampled_actions = batch.sampled_actions[mb_idx].to(self.device)
+                    old_log_probs = batch.old_log_probs[mb_idx].to(self.device)
+                    ref_log_probs = batch.ref_log_probs[mb_idx].to(self.device)
+                    advantages = batch.advantages[mb_idx].to(self.device)
+                else:
+                    states = batch.states[mb_idx]
+                    actions = batch.actions[mb_idx]
+                    rtgs = batch.rtgs[mb_idx]
+                    timesteps = batch.timesteps[mb_idx]
+                    attention_mask = batch.attention_mask[mb_idx]
+                    sampled_actions = batch.sampled_actions[mb_idx]
+                    old_log_probs = batch.old_log_probs[mb_idx]
+                    ref_log_probs = batch.ref_log_probs[mb_idx]
+                    advantages = batch.advantages[mb_idx]
 
                 current_dist, _ = self._action_distributions(
                     states, actions, rtgs, timesteps, attention_mask
