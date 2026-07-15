@@ -11,6 +11,12 @@ import numpy as np
 import polars as pl
 import torch
 
+from aemo_dt_hf import (
+    MODERN_V2_HF_FILENAME,
+    MODERN_V2_HF_REPO,
+    load_model_kwargs,
+    modern_v2_model_config_path,
+)
 from aemo_notebook_utils import (
     create_aemo_env,
     fetch_and_preprocess_aemo_scenarios,
@@ -35,8 +41,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GRPO post-training for AEMO Decision Transformer")
 
     # HF model
-    parser.add_argument("--hf-repo", default="mrvictoru/energydecision-dt", help="HuggingFace repo")
-    parser.add_argument("--hf-filename", default="aemo_dt_fcas_model.pt", help="Checkpoint filename")
+    parser.add_argument("--hf-repo", default=MODERN_V2_HF_REPO, help="HuggingFace repo")
+    parser.add_argument("--hf-filename", default=MODERN_V2_HF_FILENAME, help="Checkpoint filename")
+    parser.add_argument(
+        "--model-config",
+        type=Path,
+        default=modern_v2_model_config_path(),
+        help="Path to the Decision Transformer model kwargs JSON.",
+    )
 
     # Output paths
     parser.add_argument("--output-dir", type=Path, default=repo_root() / "models" / "aemo" / "dt" / "grpo", help="Output directory for model + artifacts")
@@ -181,18 +193,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"[GRPO] Downloading pretrained DT from {args.hf_repo}/{args.hf_filename} ...")
     checkpoint_path = hf_hub_download(repo_id=args.hf_repo, filename=args.hf_filename)
     print(f"[GRPO] Checkpoint: {checkpoint_path}")
+    print(f"[GRPO] Model config: {args.model_config.resolve()}")
 
     # Model kwargs matching the full_fcas checkpoint
-    model_kwargs = {
-        "state_dim": 18,
-        "act_dim": 9,
-        "n_block": 8,
-        "h_dim": 384,
-        "context_len": 180,
-        "n_heads": 8,
-        "drop_p": 0.15,
-        "max_timestep": 100000,
-    }
+    model_kwargs = load_model_kwargs(args.model_config)
 
     # --- 2. Fetch/preprocess AEMO data ---
     print(f"[GRPO] Setting up AEMO env for {args.region} {args.start_date}..{args.end_date} ...")
@@ -371,7 +375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"\nTo evaluate with the dispatch_matched config:\n")
     print(f"  python3 src/autoresearch_evaluator.py \\")
     print(f"    --surface-manifest-path {surface_manifest_path} \\")
-    print(f"    --evaluation-config configs/aemo_autoresearch_evaluator.dispatch_matched.json \\")
+    print(f"    --evaluation-config configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json \\")
     print(f"    --output-dir eval_output/autoresearch/grpo_{run_tag} \\")
     print(f"    --device auto")
 
