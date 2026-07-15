@@ -219,6 +219,43 @@ python3 src/run_grpo_multi_region.py \
 
 ---
 
+## Critical Insights from Eval Report
+
+### Eval surface matters: different configs, different winners
+
+The same model can rank differently depending on the eval config. Always
+evaluate on at least two surfaces:
+
+| Surface | Battery | Regions | What it tests |
+|---------|---------|---------|---------------|
+| **Standard** (recommended) | 1C fixed (10/10) | 5 regions | Cross-region generalisation |
+| **Dispatch-matched** (supplement) | Station-specific | SA1 only | Head-to-head vs real operators |
+
+From actual results:
+- Phase 1 GRPO on Standard: **$1,855/ep** (worse than baseline)
+- Phase 1 GRPO on Dispatch-matched: **$8,242/ep** (beats baseline)
+- v2 pretrained on Standard: **$3,098/ep** (better than GRPO)
+- v2 pretrained on Dispatch-matched: **$7,392/ep** (close to GRPO)
+
+**Conclusion**: Report the Standard tier as the primary benchmark. Use
+Dispatch-matched as a secondary comparison.
+
+### RTG calibration is half the improvement
+
+| Model | RTG 0.0 | RTG 0.5 | Gain |
+|-------|:-------:|:-------:|:----:|
+| Phase 1 GRPO on dispatch-matched | $5,451 | $8,242 | **+51%** |
+
+Always calibrate RTG before reporting final results.
+
+### The modern v2 model is already strong
+
+The modern v2 pretrained model ($7,392/ep on dispatch-matched) nearly matches
+the legacy Phase 1 GRPO ($8,242/ep). The modern architecture (GQA, RoPE) may
+capture much of the benefit that GRPO provides for legacy models.
+
+---
+
 ## Summary: Before & After Comparison
 
 | Before (inconsistent) | After (standardised) |
