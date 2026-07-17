@@ -1,5 +1,77 @@
 # Next Stage: GRPO Fine-Tuning Instructions (Updated)
 
+## Session Summary (2026-07-16)
+
+- Confirmed that the current GRPO run used the modern v2 Hugging Face checkpoint and modern v2 model config (`mrvictoru/energydecision-dt-v2` + `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`).
+- Cached the checkpoint locally before training, then ran a multi-region / multi-battery GRPO fine-tuning pass with the repo-native script `scripts/run_grpo_multi_region.py`.
+- The new checkpoint was written to `models/aemo/dt/grpo_modern_v2_multibat_144h/dt_model_grpo_multi.pt`.
+- The training run completed successfully; the simple rollout eval improved from baseline `-18.29` to post-GRPO `-0.25` on the built-in GRPO eval (`+18.04` improvement).
+- Evaluated the new checkpoint on two surfaces:
+  - Example evaluator (`configs/aemo_autoresearch_evaluator.example.json`): the new checkpoint beat the FCAS-rule reference in paired comparison (`mean_diff +4.08`, `p=3.05e-05`) but still posted negative profit on this surface (about `-$156/ep`).
+  - Dispatch-matched evaluator (`configs/aemo_autoresearch_evaluator.dispatch_matched.json`): the new checkpoint scored about `-$206/ep` profit vs dispatch replay `+$964/ep` and FCAS-rule `-$67k/ep` on the same asset. This means the new GRPO checkpoint did not yet match the historical legacy Phase 1 GRPO dispatch-matched result on this surface.
+- Comparison vs prior baselines:
+  - Modern v2 pretrained standard surface: about `+$4,726/ep` profit, `+$3,063/ep` FCAS revenue.
+  - Legacy pretrained standard surface: about `+$645/ep` profit, `+$2,518/ep` FCAS revenue.
+  - Legacy Phase 1 GRPO (historical report): about `+$8,242/ep` profit and `+$7,686/ep` FCAS revenue on the dispatch-matched surface with RTG calibration.
+  - Previous modern-v2 GRPO checkpoint (earlier run): about `+$1,697/ep` profit on the standard surface.
+- The current run therefore looks promising as a modern-v2 GRPO experiment, but it has not yet reproduced the strongest legacy GRPO gain on the dispatch-matched surface. The next worthwhile step is a standard-tier evaluation sweep for this new checkpoint (and optionally an RTG sweep) to see whether the present training recipe is competitive with the pretrained modern-v2 baseline on the standard surface.
+
+## Follow-up Finding: why the current modern-v2 GRPO run collapsed
+
+- The current 144h modern-v2 checkpoint was re-evaluated on the dispatch-matched surface with `rtg_value=0.5`, and it produced the same collapsed result as the `rtg_value=0.0` evaluation: about `-$206/ep` profit with `0` FCAS revenue. This rules out "wrong RTG at eval time" as the primary explanation.
+- The strongest root cause is in `src/grpo_posttraining.py`: during rollout collection, RTG is updated as `next_rtg = (rtg_t - reward_t) / dt_gamma` whenever `dt_gamma != 1.0`.
+- With `dt_gamma=0.95`, this amplifies RTG by `1 / 0.95` every step. The amplification factor becomes extreme on long horizons:
+  - 288 steps: about `2.6e6`
+  - 576 steps: about `6.8e12`
+  - 1728 steps: about `3.1e38`
+- This matches the observed failure mode of the 144h run:
+  - runtime warning: `overflow encountered in cast`
+  - epoch-1 `train_total` on the 144h run jumped to about `3.2e15`
+  - the trained policy collapsed to near-zero actions on dispatch-matched eval
+- The earlier modern-v2 GRPO run did not collapse as hard because it used 48h episodes, so the same RTG amplification bug was present but less catastrophic. It still underperformed the pretrained modern-v2 baseline, which is consistent with a degraded but not fully overflowed training signal.
+- This also explains why the legacy PR#30 setup could improve while the new modern-v2 runs did not: the older `src/run_grpo_posttraining.py` path defaulted `dt_gamma=1.0`, so it avoided this RTG explosion entirely.
+- Secondary contributors that likely hurt the modern-v2 runs further:
+  - `adaptive_rtg=True` is already documented as counterproductive when realized returns are negative.
+  - the newer multi-region / multi-battery training recipe is not apples-to-apples with the older single-region legacy GRPO recipe.
+  - the built-in `run_grpo_multi_region.py` baseline/post-GRPO eval is a lightweight sanity check only; it is not a substitute for the standard or dispatch-matched benchmark surfaces.
+
+## Handoff Notes for the Next Agent Session
+
+### What `dt_gamma` does
+
+- `dt_gamma` is the discount factor used when the GRPO rollout code updates the RTG buffer after each environment step.
+- In this repo, the update is `next_rtg = (rtg_t - reward_t) / dt_gamma` whenever `dt_gamma != 1.0`.
+- With `dt_gamma=1.0`, the update is the simple undiscounted recurrence `rtg_{t+1} = rtg_t - reward_t`.
+- With `dt_gamma < 1.0`, each update divides by a value smaller than 1, so RTG grows rapidly over long horizons. This is why our 144h run exploded when `dt_gamma=0.95`.
+
+### Acceptable range for `dt_gamma`
+
+- For this GRPO codepath, `dt_gamma=1.0` is the safest default for long-horizon runs and the one we recommend for the next comparison runs.
+- If you want a discounted RTG, keep it very close to 1.0 (for example `0.99` or `0.995`) and only after adding a guard against exploding RTG values. We did not validate those values in this session.
+- `dt_gamma=0.95` is too aggressive for the 144h runs we tested; it caused the RTG to blow up and the policy to collapse.
+- `dt_gamma > 1.0` is not standard for this setting and should be avoided unless you deliberately want a different semantics; it was not used in our successful comparison runs.
+
+### Why the legacy GRPO model looked better on dispatch-matched but worse on standard
+
+- The legacy GRPO result is consistent with overfitting to the narrower dispatch-matched setup rather than learning a broadly robust policy.
+- The dispatch-matched eval is a focused benchmark: one region, one battery asset, one time window. A policy that is tuned to that surface can look very strong there.
+- The standard eval is broader and more diverse, so a specialist policy often loses.
+- This is the strongest explanation we have from the evidence, but it is still an interpretation rather than a proven cause. The next agent should treat it as a working hypothesis to test.
+
+### Recommended starting recipe for the next comparison run
+
+1. Use `dt_gamma=1.0`.
+2. Keep `adaptive_rtg` disabled for the first comparison.
+3. Start with the simpler single-region setup (for example NSW1) before reintroducing multi-region and multi-battery randomness.
+4. Run explicit RTG sweeps on both the dispatch-matched and standard surfaces.
+5. Compare against: modern-v2 pretrained, earlier modern-v2 GRPO, and the historical legacy GRPO result.
+
+### Session handoff location
+
+- The session plan file is at `/home/victoru/.copilot/session-state/d8301de1-1bfe-413b-b401-0b3a5c97df26/plan.md`.
+- The corrected modern-v2 checkpoint from this session is at `models/aemo/dt/grpo_modern_v2_single_nsw1_gamma1/dt_model_grpo_multi.pt`.
+- The corrected evaluation outputs are under `eval_output/autoresearch/grpo_gamma1_dispatch_rtg_*` and `eval_output/autoresearch/grpo_gamma1_standard_rtg_*`.
+
 ## Files the Next Agent Must Read
 
 | # | File | Why |

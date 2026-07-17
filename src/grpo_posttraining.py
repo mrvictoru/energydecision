@@ -109,6 +109,24 @@ def compute_group_relative_advantages(
     return advantages.reshape(-1).astype(np.float32)
 
 
+MAX_ABS_GRPO_RTG = 1e6
+
+
+def _validate_grpo_rtg(value: float, *, step_count: int, dt_gamma: float) -> float:
+    if not np.isfinite(value):
+        raise ValueError(
+            f"Non-finite GRPO RTG at step {step_count} with dt_gamma={dt_gamma}. "
+            "Use dt_gamma=1.0 for long-horizon GRPO or reduce the episode length."
+        )
+    if abs(value) > MAX_ABS_GRPO_RTG:
+        raise ValueError(
+            f"Exploding GRPO RTG ({value}) at step {step_count} with dt_gamma={dt_gamma}. "
+            f"Values above {MAX_ABS_GRPO_RTG:g} are treated as unstable. "
+            "Use dt_gamma=1.0 for long-horizon GRPO or reduce the episode length."
+        )
+    return float(value)
+
+
 def _build_dt_context(
     *,
     model: DecisionTransformer,
@@ -133,7 +151,17 @@ def _build_dt_context(
         if buffer_len > 0
         else np.zeros((0, act_dim), dtype=np.float32)
     )
-    buffer_rtgs = np.array(rtg_buffer, dtype=np.float32) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
+    if buffer_len > 0:
+        buffer_rtgs64 = np.array(rtg_buffer, dtype=np.float64)
+        if not np.all(np.isfinite(buffer_rtgs64)):
+            raise ValueError("Encountered non-finite GRPO RTG values while building the DT context.")
+        if float(np.max(np.abs(buffer_rtgs64))) > MAX_ABS_GRPO_RTG:
+            raise ValueError(
+                f"Encountered GRPO RTG magnitude above {MAX_ABS_GRPO_RTG:g} while building the DT context."
+            )
+        buffer_rtgs = buffer_rtgs64.astype(np.float32)
+    else:
+        buffer_rtgs = np.zeros(0, dtype=np.float32)
     buffer_timesteps = (
         np.array(timestep_buffer, dtype=np.int64)
         if buffer_len > 0
@@ -403,6 +431,12 @@ class GRPOTrainer:
                 _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
         return act_preds
 
+    @staticmethod
+    def _sanitize_action_preds(action_preds: torch.Tensor) -> torch.Tensor:
+        if action_preds.dtype.is_floating_point:
+            action_preds = torch.nan_to_num(action_preds, nan=0.0, posinf=1.0, neginf=-1.0)
+        return action_preds
+
     def _action_distributions(
         self,
         states: torch.Tensor,
@@ -418,8 +452,8 @@ class GRPOTrainer:
         ref_preds = self._forward_dt(
             self.reference_model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
         )
-        action_mean = action_preds[:, -1:, :]
-        ref_mean = ref_preds[:, -1:, :]
+        action_mean = self._sanitize_action_preds(action_preds[:, -1:, :])
+        ref_mean = self._sanitize_action_preds(ref_preds[:, -1:, :])
         current_dist = _mixed_action_distribution(action_mean, self.log_std, self._act_dim)
         ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
         return current_dist, ref_dist
@@ -531,6 +565,7 @@ class GRPOTrainer:
                         next_rtg = rtg_buffer[-1] - float(reward)
                     else:
                         next_rtg = (rtg_buffer[-1] - float(reward)) / float(dt_gamma)
+                    next_rtg = _validate_grpo_rtg(next_rtg, step_count=step_count, dt_gamma=float(dt_gamma))
                     state_buffer.append(next_obs.copy())
                     action_buffer.append(np.zeros(int(self.model.act_dim), dtype=np.float32))
                     rtg_buffer.append(float(next_rtg))

@@ -189,6 +189,13 @@ cython_debug/
 /expo/
 /system_logs/
 opencode.json
+/eval_output/grpo_modern_v2_multibat_mb16_dispatch_matched_rtg_1.5/
+/eval_output/grpo_modern_v2_multibat_mb16_rtg_smoke/
+/eval_output/grpo_modern_v2_multibat_mb16_standard_rtg_1.5/
+/eval_output/legacy_pretrained_standard_rtg_0.5/
+/eval_output/modern_v2_dispatch_matched_rtg_0.5/
+/eval_output/modern_v2_rtg_smoke/
+/eval_output/modern_v2_standard_rtg_0.5/
 
 # keep only a small curated set of evaluation artifacts trackable
 !/eval_output/
