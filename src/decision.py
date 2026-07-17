@@ -9,6 +9,7 @@ from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
 from batterydeg import DegradationModel, RainflowCounter
 from quantile_scenarios import QuantileScenarioGenerator
+from grpo_posttraining import stable_rtg_update
 
 # Import self-contained algorithm classes
 from sdp_algorithm import SDPSolver
@@ -527,13 +528,12 @@ class Agent:
                         action_array = np.array([action], dtype=np.float32) if np.isscalar(action) else action
                     self.dt_actions_buffer[-1] = action_array
                     
-                    # Update RTG using discounted recurrence: R_{t+1} = (R_t - r_t) / gamma
-                    if self.dt_gamma == 1.0:
-                        # Undiscounted: R_{t+1} = R_t - r_t
-                        next_rtg = self.dt_rtgs_buffer[-1] - reward
-                    else:
-                        # Discounted: R_{t+1} = (R_t - r_t) / gamma
-                        next_rtg = (self.dt_rtgs_buffer[-1] - reward) / self.dt_gamma
+                    # Stable discounted RTG update (clamped to the trained envelope for
+                    # gamma<1 so the 1/gamma recurrence cannot explode on long horizons).
+                    next_rtg = stable_rtg_update(
+                        self.dt_rtgs_buffer[-1], reward,
+                        dt_gamma=self.dt_gamma, initial_rtg=self.rtg_value,
+                    )
                     
                     # Append next state, action placeholder, RTG, and timestep
                     self.dt_states_buffer.append(next_obs.copy())
@@ -1188,10 +1188,10 @@ class AEMOAgent:
                         action_array = np.array([action], dtype=np.float32) if np.isscalar(action) else action
                     self.dt_actions_buffer[-1] = action_array
 
-                    if self.dt_gamma == 1.0:
-                        next_rtg = self.dt_rtgs_buffer[-1] - reward
-                    else:
-                        next_rtg = (self.dt_rtgs_buffer[-1] - reward) / self.dt_gamma
+                    next_rtg = stable_rtg_update(
+                        self.dt_rtgs_buffer[-1], reward,
+                        dt_gamma=self.dt_gamma, initial_rtg=self.rtg_value,
+                    )
 
                     self.dt_states_buffer.append(next_obs.copy())
                     self.dt_actions_buffer.append(np.zeros(self.model.act_dim))

@@ -154,26 +154,29 @@ python3 src/convert_dispatch_to_episodes.py \
 
 ## Pretrained DT model (for GRPO fine-tuning)
 
-The best Decision Transformer checkpoint is hosted on HuggingFace:
+Two checkpoints are hosted on HuggingFace. **Verify architecture from the weights, not docs** (each `.pt` carries an embedded `config`; see `docs/next_stage_instructions.md` → "Verifying a checkpoint's architecture").
 
-- **HF repo**: `mrvictoru/energydecision-dt`
-- **Checkpoint**: `aemo_dt_fcas_model.pt` (8×384, ctx=180, aw=0.999, sw=0.002, trained on RTX 6000 Pro)
-- **Download**: `hf_hub_download("mrvictoru/energydecision-dt", "aemo_dt_fcas_model.pt")`
+- **Legacy**: repo `mrvictoru/energydecision-dt`, file `aemo_dt_fcas_model.pt` — 8×384, ctx=180, learned pos emb (`embed_return` MoLab keys).
+- **Modern v2** (PR#31): repo `mrvictoru/energydecision-dt-v2`, file `aemo_dt_fcas_model.pt` — **8×768, 12 heads, 6 KV heads (GQA), qk_norm, tie_weights, ctx=210, return_scale=2.0, learned timestep emb (rope_enabled=false)**. Canonical config: `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. Helpers in `src/aemo_dt_hf.py` (`MODERN_V2_HF_REPO`, `modern_v2_model_config_path()`, `build_surface_manifest()`).
 
-GRPO fine-tuning is on the `copilot/online-rl-fine-tuning` branch (`src/grpo_posttraining.py`).
-The AEMO GRPO notebook (`notebooks/aemo_dt_grpo_posttraining.ipynb`) downloads this model automatically and runs online RL with adaptive RTG sampling.
+GRPO fine-tuning lives in `src/grpo_posttraining.py`. The AEMO GRPO notebook (`notebooks/aemo_dt_grpo_posttraining.ipynb`) downloads the model automatically.
 
 ### GRPO post-training pipeline
 
-Standalone script: `src/run_grpo_posttraining.py`
+Entry-point scripts now live under `scripts/` (moved from `src/` in commit 859fb51):
 ```bash
-python3 src/run_grpo_posttraining.py \
+# Single-region
+python3 scripts/run_grpo_posttraining.py \
     --region NSW1 --start-date 2024-01-01 --end-date 2024-01-14 \
     --iterations 5 --step-duration 0.5 --episode-hours 144
+# Multi-region/multi-battery (defaults to modern-v2 model)
+python3 scripts/run_grpo_multi_region.py --dt-gamma 1.0 --group-size 4
 ```
-Outputs: `models/aemo/dt/grpo/dt_model_grpo.pt` + surface manifest + loss CSV.
+Outputs: `dt_model_grpo*.pt` + surface manifest + loss CSV under the `--output-dir`.
 
-**Legacy checkpoint compatibility**: The HF checkpoint uses MoLab-style keys (`embed_return`, `embed_action`, `blocks.*`) which triggers `LegacyDecisionTransformer` auto-detection in `load_from_checkpoint()`. The GRPO code handles this via `_is_legacy_dt()` which normalizes the forward call order and return value order between modern and legacy models.
+**RTG stability (fixed 2026-07-17, PR#31)**: The rollout/inference RTG update goes through `stable_rtg_update()` in `src/grpo_posttraining.py` (also used by `src/decision.py`). For `dt_gamma==1.0` it is the exact undiscounted recurrence `R_{t+1}=R_t-r_t`; for `dt_gamma<1.0` it applies the discounted update **clamped to `max(4*|initial_rtg|, 20)`**. This fixes the long-horizon RTG overflow (`(1/gamma)^t`) that collapsed every modern-v2 GRPO run at `dt_gamma=0.95`. **Use `dt_gamma=1.0` as the default**; `0.99`–`0.995` are now safe but validate against a `gamma=1.0` baseline. Avoid `adaptive_rtg` when realised returns are negative.
+
+**Legacy checkpoint compatibility**: The legacy HF checkpoint uses MoLab-style keys (`embed_return`, `embed_action`, `blocks.*`) which triggers `LegacyDecisionTransformer` auto-detection in `load_from_checkpoint()`. The GRPO code handles this via `_is_legacy_dt()` which normalizes the forward call order and return value order between modern and legacy models.
 
 ### GRPO results (July 2026)
 

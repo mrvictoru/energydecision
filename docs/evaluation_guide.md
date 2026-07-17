@@ -49,40 +49,34 @@ This table tells you which config to use and what it tests:
 The evaluator needs a JSON file describing your model's architecture and
 checkpoint path:
 
+> **Do not hand-write `model_kwargs`.** Load them from the canonical config so
+> they always match the weights, and verify any checkpoint's true architecture
+> from its embedded `config` (see "Verifying a checkpoint's architecture" in
+> `docs/next_stage_instructions.md`). The v2 model is **8×768, 12 heads, 6 KV
+> heads (GQA), qk_norm, tie_weights, ctx=210, learned timestep embeddings
+> (rope_enabled=false)**, and its HF filename is **`aemo_dt_fcas_model.pt`**.
+
 ```python
-from huggingface_hub import hf_hub_download
 from pathlib import Path
-import json
+import json, sys
+from huggingface_hub import hf_hub_download
 
-checkpoint = hf_hub_download("mrvictoru/energydecision-dt-v2", "aemo_dt_model.pt")
+sys.path.insert(0, "src")
+from aemo_dt_hf import (
+    MODERN_V2_HF_REPO, MODERN_V2_HF_FILENAME,
+    modern_v2_model_config_path, load_model_kwargs, build_surface_manifest,
+    write_placeholder_loss_csv,
+)
 
-# For legacy model (w/embed_return):
-model_kwargs_legacy = {
-    "state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
-    "context_len": 180, "n_heads": 8, "drop_p": 0.15,
-    "max_timestep": 100000,
-}
+checkpoint = hf_hub_download(MODERN_V2_HF_REPO, MODERN_V2_HF_FILENAME)  # aemo_dt_fcas_model.pt
+model_kwargs = load_model_kwargs(modern_v2_model_config_path())        # verified 8x768 config
+loss_csv = write_placeholder_loss_csv("/tmp/dummy_loss.csv")
 
-# For modern model (w/GQA, RoPE, embed_rtg):
-model_kwargs_modern = {
-    "state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384,
-    "context_len": 180, "n_heads": 8, "drop_p": 0.15,
-    "max_timestep": 100000,
-    "rope_enabled": True,
-    "rope_max_position": 540,
-    "rope_base": 10000.0,
-}
-
-manifest = {
-    "schema": "energydecision.dt_training_surface.v1",
-    "model_kwargs": model_kwargs_modern,
-    "paths": {
-        "save_path": checkpoint,
-        "loss_csv_path": "/tmp/dummy_loss.csv",
-    },
-}
+manifest = build_surface_manifest(
+    model_kwargs=model_kwargs, save_path=checkpoint, loss_csv_path=loss_csv,
+    hf_repo=MODERN_V2_HF_REPO, hf_filename=MODERN_V2_HF_FILENAME,
+)
 Path("/tmp/manifest.json").write_text(json.dumps(manifest, indent=2))
-Path("/tmp/dummy_loss.csv").write_text("epoch,train_total,train_action,val_total,val_action\n1,0.0,0.0,,\n")
 ```
 
 ---
@@ -200,7 +194,7 @@ ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/nu
 nvidia-smi --query-gpu=memory.used --format=csv,noheader   # expect < 500 MiB
 ```
 
-## GPU Memory (12×768 modern model, ctx=210)
+## GPU Memory (8×768 modern model, ctx=210)
 
 | Operation | group_size | Rollout batch | Total VRAM | On 22 GB? |
 |-----------|:----------:|:-------------:|:----------:|:---------:|
@@ -213,7 +207,7 @@ nvidia-smi --query-gpu=memory.used --format=csv,noheader   # expect < 500 MiB
 `--group-size 4` is the minimum for reliable training.
 
 **No code changes needed.** Gradient checkpointing and mixed precision are
-not required — the 12×768 model fits comfortably at `group_size=4` on a
+not required — the 8×768 model fits comfortably at `group_size=4` on a
 22 GB card after cleaning zombies.
 
 ---

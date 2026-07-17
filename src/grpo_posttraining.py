@@ -112,6 +112,46 @@ def compute_group_relative_advantages(
 MAX_ABS_GRPO_RTG = 1e6
 
 
+def stable_rtg_update(
+    current_rtg: float,
+    reward: float,
+    *,
+    dt_gamma: float,
+    initial_rtg: float,
+) -> float:
+    """Numerically stable return-to-go update for autoregressive DT rollout.
+
+    The Decision Transformer is trained on the discounted convention
+    ``rtg[t] = r[t] + gamma * rtg[t+1]`` (see ``helper._compute_rtgs_from_rewards``).
+    Inverting it gives the exact recurrence ``rtg[t+1] = (rtg[t] - r[t]) / gamma``.
+
+    That exact inverse is numerically unstable for ``gamma < 1`` on long horizons:
+    every step multiplies the magnitude by ``1 / gamma > 1``, so RTG compounds as
+    ``(1 / gamma) ** t`` and overflows (e.g. ~3e38 after 1728 steps at gamma=0.95).
+    This collapsed every long-horizon modern-v2 GRPO run.
+
+    We keep the exact undiscounted recurrence for ``gamma == 1.0`` and, for
+    ``gamma < 1.0``, apply the discounted update while clamping the result to the
+    trained RTG envelope so it can never blow up. The clamp bound is derived from
+    the initial prompt magnitude (the target the model was actually conditioned
+    on), which keeps the RTG signal inside the distribution the DT saw during
+    pretraining instead of drifting to astronomical values.
+    """
+    if not np.isfinite(current_rtg) or not np.isfinite(reward):
+        raise ValueError(
+            f"Non-finite inputs to stable_rtg_update (rtg={current_rtg}, reward={reward})."
+        )
+    if dt_gamma == 1.0:
+        return float(current_rtg - reward)
+
+    next_rtg = (float(current_rtg) - float(reward)) / float(dt_gamma)
+    # Clamp to the trained RTG envelope so the 1/gamma recurrence cannot explode.
+    # The bound is a small multiple of the initial prompt magnitude; a floor keeps
+    # small/zero prompts from collapsing the achievable RTG range.
+    envelope = max(abs(float(initial_rtg)) * 4.0, 20.0)
+    return float(np.clip(next_rtg, -envelope, envelope))
+
+
 def _validate_grpo_rtg(value: float, *, step_count: int, dt_gamma: float) -> float:
     if not np.isfinite(value):
         raise ValueError(
@@ -561,10 +601,12 @@ class GRPOTrainer:
                     step_count += 1
 
                     action_buffer[-1] = action_np
-                    if dt_gamma == 1.0:
-                        next_rtg = rtg_buffer[-1] - float(reward)
-                    else:
-                        next_rtg = (rtg_buffer[-1] - float(reward)) / float(dt_gamma)
+                    next_rtg = stable_rtg_update(
+                        rtg_buffer[-1],
+                        float(reward),
+                        dt_gamma=float(dt_gamma),
+                        initial_rtg=float(prompt.rtg_value),
+                    )
                     next_rtg = _validate_grpo_rtg(next_rtg, step_count=step_count, dt_gamma=float(dt_gamma))
                     state_buffer.append(next_obs.copy())
                     action_buffer.append(np.zeros(int(self.model.act_dim), dtype=np.float32))
