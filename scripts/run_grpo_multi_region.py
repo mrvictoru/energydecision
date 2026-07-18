@@ -77,12 +77,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--group-size", type=int, default=4)
     parser.add_argument("--update-epochs", type=int, default=2)
     parser.add_argument("--minibatch-size", type=int, default=64)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1,
+                        help="Accumulate gradients over N micro-batches before each optimizer step. "
+                        "Use e.g. 8 with --minibatch-size 8 to match effective batch 64 at lower GPU memory.")
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--kl-coeff", type=float, default=0.02)
     parser.add_argument("--entropy-coeff", type=float, default=0.0)
     parser.add_argument("--rtg-count", type=int, default=4)
     parser.add_argument("--rtg-spread", type=float, default=3.0)
     parser.add_argument("--rtg-dist", default="gaussian")
+    parser.add_argument(
+        "--rtg-target", type=float, default=None,
+        help="Center RTG for the prompt distribution. Defaults to "
+        "rtg_count * return_scale / 2 when unset. Override with the value "
+        "found by an RTG calibration sweep (e.g. 0.0 for the modern v2 model).",
+    )
     parser.add_argument("--dt-gamma", type=float, default=1.0)
     parser.add_argument("--sync-reference-every", type=int, default=0)
     parser.add_argument("--adaptive-rtg", action="store_true", default=False)
@@ -222,7 +231,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"[GRPO] Baseline reward: {float(baseline['reward_sum'].mean()):.2f}")
 
     # 6. GRPO training
-    target_rtg = args.rtg_count * optimal_rtg / 2  # center RTG on return_scale
+    if args.rtg_target is None:
+        target_rtg = args.rtg_count * optimal_rtg / 2  # center RTG on return_scale
+    else:
+        target_rtg = float(args.rtg_target)
     rtg_values = sample_rtg_values(optimum=target_rtg, spread=args.rtg_spread, count=args.rtg_count, distribution=args.rtg_dist, seed=args.seed)
     print(f"[GRPO] RTG prompts: {[round(v, 2) for v in rtg_values]}")
 
@@ -256,6 +268,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         group_size=args.group_size,
         update_epochs=args.update_epochs,
         minibatch_size=args.minibatch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         dt_gamma=args.dt_gamma,
         sync_reference_every=args.sync_reference_every,
         adaptive_rtg=args.adaptive_rtg,
@@ -305,6 +318,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "rtg_spread": args.rtg_spread,
             "rtg_dist": args.rtg_dist,
             "dt_gamma": args.dt_gamma,
+            "minibatch_size": args.minibatch_size,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "update_epochs": args.update_epochs,
         },
         "scenario": {"regions": regions, "start_date": args.start_date, "end_date": args.end_date, "episode_hours": args.episode_hours, "action_mode": args.action_mode},
     }

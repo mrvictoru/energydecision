@@ -484,18 +484,24 @@ class GRPOTrainer:
         rtgs: torch.Tensor,
         timesteps: torch.Tensor,
         attention_mask: torch.Tensor,
+        *,
+        compute_ref: bool = True,
     ) -> tuple[TransformedDistribution, TransformedDistribution]:
         amp_ctx = torch.cuda.amp.autocast(dtype=self._amp_dtype) if self.mixed_precision and 'cuda' in str(self.device) else None
         action_preds = self._forward_dt(
             self.model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
         )
-        ref_preds = self._forward_dt(
-            self.reference_model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
-        )
         action_mean = self._sanitize_action_preds(action_preds[:, -1:, :])
-        ref_mean = self._sanitize_action_preds(ref_preds[:, -1:, :])
         current_dist = _mixed_action_distribution(action_mean, self.log_std, self._act_dim)
-        ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
+
+        if compute_ref:
+            ref_preds = self._forward_dt(
+                self.reference_model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
+            )
+            ref_mean = self._sanitize_action_preds(ref_preds[:, -1:, :])
+            ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
+        else:
+            ref_dist = current_dist
         return current_dist, ref_dist
 
     def collect_rollouts(
@@ -652,26 +658,29 @@ class GRPOTrainer:
         *,
         update_epochs: int = 1,
         minibatch_size: int = 128,
+        gradient_accumulation_steps: int = 1,
     ) -> dict[str, float]:
         if batch.num_steps == 0:
             raise ValueError("Cannot update with an empty rollout batch.")
 
-        metrics = {
+        meter = {
             "loss": 0.0,
             "policy_loss": 0.0,
             "kl_loss": 0.0,
             "entropy_bonus": 0.0,
         }
-        update_steps = 0
+        optim_steps = 0
+        micro_steps = 0
         indices = torch.arange(batch.num_steps)
         _batch_on_cpu = self.cpu_rollout_buffer and str(batch.states.device) == "cpu"
+        accum = max(1, int(gradient_accumulation_steps))
 
         for _ in range(max(1, int(update_epochs))):
             shuffled = indices[torch.randperm(batch.num_steps)]
+            self.optimizer.zero_grad(set_to_none=True)
             for start in range(0, batch.num_steps, max(1, int(minibatch_size))):
                 mb_idx = shuffled[start : start + max(1, int(minibatch_size))]
                 if _batch_on_cpu:
-                    # Move mini-batch to GPU on-the-fly — saves ~6 GB vs keeping full batch on GPU
                     states = batch.states[mb_idx].to(self.device)
                     actions = batch.actions[mb_idx].to(self.device)
                     rtgs = batch.rtgs[mb_idx].to(self.device)
@@ -692,8 +701,11 @@ class GRPOTrainer:
                     ref_log_probs = batch.ref_log_probs[mb_idx]
                     advantages = batch.advantages[mb_idx]
 
+                # Skip dead reference forward during training — ref_log_probs are
+                # pre-computed from rollout.
                 current_dist, _ = self._action_distributions(
-                    states, actions, rtgs, timesteps, attention_mask
+                    states, actions, rtgs, timesteps, attention_mask,
+                    compute_ref=False,
                 )
                 current_log_probs = current_dist.log_prob(sampled_actions.unsqueeze(1)).squeeze(-1)
                 log_ratio = current_log_probs - old_log_probs
@@ -711,25 +723,37 @@ class GRPOTrainer:
 
                 base_entropy = current_dist.base_dist.entropy().mean()
                 loss = policy_loss + self.kl_coeff * kl_loss - self.entropy_coeff * base_entropy
+                (loss / float(accum)).backward()
 
-                self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
+                meter["loss"] += float(loss.detach().cpu().item())
+                meter["policy_loss"] += float(policy_loss.detach().cpu().item())
+                meter["kl_loss"] += float(kl_loss.detach().cpu().item())
+                meter["entropy_bonus"] += float(base_entropy.detach().cpu().item())
+                micro_steps += 1
+
+                if micro_steps % accum == 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+                    if self.log_std.requires_grad:
+                        torch.nn.utils.clip_grad_norm_([self.log_std], self.grad_clip_norm)
+                    self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    optim_steps += 1
+            # Flush any remaining accumulated gradients.
+            if micro_steps % accum != 0:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
                 if self.log_std.requires_grad:
                     torch.nn.utils.clip_grad_norm_([self.log_std], self.grad_clip_norm)
                 self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
+                optim_steps += 1
 
-                metrics["loss"] += float(loss.detach().cpu().item())
-                metrics["policy_loss"] += float(policy_loss.detach().cpu().item())
-                metrics["kl_loss"] += float(kl_loss.detach().cpu().item())
-                metrics["entropy_bonus"] += float(base_entropy.detach().cpu().item())
-                update_steps += 1
-
-        if update_steps > 0:
-            for key in metrics:
-                metrics[key] /= float(update_steps)
-        metrics["log_std_mean"] = float(self.log_std.detach().mean().cpu().item())
-        return metrics
+        if micro_steps > 0:
+            for key in meter:
+                meter[key] /= float(micro_steps)
+        meter["optim_steps"] = float(optim_steps)
+        meter["micro_steps"] = float(micro_steps)
+        meter["log_std_mean"] = float(self.log_std.detach().mean().cpu().item())
+        return meter
 
     def train(
         self,
@@ -740,6 +764,7 @@ class GRPOTrainer:
         group_size: int = 4,
         update_epochs: int = 1,
         minibatch_size: int = 128,
+        gradient_accumulation_steps: int = 1,
         dt_gamma: float = 0.99,
         sync_reference_every: int = 0,
         adaptive_rtg: bool = False,
@@ -763,6 +788,7 @@ class GRPOTrainer:
                 batch,
                 update_epochs=update_epochs,
                 minibatch_size=minibatch_size,
+                gradient_accumulation_steps=gradient_accumulation_steps,
             )
             reference_synced = False
             if sync_reference_every and (iteration + 1) % int(sync_reference_every) == 0:
