@@ -293,13 +293,13 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 
 6. **Large-station dispatch replays transfer profitably but inefficiently.** Hornsdale ($57,435/ep) and Torrens Island ($114,365/ep) earn high absolute profit but with poor per-MWh efficiency.
 
-![Mean reward comparison — standard surface (modern v2 pretrained vs baselines)](eval_output/baseline_v2_standard/plots/mean_reward.svg)
+![Mean reward comparison — standard surface (modern v2 pretrained vs baselines)](eval_output/final/baseline_v2_standard/plots/mean_reward.svg)
 
-![Risk-return profile — standard surface](eval_output/baseline_v2_standard/plots/risk_return.svg)
+![Risk-return profile — standard surface](eval_output/final/baseline_v2_standard/plots/risk_return.svg)
 
-![Episode return distribution — standard surface](eval_output/baseline_v2_standard/plots/episode_distribution.svg)
+![Episode return distribution — standard surface](eval_output/final/baseline_v2_standard/plots/episode_distribution.svg)
 
-![Net grid energy balance — standard surface](eval_output/baseline_v2_standard/plots/grid_energy.svg)
+![Net grid energy balance — standard surface](eval_output/final/baseline_v2_standard/plots/grid_energy.svg)
 
 ---
 
