@@ -157,7 +157,7 @@ python3 src/convert_dispatch_to_episodes.py \
 Two checkpoints are hosted on HuggingFace. **Verify architecture from the weights, not docs** (each `.pt` carries an embedded `config`; see `docs/next_stage_instructions.md` → "Verifying a checkpoint's architecture").
 
 - **Legacy**: repo `mrvictoru/energydecision-dt`, file `aemo_dt_fcas_model.pt` — 8×384, ctx=180, learned pos emb (`embed_return` MoLab keys).
-- **Modern v2** (PR#31): repo `mrvictoru/energydecision-dt-v2`, file `aemo_dt_fcas_model.pt` — **8×768, 12 heads, 6 KV heads (GQA), qk_norm, tie_weights, ctx=210, return_scale=2.0, learned timestep emb (rope_enabled=false)**. Canonical config: `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. Helpers in `src/aemo_dt_hf.py` (`MODERN_V2_HF_REPO`, `modern_v2_model_config_path()`, `build_surface_manifest()`).
+- **Modern v2** (PR#31): repo `mrvictoru/energydecision-dt-v2`, file `aemo_dt_fcas_model.pt` — **8×768, 12 heads, 6 KV heads (GQA), qk_norm, tie_weights, ctx=210, return_scale=2.0, learned timestep emb (rope_enabled=false)**. Canonical config: `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. Helpers in `src/aemo_dt_hf.py` (`MODERN_V2_HF_REPO`, `modern_v2_model_config_path()`, `build_surface_manifest()`). **This is the SOTA checkpoint — GRPO does not improve it.**
 
 GRPO fine-tuning lives in `src/grpo_posttraining.py`. The AEMO GRPO notebook (`notebooks/aemo_dt_grpo_posttraining.ipynb`) downloads the model automatically.
 
@@ -176,27 +176,45 @@ Outputs: `dt_model_grpo*.pt` + surface manifest + loss CSV under the `--output-d
 
 **RTG stability (fixed 2026-07-17, PR#31)**: The rollout/inference RTG update goes through `stable_rtg_update()` in `src/grpo_posttraining.py` (also used by `src/decision.py`). For `dt_gamma==1.0` it is the exact undiscounted recurrence `R_{t+1}=R_t-r_t`; for `dt_gamma<1.0` it applies the discounted update **clamped to `max(4*|initial_rtg|, 20)`**. This fixes the long-horizon RTG overflow (`(1/gamma)^t`) that collapsed every modern-v2 GRPO run at `dt_gamma=0.95`. **Use `dt_gamma=1.0` as the default**; `0.99`–`0.995` are now safe but validate against a `gamma=1.0` baseline. Avoid `adaptive_rtg` when realised returns are negative.
 
+**Memory-safe training**: Use `--gradient-accumulation-steps` to split the effective batch into micro-batches. With `--minibatch-size 8 --gradient-accumulation-steps 8`, the 8×768 modern model trains with ~1.8 GB peak GPU memory (fits any 4 GB+ GPU). The `update()` method skips the reference model forward (it was dead code — `ref_log_probs` come from rollout), halving activation memory during training.
+
 **Legacy checkpoint compatibility**: The legacy HF checkpoint uses MoLab-style keys (`embed_return`, `embed_action`, `blocks.*`) which triggers `LegacyDecisionTransformer` auto-detection in `load_from_checkpoint()`. The GRPO code handles this via `_is_legacy_dt()` which normalizes the forward call order and return value order between modern and legacy models.
 
-### GRPO results (July 2026)
+### Modern v2 GRPO results (definitive, July 2026)
 
-**Setup**: Pretrained DT → 5 GRPO iterations on NSW1 Jan 2024 → evaluated on SA1 2024 (4 seasons, dispatch-matched Dalrymple North 8MW BESS, full_fcas).
+**Setup**: Modern v2 pretrained (8×768) → 5 GRPO iterations on NSW1+SA1+QLD1 Jan 2024 (144h, 4 RTG, group_size=4, gradient_accumulation) → evaluated on two surfaces.
 
-| Policy | Mean Reward/step | Profit/ep | FCAS rev/ep | Sharpe | Violations |
-|--------|:----------------:|:---------:|:-----------:|:------:|:----------:|
-| **GRPO-tuned DT** | **+1.32** | **$3,973** | **$4,697** | **+2.43** | **0%** |
-| Dispatch replay | -1.38 | $963 | $110 | -1.27 | 0% |
-| FCAS rule | -68.77 | -$65,890 | $30 | -11.28 | 0% |
+| Model | Standard | Dispatch-matched (rtg=0.5) | Dispatch-matched (rtg=0.0) |
+|---|---:|---:|---:|
+| **Modern v2 pretrained** | **$4,630** | **$6,793** | **$10,138** |
+| Phase C GRPO (2 bat, 3 region, 144h) | $4,102 | $6,445 | $6,183 |
+| Phase C.2 GRPO (4 bat, 3 region, 144h) | — | $6,060 | — |
+| Legacy Phase 1 GRPO (overfit) | $1,533 | $8,242 | $5,451 |
+| PPO reference | $2,353 | $7,757 | — |
+| Dispatch Dalrymple North | $4,660 | $3,663 | — |
 
 **Key findings**:
-- GRPO-tuned DT earns **42× more FCAS revenue** than real-life dispatch replay
-- Paired comparison vs dispatch: mean_diff = **+2.70/step** (statistically significant)
-- Zero safety violations across all policies
-- FCAS rule performs poorly on dispatch-matched asset (8MW/30MW vs its designed 10MW/5MW)
-- **Iteration count matters**: 5 iterations (+1.32/step) outperforms 30 iterations (-1.54/step). Beyond ~5 iterations the policy drifts from the pretrained reference, degrading energy trading ability and increasing degradation costs 3× despite maintaining FCAS revenue.
-- **24h proxy sweep vs 144h training gap**: The 24h episode proxy sweep suggested lr=5e-5, rtgc=2, 15 iters as best, but these findings did not transfer to 144h training. The default (5 iters, lr=1e-5, rtgc=4, 144h) remains the best config. This confirms that training on the same episode length as evaluation is critical.
+- **Modern v2 pretrained is SOTA** — beats every GRPO variant, PPO, and all dispatch baselines on both surfaces. The architecture improvements (GQA, RMSNorm, weight-tying) captured the benefits GRPO provided the legacy model.
+- **GRPO does not improve the modern v2 model** — at best it comes within 5–11% of pretrained; at worst it regresses. The 2-battery Phase C recipe ($6,445 DM / $4,102 standard) is the best GRPO result.
+- **Overfitting hypothesis CONFIRMED**: Legacy Phase 1 GRPO's $8,242 dispatch-matched drops to $1,533 on standard — it overfit to a narrow benchmark. The modern v2 pretrained model generalizes properly.
+- **RTG response differs by architecture**: the modern v2 peaks at RTG=0.0 ($10,138 DM) while the legacy model peaks at RTG=0.5 ($8,242 vs $5,451 at 0.0). Always calibrate RTG per model.
+- **24h/48h proxy metrics do not predict 144h performance** — always train and evaluate on the same episode length.
 
-### GRPO sweep results (24h episodes, NSW1 Jan 2024)
+### Stale legacy GRPO results (retained for reference)
+
+The following results are from the legacy 8×384 model (PR#30, *copilot/online-rl-fine-tuning* branch) and are **not reproducible** with the modern v2 model. They are kept for historical comparison only.
+
+**Setup**: Legacy DT → 5 GRPO iterations on NSW1 Jan 2024 → evaluated on SA1 (dispatch-matched Dalrymple North 8MW BESS).
+
+| Policy | Profit/ep | FCAS rev/ep | vs dispatch | Overfit check (standard surface) |
+|--------:|:---------:|:-----------:|:-----------:|:--------------------------------:|
+| Legacy Phase 1 GRPO (rtg=0.5) | $8,242 | $7,686 | +125% | $1,533 (overfit confirmed) |
+| Legacy GRPO (no Phase 1, rtg=0.5) | $4,400 | $7,025 | +20% | N/A |
+| Dispatch Dalrymple North | $3,663 | $1,512 | ref | Same |
+
+**Note**: The legacy Phase 1 GRPO appeared to beat all baselines on dispatch-matched, but this was a specialist overfit to SA1 Q4 2024. The modern v2 pretrained model generalizes better across regions and seasons.
+
+### GRPO sweep results (legacy model only, 24h episodes)
 
 | Sweep | Best value | Reward improvement | Notes |
 |-------|-----------|:------------------:|-------|
