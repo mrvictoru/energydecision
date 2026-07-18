@@ -179,7 +179,7 @@ If those monthly cache files are missing because NEMOSIS cannot fetch the post-2
 archive format directly, stage them with:
 
 ```bash
-python3 src/fetch_aemo_monthly_cache.py --year 2025
+python3 scripts/fetch_aemo_monthly_cache.py --year 2025
 ```
 
 That tool writes the exact `PUBLIC_ARCHIVE#...#FILE01#...CSV` filenames that NEMOSIS expects and

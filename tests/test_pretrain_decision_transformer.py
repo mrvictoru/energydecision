@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import pretrain_decision_transformer as pretrain_dt  # noqa: E402
 
@@ -460,7 +461,7 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     assert progress_snapshot_path.exists()
     manifest_path = loss_csv_path.with_name("loss_surface_manifest.json")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["editable_training_surface_file"].endswith("src/pretrain_decision_transformer.py")
+    assert manifest["editable_training_surface_file"].endswith("pretrain_decision_transformer.py")
     assert manifest["surface_preset"] == "legacy"
     assert manifest["optimizer"] == "adamw"
     assert manifest["scheduler"] == "steplr"

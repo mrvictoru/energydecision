@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.9"
+__generated_with = "0.23.14"
 app = marimo.App(
     width="medium",
     css_file="/usr/local/_marimo/custom.css",
@@ -37,6 +37,17 @@ def _():
     except ImportError:
         subprocess.check_call(["pip", "install", "huggingface_hub", "pyarrow"])
         from huggingface_hub import hf_hub_download, HfApi
+
+    # ── Check what files are on the HF dataset repo ──
+    _REPO_ID = "mrvictoru/AEMO_simulated_trade"
+    try:
+        _api = HfApi()
+        _files = _api.list_repo_files(repo_id=_REPO_ID, repo_type="dataset")
+        print("📂 Files in dataset repo:")
+        for _f in sorted(_files):
+            print(f"   - {_f}")
+    except Exception as _e:
+        print(f"⚠️  Could not list repo files: {_e}")
 
     print("✅ All imports ready")
     return (
@@ -488,11 +499,13 @@ def _(np, pl, torch):
         """Creates (state, action, RTG, timestep) context windows from episode data."""
 
         def __init__(self, df, context_length=180, state_dim=18, act_dim=9,
-                     discount_factor=0.95, max_episodes=None, skip_short_episodes=True):
+                     discount_factor=0.95, max_episodes=None, skip_short_episodes=True,
+                     max_timestep=100000):
             self.context_length = context_length
             self.state_dim = state_dim
             self.act_dim = act_dim
             self.discount_factor = discount_factor
+            self.max_timestep = max_timestep
 
             # Group by episode_id and collect observations, actions, rewards
             episodes = df.group_by("episode_id").agg(
@@ -535,13 +548,16 @@ def _(np, pl, torch):
                     rtg[t] = running
 
                 # Create overlapping context windows
+                # IMPORTANT: timesteps are modulo max_timestep to stay within
+                # the embedding layer's range (handles episodes longer than max_timestep)
                 stride = context_length // 2
                 for i in range(0, n - context_length + 1, stride):
                     end = i + context_length
                     all_states.append(obs_arr[i:end])
                     all_actions.append(act_arr[i:end])
                     all_rtgs.append(rtg[i:end])
-                    all_timesteps.append(np.arange(i, end, dtype=np.int64))
+                    # Modulo to keep within embedding bounds
+                    all_timesteps.append(np.arange(i, end, dtype=np.int64) % max_timestep)
 
             if n_skipped_dim > 0:
                 print(f"⚠️  Skipped {n_skipped_dim} episode(s) with mismatched dimensions")
@@ -560,6 +576,7 @@ def _(np, pl, torch):
             total_eps = len(episodes)
             used_eps = total_eps - n_skipped_dim
             print(f"📊 TrajectoryDataset: {len(self):,} contexts from {used_eps} episodes")
+            print(f"   Timestep range: [{self.timesteps.min()}, {self.timesteps.max()}] (max_timestep={max_timestep})")
 
         def __len__(self):
             return len(self.states)
@@ -988,6 +1005,25 @@ def _(
     global_step = 0
     USE_PILOT = use_pilot.value
 
+    # ── CUDA sanity check: detect a poisoned GPU context from a prior crash ──
+    if device.type == "cuda":
+        try:
+            _test = torch.tensor([1.0], device=device) + torch.tensor([2.0], device=device)
+            torch.cuda.synchronize(device)
+        except Exception:
+            mo.stop(True, mo.md(f"""
+    ⚠️ **GPU is in a corrupted state** from a previous crash.
+
+    The CUDA context needs to be reset. This requires restarting the Python kernel.
+
+    **To fix**:
+    1. Go to **Settings → Restart kernel** (or click the 🔄 restart button in the marimo UI).
+    2. **Uncheck** the "Fresh start" checkbox.
+    3. Run all cells again and click **🚀 Start Training**.
+
+    The dataset timestep fix is already in place — timesteps now safely wrap at max_timestep=100000.
+    """))
+
     # ── Gate: only proceed when the Start Training button was clicked ──
     if not train_btn.value:
         mo.stop(True, mo.md("""> 👆 Click the **🚀 Start Training** button above to begin or resume training. Adjust hyperparameters in the Control Panel first."""))
@@ -1035,6 +1071,7 @@ def _(
             discount_factor=TRAIN_CFG["discount_factor"],
             max_episodes=None,
             skip_short_episodes=True,
+            max_timestep=TRAIN_CFG["max_timestep"],
         )
         val_ds = TrajectoryDataset(
             val_df,
@@ -1044,6 +1081,7 @@ def _(
             discount_factor=TRAIN_CFG["discount_factor"],
             max_episodes=None,
             skip_short_episodes=True,
+            max_timestep=TRAIN_CFG["max_timestep"],
         )
     else:
         full_ds = TrajectoryDataset(
@@ -1054,6 +1092,7 @@ def _(
             discount_factor=TRAIN_CFG["discount_factor"],
             max_episodes=None,
             skip_short_episodes=True,
+            max_timestep=TRAIN_CFG["max_timestep"],
         )
         _n_val = max(1, int(len(full_ds) * TRAIN_CFG["val_split"]))
         _n_train = len(full_ds) - _n_val

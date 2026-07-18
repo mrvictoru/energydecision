@@ -11,8 +11,10 @@ from decision_transformer import DecisionTransformer  # noqa: E402
 from grpo_posttraining import (  # noqa: E402
     GRPOPrompt,
     GRPOTrainer,
+    MAX_ABS_GRPO_RTG,
     compute_group_relative_advantages,
     sample_rtg_values,
+    stable_rtg_update,
 )
 
 
@@ -256,3 +258,41 @@ def test_sample_rtg_values_lognormal_positive():
     others = [v for v in values if v != 5.0]
     assert all(v > 0 for v in others)
     # Mean of lognormal is exp(mu + sigma^2/2) where mu = ln(5)
+
+
+def test_stable_rtg_update_undiscounted_is_exact():
+    # gamma == 1.0 must remain the exact undiscounted recurrence R_{t+1} = R_t - r_t
+    rtg = 10.0
+    for _ in range(5):
+        rtg = stable_rtg_update(rtg, 1.0, dt_gamma=1.0, initial_rtg=10.0)
+    assert rtg == pytest.approx(5.0)
+
+
+def test_stable_rtg_update_discounted_matches_exact_short_horizon():
+    # For a few steps the clamp should not bind, so the discounted update must
+    # match the exact inverse recurrence (R_t - r_t) / gamma.
+    gamma = 0.95
+    rtg = exact = 2.0
+    for _ in range(3):
+        exact = (exact - 0.1) / gamma
+        rtg = stable_rtg_update(rtg, 0.1, dt_gamma=gamma, initial_rtg=2.0)
+    assert rtg == pytest.approx(exact)
+
+
+def test_stable_rtg_update_bounded_on_long_horizon():
+    # The exact 1/gamma recurrence overflows on long horizons; the stable update
+    # must stay finite and inside the guard bound for 1728 steps at gamma=0.95.
+    rtg = 5.0
+    for _ in range(1728):
+        rtg = stable_rtg_update(rtg, -0.1, dt_gamma=0.95, initial_rtg=5.0)
+    assert np.isfinite(rtg)
+    assert abs(rtg) < MAX_ABS_GRPO_RTG
+    # Bound is derived from the initial prompt envelope.
+    assert abs(rtg) <= max(abs(5.0) * 4.0, 20.0) + 1e-6
+
+
+def test_stable_rtg_update_rejects_non_finite_inputs():
+    with pytest.raises(ValueError):
+        stable_rtg_update(float("inf"), 0.0, dt_gamma=0.95, initial_rtg=1.0)
+    with pytest.raises(ValueError):
+        stable_rtg_update(0.0, float("nan"), dt_gamma=0.95, initial_rtg=1.0)

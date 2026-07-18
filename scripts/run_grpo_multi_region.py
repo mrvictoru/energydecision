@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO_ROOT / "src"))
+
+
 import argparse
 import json
 import random
@@ -12,6 +18,21 @@ import numpy as np
 import polars as pl
 import torch
 
+from aemo_dt_hf import (
+    MODERN_V2_HF_FILENAME,
+    MODERN_V2_HF_REPO,
+    load_model_kwargs,
+    modern_v2_model_config_path,
+)
+
+# ── Battery configs (matching the v2 dataset) ──────────────────────
+BATTERY_CONFIGS: dict[str, dict[str, float]] = {
+    "small_05c":  {"capacity_mwh": 2.0, "max_power_mw": 1.0,  "init_soc_ratio": 0.5},
+    "medium_1c":  {"capacity_mwh": 10.0, "max_power_mw": 10.0, "init_soc_ratio": 0.5},
+    "large_07c":  {"capacity_mwh": 50.0, "max_power_mw": 35.0, "init_soc_ratio": 0.5},
+    "fast_375c":  {"capacity_mwh": 8.0,  "max_power_mw": 30.0, "init_soc_ratio": 0.5},
+}
+DEFAULT_BATTERY_CONFIGS = "medium_1c,large_07c,small_05c,fast_375c"
 from aemo_notebook_utils import (
     create_aemo_env,
     fetch_and_preprocess_aemo_scenarios,
@@ -35,8 +56,14 @@ def repo_root() -> Path:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Multi-region GRPO post-training for AEMO DT")
 
-    parser.add_argument("--hf-repo", default="mrvictoru/energydecision-dt")
-    parser.add_argument("--hf-filename", default="aemo_dt_fcas_model.pt")
+    parser.add_argument("--hf-repo", default=MODERN_V2_HF_REPO)
+    parser.add_argument("--hf-filename", default=MODERN_V2_HF_FILENAME)
+    parser.add_argument(
+        "--model-config",
+        type=Path,
+        default=modern_v2_model_config_path(),
+        help="Path to the Decision Transformer model kwargs JSON.",
+    )
     parser.add_argument("--output-dir", type=Path, default=repo_root() / "models" / "aemo" / "dt" / "grpo_multi")
 
     # Regions (comma-separated)
@@ -50,19 +77,34 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--group-size", type=int, default=4)
     parser.add_argument("--update-epochs", type=int, default=2)
     parser.add_argument("--minibatch-size", type=int, default=64)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1,
+                        help="Accumulate gradients over N micro-batches before each optimizer step. "
+                        "Use e.g. 8 with --minibatch-size 8 to match effective batch 64 at lower GPU memory.")
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--kl-coeff", type=float, default=0.02)
     parser.add_argument("--entropy-coeff", type=float, default=0.0)
     parser.add_argument("--rtg-count", type=int, default=4)
     parser.add_argument("--rtg-spread", type=float, default=3.0)
     parser.add_argument("--rtg-dist", default="gaussian")
+    parser.add_argument(
+        "--rtg-target", type=float, default=None,
+        help="Center RTG for the prompt distribution. Defaults to "
+        "rtg_count * return_scale / 2 when unset. Override with the value "
+        "found by an RTG calibration sweep (e.g. 0.0 for the modern v2 model).",
+    )
     parser.add_argument("--dt-gamma", type=float, default=1.0)
     parser.add_argument("--sync-reference-every", type=int, default=0)
     parser.add_argument("--adaptive-rtg", action="store_true", default=False)
     parser.add_argument("--adaptive-rtg-ewma-alpha", type=float, default=0.1)
     parser.add_argument("--deg-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--mixed-precision", action="store_true", default=False,
+                        help="Enable mixed precision (fp16/bf16) forward passes to reduce GPU memory")
+    parser.add_argument("--no-cpu-rollout-buffer", action="store_true", default=False,
+                        help="Disable CPU rollout buffer (keep all rollouts on GPU, uses more memory)")
 
     parser.add_argument("--action-mode", default="full_fcas")
+    parser.add_argument("--battery-configs", type=str, default=DEFAULT_BATTERY_CONFIGS,
+                        help="Comma-separated battery config names to randomly sample during training")
     parser.add_argument("--battery-capacity", type=float, default=10.0)
     parser.add_argument("--max-power", type=float, default=5.0)
     parser.add_argument("--step-duration", type=float, default=0.5)
@@ -112,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"[GRPO] Downloading DT from {args.hf_repo}/{args.hf_filename}...")
     checkpoint_path = hf_hub_download(repo_id=args.hf_repo, filename=args.hf_filename)
 
-    model_kwargs = {"state_dim": 18, "act_dim": 9, "n_block": 8, "h_dim": 384, "context_len": 180, "n_heads": 8, "drop_p": 0.15, "max_timestep": 100000}
+    model_kwargs = load_model_kwargs(args.model_config)
 
     # 2. Preprocess all regions
     regions = [r.strip() for r in args.regions.split(",")]
@@ -131,6 +173,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         scenarios=scenarios, cache_dir=cache_dir, step_duration=args.step_duration, refresh=False,
     )
 
+    # Parse battery configs to randomly sample during training
+    battery_names = [b.strip() for b in args.battery_configs.split(",")]
+    filtered_batteries = {k: v for k, v in BATTERY_CONFIGS.items() if k in battery_names}
+    if not filtered_batteries:
+        filtered_batteries = {"medium_1c": BATTERY_CONFIGS["medium_1c"]}
+    battery_names_available = list(filtered_batteries.keys())
+    print(f"[GRPO] Battery configs: {battery_names_available}")
+
     battery_variant = resolve_battery_variants([{"name": "medium", "capacity_mwh": args.battery_capacity, "max_power_mw": args.max_power, "init_soc_ratio": 0.5}])[0]
     max_step = max(1, int(round(args.episode_hours / args.step_duration)))
 
@@ -140,12 +190,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         region_data[sm["region"]] = processed_by_label[sm["label"]]
     region_names = list(region_data.keys())
 
-    # 3. Create multi-region env factory
+    # 3. Create multi-region + multi-battery env factory
     def make_env():
         region = random.choice(region_names)
+        bat_name = random.choice(battery_names_available)
+        bat_spec = filtered_batteries[bat_name]
+        bat_variant = resolve_battery_variants([{
+            "name": bat_name,
+            "capacity_mwh": bat_spec["capacity_mwh"],
+            "max_power_mw": bat_spec["max_power_mw"],
+            "init_soc_ratio": bat_spec["init_soc_ratio"],
+        }])[0]
         return create_aemo_env(
             processed_data=region_data[region],
-            battery_variant=battery_variant,
+            battery_variant=bat_variant,
             max_step=max_step,
             step_duration=args.step_duration,
             action_mode=args.action_mode,
@@ -154,6 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # 4. Load model
     print(f"[GRPO] Loading model on {device}...")
+    print(f"[GRPO] Model config: {args.model_config.resolve()}")
     model, reference_model = load_pretrained_dt_for_grpo(model_kwargs, checkpoint_path, device=device)
     optimal_rtg = float(getattr(model, "return_scale", 1.0))
     print(f"[GRPO] return_scale = {optimal_rtg}")
@@ -172,7 +231,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"[GRPO] Baseline reward: {float(baseline['reward_sum'].mean()):.2f}")
 
     # 6. GRPO training
-    target_rtg = args.rtg_count * optimal_rtg / 2  # center RTG on return_scale
+    if args.rtg_target is None:
+        target_rtg = args.rtg_count * optimal_rtg / 2  # center RTG on return_scale
+    else:
+        target_rtg = float(args.rtg_target)
     rtg_values = sample_rtg_values(optimum=target_rtg, spread=args.rtg_spread, count=args.rtg_count, distribution=args.rtg_dist, seed=args.seed)
     print(f"[GRPO] RTG prompts: {[round(v, 2) for v in rtg_values]}")
 
@@ -196,6 +258,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         kl_coeff=args.kl_coeff,
         entropy_coeff=args.entropy_coeff,
         degradation_penalty_weight=args.deg_penalty_weight,
+        mixed_precision=args.mixed_precision,
+        cpu_rollout_buffer=not args.no_cpu_rollout_buffer,
     )
     history = trainer.train(
         make_env,
@@ -204,6 +268,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         group_size=args.group_size,
         update_epochs=args.update_epochs,
         minibatch_size=args.minibatch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         dt_gamma=args.dt_gamma,
         sync_reference_every=args.sync_reference_every,
         adaptive_rtg=args.adaptive_rtg,
@@ -253,6 +318,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "rtg_spread": args.rtg_spread,
             "rtg_dist": args.rtg_dist,
             "dt_gamma": args.dt_gamma,
+            "minibatch_size": args.minibatch_size,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "update_epochs": args.update_epochs,
         },
         "scenario": {"regions": regions, "start_date": args.start_date, "end_date": args.end_date, "episode_hours": args.episode_hours, "action_mode": args.action_mode},
     }

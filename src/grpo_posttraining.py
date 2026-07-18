@@ -109,6 +109,64 @@ def compute_group_relative_advantages(
     return advantages.reshape(-1).astype(np.float32)
 
 
+MAX_ABS_GRPO_RTG = 1e6
+
+
+def stable_rtg_update(
+    current_rtg: float,
+    reward: float,
+    *,
+    dt_gamma: float,
+    initial_rtg: float,
+) -> float:
+    """Numerically stable return-to-go update for autoregressive DT rollout.
+
+    The Decision Transformer is trained on the discounted convention
+    ``rtg[t] = r[t] + gamma * rtg[t+1]`` (see ``helper._compute_rtgs_from_rewards``).
+    Inverting it gives the exact recurrence ``rtg[t+1] = (rtg[t] - r[t]) / gamma``.
+
+    That exact inverse is numerically unstable for ``gamma < 1`` on long horizons:
+    every step multiplies the magnitude by ``1 / gamma > 1``, so RTG compounds as
+    ``(1 / gamma) ** t`` and overflows (e.g. ~3e38 after 1728 steps at gamma=0.95).
+    This collapsed every long-horizon modern-v2 GRPO run.
+
+    We keep the exact undiscounted recurrence for ``gamma == 1.0`` and, for
+    ``gamma < 1.0``, apply the discounted update while clamping the result to the
+    trained RTG envelope so it can never blow up. The clamp bound is derived from
+    the initial prompt magnitude (the target the model was actually conditioned
+    on), which keeps the RTG signal inside the distribution the DT saw during
+    pretraining instead of drifting to astronomical values.
+    """
+    if not np.isfinite(current_rtg) or not np.isfinite(reward):
+        raise ValueError(
+            f"Non-finite inputs to stable_rtg_update (rtg={current_rtg}, reward={reward})."
+        )
+    if dt_gamma == 1.0:
+        return float(current_rtg - reward)
+
+    next_rtg = (float(current_rtg) - float(reward)) / float(dt_gamma)
+    # Clamp to the trained RTG envelope so the 1/gamma recurrence cannot explode.
+    # The bound is a small multiple of the initial prompt magnitude; a floor keeps
+    # small/zero prompts from collapsing the achievable RTG range.
+    envelope = max(abs(float(initial_rtg)) * 4.0, 20.0)
+    return float(np.clip(next_rtg, -envelope, envelope))
+
+
+def _validate_grpo_rtg(value: float, *, step_count: int, dt_gamma: float) -> float:
+    if not np.isfinite(value):
+        raise ValueError(
+            f"Non-finite GRPO RTG at step {step_count} with dt_gamma={dt_gamma}. "
+            "Use dt_gamma=1.0 for long-horizon GRPO or reduce the episode length."
+        )
+    if abs(value) > MAX_ABS_GRPO_RTG:
+        raise ValueError(
+            f"Exploding GRPO RTG ({value}) at step {step_count} with dt_gamma={dt_gamma}. "
+            f"Values above {MAX_ABS_GRPO_RTG:g} are treated as unstable. "
+            "Use dt_gamma=1.0 for long-horizon GRPO or reduce the episode length."
+        )
+    return float(value)
+
+
 def _build_dt_context(
     *,
     model: DecisionTransformer,
@@ -133,7 +191,17 @@ def _build_dt_context(
         if buffer_len > 0
         else np.zeros((0, act_dim), dtype=np.float32)
     )
-    buffer_rtgs = np.array(rtg_buffer, dtype=np.float32) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
+    if buffer_len > 0:
+        buffer_rtgs64 = np.array(rtg_buffer, dtype=np.float64)
+        if not np.all(np.isfinite(buffer_rtgs64)):
+            raise ValueError("Encountered non-finite GRPO RTG values while building the DT context.")
+        if float(np.max(np.abs(buffer_rtgs64))) > MAX_ABS_GRPO_RTG:
+            raise ValueError(
+                f"Encountered GRPO RTG magnitude above {MAX_ABS_GRPO_RTG:g} while building the DT context."
+            )
+        buffer_rtgs = buffer_rtgs64.astype(np.float32)
+    else:
+        buffer_rtgs = np.zeros(0, dtype=np.float32)
     buffer_timesteps = (
         np.array(timestep_buffer, dtype=np.int64)
         if buffer_len > 0
@@ -309,6 +377,8 @@ class GRPOTrainer:
         grad_clip_norm: float = 1.0,
         action_bounds: tuple[float, float] | None = None,
         degradation_penalty_weight: float = 1.0,
+        mixed_precision: bool = False,
+        cpu_rollout_buffer: bool = True,
     ) -> None:
         self.model = model.to(device)
         self.device = torch.device(device)
@@ -336,6 +406,9 @@ class GRPOTrainer:
         self.degradation_penalty_weight = float(degradation_penalty_weight)
         self._last_prompts: list[GRPOPrompt] = []
         self._adaptive_rtg_ewma: float | None = None
+        self.mixed_precision = bool(mixed_precision)
+        self.cpu_rollout_buffer = bool(cpu_rollout_buffer)
+        self._amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
     def _sync_reference_model(self) -> None:
         self.reference_model.load_state_dict(copy.deepcopy(self.model.state_dict()))
@@ -379,17 +452,30 @@ class GRPOTrainer:
         ]
 
     @staticmethod
-    def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask):
+    def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask, amp_context=None):
         """Call model.forward with correct argument order, normalizing return order.
 
         Modern:  forward(state, rtg, timestep, actions, mask) -> (return_preds, state_preds, act_preds)
         Legacy:  forward(states, actions, returns_to_go, timesteps, mask) -> (act_preds, state_preds, return_preds)
         """
-        if _is_legacy_dt(model):
-            act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+        if amp_context is not None:
+            with amp_context:
+                if _is_legacy_dt(model):
+                    act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+                else:
+                    _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
         else:
-            _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+            if _is_legacy_dt(model):
+                act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+            else:
+                _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
         return act_preds
+
+    @staticmethod
+    def _sanitize_action_preds(action_preds: torch.Tensor) -> torch.Tensor:
+        if action_preds.dtype.is_floating_point:
+            action_preds = torch.nan_to_num(action_preds, nan=0.0, posinf=1.0, neginf=-1.0)
+        return action_preds
 
     def _action_distributions(
         self,
@@ -398,17 +484,24 @@ class GRPOTrainer:
         rtgs: torch.Tensor,
         timesteps: torch.Tensor,
         attention_mask: torch.Tensor,
+        *,
+        compute_ref: bool = True,
     ) -> tuple[TransformedDistribution, TransformedDistribution]:
+        amp_ctx = torch.cuda.amp.autocast(dtype=self._amp_dtype) if self.mixed_precision and 'cuda' in str(self.device) else None
         action_preds = self._forward_dt(
-            self.model, states, rtgs, timesteps, actions, attention_mask
+            self.model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
         )
-        ref_preds = self._forward_dt(
-            self.reference_model, states, rtgs, timesteps, actions, attention_mask
-        )
-        action_mean = action_preds[:, -1:, :]
-        ref_mean = ref_preds[:, -1:, :]
+        action_mean = self._sanitize_action_preds(action_preds[:, -1:, :])
         current_dist = _mixed_action_distribution(action_mean, self.log_std, self._act_dim)
-        ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
+
+        if compute_ref:
+            ref_preds = self._forward_dt(
+                self.reference_model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
+            )
+            ref_mean = self._sanitize_action_preds(ref_preds[:, -1:, :])
+            ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
+        else:
+            ref_dist = current_dist
         return current_dist, ref_dist
 
     def collect_rollouts(
@@ -514,10 +607,13 @@ class GRPOTrainer:
                     step_count += 1
 
                     action_buffer[-1] = action_np
-                    if dt_gamma == 1.0:
-                        next_rtg = rtg_buffer[-1] - float(reward)
-                    else:
-                        next_rtg = (rtg_buffer[-1] - float(reward)) / float(dt_gamma)
+                    next_rtg = stable_rtg_update(
+                        rtg_buffer[-1],
+                        float(reward),
+                        dt_gamma=float(dt_gamma),
+                        initial_rtg=float(prompt.rtg_value),
+                    )
+                    next_rtg = _validate_grpo_rtg(next_rtg, step_count=step_count, dt_gamma=float(dt_gamma))
                     state_buffer.append(next_obs.copy())
                     action_buffer.append(np.zeros(int(self.model.act_dim), dtype=np.float32))
                     rtg_buffer.append(float(next_rtg))
@@ -537,20 +633,21 @@ class GRPOTrainer:
         for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
             step_advantages.extend([advantage] * step_count)
 
+        batch_device = "cpu" if self.cpu_rollout_buffer else self.device
         batch = GRPORolloutBatch(
-            states=torch.stack(states_records).to(self.device),
-            actions=torch.stack(actions_records).to(self.device),
-            rtgs=torch.stack(rtg_records).to(self.device),
-            timesteps=torch.stack(timestep_records).to(self.device),
-            attention_mask=torch.stack(mask_records).to(self.device),
-            sampled_actions=torch.stack(sampled_action_records).to(self.device),
-            old_log_probs=torch.tensor(old_log_prob_records, dtype=torch.float32, device=self.device),
-            ref_log_probs=torch.tensor(ref_log_prob_records, dtype=torch.float32, device=self.device),
-            advantages=torch.tensor(step_advantages, dtype=torch.float32, device=self.device),
-            rewards=torch.tensor(reward_records, dtype=torch.float32, device=self.device),
-            env_rewards=torch.tensor(env_reward_records, dtype=torch.float32, device=self.device),
-            returns=torch.tensor(returns, dtype=torch.float32, device=self.device),
-            prompt_indices=torch.tensor(prompt_index_records, dtype=torch.long, device=self.device),
+            states=torch.stack(states_records).to(batch_device),
+            actions=torch.stack(actions_records).to(batch_device),
+            rtgs=torch.stack(rtg_records).to(batch_device),
+            timesteps=torch.stack(timestep_records).to(batch_device),
+            attention_mask=torch.stack(mask_records).to(batch_device),
+            sampled_actions=torch.stack(sampled_action_records).to(batch_device),
+            old_log_probs=torch.tensor(old_log_prob_records, dtype=torch.float32, device=batch_device),
+            ref_log_probs=torch.tensor(ref_log_prob_records, dtype=torch.float32, device=batch_device),
+            advantages=torch.tensor(step_advantages, dtype=torch.float32, device=batch_device),
+            rewards=torch.tensor(reward_records, dtype=torch.float32, device=batch_device),
+            env_rewards=torch.tensor(env_reward_records, dtype=torch.float32, device=batch_device),
+            returns=torch.tensor(returns, dtype=torch.float32, device=batch_device),
+            prompt_indices=torch.tensor(prompt_index_records, dtype=torch.long, device=batch_device),
         )
         self.model.train()
         return batch
@@ -561,35 +658,54 @@ class GRPOTrainer:
         *,
         update_epochs: int = 1,
         minibatch_size: int = 128,
+        gradient_accumulation_steps: int = 1,
     ) -> dict[str, float]:
         if batch.num_steps == 0:
             raise ValueError("Cannot update with an empty rollout batch.")
 
-        metrics = {
+        meter = {
             "loss": 0.0,
             "policy_loss": 0.0,
             "kl_loss": 0.0,
             "entropy_bonus": 0.0,
         }
-        update_steps = 0
-        indices = torch.arange(batch.num_steps, device=self.device)
+        optim_steps = 0
+        micro_steps = 0
+        indices = torch.arange(batch.num_steps)
+        _batch_on_cpu = self.cpu_rollout_buffer and str(batch.states.device) == "cpu"
+        accum = max(1, int(gradient_accumulation_steps))
 
         for _ in range(max(1, int(update_epochs))):
-            shuffled = indices[torch.randperm(batch.num_steps, device=self.device)]
+            shuffled = indices[torch.randperm(batch.num_steps)]
+            self.optimizer.zero_grad(set_to_none=True)
             for start in range(0, batch.num_steps, max(1, int(minibatch_size))):
                 mb_idx = shuffled[start : start + max(1, int(minibatch_size))]
-                states = batch.states[mb_idx]
-                actions = batch.actions[mb_idx]
-                rtgs = batch.rtgs[mb_idx]
-                timesteps = batch.timesteps[mb_idx]
-                attention_mask = batch.attention_mask[mb_idx]
-                sampled_actions = batch.sampled_actions[mb_idx]
-                old_log_probs = batch.old_log_probs[mb_idx]
-                ref_log_probs = batch.ref_log_probs[mb_idx]
-                advantages = batch.advantages[mb_idx]
+                if _batch_on_cpu:
+                    states = batch.states[mb_idx].to(self.device)
+                    actions = batch.actions[mb_idx].to(self.device)
+                    rtgs = batch.rtgs[mb_idx].to(self.device)
+                    timesteps = batch.timesteps[mb_idx].to(self.device)
+                    attention_mask = batch.attention_mask[mb_idx].to(self.device)
+                    sampled_actions = batch.sampled_actions[mb_idx].to(self.device)
+                    old_log_probs = batch.old_log_probs[mb_idx].to(self.device)
+                    ref_log_probs = batch.ref_log_probs[mb_idx].to(self.device)
+                    advantages = batch.advantages[mb_idx].to(self.device)
+                else:
+                    states = batch.states[mb_idx]
+                    actions = batch.actions[mb_idx]
+                    rtgs = batch.rtgs[mb_idx]
+                    timesteps = batch.timesteps[mb_idx]
+                    attention_mask = batch.attention_mask[mb_idx]
+                    sampled_actions = batch.sampled_actions[mb_idx]
+                    old_log_probs = batch.old_log_probs[mb_idx]
+                    ref_log_probs = batch.ref_log_probs[mb_idx]
+                    advantages = batch.advantages[mb_idx]
 
+                # Skip dead reference forward during training — ref_log_probs are
+                # pre-computed from rollout.
                 current_dist, _ = self._action_distributions(
-                    states, actions, rtgs, timesteps, attention_mask
+                    states, actions, rtgs, timesteps, attention_mask,
+                    compute_ref=False,
                 )
                 current_log_probs = current_dist.log_prob(sampled_actions.unsqueeze(1)).squeeze(-1)
                 log_ratio = current_log_probs - old_log_probs
@@ -607,25 +723,37 @@ class GRPOTrainer:
 
                 base_entropy = current_dist.base_dist.entropy().mean()
                 loss = policy_loss + self.kl_coeff * kl_loss - self.entropy_coeff * base_entropy
+                (loss / float(accum)).backward()
 
-                self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
+                meter["loss"] += float(loss.detach().cpu().item())
+                meter["policy_loss"] += float(policy_loss.detach().cpu().item())
+                meter["kl_loss"] += float(kl_loss.detach().cpu().item())
+                meter["entropy_bonus"] += float(base_entropy.detach().cpu().item())
+                micro_steps += 1
+
+                if micro_steps % accum == 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+                    if self.log_std.requires_grad:
+                        torch.nn.utils.clip_grad_norm_([self.log_std], self.grad_clip_norm)
+                    self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    optim_steps += 1
+            # Flush any remaining accumulated gradients.
+            if micro_steps % accum != 0:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
                 if self.log_std.requires_grad:
                     torch.nn.utils.clip_grad_norm_([self.log_std], self.grad_clip_norm)
                 self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
+                optim_steps += 1
 
-                metrics["loss"] += float(loss.detach().cpu().item())
-                metrics["policy_loss"] += float(policy_loss.detach().cpu().item())
-                metrics["kl_loss"] += float(kl_loss.detach().cpu().item())
-                metrics["entropy_bonus"] += float(base_entropy.detach().cpu().item())
-                update_steps += 1
-
-        if update_steps > 0:
-            for key in metrics:
-                metrics[key] /= float(update_steps)
-        metrics["log_std_mean"] = float(self.log_std.detach().mean().cpu().item())
-        return metrics
+        if micro_steps > 0:
+            for key in meter:
+                meter[key] /= float(micro_steps)
+        meter["optim_steps"] = float(optim_steps)
+        meter["micro_steps"] = float(micro_steps)
+        meter["log_std_mean"] = float(self.log_std.detach().mean().cpu().item())
+        return meter
 
     def train(
         self,
@@ -636,6 +764,7 @@ class GRPOTrainer:
         group_size: int = 4,
         update_epochs: int = 1,
         minibatch_size: int = 128,
+        gradient_accumulation_steps: int = 1,
         dt_gamma: float = 0.99,
         sync_reference_every: int = 0,
         adaptive_rtg: bool = False,
@@ -659,6 +788,7 @@ class GRPOTrainer:
                 batch,
                 update_epochs=update_epochs,
                 minibatch_size=minibatch_size,
+                gradient_accumulation_steps=gradient_accumulation_steps,
             )
             reference_synced = False
             if sync_reference_every and (iteration + 1) % int(sync_reference_every) == 0:

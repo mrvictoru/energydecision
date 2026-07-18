@@ -9,6 +9,7 @@ import polars as pl
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 import autoresearch_evaluator as evaluator  # noqa: E402
 

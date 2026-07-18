@@ -6,18 +6,18 @@ The main training dataset is the FCAS-rich assembly. It was generated in three p
 
 **Phase 1 — Fetch AEMO data** (distrobox, ~30min):
 ```bash
-python3 src/fetch_aemo_region.py --region NSW1
-python3 src/fetch_aemo_region.py --region QLD1
-python3 src/fetch_aemo_region.py --region SA1
-python3 src/fetch_aemo_region.py --region TAS1
-python3 src/fetch_aemo_region.py --region VIC1
+python3 scripts/fetch_aemo_region.py --region NSW1
+python3 scripts/fetch_aemo_region.py --region QLD1
+python3 scripts/fetch_aemo_region.py --region SA1
+python3 scripts/fetch_aemo_region.py --region TAS1
+python3 scripts/fetch_aemo_region.py --region VIC1
 ```
 
 **Phase 2 — Generate episodes** (distrobox, GPU recommended):
 ```bash
-python3 src/generate_fcas_dataset.py --policies ppo      # 905 eps
-python3 src/generate_fcas_dataset.py --policies td3,a2c,ddpg,sac  # 300 eps each
-python3 src/generate_fcas_dataset.py --policies fcas_rule  # 300 eps
+python3 scripts/generate_fcas_dataset.py --policies ppo      # 905 eps
+python3 scripts/generate_fcas_dataset.py --policies td3,a2c,ddpg,sac  # 300 eps each
+python3 scripts/generate_fcas_dataset.py --policies fcas_rule  # 300 eps
 ```
 
 **Phase 3 — Assemble dataset**:

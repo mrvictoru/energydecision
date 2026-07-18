@@ -14,14 +14,14 @@ Use this document when you need:
 For full 8-service FCAS support, use the new **direct episode converter** instead of the env-simulated dispatch replay. It reads AEMO DISPATCHLOAD + DISPATCHPRICE data directly and produces DT-compatible episode logs without running the environment:
 
 ```bash
-python3 src/convert_dispatch_to_episodes.py \
+python3 scripts/convert_dispatch_to_episodes.py \
     --station dalrymple_north \
     --start-date 2024-01-01 \
     --end-date 2024-07-01 \
     --output data/aemo_dispatch_episodes/dalrymple_north_2024h1.parquet
 ```
 
-The converter captures all 8 FCAS services from actual AEMO-cleared values, reconstructs the SoC trajectory from energy dispatch, and computes revenue using actual market prices. See `src/convert_dispatch_to_episodes.py` for details.
+The converter captures all 8 FCAS services from actual AEMO-cleared values, reconstructs the SoC trajectory from energy dispatch, and computes revenue using actual market prices. See `scripts/convert_dispatch_to_episodes.py` for details.
 
 **Note on FCAS coverage:** The legacy `multi_market` dispatch replay (via `AEMOAgent` with `algorithm='dispatch'`) only captures RAISEREG and LOWERREG. The direct converter (`full_fcas` output) captures all 8 services.
 

@@ -1,0 +1,112 @@
+{
+  "track": "aemo",
+  "target_return": 0.0,
+  "bootstrap_iterations": 1000,
+  "bootstrap_seed": 42,
+  "reference_policy": "dispatch_dalrymple_north",
+  "reference_cache_dir": "eval_output/reference_cache/tier_comprehensive",
+  "condition_thresholds": {
+    "negative_price_threshold": 0.0,
+    "price_spike_threshold": 150.0,
+    "low_soc_ratio": 0.2,
+    "high_soc_ratio": 0.8
+  },
+  "heldout": {
+    "cache_dir": "data/aemo",
+    "step_duration": 0.083333,
+    "episode_hours": 144.0,
+    "action_mode": "full_fcas",
+    "degradation_mode": "real_world",
+    "degradation_chemistry": "LFP",
+    "degradation_temperature": 30.0,
+    "episodes_per_variant": 2,
+    "random_episode_start": false,
+    "fit_global_stats": true,
+    "parallel_workers": 8,
+    "parallelize_candidate_dt": false,
+    "battery_variants": [
+      {
+        "name": "medium_1c",
+        "capacity_mwh": 10.0,
+        "max_power_mw": 10.0,
+        "init_soc_ratio": 0.5
+      },
+      {
+        "name": "small_05c",
+        "capacity_mwh": 2.0,
+        "max_power_mw": 1.0,
+        "init_soc_ratio": 0.5
+      }
+    ],
+    "scenarios": [
+      {
+        "label": "nsw1_oct_2024",
+        "region": "NSW1",
+        "start_date": "2024-10-01",
+        "end_date": "2024-10-14"
+      },
+      {
+        "label": "nsw1_nov_2024",
+        "region": "NSW1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "sa1_oct_2024",
+        "region": "SA1",
+        "start_date": "2024-10-01",
+        "end_date": "2024-10-14"
+      },
+      {
+        "label": "sa1_nov_2024",
+        "region": "SA1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "qld1_oct_2024",
+        "region": "QLD1",
+        "start_date": "2024-10-01",
+        "end_date": "2024-10-14"
+      },
+      {
+        "label": "vic1_oct_2024",
+        "region": "VIC1",
+        "start_date": "2024-10-01",
+        "end_date": "2024-10-14"
+      },
+      {
+        "label": "tas1_oct_2024",
+        "region": "TAS1",
+        "start_date": "2024-10-01",
+        "end_date": "2024-10-14"
+      }
+    ]
+  },
+  "policies": [
+    {
+      "name": "candidate_dt",
+      "kind": "dt",
+      "rtg_value": 0.5
+    },
+    {
+      "name": "dispatch_dalrymple_north",
+      "kind": "dispatch",
+      "station_name": "dalrymple_north",
+      "dispatch_index": 0
+    },
+    {
+      "name": "ppo_reference",
+      "kind": "sb3",
+      "algorithm": "PPO",
+      "model_path": "models/aemo_sb3/ppo_aemo_fcas_model.zip",
+      "deterministic": true,
+      "device": "auto"
+    },
+    {
+      "name": "fcas_rule",
+      "kind": "rule",
+      "algorithm": "fcas_rule"
+    }
+  ]
+}
