@@ -232,6 +232,12 @@ opencode.json
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.png
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.svg
+!/eval_output/baseline_v2_standard/
+!/eval_output/baseline_v2_standard/plots/
+!/eval_output/baseline_v2_standard/plots/*.svg
+!/eval_output/baseline_v2_standard/evaluation_summary.json
+!/eval_output/baseline_v2_standard/heldout_metrics.csv
+!/eval_output/baseline_v2_standard/heldout_metrics_by_scenario.csv
 
 # ignore large generated caches and rollouts
 **/heldout_logs/
