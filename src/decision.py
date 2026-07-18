@@ -171,10 +171,6 @@ class Agent:
         arr = np.array(data, dtype=np.float64)
         finite = np.isfinite(arr)
         if not finite.all():
-            logging.warning(
-                "Found %d non-finite RTG values; replacing with 0 before casting.",
-                int((~finite).sum())
-            )
             arr = np.where(finite, arr, 0.0)
         clip_max = np.finfo(np.float32).max
         arr = np.clip(arr, -clip_max, clip_max)
@@ -645,10 +641,6 @@ class AEMOAgent:
         arr = np.array(data, dtype=np.float64)
         finite = np.isfinite(arr)
         if not finite.all():
-            logging.warning(
-                "Found %d non-finite RTG values; replacing with 0 before casting.",
-                int((~finite).sum())
-            )
             arr = np.where(finite, arr, 0.0)
         clip_max = np.finfo(np.float32).max
         arr = np.clip(arr, -clip_max, clip_max)
