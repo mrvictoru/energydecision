@@ -232,6 +232,9 @@ opencode.json
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.png
 !/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.svg
+/eval_output/baseline_v2_*/
+/eval_output/grpo_*/
+/eval_output/legacy_*/
 
 # ignore large generated caches and rollouts
 **/heldout_logs/
