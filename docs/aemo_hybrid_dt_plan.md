@@ -47,41 +47,59 @@ The AEMO environment is a particularly good fit for this approach because:
 
 ---
 
-## Primary Objective: Energy-SDP Trajectories in DT Training Data (Path B')
+## Primary Objective: SDP Trajectories + Forecast-Conditioned Architecture (Path B' + Path A1)
 
-### What
+The modern DT at rtg=0.0 earns $10,138/ep on dispatch-matched, but $10,068 of that is FCAS revenue.
+Energy arbitrage accounts for only ~$70/ep. The DT has no explicit forecast mechanism — it relies
+entirely on a 210-step context window to infer future market conditions.
+
+The primary objective combines two complementary thrusts:
+
+### Thrust 1: Energy-SDP Trajectories in Training Data (Path B')
 
 Run the existing SDP/MRDP solver on the AEMO environment in `action_mode='simple'` (1D energy
 charge/discharge) to generate **provably optimal energy arbitrage trajectories**. Add these
-trajectories to the FCAS-rich training dataset and retrain the DT.
+trajectories to the FCAS-rich training dataset.
 
-### Why
+**Why**: SDP computes the *theoretically optimal* energy arbitrage schedule against historical
+spot prices — potentially adding $500-2,000/ep to the mix. The DT can learn SDP's energy timing
+while keeping its FCAS bidding from PPO demonstrations.
 
-The modern DT at rtg=0.0 earns $10,138/ep on dispatch-matched, but $10,068 of that is FCAS revenue.
-Energy arbitrage accounts for only ~$70/ep. The SDP can compute the *theoretically optimal* energy
-arbitrage schedule against historical spot prices — potentially adding $500-2,000/ep to the mix.
-The DT can learn SDP's energy timing while keeping its FCAS bidding from PPO demonstrations.
+**How**:
+1. **Adapt `sdp_algorithm.py` to AEMO**: Replace household variables (SolarGen, HouseLoad) with
+   AEMO variables (RRP, TOTALDEMAND). The reward function becomes `max(energy_dispatch × RRP) -
+   degradation`. The `QuantileScenarioGenerator` generates scenarios from historical RRP and FCAS
+   price columns (already works on Polars DataFrames).
+2. **Generate SDP trajectory logs**: Run SDP for each region × time period × battery config, convert
+   optimal energy actions to Parquet format, combine with existing FCAS-rich dataset.
+3. **Retrain DT** on the augmented dataset — learns optimal energy timing from SDP, retains FCAS
+   bidding from PPO demonstrations.
+4. **Evaluate** on dispatch-matched + standard surfaces.
 
-### How
+**Effort**: ~4h generate + retrain. **Expected gain**: $500-2,000/ep.
 
-1. **Adapt `sdp_algorithm.py` to AEMO**:
-   - Replace household variables (SolarGen, HouseLoad) with AEMO variables (RRP, TOTALDEMAND)
-   - The reward function becomes: maximize `energy_revenue = energy_dispatch × RRP` minus degradation
-   - The `QuantileScenarioGenerator` generates scenarios from historical RRP and FCAS price columns
+### Thrust 2: Forecast-Conditioned DT Architecture (Path A1)
 
-2. **Generate SDP trajectory logs**:
-   - Run SDP solver on AEMO data for each region × time period × battery config
-   - Convert resulting optimal energy actions to trajectory format (parquet)
-   - Combine with existing FCAS-rich dataset
+Add a forecast token stream to the DT that interleaves predicted future market states alongside
+historical observations. The model attends to both past prices (in context window) and future
+forecasts (explicit predictions).
 
-3. **Retrain modern v2 DT** (8×768, full_fcas) on the augmented dataset
-   - The DT learns optimal energy timing from SDP trajectories
-   - FCAS capability retained from PPO demonstrations
+**Why**: This removes the information bottleneck of pure history conditioning, giving the DT
+explicit forward-looking information. The SDP paper's core advantage is forecast-informed
+planning — this brings that capability directly into the transformer.
 
-4. **Evaluate** on dispatch-matched + standard surfaces
+**How**:
+1. **Extend the token sequence**: The DT currently processes interleaved `(rtg_t, state_t, action_t)`
+   for historical timesteps. Add a second segment `(forecast_rtg, forecast_state, None)` covering
+   the next N timesteps of predicted market conditions (RRP, FCAS prices, demand).
+2. **Token type embeddings**: Add learnable embeddings to distinguish observation vs forecast tokens.
+3. **Attention mask**: Extend the causal mask so historical tokens attend to forecast tokens.
+4. **Forecast source**: The `QuantileScenarioGenerator` produces price scenarios from historical data.
+   Even a simple persistence forecast (next 24h ≈ last 24h) would be a strong baseline.
+5. **Train the augmented DT** on the existing FCAS-rich dataset (no SDP trajectories needed for this
+   thrust, though they can be combined).
 
-### Effort: ~4h generate + retrain
-### Expected gain: $500-2,000/ep
+**Effort**: ~1 week (architecture + retraining). **Expected gain**: $1,000-4,000/ep.
 
 ---
 
@@ -94,10 +112,7 @@ at the battery's current state at inference time.
 
 **Why**: The SDP outputs the exact expected optimal return-to-go for any SoC at any timestep. Using
 this as the DT's RTG gives the model a *forecast-informed*, *time-varying*, *feasible* target instead of
-a hand-tuned scalar.
-
-**How**: At each DT inference step, run SDP forward (fast — cached value function), extract the
-cost-to-go at current SoC, convert to RTG, and feed it to `get_action()`. No retraining needed.
+a hand-tuned scalar. No retraining needed.
 
 ### 2. Hierarchical Inference: SDP Energy + DT FCAS (Path C')
 
@@ -105,36 +120,18 @@ cost-to-go at current SoC, convert to RTG, and feed it to `get_action()`. No ret
 produces the FCAS bids (dims 1–8).
 
 **Why**: Energy arbitrage is a convex optimization problem that SDP solves optimally. FCAS bidding
-is a learned pattern that DT excels at. Together they cover both revenue streams without the DT
-having to learn energy timing from scratch.
+is a learned pattern that DT excels at. Together they cover both revenue streams.
 
-**How**: SDP runs alongside DT at each step. The DT receives the SDP's energy recommendation as an
-extra input channel.
-
-### 3. Forecast-Conditioned DT Architecture (Path A1)
-
-**What**: Add a forecast token stream to the DT that interleaves predicted future market states
-alongside historical observations. The model attends to both past prices (in context window) and
-future forecasts (explicit predictions).
-
-**Why**: This is the most fundamental improvement — it removes the information bottleneck of pure
-history conditioning, giving the DT explicit forward-looking information.
-
-**How**: Extend the DT's interleaved token sequence `(rtg_t, state_t, action_t)` with a second
-segment `(forecast_rtg, forecast_state, None)` covering the next N timesteps of predicted prices.
-Augment token type embeddings to distinguish observation vs forecast. Retrain on the augmented
-dataset.
-
-### 4. Remaining Items from `docs/dt_improvement_roadmap.md`
+### 3. Remaining Items from `docs/dt_improvement_roadmap.md`
 
 These were deferred from the previous roadmap and remain relevant:
 
 - **FCAS-weighted loss**: Higher training weight on FCAS action dimensions (currently all 9 dims
-  treated equally). Expected to improve FCAS bid quality further.
+  treated equally).
 - **Longer context sweep**: Re-test context lengths (288, 576, 1008, 2016) on the modern v2
-  model with FCAS-rich data. The earlier sweep used the legacy 8×384 model.
+  model with FCAS-rich data.
 - **Multi-round self-improvement**: Generate new rollouts from improved model → append to dataset
-  → retrain → repeat. Requires successful primary objective first.
+  → retrain → repeat.
 
 ---
 
@@ -156,14 +153,16 @@ Success criteria:
 
 ## Milestones
 
-| # | Milestone | Dependencies | Est. effort |
-|---|-----------|-------------|:-----------:|
-| 1 | AEMO-adapted SDP (`action_mode='simple'`) verified on 1 region | None | 2h |
-| 2 | SDP trajectory logs generated (3 regions × 2 batteries) | Milestone 1 | 4h |
-| 3 | DT retrained on augmented dataset (SDP + FCAS-rich) | Milestone 2 | 6h |
-| 4 | Evaluate on dispatch-matched + standard | Milestone 3 | 2h |
-| 5 | SDP-computed RTG inference (quick win) | Milestone 1 | 2h |
-| 6 | Hierarchical SDP+DT inference (if primary underperforms) | Milestones 1, 3 | 4h |
+| # | Milestone | Thrust | Dependencies | Est. effort |
+|---|-----------|--------|-------------|:-----------:|
+| 1 | AEMO-adapted SDP (`action_mode='simple'`) verified on 1 region | Path B' | None | 2h |
+| 2 | Forecast token architecture design + prototype on DT | Path A1 | None | 1 week |
+| 3 | SDP trajectory logs generated (3 regions × 2 batteries) | Path B' | Milestone 1 | 4h |
+| 4 | DT retrained on augmented dataset (SDP + FCAS-rich) | Path B' | Milestone 3 | 6h |
+| 5 | DT retrained with forecast token architecture (on FCAS-rich data) | Path A1 | Milestone 2 | 6h |
+| 6 | Combined: forecast-conditioned DT retrained on SDP-augmented data | Both | Milestones 4, 5 | 6h |
+| 7 | Evaluate all checkpoints on dispatch-matched + standard | Both | Milestones 4–6 | 2h |
+| 8 | SDP-computed RTG inference (quick win, can run in parallel) | Secondary | Milestone 1 | 2h |
 
 ---
 
