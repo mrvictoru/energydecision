@@ -126,6 +126,27 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 
 > **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
 
+### 4.2 Modern v2 Architecture (SOTA model)
+
+The headline results in Section 8 are produced by the **modern v2 Decision Transformer**
+([`mrvictoru/energydecision-dt-v2`](https://huggingface.co/mrvictoru/energydecision-dt-v2)), an
+8-block transformer that modernizes the legacy block described in §4.1. Relative to the legacy
+8×384 model, the changes are architectural rather than scale-driven (hidden dim grows 384→768,
+but the decisive gains come from the following):
+
+- **Grouped-Query Attention (GQA):** 12 query heads attend over 6 key/value heads (n_rep = 2), reducing KV-cache memory and stabilizing long-context attention.
+- **QK-Norm:** per-head RMSNorm on queries and keys (before the attention dot-product) for training stability without warmup sensitivity.
+- **RMSNorm pre-norm** throughout, replacing LayerNorm.
+- **SwiGLU** feed-forward (768 → 2304 → 768) with dropout 0.15.
+- **Weight tying:** the input embedding and output prediction layers for state/action/return share weights (`pred_act`, `pred_state`, `pred_return` are linear projections of the tied embeddings).
+- **Learned timestep embedding** (RoPE disabled; `rope_enabled=false`), context length 210.
+- Trained with `discount=0.95`, `return_scale=2.0`, and near-action-only loss weights
+  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly.
+
+Canonical hyperparameters are shipped at
+`configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. The architecture
+is verified from the uploaded checkpoint's embedded `config`, not from documentation.
+
 ## 5. Data and Preprocessing
 
 ### 5.1 Source Data
@@ -414,6 +435,8 @@ The transformer model (modern v2 pretrained Decision Transformer) has credibilit
 - **Large-station dispatch replay dominates absolute profit.** Hornsdale and Torrens Island strategies, refined over years of real operations, transfer profitably to smaller assets — though their per-MWh efficiency is poor.
 - **Degradation minimization is the primary open problem.** Closing the degradation gap while maintaining FCAS revenue remains the most important challenge for DT-based battery control.
 - **Training cost.** The modern v2 model required significant offline data collection (2,401 episodes). While GRPO is not required, the offline data generation pipeline is itself compute-intensive.
+- **Small dispatch-matched sample.** The headline dispatch-matched surface covers Q4 2024 SA1 only (2 episodes × 144 h). The standard surface is broader (5 regions, medium battery) and is the more robust cross-region generalization evidence; dispatch-matched figures should be read as a same-asset head-to-head rather than a seasonally robust estimate. Confidence intervals and bootstrap/Wilcoxon tools in `src/helper.py` are available but were not applied to the per-surface profit headlines.
+- **Simulated market dynamics.** All revenue/degradation figures are produced by the in-repo simulator (`AEMOBatteryEnv`) driven by historical AEMO price/demand series; they are not settled market outcomes. The simulator's FCAS co-optimization and degradation models are approximations of real BESS dispatch economics.
 
 ---
 
@@ -427,7 +450,7 @@ The following table traces the DT's progression from the original pilot model th
 | 2. Autoresearch | 8×512, ctx=180 | 24 episodes (mixed) | -$1,396 | $77 | $2,503 | Hyperparameter tuning |
 | 3. FCAS-rich DT | 8×384, ctx=180 | 2,425 episodes (PPO-rich) | +$1,522 | $1,383 | $212 | Dataset quality |
 | 4. Phase 1 GRPO (legacy, overfit) | 8×384 (GRPO-tuned) | v2 HF + 5 GRPO iter | +$8,242 | $7,686 | $760 | Online fine-tuning (overfit to DM) |
-| **5. Modern v2 pretrained** | **8×768 GQA** | **2,401 episodes (realistic bat)** | **+$10,138** | **$10,068** | **TBD** | **Architecture improvement** |
+| **5. Modern v2 pretrained** | **8×768 GQA** | **2,401 episodes (realistic bat)** | **+$10,138** | **$10,068** | **$187** | **Architecture improvement** |
 
 **Key insight:** Stage 5's improvement over stage 4 comes entirely from architecture (GQA, RMSNorm, weight tying) and better training data (realistic battery configurations), not from online RL. The modern v2 architecture captures everything GRPO once provided — and generalizes better (stage 5 gets $4,630/ep on the standard surface vs stage 4's $1,533/ep).
 
@@ -523,7 +546,7 @@ This repository introduces a unified framework for learning and planning in batt
 - **AEMO utility-scale environment (same-asset dispatch-matched benchmark):** On the fairest comparison where all policies share the identical battery (Dalrymple North 8 MWh / 30 MW) with RTG calibration, the **modern v2 pretrained Decision Transformer achieves the highest profit per episode across both evaluation surfaces: $10,138/ep on dispatch-matched (rtg=0.0) and $4,630/ep on the standard surface**. This beats PPO ($7,757/ep), all GRPO-tuned variants ($6,445 best), and dispatch replay ($3,663/ep) on the same asset. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL fine-tuning once provided the legacy model.
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. However, the optimal RTG depends on the architecture: modern peaks at 0.0, legacy at 0.5. Always calibrate per model.
-- **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep), closing the FCAS gap from 138× to 14% and reducing degradation 2.9× vs PPO. This establishes that **offline RL on well-curated data can match online RL**.
+- **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep). FCAS revenue rose 18× (from $77/ep to $1,383/ep), closing most of the prior gap to PPO's $1,616/ep FCAS revenue (the DT reached ~86% of PPO's FCAS revenue, versus ~5% before), while degradation fell 2.9× vs PPO ($212/ep vs $609/ep). This establishes that **offline RL on well-curated data can match online RL**.
 - **Remaining limitations:** PPO retains a degradation advantage ($310/ep), and large-station dispatch replays dominate absolute per-episode profit on transferred assets. DT degradation efficiency is the primary open challenge.
 
 This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
