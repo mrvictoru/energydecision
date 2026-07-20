@@ -1,12 +1,10 @@
-# Benchmarking and Advancing Control Strategies for Energy Storage: A Unified Framework Across Household Solar-Battery Control and Utility-Scale AEMO Battery Operation
+# Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch: A Degradation-Aware AEMO/NEM Benchmark
 
 ## Abstract
 
-The effective integration of battery energy storage is critical for a reliable, renewable-dominant grid, spanning both behind-the-meter residential operation and utility-scale market participation. Developing and comparing control strategies can be challenging when environments omit key factors such as stochastic demand/generation, time-varying tariffs or market prices, and battery degradation. This report documents a research codebase that provides two Gymnasium-compatible environments—(i) a household solar+battery controller and (ii) a utility battery trading environment for AEMO/NEM with an implemented historical dispatch-replay workflow—and a shared evaluation workflow.
+Optimal operation of grid-scale battery energy storage (BESS) in wholesale electricity markets requires simultaneous energy arbitrage and co-optimized bidding across multiple ancillary-service markets, under non-linear degradation and strict physical constraints. This report asks whether a **decision transformer (DT)** trained purely offline from logged trajectories can match or exceed online reinforcement learning (RL) and real-world dispatch for this problem. We answer this on a unified, degradation-aware benchmark built around Australia's NEM market (AEMO), supporting both a household solar–battery environment and a utility-scale BESS trading environment with full 9-dimensional FCAS bidding.
 
-The **primary learning model** in this codebase is an **offline Decision Transformer (DT)** trained from logged trajectories to produce continuous battery-charge/discharge actions conditioned on a desired return-to-go (RTG). A core motivation of this repository is to bring **modern transformer-based sequence modeling** to the practical challenge of battery operation, and to evaluate these models against established planning and RL baselines under consistent dynamics and metrics. Rule-based heuristics, dynamic-programming planners (SDP/MRDP), online RL baselines (Stable-Baselines3), and dispatch-replay baselines for the AEMO environment are included primarily as comparators and data-generators for DT training.
-
-> **Key empirical finding:** On the household environment, the DT achieves state-of-the-art results (best mean return, beating Oracle). **On the utility-scale AEMO environment, the most practically relevant benchmark is the same-asset dispatch-matched comparison** where all policies are evaluated on an identical battery asset (Dalrymple North 8 MWh / 30 MW) with the same `full_fcas` action space. On this benchmark, the **modern v2 (8×768 GQA) pretrained Decision Transformer achieves the highest profit per episode on both evaluation surfaces: $4,630/ep on the broad standard surface and $10,138/ep on the dispatch-matched surface** (with RTG calibration). The modern architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL fine-tuning (GRPO) once provided the legacy model. GRPO is not required for the modern model — the pretrained checkpoint beats PPO ($7,757/ep), the best GRPO-tuned variant ($6,445/ep), and dispatch replay ($3,663/ep). The DT also earns 5× more FCAS revenue than the real-world dispatch strategy. These results demonstrate that a modern transformer-based sequence model, with strong architecture and high-quality offline data, serves as a credible utility-scale battery control policy — competitive with or superior to online RL, dispatch replay, and rule-based baselines.
+Our central result is that a modernized offline DT — 8-block transformer with grouped-query attention, QK-Norm, and weight-tying, trained on a 2,401-episode FCAS-rich corpus — is the **state of the art** on the fairest same-asset comparison: **$10,138/ep on the dispatch-matched surface (RTG=0.0) and $4,630/ep on the broad cross-region standard surface**, beating online PPO ($7,757/ep), the best GRPO-tuned variant ($6,445/ep), and real dispatch replay ($3,663/ep). Two findings stand out. First, **GRPO online fine-tuning does not improve the modern model** — the architecture already internalizes what RL once added, and the legacy GRPO champion is shown to be a narrow overfit ($8,242 dispatch-matched collapses to $1,533 on the standard surface). Second, the DT's return-to-go prompt yields **zero-shot, inference-time control** of the profit/degradation trade-off, with the optimal prompt being architecture-dependent (modern: 0.0; legacy: 0.5). These results position offline sequence modeling with strong architecture and curated data as a credible, deployable prior for utility-scale battery control, and motivate the current research direction of injecting explicit forecast/planning awareness into the model.
 
 ## 1. Introduction
 
@@ -21,20 +19,35 @@ Despite substantial literature on energy management systems (EMS), reproducibili
 
 Recent review work supports this benchmark direction: Subramanya et al. [6] note that comparisons across RL-for-battery studies are hindered by unique formulations (environments, state/action spaces, and rewards), and argue that benchmark environments with a standard interface would improve comparability.
 
-### 1.2 Contributions and Research Goals
-This work establishes a consolidated, reproducible benchmark to address these limitations. We provide:
-1.  **Two Gymnasium-Compatible Simulation Environments:** Environments for (a) household solar+battery operation under ToU import/export pricing and (b) grid-scale battery trading under AEMO/NEM market signals (energy + optional FCAS), including replay of historical utility-scale station actions.
-2.  **Decision Transformer as the Primary Model:** A modernized Decision Transformer implementation plus an offline training pipeline built around trajectory logging, RTG construction, return scaling, and robust checkpoint loading.
-3.  **Baselines as Comparators and Data Sources:** A unified interface for comparing rule-based heuristics, SDP/MRDP planners, online RL (PPO, SAC, etc.), and (for AEMO) dispatch replay against DT, and for generating trajectory data for offline learning.
-4.  **Standardized Evaluation Workflow:** Metrics for return, grid energy flows, degradation, risk proxies (Sharpe/Sortino ratios), tail-risk analysis (VaR/CVaR at 5%), bootstrap confidence intervals, and paired statistical comparisons (Wilcoxon signed-rank), plus plotting utilities.
+### 1.2 Research Questions
 
-The goal of this platform is to provide a reusable baseline for studying generalization and robustness in control policies for decentralized energy systems.
+This report is organized around three falsifiable questions, each answered by the experiments in Section 8:
+
+- **RQ1 — Offline vs online RL.** Can a Decision Transformer trained *offline* from behavior-cloned trajectories match or exceed *online* RL (PPO) and real-world dispatch for multi-market BESS dispatch? (Answer: yes — §8.2.1, §8.2.3.)
+- **RQ2 — Does online fine-tuning help a strong offline model?** Does GRPO online RL fine-tuning further improve an already-strong offline DT? (Answer: no — §8.2.1, §8.2.7; the apparent GRPO gain is a narrow overfit.)
+- **RQ3 — Is optimal prompting architecture-dependent?** Can the profit/degradation operating point be tuned at inference time, and does the optimal return-to-go prompt transfer across architectures? (Answer: yes for tunability, no for transfer — §8.2.2.)
+
+### 1.3 Contributions and Research Goals
+This work establishes a consolidated, reproducible benchmark to address these limitations. The contributions, in priority order, are:
+1.  **A best-performing offline Decision Transformer for utility-scale BESS dispatch** — a modernized 8×768 GQA transformer trained on a 2,401-episode FCAS-rich corpus, achieving the highest profit on a same-asset benchmark and surpassing online RL and real dispatch replay (§4.2, §8.2).
+2.  **A rigorous same-asset evaluation methodology** that removes the battery-sizing confounder from dispatch-replay comparisons, plus RTG calibration and an overfitting post-mortem for narrow benchmarks (§8.2.1, §8.2.2).
+3.  **Two Gymnasium-Compatible Simulation Environments:** (a) household solar+battery under ToU pricing and (b) grid-scale AEMO/NEM trading with full FCAS and historical dispatch replay.
+4.  **Baselines as Comparators and Data Sources:** a unified interface for rule-based, SDP/MRDP, online RL (SB3), and dispatch-replay policies, also used to generate offline training data.
+5.  **Standardized Evaluation Workflow:** return, grid flows, degradation, risk proxies (Sharpe/Sortino), tail-risk (VaR/CVaR@5%), bootstrap confidence intervals, and paired Wilcoxon comparisons.
+
+The goal of this platform is to provide a reusable baseline for studying generalization and robustness in control policies for decentralized energy systems, and a foundation for the current research direction of forecast-aware sequence modeling (§9).
 
 ## 2. Related Work
 
-This work is inspired by Abdulla et al. [1], which formulates optimal operation of energy storage using Stochastic Dynamic Programming (SDP) and emphasizes the importance of uncertainty and degradation for realistic assessment.
+We position this work at the intersection of three literatures: battery optimal control under degradation, reinforcement learning for energy storage, and sequence-modeling / offline RL.
 
-We adopt an SDP-style planning baseline (implemented in this repository) and a multi-factor degradation model based on Muenzel et al. [2] (implemented in `src/batterydeg.py`).  Alongside these planning components, the Decision Transformer framework [4] motivated our implementation of a transformer‑based sequence model trained with offline RL; this becomes the primary learning baseline in the codebase.  We extend the planning baseline with additional learning‑based baselines and a Gymnasium environment wrapper.
+**Optimal control with degradation.** The foundational planning perspective is Abdulla et al. [1], who formulate BESS optimal operation as stochastic dynamic programming and stress the joint role of forecast uncertainty and degradation for realistic assessment. Their backward-induction solver supplies provably-optimal energy arbitrage under a discretization, and directly motivates the SDP/MRDP baselines and the forecast-aware research direction in §9. Degradation realism is provided by the multi-factor cycle-life model of Muenzel et al. [2] (rate, temperature, SoC, depth-of-discharge dependent), which we adopt for both environments; real-world BESS aging (calendar + cycle, Arrhenius temperature dependence, NMC/LFP presets) is available via `RealWorldBESSDegradationModel` [3].
+
+**Reinforcement learning for battery control.** Subramanya et al. [6] survey RL-for-battery-storage across optimization objective, user impact, losses/degradation, and application context, and explicitly call for benchmark environments with a standard interface to enable cross-paper comparability. Their critique — that bespoke environments, private data, and divergent reward/constraint formulations block fair comparison — is the direct motivation for the unified, degradation-aware benchmark in this report.
+
+**Sequence models and offline RL.** The Decision Transformer (DT) of Chen et al. [4] reframes RL as conditional sequence modeling: a transformer predicts actions from return-to-go (RTG), state, and action tokens, enabling offline training from logged trajectories and inference-time policy steering via the RTG prompt. Subsequent work extends DT to online fine-tuning (e.g., Online Decision Transformer) and to continuous control. Our contribution is to bring a *modernized* DT (grouped-query attention, QK-Norm, weight tying, SwiGLU) to the practically under-studied setting of **multi-market BESS dispatch with co-optimized FCAS bidding**, and to test, empirically, whether online RL fine-tuning (GRPO) adds value on top of a strong offline model — a question largely absent from the DT literature.
+
+While we are not aware of a directly comparable published result on full 9-dimensional FCAS co-optimization via offline sequence models, the benchmark, baselines, and evaluation protocol here are designed so that such comparisons can be made under identical dynamics and metrics.
 
 ## 3. System Model and Environments
 
@@ -124,7 +137,26 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 
 **Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
-> **NOTE (important repo mismatch):** The dataset schema includes `FutureSolar`/`FutureLoad` (see `transform_polars_df`), but the current planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP will fall back to using `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`.
+### 4.2 Modern v2 Architecture (current best-performing model)
+
+The headline results in Section 8 are produced by the **modern v2 Decision Transformer**
+([`mrvictoru/energydecision-dt-v2`](https://huggingface.co/mrvictoru/energydecision-dt-v2)), an
+8-block transformer that modernizes the legacy block described in §4.1. Relative to the legacy
+8×384 model, the changes are architectural rather than scale-driven (hidden dim grows 384→768,
+but the decisive gains come from the following):
+
+- **Grouped-Query Attention (GQA):** 12 query heads attend over 6 key/value heads (n_rep = 2), reducing KV-cache memory and stabilizing long-context attention.
+- **QK-Norm:** per-head RMSNorm on queries and keys (before the attention dot-product) for training stability without warmup sensitivity.
+- **RMSNorm pre-norm** throughout, replacing LayerNorm.
+- **SwiGLU** feed-forward (768 → 2304 → 768) with dropout 0.15.
+- **Weight tying:** the input embedding and output prediction layers for state/action/return share weights (`pred_act`, `pred_state`, `pred_return` are linear projections of the tied embeddings).
+- **Learned timestep embedding** (RoPE disabled; `rope_enabled=false`), context length 210.
+- Trained with `discount=0.95`, `return_scale=2.0`, and near-action-only loss weights
+  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly.
+
+Canonical hyperparameters are shipped at
+`configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. The architecture
+is verified from the uploaded checkpoint's embedded `config`, not from documentation.
 
 ## 5. Data and Preprocessing
 
@@ -232,27 +264,9 @@ This section presents the empirical evaluation of the Decision Transformer (DT) 
 
 ### 8.1 Household Solar-Battery Control (Historical Benchmark)
 
-The household environment was the original benchmark for this repository. The DT was evaluated against rule-based, SDP/MRDP, online RL (PPO, SAC, A2C, DDPG, TD3), and Oracle agents on the Ausgrid Solar Home dataset. Full metrics are in [eval_output/household/baseline/evaluation_metrics.csv](eval_output/household/baseline/evaluation_metrics.csv).
+The household environment (1D action, Ausgrid Solar Home data) was the original testbed that established the DT's effectiveness on a simpler control problem; it is retained as a validation domain rather than the primary contribution. The DT achieves the best mean return (−$2,408) among all baselines including the perfect-foresight Oracle (−$2,483), a difference that is statistically significant (Wilcoxon p = 0.005). Critically, the RTG prompt provides **zero-shot control of the degradation/return trade-off**: moderate prompts yield 0.005/ep degradation versus 0.114/ep for near-zero prompts (a 22× reduction) without any retraining, and tail-risk (CVaR ≈ −9,705) is competitive with or better than SDP, A2C, and PPO. The full metric table, RTG-sensitivity analysis, and pairwise Wilcoxon tests are provided in [eval_output/household/](eval_output/household/) (see Appendix B for the per-algorithm table).
 
-| Algorithm | Mean Reward | Std Reward | Sharpe | Avg Degradation/Ep |
-|-----------|----------:|----------:|------:|-------------------:|
-| dt_rtg_neg200 | **-2407.65** | 3087.47 | -0.780 | 0.0051 |
-| dt_rtg_neg500 | -2407.62 | 3087.51 | -0.780 | 0.0051 |
-| oracle | -2483.38 | 1773.97 | -1.400 | 0.2351 |
-| a2c | -2528.62 | 3234.82 | -0.782 | 0.0000 |
-| sdp | -2598.35 | 3200.02 | -0.812 | 0.0115 |
-| ppo | -2828.28 | 3275.89 | -0.863 | 0.0349 |
-| rule | -3077.26 | 3454.07 | -0.891 | 0.0541 |
-
-![Household mean episode return by agent](eval_output/household/baseline/mean_reward.svg)
-
-**Key takeaways:**
-- **DT achieves best mean return:** `dt_rtg_neg200` (-2408) and `dt_rtg_neg500` (-2408) outperform all baselines including perfect-foresight Oracle (-2483). Difference vs Oracle is statistically significant (p = 0.005).
-- **RTG prompt controls degradation:** Moderate prompts achieve 0.005/ep degradation vs 0.114/ep for near-zero prompt — a 22× difference. The DT enables zero-shot trade-off control without retraining.
-- **Tail risk is competitive:** DT moderate-prompt CVaR (≈ -9705) is better than A2C (-9966), SDP (-9965), and PPO (-10089).
-- **Full analysis:** RTG sensitivity, tail-risk metrics, and pairwise Wilcoxon tests are documented in [eval_output/household/](eval_output/household/).
-
-> **NOTE:** These household results establish the DT's effectiveness on a simpler 1D-action problem. The repository's current focus is on the more challenging AEMO utility-scale environment (Section 8.2), where the action space is 3D (energy + FCAS bidding) and market dynamics are significantly more complex.
+> **NOTE:** These household results establish the DT's effectiveness on a simpler 1D-action problem. The repository's primary contribution is the more challenging AEMO utility-scale environment (Section 8.2), where the action space is 9D (energy + FCAS bidding) and market dynamics are significantly more complex.
 
 ### 8.2 Utility-Scale AEMO Battery Trading (Primary Focus)
 
@@ -281,7 +295,7 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 
 **Key observations:**
 
-1. **Modern v2 pretrained is SOTA.** The architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that GRPO once provided the legacy model. It beats every variant on the broad standard surface ($4,630/ep) and achieves the highest dispatch-matched profit ($10,138/ep at RTG=0.0).
+1. **Modern v2 pretrained leads all compared methods.** The architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that GRPO once provided the legacy model. It beats every variant on the broad standard surface ($4,630/ep) and achieves the highest dispatch-matched profit ($10,138/ep at RTG=0.0).
 
 2. **Legacy Phase 1 GRPO was overfit.** Its dispatch-matched peak ($8,242/ep) collapses to $1,533/ep on the standard surface — the worst cross-region generalization of any DT model. The modern v2 pretrained model ($4,630 standard) generalizes properly. Overfitting was to dispatch-matched SA1 Q4 2024, not to the broader AEMO market.
 
@@ -289,7 +303,7 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 
 4. **FCAS learning is robust across all DT models.** Every DT variant — pretrained, GRPO-tuned, legacy — earns 3–5× more FCAS revenue than the real dispatch strategy. The FCAS capability comes from the offline dataset, not from GRPO.
 
-5. **PPO retains a degradation advantage** across all comparisons. PPO's $310/ep degradation cost remains lower than every DT variant, reflecting its more conservative dispatch patterns.
+5. **PPO retains a degradation advantage over most DT variants.** PPO's ~$310/ep degradation cost is lower than the legacy and GRPO-tuned DT variants (which cycle more aggressively to capture FCAS revenue). The modern v2 pretrained model is an exception: its dispatch-matched degradation (~$187/ep) is *below* PPO's, showing that the modern architecture captures FCAS revenue without the same degradation penalty. Closing the residual degradation gap while preserving FCAS revenue remains the key open challenge.
 
 6. **Large-station dispatch replays transfer profitably but inefficiently.** Hornsdale ($57,435/ep) and Torrens Island ($114,365/ep) earn high absolute profit but with poor per-MWh efficiency.
 
@@ -405,21 +419,23 @@ The transformer model (modern v2 pretrained Decision Transformer) has credibilit
 **Strengths:**
 - **FCAS-aware learned control.** The model captures 8-service FCAS bidding patterns from the offline dataset, earning 3–5× more FCAS revenue than the real dispatch strategy on the same asset.
 - **Prompt-time controllability.** The RTG prompt lets an operator tune the profit/degradation trade-off at inference time — an advantage no fixed-policy baseline (PPO, dispatch replay, rule) can match without retraining or redeployment.
-- **SOTA without online RL.** The modern v2 pretrained model achieves the highest profit across all benchmarks without any GRPO fine-tuning. It beats PPO ($7,757/ep) and dispatch replay ($3,663/ep) on the dispatch-matched surface and demonstrates strong cross-region generalization ($4,630/ep standard).
+- **Leads all methods without online RL.** The modern v2 pretrained model achieves the highest profit across all benchmarks without any GRPO fine-tuning. It beats PPO ($7,757/ep) and dispatch replay ($3,663/ep) on the dispatch-matched surface and demonstrates strong cross-region generalization ($4,630/ep standard).
 - **Beats matched dispatch replay.** All DT variants outperform the actual Dalrymple North dispatch strategy by 1.7–2.8× on the same battery, demonstrating learned patterns beyond simple imitation.
 - **Deployable scheduling prior.** The model operates across multiple battery configurations, regions, and market conditions, making it a candidate for a transferable battery control prior.
 
 **Remaining limitations:**
-- **PPO retains a degradation edge.** PPO's $310/ep degradation cost remains lower than every DT variant. DT models cycle the battery more aggressively to capture FCAS revenue. For owners prioritizing battery longevity, PPO remains attractive.
+- **PPO retains a degradation edge over most DT variants.** PPO's ~$310/ep degradation is lower than the legacy/GRPO-tuned DT variants; the modern v2 pretrained model is competitive (~$187/ep dispatch-matched), but the general DT tendency to cycle aggressively for FCAS revenue still leaves room for degradation improvement. For owners prioritizing battery longevity, PPO remains attractive on the older variants.
 - **Large-station dispatch replay dominates absolute profit.** Hornsdale and Torrens Island strategies, refined over years of real operations, transfer profitably to smaller assets — though their per-MWh efficiency is poor.
 - **Degradation minimization is the primary open problem.** Closing the degradation gap while maintaining FCAS revenue remains the most important challenge for DT-based battery control.
 - **Training cost.** The modern v2 model required significant offline data collection (2,401 episodes). While GRPO is not required, the offline data generation pipeline is itself compute-intensive.
+- **Small dispatch-matched sample.** The headline dispatch-matched surface covers Q4 2024 SA1 only (2 episodes × 144 h). The standard surface is broader (5 regions, medium battery) and is the more robust cross-region generalization evidence; dispatch-matched figures should be read as a same-asset head-to-head rather than a seasonally robust estimate. Confidence intervals and bootstrap/Wilcoxon tools in `src/helper.py` are available but were not applied to the per-surface profit headlines.
+- **Simulated market dynamics.** All revenue/degradation figures are produced by the in-repo simulator (`AEMOBatteryEnv`) driven by historical AEMO price/demand series; they are not settled market outcomes. The simulator's FCAS co-optimization and degradation models are approximations of real BESS dispatch economics.
 
 ---
 
 #### 8.2.7 Improvement Trajectory
 
-The following table traces the DT's progression from the original pilot model through the FCAS-rich offline result to the modern v2 pretrained model — which represents the current SOTA.
+The following table traces the DT's progression from the original pilot model through the FCAS-rich offline result to the modern v2 pretrained model — which represents the current best-performing configuration in this benchmark.
 
 | Stage | Model | Training Data | Profit/Ep (DM) | FCAS Rev | Deg Cost | Key Change |
 |-------|-------|--------------|:---------:|:--------:|:--------:|:-----------|
@@ -427,7 +443,7 @@ The following table traces the DT's progression from the original pilot model th
 | 2. Autoresearch | 8×512, ctx=180 | 24 episodes (mixed) | -$1,396 | $77 | $2,503 | Hyperparameter tuning |
 | 3. FCAS-rich DT | 8×384, ctx=180 | 2,425 episodes (PPO-rich) | +$1,522 | $1,383 | $212 | Dataset quality |
 | 4. Phase 1 GRPO (legacy, overfit) | 8×384 (GRPO-tuned) | v2 HF + 5 GRPO iter | +$8,242 | $7,686 | $760 | Online fine-tuning (overfit to DM) |
-| **5. Modern v2 pretrained** | **8×768 GQA** | **2,401 episodes (realistic bat)** | **+$10,138** | **$10,068** | **TBD** | **Architecture improvement** |
+| **5. Modern v2 pretrained** | **8×768 GQA** | **2,401 episodes (realistic bat)** | **+$10,138** | **$10,068** | **$187** | **Architecture improvement** |
 
 **Key insight:** Stage 5's improvement over stage 4 comes entirely from architecture (GQA, RMSNorm, weight tying) and better training data (realistic battery configurations), not from online RL. The modern v2 architecture captures everything GRPO once provided — and generalizes better (stage 5 gets $4,630/ep on the standard surface vs stage 4's $1,533/ep).
 
@@ -447,7 +463,7 @@ The following table traces the DT's progression from the original pilot model th
 
 ### 8.3 Key Takeaways
 
-1. **The modern v2 Decision Transformer is SOTA for utility-scale battery control.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.
+1. **The modern v2 Decision Transformer is the best-performing method for utility-scale battery control in this benchmark.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.
 
 2. **The full pipeline matters — but architecture matters most.** Offline data quality (2,401-episode FCAS-rich corpus), realistic battery configurations, and modern architecture each contribute. But the jump from stage 4 to stage 5 ($1,533→$4,630 standard) came from architecture alone — GRPO does not help the modern model.
 
@@ -495,13 +511,21 @@ Beyond DT-centric work, the AEMO results also highlight:
 
 > **NOTE (literature alignment):** Because studies often vary in objective definitions (financial vs energy-efficiency) and in constraint/user-impact handling, robustness studies should explicitly document which objective family and constraint set is being targeted [6].
 
-### Phase 3: Advanced Architectures and Multi-Agent Systems (Year 2-3)
-- **Transformer Architectures:** Explore modifications to the Decision Transformer architecture (e.g., long-context attention) to better capture seasonal periodicities in energy data.
-- **Multi-Agent Coordination:** Extend the environment to a microgrid setting where multiple homes trade energy, studying the emergence of cooperative behaviors.
+### Phase 3: Forecast- and Planning-Aware Sequence Modeling (Current Direction)
 
-### Phase 4: Sim-to-Real Transfer (Year 3-4)
-- Develop "safe RL" wrappers to ensure constraints are met during deployment.
-- Validate policies on hardware-in-the-loop setups or pilot deployments.
+The modern v2 DT is the current best-performing model, yet it conditions only on a 210-step history window and has **no explicit forward-looking signal** — and its energy-arbitrage contribution is small (~$70/ep of the $10,138 dispatch-matched profit; the rest is FCAS). The next phase injects planning/forecast awareness, building directly on Abdulla et al. [1] and the implemented SDP/MRDP solvers. This is the active research line tracked in `docs/aemo_hybrid_dt_plan.md` (PR #32).
+
+- **Thrust 1 — SDP-trajectory-augmented offline training (Path B'):** run the SDP/MRDP solver on the AEMO environment in `action_mode='simple'` to generate provably-optimal energy-arbitrage trajectories, add them to the FCAS-rich corpus, and retrain the DT so it learns SDP's energy timing while retaining PPO-learned FCAS bidding.
+- **Thrust 2 — Forecast-conditioned DT architecture (Path A1):** extend the token stream with a forecast segment (predicted RRP, FCAS prices, demand from `QuantileScenarioGenerator`), add token-type embeddings and an attention mask so historical tokens attend to forecasts — removing the pure-history information bottleneck.
+- **Secondary — SDP-computed RTG at inference:** replace the hand-tuned scalar RTG with the SDP cost-to-go for the current state (no retraining); and **hierarchical SDP+DT** inference (SDP sets energy dispatch, DT sets FCAS bids).
+- **Success criteria:** DT retrained with SDP trajectories exceeds the pretrained baseline on ≥1 surface; SDP-guided RTG improves inference-time profit without retraining; combined system targets >$12,000/ep dispatch-matched or >$6,000/ep standard.
+
+### Phase 4: Robustness, Multi-Objective, and Sim-to-Real (Year 2-4)
+- **Statistical rigor:** apply bootstrap CIs and paired Wilcoxon tests to the AEMO headline tables (tooling exists; see Appendix C).
+- **Risk-sensitive / multi-objective training:** CVaR-constrained or degradation-weighted objectives in the training loop; FCAS-weighted action loss.
+- **Long-context and training-mixture studies:** re-sweep context lengths (2016 feasible on 22 GB) on FCAS-rich data; ablate behavior-policy mixtures.
+- **Sim-to-real transfer:** safe-RL wrappers and pilot/hardware-in-the-loop validation, responding to the review's call [6] to compare simulated performance against real deployments.
+- **Multi-agent coordination:** extend to a microgrid setting with multiple trading homes.
 
 > **NOTE (literature alignment):** The review explicitly calls out the need to compare simulated/model-based performance to real battery deployments [6].
 
@@ -523,8 +547,8 @@ This repository introduces a unified framework for learning and planning in batt
 - **AEMO utility-scale environment (same-asset dispatch-matched benchmark):** On the fairest comparison where all policies share the identical battery (Dalrymple North 8 MWh / 30 MW) with RTG calibration, the **modern v2 pretrained Decision Transformer achieves the highest profit per episode across both evaluation surfaces: $10,138/ep on dispatch-matched (rtg=0.0) and $4,630/ep on the standard surface**. This beats PPO ($7,757/ep), all GRPO-tuned variants ($6,445 best), and dispatch replay ($3,663/ep) on the same asset. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL fine-tuning once provided the legacy model.
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. However, the optimal RTG depends on the architecture: modern peaks at 0.0, legacy at 0.5. Always calibrate per model.
-- **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep), closing the FCAS gap from 138× to 14% and reducing degradation 2.9× vs PPO. This establishes that **offline RL on well-curated data can match online RL**.
-- **Remaining limitations:** PPO retains a degradation advantage ($310/ep), and large-station dispatch replays dominate absolute per-episode profit on transferred assets. DT degradation efficiency is the primary open challenge.
+- **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep). FCAS revenue rose 18× (from $77/ep to $1,383/ep), closing most of the prior gap to PPO's $1,616/ep FCAS revenue (the DT reached ~86% of PPO's FCAS revenue, versus ~5% before), while degradation fell 2.9× vs PPO ($212/ep vs $609/ep). This establishes that **offline RL on well-curated data can match online RL**.
+- **Remaining limitations:** PPO retains a degradation advantage over most DT variants (~$310/ep vs the legacy/GRPO-tuned DTs; modern v2 is competitive at ~$187/ep dispatch-matched), and large-station dispatch replays dominate absolute per-episode profit on transferred assets. Residual DT degradation efficiency is the primary open challenge.
 
 This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
@@ -534,9 +558,9 @@ This report documents the system and experimental protocol; results can be itera
 
 [2] V. Muenzel, J. De Hoog, et al., "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management," *IEEE Transactions on Industrial Electronics*, 2015.
 
-[3] Sutton & Barto. Reinforcement Learning: An Introduction.
+[3] A. Kampker et al., "Modelling of Battery Energy Storage Systems Under Real-World Conditions," *Batteries*, vol. 11, no. 3, 2025, doi:10.3390/batteries11010392. (Real-world calendar + cycle aging model with Arrhenius temperature dependence and NMC/LFP presets, used by `RealWorldBESSDegradationModel`.)
 
-[4] Chen et al. Decision Transformer: Reinforcement Learning via Sequence Modeling.
+[4] L. Chen, K. Lu, A. Rajeswaran, K. Lee, A. Grover, M. Laskin, P. Abbeel, A. Srinivas, and I. Mordatch, "Decision Transformer: Reinforcement Learning via Sequence Modeling," *Advances in Neural Information Processing Systems (NeurIPS)*, 2021, arXiv:2106.01345.
 
 [5] Ausgrid. Solar home electricity data. https://github.com/pierre-haessig/ausgrid-solar-data?tab=readme-ov-file. Accessed April 2017.
 
@@ -553,3 +577,25 @@ RL
 DT
 - Train (CLI): `python -m src.pretrain_decision_transformer --data-dir data/household/logs --model-config models/household/dt/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
 - Dataset (Python): `TrajectoryDataset(data_path=..., context_length=..., state_dim=..., act_dim=..., discount_factor=0.99)` → train with `train_decision_transformer` and evaluate via `Agent(algorithm='dt', rtg_value=...)`.
+
+---
+
+Appendix B: Household Per-Algorithm Metrics (§8.1)
+
+| Algorithm | Mean Reward | Std Reward | Sharpe | Avg Degradation/Ep |
+|-----------|----------:|----------:|------:|-------------------:|
+| dt_rtg_neg200 | **-2407.65** | 3087.47 | -0.780 | 0.0051 |
+| dt_rtg_neg500 | -2407.62 | 3087.51 | -0.780 | 0.0051 |
+| oracle | -2483.38 | 1773.97 | -1.400 | 0.2351 |
+| a2c | -2528.62 | 3234.82 | -0.782 | 0.0000 |
+| sdp | -2598.35 | 3200.02 | -0.812 | 0.0115 |
+| ppo | -2828.28 | 3275.89 | -0.863 | 0.0349 |
+| rule | -3077.26 | 3454.07 | -0.891 | 0.0541 |
+
+---
+
+Appendix C: Implementation Notes and Known Mismatches
+
+- **Dataset/forecast column mismatch:** the dataset schema emitted by `transform_polars_df` includes `FutureSolar`/`FutureLoad`, but the planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP fall back to `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`. This is a known code-level inconsistency and does not affect the AEMO (utility-scale) results, which use AEMO-native columns.
+- **Statistical confidence on headline AEMO figures:** bootstrap confidence intervals and paired Wilcoxon tests (`src/helper.py`) are implemented and were used for the household domain. For the AEMO headline tables, point estimates are reported; applying CIs/Wilcoxon to the per-surface AEMO profit headlines is listed as near-term future work (see README Roadmap, "Statistical confidence on AEMO headlines").
+- **Figure embedding:** figure paths reference repository-relative SVGs; for PDF export these should be embedded.
