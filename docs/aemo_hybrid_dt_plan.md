@@ -103,6 +103,97 @@ planning — this brings that capability directly into the transformer.
 
 ---
 
+## Forecast Generation Strategy
+
+Thrust 2 (forecast tokens) requires realistic forecasts that the model learns to trust without
+cheating. This section defines how forecasts are generated, how many timesteps are used, and how
+they interact with the DT's context window.
+
+### 1. Three-Phase Forecast Maturity
+
+| Phase | Forecast source | Realism | Purpose |
+|---|---|---|---|
+| **1: Perfect foresight (validate)** | Actual future values from `aemo_data` | ❌ Unrealistic but fast | Prove the architecture works — if the model can't exploit perfect forecasts, the design is wrong |
+| **2: Statistical forecast (MVP)** | `QuantileScenarioGenerator` (already in repo) | ⚠️ Honest, imperfect | Minimum viable forecast. The model learns to work with uncertainty because forecasts are wrong sometimes |
+| **3: Learned forecast (stretch)** | Fine-tuned time-series model (e.g. IBM Granite TTM, 1.41M params, Apache 2.0) | ✅ Realistic | Closer to what a real operator would use; forecast quality is bounded by the model |
+
+**Phase 1** should be run first — it costs no new dependencies (the `aemo_data` DataFrame already
+covers the full episode window, so "future" values are trivially read from it). If the model
+improves with perfect forecasts, we know the architecture is sound.
+
+**Phase 2** is the production baseline. The `QuantileScenarioGenerator` already exists in the repo
+(`src/quantile_scenarios.py`) and is used by the SDP solver. It computes quantile distributions
+from historical data. For forecast tokens, we use the median quantile as the point forecast and
+optionally encode the inter-quantile range as uncertainty:
+
+```python
+# At each timestep t, for forecast step f in 1..F:
+scenario_gen = QuantileScenarioGenerator(n_scenarios=5)
+forecast_row = scenario_gen.get_median_forecast(current_idx + f)
+# Produces: median RRP, median FCAS prices, median demand
+```
+
+**Phase 3** is a stretch goal. [IBM Granite TTM](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3)
+is a tiny (1.41M params, Apache 2.0) time-series foundation model supporting zero-shot forecasting,
+few-shot adaptation, multivariate inputs, and multi-quantile output. It runs at ~180 samples/sec on
+CPU or ~7,500/sec on GPU. Fine-tuning it on AEMO price data (years of 5-min RRP + FCAS prices)
+would produce higher-quality forecasts than the statistical baseline.
+
+### 2. Forecast Horizon
+
+| Horizon | Steps (5-min) | What it captures | Added tokens (3×) |
+|---|---:|---|:---:|
+| 1 hour | 12 | One charge cycle for 1C battery | 36 |
+| **2 hours** | **24** | Full charge/discharge cycle | 72 |
+| **4 hours** | **48** | Morning/evening ramp + 2–4 cycles | 144 |
+| 8 hours | 96 | Day-ahead pattern (SDP default) | 288 |
+
+**Recommendation: 48 forecast steps (4 hours).** Because:
+
+- A medium_1c battery charges in ~60 minutes (12 steps). A fast_375c cycles in ~16 minutes (3–4 steps).
+  48 steps covers multiple full cycles regardless of battery config.
+- Beyond 4 hours, forecast quality degrades and the battery is physically constrained by its capacity
+  anyway — a full battery at hour 2 means the hour-8 forecast cannot change the hour-2 action.
+- With GQA (12 heads, 6 KV heads), the added attention memory for 48 forecast steps is ~110 MB
+  on top of the existing model — negligible on 22 GB.
+
+### 3. Interaction with Context Window
+
+**Design**: Forecast tokens are **prepended as a prefix** before the existing history tokens.
+Causal attention means history tokens attend to all forecast tokens + prior history.
+
+```
+Position:  [forecast_rtg_0, forecast_s_0, pad_0, ... forecast_rtg_47, forecast_s_47, pad_47,
+            rtg_0, s_0, a_0, ... rtg_209, s_209, a_209]
+           |<----- 3 × 48 = 144 forecast tokens ------>|<------- 3 × 210 = 630 history tokens ------>|
+```
+
+Total sequence: 144 + 630 = **774 tokens** (vs 630 without forecasts).
+
+| Option | History | Forecast | Total | Trade-off |
+|---|---:|---:|---:|:---|
+| **A: Fixed total** | 162 | 48 | 630 | Sacrifices 48 history steps for forecasts. Loses 4h of market context. |
+| **B: Extended (recommended)** | 210 | 48 | 774 | Full 17.5h history + 4h forecast. 774 tokens fits in 22 GB. |
+
+Option B is preferred. The 144 extra tokens increase attention complexity from O(630²) to O(774²)
+but with GQA and 768-dim this is ~110 MB additional memory — well within the 22 GB budget.
+
+The `context_len` parameter increases from 210 to 258 (210 history + 48 forecast). A separate
+`forecast_len` parameter tracks the split. The action-prediction head reads from the last history
+action position — unchanged. Forecast action positions are zero-padded and masked from the loss.
+
+### 4. No Environment Changes
+
+The forecast tokens are constructed **at DT input time** by reading future values from the
+`aemo_data` DataFrame (which already covers the full episode at both training and inference time).
+The environment's 18D observation space stays unchanged. Other agents (PPO, dispatch, rule) are
+unaffected — only the DT receives forecast tokens.
+
+At training time, the forecast is extracted from the logged trajectory's future steps (trivially
+available). At inference time, the `aemo_data` for the loaded episode provides the same look-ahead.
+
+---
+
 ## Secondary Objectives
 
 ### 1. SDP-Computed RTG (Quick Win)
@@ -156,13 +247,16 @@ Success criteria:
 | # | Milestone | Thrust | Dependencies | Est. effort |
 |---|-----------|--------|-------------|:-----------:|
 | 1 | AEMO-adapted SDP (`action_mode='simple'`) verified on 1 region | Path B' | None | 2h |
-| 2 | Forecast token architecture design + prototype on DT | Path A1 | None | 1 week |
-| 3 | SDP trajectory logs generated (3 regions × 2 batteries) | Path B' | Milestone 1 | 4h |
-| 4 | DT retrained on augmented dataset (SDP + FCAS-rich) | Path B' | Milestone 3 | 6h |
-| 5 | DT retrained with forecast token architecture (on FCAS-rich data) | Path A1 | Milestone 2 | 6h |
-| 6 | Combined: forecast-conditioned DT retrained on SDP-augmented data | Both | Milestones 4, 5 | 6h |
-| 7 | Evaluate all checkpoints on dispatch-matched + standard | Both | Milestones 4–6 | 2h |
-| 8 | SDP-computed RTG inference (quick win, can run in parallel) | Secondary | Milestone 1 | 2h |
+| 2 | Forecast token architecture prototype (prefix design, perfect-foresight validation) | Path A1 | None | 1 week |
+| 3 | Phase 1 forecast validation: train + eval with perfect foresight | Path A1 | Milestone 2 | 4h |
+| 4 | Phase 2 forecast MVP: QuantileScenarioGenerator based forecasts | Path A1 | Milestones 2, 3 | 4h |
+| 5 | SDP trajectory logs generated (3 regions × 2 batteries) | Path B' | Milestone 1 | 4h |
+| 6 | DT retrained on SDP-augmented dataset (no forecast tokens) | Path B' | Milestone 5 | 6h |
+| 7 | DT retrained with forecast architecture (QuantileScenarioGenerator) | Path A1 | Milestone 4 | 6h |
+| 8 | Combined: forecast-conditioned DT on SDP-augmented data | Both | Milestones 6, 7 | 6h |
+| 9 | Evaluate all checkpoints on dispatch-matched + standard | Both | Milestones 3, 6–8 | 2h |
+| 10 | Phase 3: IBM Granite TTM fine-tuned on AEMO prices (stretch goal) | Path A1 | Milestone 4 | 1–2 weeks |
+| 11 | SDP-computed RTG inference (quick win, runs in parallel) | Secondary | Milestone 1 | 2h |
 
 ---
 
@@ -177,5 +271,6 @@ Success criteria:
 | `src/decision_transformer.py` | Modern v2 DT (8×768 GQA) — target architecture |
 | `docs/DP_ALGORITHM_README.md` | SDP/MRDP algorithm deep dive |
 | `docs/modern_transformer_improvements.md` | Architecture reference |
+| [`https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3`](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3) | IBM Granite TTM (Phase 3 forecast model, 1.41M params, Apache 2.0) |
 | `configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json` | Primary eval config |
 | `configs/eval_tier_standard.json` | Secondary eval config |
