@@ -316,7 +316,7 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 
 **Key observations:**
 
-1. **Modern v2 pretrained is SOTA.** The architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that GRPO once provided the legacy model. It beats every variant on the broad standard surface ($4,630/ep) and achieves the highest dispatch-matched profit ($10,138/ep at RTG=0.0).
+1. **Modern v2 pretrained leads all compared methods.** The architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that GRPO once provided the legacy model. It beats every variant on the broad standard surface ($4,630/ep) and achieves the highest dispatch-matched profit ($10,138/ep at RTG=0.0).
 
 2. **Legacy Phase 1 GRPO was overfit.** Its dispatch-matched peak ($8,242/ep) collapses to $1,533/ep on the standard surface — the worst cross-region generalization of any DT model. The modern v2 pretrained model ($4,630 standard) generalizes properly. Overfitting was to dispatch-matched SA1 Q4 2024, not to the broader AEMO market.
 
@@ -440,7 +440,7 @@ The transformer model (modern v2 pretrained Decision Transformer) has credibilit
 **Strengths:**
 - **FCAS-aware learned control.** The model captures 8-service FCAS bidding patterns from the offline dataset, earning 3–5× more FCAS revenue than the real dispatch strategy on the same asset.
 - **Prompt-time controllability.** The RTG prompt lets an operator tune the profit/degradation trade-off at inference time — an advantage no fixed-policy baseline (PPO, dispatch replay, rule) can match without retraining or redeployment.
-- **SOTA without online RL.** The modern v2 pretrained model achieves the highest profit across all benchmarks without any GRPO fine-tuning. It beats PPO ($7,757/ep) and dispatch replay ($3,663/ep) on the dispatch-matched surface and demonstrates strong cross-region generalization ($4,630/ep standard).
+- **Leads all methods without online RL.** The modern v2 pretrained model achieves the highest profit across all benchmarks without any GRPO fine-tuning. It beats PPO ($7,757/ep) and dispatch replay ($3,663/ep) on the dispatch-matched surface and demonstrates strong cross-region generalization ($4,630/ep standard).
 - **Beats matched dispatch replay.** All DT variants outperform the actual Dalrymple North dispatch strategy by 1.7–2.8× on the same battery, demonstrating learned patterns beyond simple imitation.
 - **Deployable scheduling prior.** The model operates across multiple battery configurations, regions, and market conditions, making it a candidate for a transferable battery control prior.
 
@@ -456,7 +456,7 @@ The transformer model (modern v2 pretrained Decision Transformer) has credibilit
 
 #### 8.2.7 Improvement Trajectory
 
-The following table traces the DT's progression from the original pilot model through the FCAS-rich offline result to the modern v2 pretrained model — which represents the current SOTA.
+The following table traces the DT's progression from the original pilot model through the FCAS-rich offline result to the modern v2 pretrained model — which represents the current best-performing configuration in this benchmark.
 
 | Stage | Model | Training Data | Profit/Ep (DM) | FCAS Rev | Deg Cost | Key Change |
 |-------|-------|--------------|:---------:|:--------:|:--------:|:-----------|
@@ -484,7 +484,7 @@ The following table traces the DT's progression from the original pilot model th
 
 ### 8.3 Key Takeaways
 
-1. **The modern v2 Decision Transformer is SOTA for utility-scale battery control.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.
+1. **The modern v2 Decision Transformer is the best-performing method for utility-scale battery control in this benchmark.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.
 
 2. **The full pipeline matters — but architecture matters most.** Offline data quality (2,401-episode FCAS-rich corpus), realistic battery configurations, and modern architecture each contribute. But the jump from stage 4 to stage 5 ($1,533→$4,630 standard) came from architecture alone — GRPO does not help the modern model.
 
