@@ -60,6 +60,7 @@ Trained model weight and dataset used can be found in the following huggingface 
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
 *   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.
 *   [ ] **Sim-to-real readiness:** Add safety wrappers and evaluate policies with hardware-in-the-loop (where available).
+*   [ ] **Statistical confidence on AEMO headlines:** Apply bootstrap confidence intervals and paired Wilcoxon signed-rank tests (`bootstrap_confidence_intervals`, `paired_comparison` in `src/helper.py`) to the per-surface AEMO profit headlines in `report.md` (see Appendix C: Implementation Notes and Known Mismatches).
 *   [ ] **Artifact provenance:** Add lightweight checksums/config logging for datasets, models, and evaluation outputs.
 
 
