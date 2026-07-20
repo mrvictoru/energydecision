@@ -1,10 +1,21 @@
 # AEMO Hybrid DT: SDP-Forecast Informed Decision Transformer
 
-## Status: In Progress (New PR)
+## Status: In Progress (PR #32)
 
 This plan supersedes `docs/next_stage_instructions.md` (completed — see Summary of Prior Work below) and
 consolidates the next research phase: **bridging the SDP paper's forecast-aware planning into the modern
 Decision Transformer** for the AEMO utility-scale battery trading environment.
+
+### Current Progress (July 2026)
+
+| Milestone | Status | Notes |
+|---|---|---|
+| AEMO-adapted SDP solver (`src/aemo_sdp_solver.py`) | ✅ Done | Energy-only cost: `minimize(net_charge × RRP)`, subclass of existing SDPSolver |
+| SDP trajectory generator (`scripts/generate_sdp_aemo_trajectories.py`) | ✅ Done | 12-core parallel, 1200 episodes in ~2 min |
+| SDP trajectory data generated | ✅ Done | 1200 episodes, 5 regions × 2 batteries, Apr 2022 – Apr 2023, 144h episodes, 2M steps, 72 MB. Stored at `data/aemo_dt_sdp/aemo_sdp_trajectories.parquet`. Data to be uploaded to HuggingFace. |
+| SDP trajectories integrated with FCAS dataset → retrain DT | ⏳ Next | Training script must handle loading multiple datasets |
+| Forecast token architecture (Path A1) | ❌ Not started | Requires architecture changes to DT |
+| All downstream milestones | ❌ Not started | Train, evaluate, combine |
 
 ---
 
@@ -244,19 +255,25 @@ Success criteria:
 
 ## Milestones
 
-| # | Milestone | Thrust | Dependencies | Est. effort |
-|---|-----------|--------|-------------|:-----------:|
-| 1 | AEMO-adapted SDP (`action_mode='simple'`) verified on 1 region | Path B' | None | 2h |
-| 2 | Forecast token architecture prototype (prefix design, perfect-foresight validation) | Path A1 | None | 1 week |
-| 3 | Phase 1 forecast validation: train + eval with perfect foresight | Path A1 | Milestone 2 | 4h |
-| 4 | Phase 2 forecast MVP: QuantileScenarioGenerator based forecasts | Path A1 | Milestones 2, 3 | 4h |
-| 5 | SDP trajectory logs generated (3 regions × 2 batteries) | Path B' | Milestone 1 | 4h |
-| 6 | DT retrained on SDP-augmented dataset (no forecast tokens) | Path B' | Milestone 5 | 6h |
-| 7 | DT retrained with forecast architecture (QuantileScenarioGenerator) | Path A1 | Milestone 4 | 6h |
-| 8 | Combined: forecast-conditioned DT on SDP-augmented data | Both | Milestones 6, 7 | 6h |
-| 9 | Evaluate all checkpoints on dispatch-matched + standard | Both | Milestones 3, 6–8 | 2h |
-| 10 | Phase 3: IBM Granite TTM fine-tuned on AEMO prices (stretch goal) | Path A1 | Milestone 4 | 1–2 weeks |
-| 11 | SDP-computed RTG inference (quick win, runs in parallel) | Secondary | Milestone 1 | 2h |
+| # | Milestone | Thrust | Dependencies | Est. effort | Status |
+|---|-----------|--------|-------------|:-----------:|:------:|
+| 1 | AEMO-adapted SDP (`action_mode='simple'`) verified on 1 region | Path B' | None | 2h | ✅ Done |
+| 2 | Forecast token architecture prototype (prefix design, perfect-foresight validation) | Path A1 | None | 1 week | ❌ |
+| 3 | Phase 1 forecast validation: train + eval with perfect foresight | Path A1 | Milestone 2 | 4h | ❌ |
+| 4 | Phase 2 forecast MVP: QuantileScenarioGenerator based forecasts | Path A1 | Milestones 2, 3 | 4h | ❌ |
+| 5 | SDP trajectory logs generated (5 regions × 2 batteries, 2022–2023) | Path B' | Milestone 1 | 4h | ✅ Done |
+| 6 | **Next: DT retrained on SDP-augmented dataset** | Path B' | Milestone 5 | 6h | ⏳ |
+| 7 | DT retrained with forecast architecture (QuantileScenarioGenerator) | Path A1 | Milestone 4 | 6h | ❌ |
+| 8 | Combined: forecast-conditioned DT on SDP-augmented data | Both | Milestones 6, 7 | 6h | ❌ |
+| 9 | Evaluate all checkpoints on dispatch-matched + standard | Both | Milestones 3, 6–8 | 2h | ❌ |
+| 10 | Phase 3: IBM Granite TTM fine-tuned on AEMO prices (stretch goal) | Path A1 | Milestone 4 | 1–2 weeks | ❌ |
+| 11 | SDP-computed RTG inference (quick win, runs in parallel) | Secondary | Milestone 1 | 2h | ❌ |
+
+> **Note on dataset loading**: SDP trajectories will be uploaded to HuggingFace. The training script
+> (e.g. `scripts/pretrain_aemo_decision_transformer.py`) must be updated to load from **multiple
+> parquet sources** (the existing FCAS-rich dataset + the SDP dataset) and combine them into a single
+> `TrajectoryDataset`. The `--patterns` flag in `pretrain_decision_transformer.py` already supports
+> multi-pattern filtering, which can be extended to accept multiple parquet file paths.
 
 ---
 
@@ -264,11 +281,16 @@ Success criteria:
 
 | File | Why |
 |------|-----|
-| `src/sdp_algorithm.py` | SDP solver to adapt for AEMO energy-only optimization |
+| `src/aemo_sdp_solver.py` | ✅ AEMO-adapted SDP solver (energy-only) |
+| `scripts/generate_sdp_aemo_trajectories.py` | ✅ Parallel trajectory generator |
+| `data/aemo_dt_sdp/aemo_sdp_trajectories.parquet` | ✅ Generated SDP trajectories (1200 episodes) |
+| `src/sdp_algorithm.py` | Base SDP solver class |
 | `src/mrdp_algorithm.py` | Multi-resolution variant (better for long horizons) |
 | `src/decision.py` (`AEMOAgent`) | Agent wrappers for DT + SDP integration |
 | `src/quantile_scenarios.py` | Scenario generator — already works on Polars DataFrames |
 | `src/decision_transformer.py` | Modern v2 DT (8×768 GQA) — target architecture |
+| `src/pretrain_decision_transformer.py` | DT training entrypoint — needs multi-dataset loading |
+| `scripts/pretrain_aemo_decision_transformer.py` | AEMO DT training wrapper — needs multi-dataset loading |
 | `docs/DP_ALGORITHM_README.md` | SDP/MRDP algorithm deep dive |
 | `docs/modern_transformer_improvements.md` | Architecture reference |
 | [`https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3`](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3) | IBM Granite TTM (Phase 3 forecast model, 1.41M params, Apache 2.0) |
