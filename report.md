@@ -29,7 +29,7 @@ This report is organized around three falsifiable questions, each answered by th
 
 ### 1.3 Contributions and Research Goals
 This work establishes a consolidated, reproducible benchmark to address these limitations. The contributions, in priority order, are:
-1.  **A SOTA offline Decision Transformer for utility-scale BESS dispatch** — a modernized 8×768 GQA transformer trained on a 2,401-episode FCAS-rich corpus, achieving state-of-the-art profit on a same-asset benchmark and surpassing online RL and real dispatch replay (§4.2, §8.2).
+1.  **A best-performing offline Decision Transformer for utility-scale BESS dispatch** — a modernized 8×768 GQA transformer trained on a 2,401-episode FCAS-rich corpus, achieving the highest profit on a same-asset benchmark and surpassing online RL and real dispatch replay (§4.2, §8.2).
 2.  **A rigorous same-asset evaluation methodology** that removes the battery-sizing confounder from dispatch-replay comparisons, plus RTG calibration and an overfitting post-mortem for narrow benchmarks (§8.2.1, §8.2.2).
 3.  **Two Gymnasium-Compatible Simulation Environments:** (a) household solar+battery under ToU pricing and (b) grid-scale AEMO/NEM trading with full FCAS and historical dispatch replay.
 4.  **Baselines as Comparators and Data Sources:** a unified interface for rule-based, SDP/MRDP, online RL (SB3), and dispatch-replay policies, also used to generate offline training data.
@@ -137,28 +137,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 
 **Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
-### 4.2 Modern v2 Architecture (SOTA model)
-
-The headline results in Section 8 are produced by the **modern v2 Decision Transformer**
-([`mrvictoru/energydecision-dt-v2`](https://huggingface.co/mrvictoru/energydecision-dt-v2)), an
-8-block transformer that modernizes the legacy block described in §4.1. Relative to the legacy
-8×384 model, the changes are architectural rather than scale-driven (hidden dim grows 384→768,
-but the decisive gains come from the following):
-
-- **Grouped-Query Attention (GQA):** 12 query heads attend over 6 key/value heads (n_rep = 2), reducing KV-cache memory and stabilizing long-context attention.
-- **QK-Norm:** per-head RMSNorm on queries and keys (before the attention dot-product) for training stability without warmup sensitivity.
-- **RMSNorm pre-norm** throughout, replacing LayerNorm.
-- **SwiGLU** feed-forward (768 → 2304 → 768) with dropout 0.15.
-- **Weight tying:** the input embedding and output prediction layers for state/action/return share weights (`pred_act`, `pred_state`, `pred_return` are linear projections of the tied embeddings).
-- **Learned timestep embedding** (RoPE disabled; `rope_enabled=false`), context length 210.
-- Trained with `discount=0.95`, `return_scale=2.0`, and near-action-only loss weights
-  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly.
-
-Canonical hyperparameters are shipped at
-`configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. The architecture
-is verified from the uploaded checkpoint's embedded `config`, not from documentation.
-
-### 4.2 Modern v2 Architecture (SOTA model)
+### 4.2 Modern v2 Architecture (current best-performing model)
 
 The headline results in Section 8 are produced by the **modern v2 Decision Transformer**
 ([`mrvictoru/energydecision-dt-v2`](https://huggingface.co/mrvictoru/energydecision-dt-v2)), an
@@ -534,7 +513,7 @@ Beyond DT-centric work, the AEMO results also highlight:
 
 ### Phase 3: Forecast- and Planning-Aware Sequence Modeling (Current Direction)
 
-The modern v2 DT is SOTA, yet it conditions only on a 210-step history window and has **no explicit forward-looking signal** — and its energy-arbitrage contribution is small (~$70/ep of the $10,138 dispatch-matched profit; the rest is FCAS). The next phase injects planning/forecast awareness, building directly on Abdulla et al. [1] and the implemented SDP/MRDP solvers. This is the active research line tracked in `docs/aemo_hybrid_dt_plan.md` (PR #32).
+The modern v2 DT is the current best-performing model, yet it conditions only on a 210-step history window and has **no explicit forward-looking signal** — and its energy-arbitrage contribution is small (~$70/ep of the $10,138 dispatch-matched profit; the rest is FCAS). The next phase injects planning/forecast awareness, building directly on Abdulla et al. [1] and the implemented SDP/MRDP solvers. This is the active research line tracked in `docs/aemo_hybrid_dt_plan.md` (PR #32).
 
 - **Thrust 1 — SDP-trajectory-augmented offline training (Path B'):** run the SDP/MRDP solver on the AEMO environment in `action_mode='simple'` to generate provably-optimal energy-arbitrage trajectories, add them to the FCAS-rich corpus, and retrain the DT so it learns SDP's energy timing while retaining PPO-learned FCAS bidding.
 - **Thrust 2 — Forecast-conditioned DT architecture (Path A1):** extend the token stream with a forecast segment (predicted RRP, FCAS prices, demand from `QuantileScenarioGenerator`), add token-type embeddings and an attention mask so historical tokens attend to forecasts — removing the pure-history information bottleneck.
