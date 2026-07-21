@@ -89,6 +89,7 @@ def _(json, mo, os):
     upload_btn = mo.ui.run_button(label="Upload to HuggingFace", kind="info")
     hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="HF repo", full_width=True)
     hf_token_input = mo.ui.text(value=os.environ.get("HF_TOKEN", ""), label="HF token", full_width=True)
+    hf_data_repo = mo.ui.text(value="mrvictoru/energydecision-forecast-data", label="Data repo (SDP + TTM forecasts)", full_width=True)
 
     manual_controls = mo.vstack([
         mo.md("### Architecture"),
@@ -111,7 +112,7 @@ def _(json, mo, os):
         ),
         hf_checkpoint_path := mo.ui.text(value="", label="HF checkpoint filename", full_width=True),
         return_loss_weight, state_loss_weight, tie_weights, train_btn,
-        upload_btn, use_json_config, use_pilot,
+        upload_btn, use_json_config, use_pilot, hf_data_repo,
     )
 
 
@@ -155,12 +156,29 @@ def _(
 @app.cell
 def _(
     Path, hf_hub_download, include_base_dataset, include_grpo_dataset,
-    include_sdp_dataset, pl, use_pilot,
+    include_sdp_dataset, hf_data_repo, pl, use_pilot,
 ):
     REPO_ID = "mrvictoru/AEMO_simulated_trade"
+    DATA_REPO = hf_data_repo.value.strip()
     CACHE_DIR = Path("/workspace")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     selected_dfs = []
+    forecast_npz = None
+
+    # Download TTM forecast npz if data repo is configured
+    if DATA_REPO:
+        npz_path = CACHE_DIR / "ttm_forecasts.npz"
+        if not npz_path.exists():
+            try:
+                print(f"⬇️ Downloading TTM forecast data from {DATA_REPO}...")
+                hf_hub_download(repo_id=DATA_REPO, filename="ttm_forecasts.npz", local_dir=str(CACHE_DIR),
+                               local_dir_use_symlinks=False, repo_type="dataset")
+            except Exception as e:
+                print(f"⚠️ TTM forecast download skipped: {e}")
+        if npz_path.exists():
+            import numpy as np
+            forecast_npz = np.load(npz_path)["forecast_map"]
+            print(f"✅ TTM forecasts loaded: {forecast_npz.shape}")
 
     if use_pilot.value:
         filename = "aemo_fcas_pilot.parquet"
@@ -209,7 +227,7 @@ def _(
             df = selected_dfs[0]
 
     print(f"✅ Loaded {len(df):,} rows")
-    return df,
+    return df, forecast_npz,
 
 
 # ── MODEL DEFINITION (self-contained for MoLab) ──────────────────────
