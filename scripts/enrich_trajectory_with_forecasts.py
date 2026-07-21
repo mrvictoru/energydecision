@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Enrich a trajectory parquet with TTM forecast columns — vectorized.
+Add episode_start to trajectories for TTM forecast alignment.
 
-Reads trajectory data, looks up forecasts by step index, and appends
-a 'forecast' column to each row (shape [F, 6] per row).
+Instead of embedding full forecasts per row (84 GB), this script adds
+a compact `episode_start` column. The ForecastTrajectoryDataset then
+reads forecasts from the shared ttm_forecasts.npz at training time.
 
-Usage:
-    python3 scripts/enrich_trajectory_with_forecasts.py \
-        --input data/aemo_dt_sdp/aemo_sdp_trajectories.parquet \
-        --forecast-npz data/aemo_dt_forecast/ttm_forecasts.npz \
-        --output data/aemo_dt_forecast/aemo_sdp_forecast.parquet
+For rule episodes: seed = 42 + local_idx
+For DT/GRPO episodes: seed = 8964 + local_idx
+For SB3 episodes: seed = 0 + local_idx (approximate, still better than nothing)
+SDP episodes: episode_start already present — passes through.
 """
 from __future__ import annotations
 
@@ -20,59 +20,100 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+REGION_MAP = {
+    "nsw1": "NSW1", "qld1": "QLD1", "sa1": "SA1",
+    "tas1": "TAS1", "vic1": "VIC1",
+}
+
+
+def load_region_length(region: str, aemo_dir: str) -> int:
+    """Get the length of a region's processed AEMO data."""
+    files = sorted(Path(aemo_dir).glob(f"processed_{region}_*_0.0833h.parquet"))
+    if not files:
+        return 500000
+    best = max(files, key=lambda x: x.stat().st_size)
+    return len(pl.read_parquet(best))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
-    parser.add_argument("--forecast-npz", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--aemo-dir", default="data/aemo")
     args = parser.parse_args()
 
     t0 = time.time()
-
-    # Load trajectory
-    df = pl.read_parquet(args.input, columns=["episode_id", "step", "norm_observation", "action", "reward"])
-    steps = df["step"].to_numpy()
+    df = pl.read_parquet(args.input)
     n_rows = len(df)
     n_eps = df["episode_id"].n_unique()
     print(f"[Enrich] {n_rows:,} rows, {n_eps} episodes")
 
-    # Load forecast lookup
-    fc = np.load(args.forecast_npz)
-    forecast_map = fc["forecast_map"]  # [N_global, 48, 6]
-    n_global = len(forecast_map)
-    F = forecast_map.shape[1]
-    n_chan = forecast_map.shape[2]
-    print(f"[Enrich] Forecast map: {forecast_map.shape}")
+    if "episode_start" in df.columns:
+        print("[Enrich] Already has episode_start — copying")
+        df.write_parquet(args.output)
+        print(f"[Enrich] Done in {time.time()-t0:.1f}s")
+        return
 
-    # Vectorized: for each step, look up forecast_map[step]
-    # Steps that exceed the forecast map get zeros
-    valid = steps < n_global - F
-    n_valid = valid.sum()
-    n_missing = n_rows - n_valid
-    print(f"[Enrich] Valid: {n_valid}/{n_rows} ({100*n_valid//n_rows}%)")
+    # Build episode metadata
+    eps_df = df.group_by("episode_id").agg([
+        pl.col("source_policy").first(),
+        pl.col("step").len().alias("ep_len"),
+        pl.col("step").max().alias("max_step"),
+    ])
 
-    # Build result array [N, F, 6] using vectorized indexing
-    result_forecast = np.zeros((n_rows, F, n_chan), dtype=np.float32)
-    valid_indices = np.where(valid)[0]
-    valid_steps = steps[valid_indices]
-    result_forecast[valid_indices] = forecast_map[valid_steps]
+    # Compute episode_start for each episode
+    policy_counters: dict[str, int] = {}
+    ep_starts_list: list[int] = []
 
-    # Store as flat list per row [F * n_chan] — reshape in dataset
-    forecast_flat = result_forecast.reshape(n_rows, F * n_chan).tolist()
+    for row in eps_df.iter_rows(named=True):
+        eid = row["episode_id"]
+        sp = row["source_policy"]
+        max_step = row["max_step"]
+        parts = sp.split("__") if "__" in sp else []
+        region_label = parts[0] if parts else "nsw1"
+        region = REGION_MAP.get(region_label, "NSW1")
+        policy_name = parts[1] if len(parts) > 1 else sp
+        region_len = load_region_length(region, args.aemo_dir)
 
+        is_rule = "rule" in policy_name.lower()
+        is_dt = "dt" in policy_name or "grpo" in policy_name
+        is_sdp = "sdp" in policy_name
+
+        if is_sdp:
+            ep_starts_list.append(0)  # SDP already has it; this is a fallback
+        elif is_rule or is_dt:
+            base = 42 if is_rule else 8964
+            local_idx = policy_counters.get(sp, 0)
+            policy_counters[sp] = local_idx + 1
+            rng = np.random.default_rng(base + local_idx)
+            ep_starts_list.append(int(rng.integers(0, max(1, region_len - max_step - 1))))
+        else:
+            # SB3: approximate via cumulative offset within region
+            local_idx = policy_counters.get(sp, 0)
+            policy_counters[sp] = local_idx + 1
+            rng = np.random.default_rng(0 + local_idx)
+            ep_starts_list.append(int(rng.integers(0, max(1, region_len - max_step - 1))))
+
+    # Map episode_id → episode_start
+    ep_start_map = dict(zip(eps_df["episode_id"].to_list(), ep_starts_list))
+
+    # Add column
     result = df.with_columns(
-        pl.Series("forecast", forecast_flat, dtype=pl.List(pl.Float64))
+        pl.col("episode_id").replace_strict(
+            pl.Series(list(ep_start_map.keys()), dtype=pl.Int64),
+            pl.Series(list(ep_start_map.values()), dtype=pl.Int64),
+        ).alias("episode_start")
     )
 
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    result.write_parquet(out_path)
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    result.write_parquet(out)
 
+    n_det = sum(1 for s in ep_starts_list if s > 0)
     elapsed = time.time() - t0
     print(f"[Enrich] Done in {elapsed:.1f}s")
-    print(f"[Enrich] Output: {out_path} ({out_path.stat().st_size / 1e6:.0f} MB)")
-    print(f"[Enrich] Schema: {result.schema}")
+    print(f"[Enrich] {n_eps} episodes processed, {n_det} deterministic starts")
+    print(f"[Enrich] Output: {out}")
 
 
 if __name__ == "__main__":

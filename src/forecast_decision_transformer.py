@@ -547,6 +547,7 @@ class ForecastTrajectoryDataset(Dataset):
         forecast_len: int = 48,
         discount_factor: float = 0.95,
         min_episode_length: int | None = None,
+        forecast_npz_path: str | None = None,
     ):
         self.context_length = context_length
         self.forecast_len = forecast_len
@@ -554,14 +555,26 @@ class ForecastTrajectoryDataset(Dataset):
         self.act_dim = act_dim
         self.discount_factor = discount_factor
 
-        # Load data
+        # Load TTM forecast data if provided
+        self._forecast_map: np.ndarray | None = None
+        if forecast_npz_path:
+            fc = np.load(forecast_npz_path)
+            self._forecast_map = fc["forecast_map"]  # [N, F, 6]
+            print(f"[Dataset] TTM forecast map loaded: {self._forecast_map.shape}")
+
+         # Load data
         if isinstance(data_path, pl.DataFrame):
             df = data_path
         else:
             needed_cols = ["episode_id", "step", "norm_observation", "action", "reward", "forecast"]
-            df = pl.read_parquet(data_path, columns=needed_cols)
+            try:
+                df = pl.read_parquet(data_path, columns=needed_cols)
+            except Exception:
+                # Fallback: some columns may not exist
+                df = pl.read_parquet(data_path, columns=needed_cols[:-1])
 
         self._has_forecast_column = "forecast" in df.columns
+        self._has_episode_start = "episode_start" in df.columns
 
         # Filter rows with mismatched dimensions
         df_clean = df.filter(
@@ -654,21 +667,36 @@ class ForecastTrajectoryDataset(Dataset):
         timesteps[-h_actual:] = ep["timesteps"][start_idx:start_idx + h_actual]
         mask[-h_actual:] = 1.0
 
-        if self._has_forecast_column and ep.get("forecasts") is not None:
+        # Build forecast window
+        fc_map = self._forecast_map
+        ep_start = ep.get("episode_start")
+
+        if fc_map is not None and ep_start is not None and f_actual > 0:
+            # TTM forecast from npz: global_idx = episode_start + step
+            f_states = np.zeros((F, 18), dtype=np.float32)
+            for fi in range(F):
+                src_step = h_end + fi
+                g_idx = int(ep_start) + int(src_step)
+                if 0 <= g_idx < len(fc_map):
+                    f_states[fi, 5:11] = fc_map[g_idx, 0, :6]  # [F, 6] → take first
+            f_rtgs = np.zeros((F, 1), dtype=np.float32)
+            f_timesteps = np.zeros(F, dtype=np.int64)
+            f_mask = np.ones(F, dtype=np.float32)
+        elif self._has_forecast_column and ep.get("forecasts") is not None:
             fc = ep["forecasts"]  # [L, F * 6] — flat per row
             n_chan = 6
             f_states = np.zeros((F, 18), dtype=np.float32)
             if f_actual > 0:
                 for fi in range(F):
                     src_idx = min(f_start + fi, len(fc) - 1)
-                    flat_row = fc[src_idx]  # [F * 6]
+                    flat_row = fc[src_idx]
                     fc_vals = flat_row.reshape(-1, n_chan)[min(fi, flat_row.size // n_chan - 1)]
                     f_states[fi, 5:5 + n_chan] = fc_vals
             f_rtgs = np.zeros((F, 1), dtype=np.float32)
             f_timesteps = np.zeros(F, dtype=np.int64)
             f_mask = np.ones(F, dtype=np.float32) if f_actual > 0 else np.zeros(F, dtype=np.float32)
         else:
-            # Fallback: extract forecast from episode's own future steps (perfect foresight)
+            # Fallback: perfect foresight from episode's own future steps
             f_states = np.zeros((F, self.state_dim), dtype=np.float32)
             f_rtgs = np.zeros((F, 1), dtype=np.float32)
             f_timesteps = np.zeros(F, dtype=np.int64)
