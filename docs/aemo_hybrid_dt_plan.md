@@ -6,16 +6,17 @@ This plan supersedes `docs/next_stage_instructions.md` (completed — see Summar
 consolidates the next research phase: **bridging the SDP paper's forecast-aware planning into the modern
 Decision Transformer** for the AEMO utility-scale battery trading environment.
 
-### Current Progress (July 2026)
+### Current Progress (Aug 2026)
 
 | Milestone | Status | Notes |
 |---|---|---|
-| AEMO-adapted SDP solver (`src/aemo_sdp_solver.py`) | ✅ Done | Energy-only cost: `minimize(net_charge × RRP)`, subclass of existing SDPSolver |
-| SDP trajectory generator (`scripts/generate_sdp_aemo_trajectories.py`) | ✅ Done | 12-core parallel, 1200 episodes in ~2 min |
-| SDP trajectory data generated | ✅ Done | 1200 episodes, 5 regions × 2 batteries, Apr 2022 – Apr 2023, 144h episodes, 2M steps, 72 MB. Stored at `data/aemo_dt_sdp/aemo_sdp_trajectories.parquet`. Data to be uploaded to HuggingFace. |
-| SDP trajectories integrated with FCAS dataset → retrain DT | ⏳ Next | Training script must handle loading multiple datasets |
-| Forecast token architecture (Path A1) | ❌ Not started | Requires architecture changes to DT |
-| All downstream milestones | ❌ Not started | Train, evaluate, combine |
+| AEMO-adapted SDP solver (`src/aemo_sdp_solver.py`) | ✅ Done | Energy-only cost using RRP |
+| SDP trajectory generator + data | ✅ Done | 1200 episodes, 5 regions × 2 batteries, 2022–2023 |
+| Forecast token architecture (`src/forecast_decision_transformer.py`) | ✅ Done | New `ForecastDecisionTransformer` class with RoPE + `forecast_len` param. `ForecastTrajectoryDataset` yields history+forecast windows. 15/15 tests pass. |
+| MoLab notebook (`notebooks/molab_notebook_forecast.py`) | ✅ Done | Self-contained, inlines all model classes, supports SDP/FCAS/GRPO dataset loading |
+| **Next: Generate forecast-augmented training data** | ⏳ **Current** | Use IBM Granite TTM to forecast AEMO prices, append forecast tokens to existing trajectory datasets |
+| SDP trajectories → combined training | ⏳ Pending | Waiting on data upload to HuggingFace |
+| Forecast DT training + eval | ❌ Not started | Requires forecast-augmented data first |
 
 ---
 
@@ -125,30 +126,18 @@ they interact with the DT's context window.
 | Phase | Forecast source | Realism | Purpose |
 |---|---|---|---|
 | **1: Perfect foresight (validate)** | Actual future values from `aemo_data` | ❌ Unrealistic but fast | Prove the architecture works — if the model can't exploit perfect forecasts, the design is wrong |
-| **2: Statistical forecast (MVP)** | `QuantileScenarioGenerator` (already in repo) | ⚠️ Honest, imperfect | Minimum viable forecast. The model learns to work with uncertainty because forecasts are wrong sometimes |
-| **3: Learned forecast (stretch)** | Fine-tuned time-series model (e.g. IBM Granite TTM, 1.41M params, Apache 2.0) | ✅ Realistic | Closer to what a real operator would use; forecast quality is bounded by the model |
+| **2: Statistical forecast (baseline)** | `QuantileScenarioGenerator` (already in repo) | ⚠️ Honest, imperfect | Minimum viable forecast. The model learns to work with uncertainty because forecasts are wrong sometimes |
+| **3: Learned forecast (current focus)** | Fine-tuned time-series model (e.g. IBM Granite TTM, 1.41M params, Apache 2.0) | ✅ Realistic | Closer to what a real operator would use; forecast quality is bounded by the model |
 
-**Phase 1** should be run first — it costs no new dependencies (the `aemo_data` DataFrame already
-covers the full episode window, so "future" values are trivially read from it). If the model
-improves with perfect forecasts, we know the architecture is sound.
+The current focus is Phase 3 (skipping ahead to a learned forecaster). The `ForecastDecisionTransformer`
+architecture is already built and validated (15/15 tests pass). The immediate next step is to generate a
+**forecast-augmented dataset**: for every step in the existing trajectory parquets, append the next
+48 timesteps of predicted market conditions (RRP, FCAS prices, demand) as forecast tokens generated
+by IBM Granite TTM.
 
-**Phase 2** is the production baseline. The `QuantileScenarioGenerator` already exists in the repo
-(`src/quantile_scenarios.py`) and is used by the SDP solver. It computes quantile distributions
-from historical data. For forecast tokens, we use the median quantile as the point forecast and
-optionally encode the inter-quantile range as uncertainty:
-
-```python
-# At each timestep t, for forecast step f in 1..F:
-scenario_gen = QuantileScenarioGenerator(n_scenarios=5)
-forecast_row = scenario_gen.get_median_forecast(current_idx + f)
-# Produces: median RRP, median FCAS prices, median demand
-```
-
-**Phase 3** is a stretch goal. [IBM Granite TTM](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3)
-is a tiny (1.41M params, Apache 2.0) time-series foundation model supporting zero-shot forecasting,
-few-shot adaptation, multivariate inputs, and multi-quantile output. It runs at ~180 samples/sec on
-CPU or ~7,500/sec on GPU. Fine-tuning it on AEMO price data (years of 5-min RRP + FCAS prices)
-would produce higher-quality forecasts than the statistical baseline.
+The TTM model runs on CPU/GPU and produces forecasts from historical price context. The output is a
+new parquet with the same schema as the original trajectory data, plus forecast columns appended as
+extra lists. The `ForecastTrajectoryDataset` reads these and yields both history and forecast windows.
 
 ### 2. Forecast Horizon
 
@@ -257,17 +246,14 @@ Success criteria:
 
 | # | Milestone | Thrust | Dependencies | Est. effort | Status |
 |---|-----------|--------|-------------|:-----------:|:------:|
-| 1 | AEMO-adapted SDP (`action_mode='simple'`) verified on 1 region | Path B' | None | 2h | ✅ Done |
-| 2 | Forecast token architecture prototype (prefix design, perfect-foresight validation) | Path A1 | None | 1 week | ❌ |
-| 3 | Phase 1 forecast validation: train + eval with perfect foresight | Path A1 | Milestone 2 | 4h | ❌ |
-| 4 | Phase 2 forecast MVP: QuantileScenarioGenerator based forecasts | Path A1 | Milestones 2, 3 | 4h | ❌ |
-| 5 | SDP trajectory logs generated (5 regions × 2 batteries, 2022–2023) | Path B' | Milestone 1 | 4h | ✅ Done |
-| 6 | **Next: DT retrained on SDP-augmented dataset** | Path B' | Milestone 5 | 6h | ⏳ |
-| 7 | DT retrained with forecast architecture (QuantileScenarioGenerator) | Path A1 | Milestone 4 | 6h | ❌ |
-| 8 | Combined: forecast-conditioned DT on SDP-augmented data | Both | Milestones 6, 7 | 6h | ❌ |
-| 9 | Evaluate all checkpoints on dispatch-matched + standard | Both | Milestones 3, 6–8 | 2h | ❌ |
-| 10 | Phase 3: IBM Granite TTM fine-tuned on AEMO prices (stretch goal) | Path A1 | Milestone 4 | 1–2 weeks | ❌ |
-| 11 | SDP-computed RTG inference (quick win, runs in parallel) | Secondary | Milestone 1 | 2h | ❌ |
+| 1 | AEMO-adapted SDP solver and trajectory generator | Path B' | None | 2h | ✅ Done |
+| 2 | Forecast token architecture (ForecastDecisionTransformer) | Path A1 | None | 1 week | ✅ Done |
+| 3 | 15 verification tests for forecast token mechanics | Path A1 | Milestone 2 | 2h | ✅ Done |
+| 4 | **Next: Generate forecast-augmented dataset (TTM or similar)** | Path A1 | None | 1–2 weeks | ⏳ |
+| 5 | Train ForecastDecisionTransformer on forecast-augmented data | Path A1 | Milestone 4 | 6h (MoLab) | ❌ |
+| 6 | Evaluate on dispatch-matched + standard surfaces | Both | Milestones 4, 5 | 2h | ❌ |
+| 7 | SDP-guided RTG inference (quick win) | Secondary | Milestone 1 | 2h | ❌ |
+| 8 | Combined SDP trajectories + forecast DT training | Both | Milestones 4, 6 | 6h | ❌ |
 
 > **Note on dataset loading**: SDP trajectories will be uploaded to HuggingFace. The training script
 > (e.g. `scripts/pretrain_aemo_decision_transformer.py`) must be updated to load from **multiple
