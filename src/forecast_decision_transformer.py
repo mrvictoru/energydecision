@@ -558,8 +558,10 @@ class ForecastTrajectoryDataset(Dataset):
         if isinstance(data_path, pl.DataFrame):
             df = data_path
         else:
-            needed_cols = ["episode_id", "step", "norm_observation", "action", "reward"]
+            needed_cols = ["episode_id", "step", "norm_observation", "action", "reward", "forecast"]
             df = pl.read_parquet(data_path, columns=needed_cols)
+
+        self._has_forecast_column = "forecast" in df.columns
 
         # Filter rows with mismatched dimensions
         df_clean = df.filter(
@@ -575,33 +577,37 @@ class ForecastTrajectoryDataset(Dataset):
         self.indices: list[tuple[int, int]] = []
 
         total_window = context_length + forecast_len
-        if min_episode_length is not None:
-            min_len = min_episode_length
-        else:
-            min_len = total_window
+        min_len = min_episode_length or total_window
 
         for eid in df_clean["episode_id"].unique().to_list():
             grp = df_clean.filter(pl.col("episode_id") == eid)
-            states = np.stack(grp["norm_observation"].to_list()).astype(np.float32)  # [L, state_dim]
-            actions = np.stack(grp["action"].to_list()).astype(np.float32)  # [L, act_dim]
-            rewards = np.array(grp["reward"].to_list(), dtype=np.float32)  # [L]
-            timesteps = np.array(grp["step"].to_list(), dtype=np.int64)  # [L]
+            states = np.stack(grp["norm_observation"].to_list()).astype(np.float32)
+            actions = np.stack(grp["action"].to_list()).astype(np.float32)
+            rewards = np.array(grp["reward"].to_list(), dtype=np.float32)
+            timesteps = np.array(grp["step"].to_list(), dtype=np.int64)
             rtgs = self._compute_rtgs(rewards)
+
+            # Load pre-computed forecasts if available
+            if self._has_forecast_column:
+                forecasts = np.array(grp["forecast"].to_list(), dtype=np.float32)
+                # forecasts shape: [L, forecast_len, n_channels]
+            else:
+                forecasts = None
 
             ep_len = states.shape[0]
             if ep_len < min_len:
                 continue
 
-            ep_dict = {
+            ep_dict: dict[str, Any] = {
                 "states": states,
                 "actions": actions,
                 "rtgs": rtgs,
                 "timesteps": timesteps,
                 "length": ep_len,
+                "forecasts": forecasts,
             }
             self.episodes.append(ep_dict)
 
-            # Sliding windows with half stride
             stride = max(1, context_length // 2)
             for start_idx in range(0, ep_len - total_window + 1, stride):
                 self.indices.append((len(self.episodes) - 1, start_idx))
@@ -648,17 +654,30 @@ class ForecastTrajectoryDataset(Dataset):
         timesteps[-h_actual:] = ep["timesteps"][start_idx:start_idx + h_actual]
         mask[-h_actual:] = 1.0
 
-        # Forecast window (left-aligned, pad at the end)
-        f_states = np.zeros((F, self.state_dim), dtype=np.float32)
-        f_rtgs = np.zeros((F, 1), dtype=np.float32)
-        f_timesteps = np.zeros(F, dtype=np.int64)
-        f_mask = np.zeros(F, dtype=np.float32)
-
-        if f_actual > 0:
-            f_states[:f_actual] = ep["states"][f_start:f_start + f_actual]
-            f_rtgs[:f_actual, 0] = ep["rtgs"][f_start:f_start + f_actual]
-            f_timesteps[:f_actual] = ep["timesteps"][f_start:f_start + f_actual]
-            f_mask[:f_actual] = 1.0
+        if self._has_forecast_column and ep.get("forecasts") is not None:
+            fc = ep["forecasts"]  # [L, F * 6] — flat per row
+            n_chan = 6
+            f_states = np.zeros((F, 18), dtype=np.float32)
+            if f_actual > 0:
+                for fi in range(F):
+                    src_idx = min(f_start + fi, len(fc) - 1)
+                    flat_row = fc[src_idx]  # [F * 6]
+                    fc_vals = flat_row.reshape(-1, n_chan)[min(fi, flat_row.size // n_chan - 1)]
+                    f_states[fi, 5:5 + n_chan] = fc_vals
+            f_rtgs = np.zeros((F, 1), dtype=np.float32)
+            f_timesteps = np.zeros(F, dtype=np.int64)
+            f_mask = np.ones(F, dtype=np.float32) if f_actual > 0 else np.zeros(F, dtype=np.float32)
+        else:
+            # Fallback: extract forecast from episode's own future steps (perfect foresight)
+            f_states = np.zeros((F, self.state_dim), dtype=np.float32)
+            f_rtgs = np.zeros((F, 1), dtype=np.float32)
+            f_timesteps = np.zeros(F, dtype=np.int64)
+            f_mask = np.zeros(F, dtype=np.float32)
+            if f_actual > 0:
+                f_states[:f_actual] = ep["states"][f_start:f_start + f_actual]
+                f_rtgs[:f_actual, 0] = ep["rtgs"][f_start:f_start + f_actual]
+                f_timesteps[:f_actual] = ep["timesteps"][f_start:f_start + f_actual]
+                f_mask[:f_actual] = 1.0
 
         return {
             "states": torch.from_numpy(states),
