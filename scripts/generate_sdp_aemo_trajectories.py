@@ -150,6 +150,7 @@ def _run_one_episode(
 
     steps: list[dict[str, Any]] = []
     env.reset(seed=seed)
+    episode_start = int(env.episode_start_idx)
     done = False
     step_count = 0
 
@@ -183,6 +184,7 @@ def _run_one_episode(
             "reward": float(reward),
             "source_policy": "sdp_energy",
             "episode_id": episode_id,
+            "episode_start": episode_start,
         })
         step_count += 1
 
@@ -273,9 +275,8 @@ def main() -> None:
           f"{len(regions)} regions × {len(batteries)} batteries")
     print(f"[SDP] Scenario range: {args.start_date} → {args.end_date}, "
           f"{args.episode_hours}h/episode")
-    print(f"[SDP] Cached AEMO data needed: {len(set(
-        (s['region'], s['start_date'][:7]) for s in scenarios
-    ))} region-month combos")
+    n_combos = len(set((s["region"], s["start_date"][:7]) for s in scenarios))
+    print(f"[SDP] Cached AEMO data needed: {n_combos} region-month combos")
 
     workers = args.workers or max(1, os.cpu_count() // 2)
     print(f"[SDP] Using {workers} parallel workers")
