@@ -51,10 +51,11 @@ checkpoint path:
 
 > **Do not hand-write `model_kwargs`.** Load them from the canonical config so
 > they always match the weights, and verify any checkpoint's true architecture
-> from its embedded `config` (see "Verifying a checkpoint's architecture" in
-> `docs/next_stage_instructions.md`). The v2 model is **8×768, 12 heads, 6 KV
-> heads (GQA), qk_norm, tie_weights, ctx=210, learned timestep embeddings
-> (rope_enabled=false)**, and its HF filename is **`aemo_dt_fcas_model.pt`**.
+> from its embedded `config`. For the modern v2 checkpoint, the canonical repo
+> config is `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`.
+> The v2 model is **8×768, 12 heads, 6 KV heads (GQA), qk_norm, tie_weights,
+> ctx=210, learned timestep embeddings (rope_enabled=false)**, and its HF
+> filename is **`aemo_dt_fcas_model.pt`**.
 
 ```python
 from pathlib import Path

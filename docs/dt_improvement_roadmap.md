@@ -1,5 +1,15 @@
 # AEMO Decision Transformer Roadmap
 
+This document is a research roadmap, not a stable onboarding or operations guide.
+
+Use it when you need:
+
+- historical and current AEMO DT findings
+- open research questions
+- candidate next experiments
+
+For current workflow and setup guidance, start with [README.md](README.md), [architecture.md](architecture.md), [development.md](development.md), and [aemo/README.md](aemo/README.md).
+
 ## Executive summary
 
 This roadmap consolidates the DT and GRPO work for AEMO trading. The central question is whether offline Decision Transformer training can match or exceed online RL on energy-plus-FCAS bidding, and whether GRPO fine-tuning can improve the pretrained policy further without sacrificing safety or profitability.

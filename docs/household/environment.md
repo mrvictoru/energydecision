@@ -9,7 +9,7 @@ Use this document when you need:
 - reward mechanics
 - the household control loop
 
-For the full household docs map, start with [README.md](README.md). For the detailed degradation math, see [degradation.md](degradation.md).
+For the full household docs map, start with [README.md](README.md). For the step-by-step operating path, see [workflow.md](workflow.md). For the detailed degradation math, see [degradation.md](degradation.md).
 
 The `SolarBatteryEnv` (defined in `src/EnergySimEnv.py`) simulates a single household with:
 - **Solar Photovoltaics (PV)**: variable renewable generation.
@@ -142,7 +142,7 @@ $$R_t = - (C^{grid}_t + C^{deg}_t + P^{violation}_t)$$
 
 ## Degradation Model
 The environment uses a rainflow-counting based degradation model or a linear approximation depending on configuration.
-See [src/batterydeg.py](../src/batterydeg.py) for the implementation of the "Weighted Ah-Throughput" model which accounts for:
+See [../../src/batterydeg.py](../../src/batterydeg.py) for the implementation of the "Weighted Ah-Throughput" model which accounts for:
 - **Cycle Depth**: Deeper cycles cause super-linear wear.
 - **C-rate**: Higher currents increase degradation.
 - **Temperature**: Arrhenius dependence (if enabled).

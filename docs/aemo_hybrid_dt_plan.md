@@ -1,8 +1,18 @@
 # AEMO Hybrid DT: SDP-Forecast Informed Decision Transformer
 
+This document is a forward-looking research plan.
+
+Use it when you need:
+
+- the rationale for forecast-conditioned DT work
+- a record of the next-stage research direction
+- implementation ideas that may not yet be productized or standardized in the repo
+
+For stable usage and development guidance, use [aemo/README.md](aemo/README.md), [aemo/workflow.md](aemo/workflow.md), and [development.md](development.md).
+
 ## Status: In Progress (PR #32)
 
-This plan supersedes `docs/next_stage_instructions.md` (completed — see Summary of Prior Work below) and
+This plan supersedes an earlier now-removed planning note and
 consolidates the next research phase: **bridging the SDP paper's forecast-aware planning into the modern
 Decision Transformer** for the AEMO utility-scale battery trading environment.
 

@@ -1,6 +1,6 @@
-# AEMO dispatch replay guide and API reference (`dispatch_utils`)
+# AEMO Dispatch Replay Guide And API Reference
 
-This is the **dispatch replay guide and API reference** for `src/dispatch_utils.py`.
+This is the focused guide for dispatch replay and the `src/dispatch_utils.py` helper surface.
 
 Use this document when you need:
 
@@ -25,12 +25,14 @@ The converter captures all 8 FCAS services from actual AEMO-cleared values, reco
 
 **Note on FCAS coverage:** The legacy `multi_market` dispatch replay (via `AEMOAgent` with `algorithm='dispatch'`) only captures RAISEREG and LOWERREG. The direct converter (`full_fcas` output) captures all 8 services.
 
-If you want the broader notebook workflow, read [workflow.md](workflow.md). If you want the full AEMO docs map, start with [README.md](README.md).
+If you want the broader workflow, read [workflow.md](workflow.md). If you want the full AEMO docs map, start with [README.md](README.md).
 
 The `dispatch_utils` module (``src/dispatch_utils.py``) provides high-level
 helpers for **dispatch replay** simulations.  It bridges the raw data-fetching
 functions in `aemo_data` with `AEMOBatteryTradingEnv` and `AEMOAgent` so that
 notebooks stay clean and readable.
+
+For repeatable evaluation workflows, pair this guide with [../evaluation_guide.md](../evaluation_guide.md).
 
 ---
 

@@ -1,5 +1,9 @@
 # Modern DecisionTransformer Improvements
 
+This document is a research/design note for transformer architecture changes.
+
+It is useful when reviewing model-evolution ideas and implementation tradeoffs, but it is not the source of truth for the currently recommended training workflow. For that, use [aemo/README.md](aemo/README.md), [aemo/workflow.md](aemo/workflow.md), and [development.md](development.md).
+
 This document outlines architectural upgrades to the modern `DecisionTransformer`
 class in `src/decision_transformer.py`. The goal is to reduce memory usage and
 parameter count while enabling larger models and longer contexts.
