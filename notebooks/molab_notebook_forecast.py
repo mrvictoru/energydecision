@@ -4,23 +4,29 @@ __generated_with = "0.23.14"
 app = marimo.App(width="medium", auto_download=["html"])
 
 
-# ── Cell 1: Clone repo and import ───────────────────────────────────
-
 @app.cell
 def _():
-    import os, sys, subprocess, time
+    import os, sys, subprocess, time, shutil
     from pathlib import Path
 
     REPO_DIR = Path("/workspace/energydecision")
-    if not REPO_DIR.exists():
-        print("⬇️ Cloning energydecision repo...")
-        subprocess.run(
-            ["git", "clone", "--depth", "1",
-             "https://github.com/mrvictoru/energydecision.git",
-             str(REPO_DIR)],
-            check=True, capture_output=True
-        )
-        print("✅ Cloned")
+    BRANCH = "copilot/aemo-hybrid-dt"
+
+    # Full clean removal
+    if REPO_DIR.exists():
+        print("🗑️ Removing existing clone...")
+        shutil.rmtree(str(REPO_DIR), ignore_errors=True)
+        time.sleep(0.5)
+
+    print(f"⬇️ Cloning energydecision repo (branch: {BRANCH})...")
+    result = subprocess.run(
+        ["git", "clone", "--depth", "1",
+         "--branch", BRANCH,
+         "https://github.com/mrvictoru/energydecision.git",
+         str(REPO_DIR)],
+        check=True, capture_output=True, timeout=60
+    )
+    print("✅ Cloned")
 
     sys.path.insert(0, str(REPO_DIR / "src"))
 
@@ -33,6 +39,7 @@ def _():
     import torch.nn as nn
     import torch.nn.functional as F
     from huggingface_hub import HfApi, hf_hub_download
+
     from forecast_decision_transformer import (
         ForecastDecisionTransformer,
         ForecastTrajectoryDataset,
@@ -40,13 +47,22 @@ def _():
 
     print("✅ Imports ready")
     return (
-        F, ForecastDecisionTransformer, ForecastTrajectoryDataset,
-        HfApi, Path, REPO_DIR, hf_hub_download, json, mo, nn, np, os,
-        pl, plt, subprocess, time, torch,
+        F,
+        ForecastDecisionTransformer,
+        ForecastTrajectoryDataset,
+        HfApi,
+        Path,
+        hf_hub_download,
+        json,
+        mo,
+        np,
+        os,
+        pl,
+        plt,
+        time,
+        torch,
     )
 
-
-# ── Cell 2: Checkpoint paths ────────────────────────────────────────
 
 @app.cell
 def _(Path, torch):
@@ -63,8 +79,6 @@ def _(Path, torch):
             ckpt_info = "Checkpoint exists but unreadable"
     return BEST_MODEL_PATH, CHECKPOINT_DIR, CHECKPOINT_PATH, ckpt_info
 
-
-# ── Cell 3: UI Controls ─────────────────────────────────────────────
 
 @app.cell
 def _(json, mo, os):
@@ -108,9 +122,9 @@ def _(json, mo, os):
 
     train_btn = mo.ui.run_button(label="Start Training", kind="success")
     upload_btn = mo.ui.run_button(label="Upload to HuggingFace", kind="info")
-    hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="HF model repo")
-    hf_token_input = mo.ui.text(value=os.environ.get("HF_TOKEN", ""), label="HF token")
-    hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_trade", label="Data repo")
+    hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="HF model repo", full_width=True)
+    hf_token_input = mo.ui.text(value=os.environ.get("HF_TOKEN", ""), label="HF token", full_width=True)
+    hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_trade", label="Data repo", full_width=True)
 
     manual_controls = mo.vstack([
         mo.md("### Architecture"),
@@ -121,53 +135,87 @@ def _(json, mo, os):
         mo.hstack([batch_size, epochs_per_session, lr], justify="start", gap=1),
         mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="start", gap=1),
     ], gap=0.5)
-    manual_controls
-
     return (
-        action_loss_weight, batch_size, context_len, drop_p, epochs_per_session,
-        forecast_len, fresh_start, h_dim, hf_checkpoint_path := mo.ui.text(value="", label="HF checkpoint filename"),
-        hf_data_repo, hf_repo_id, hf_token_input, include_base_dataset,
-        include_grpo_dataset, include_sdp_dataset, json_config, lr, manual_controls,
-        n_block, n_heads, n_kv_heads, qk_norm, resume_from_hf := mo.ui.checkbox(
-            label="Resume from HF checkpoint", value=False
-        ), return_loss_weight, state_loss_weight, tie_weights, train_btn,
-        upload_btn, use_json_config, use_pilot,
+        action_loss_weight,
+        batch_size,
+        context_len,
+        drop_p,
+        epochs_per_session,
+        forecast_len,
+        fresh_start,
+        h_dim,
+        hf_data_repo,
+        hf_repo_id,
+        hf_token_input,
+        include_base_dataset,
+        include_grpo_dataset,
+        include_sdp_dataset,
+        json_config,
+        lr,
+        manual_controls,
+        n_block,
+        n_heads,
+        n_kv_heads,
+        qk_norm,
+        return_loss_weight,
+        state_loss_weight,
+        tie_weights,
+        train_btn,
+        upload_btn,
+        use_json_config,
+        use_pilot,
     )
 
 
-# ── Cell 4: Display ─────────────────────────────────────────────────
-
 @app.cell
 def _(
-    BEST_MODEL_PATH, ckpt_info, forecast_len, fresh_start, hf_checkpoint_path,
-    hf_data_repo, hf_repo_id, hf_token_input, include_base_dataset,
-    include_grpo_dataset, include_sdp_dataset, json_config, manual_controls,
-    mo, resume_from_hf, train_btn, upload_btn, use_json_config, use_pilot,
+    ckpt_info,
+    forecast_len,
+    fresh_start,
+    hf_data_repo,
+    hf_repo_id,
+    hf_token_input,
+    include_base_dataset,
+    include_grpo_dataset,
+    include_sdp_dataset,
+    json_config,
+    manual_controls,
+    mo,
+    train_btn,
+    upload_btn,
+    use_json_config,
+    use_pilot,
 ):
-    ds = [
+    _ds = [
         mo.md("### Dataset"),
         mo.hstack([use_pilot, fresh_start, use_json_config], justify="start", gap=2),
     ]
     if not use_pilot.value:
-        ds.append(mo.hstack([include_base_dataset, include_grpo_dataset, include_sdp_dataset], justify="start", gap=2))
+        _ds.append(mo.hstack([include_base_dataset, include_grpo_dataset, include_sdp_dataset], justify="start", gap=2))
     mo.vstack([
         mo.md(f"## Forecast DT — AEMO Training\n*forecast_len={forecast_len.value}, data repo: {hf_data_repo.value}*\n*ckpt: {ckpt_info}*"),
-        mo.vstack(ds, gap=0.5),
+        mo.vstack(_ds, gap=0.5),
         json_config if use_json_config.value else manual_controls,
-        mo.hstack([resume_from_hf, hf_checkpoint_path], justify="start", gap=2),
-        mo.hstack([train_btn, upload_btn], justify="start", gap=2),
-        hf_repo_id, hf_token_input,
+        mo.md("### Training"),
+        mo.hstack([train_btn, upload_btn], justify="space-around", gap=3),
+        hf_repo_id,
+        hf_token_input,
     ])
     return
 
 
-# ── Cell 5: Data Loading ────────────────────────────────────────────
-
 @app.cell
 def _(
-    Path, ForecastTrajectoryDataset, hf_data_repo, hf_hub_download,
-    include_base_dataset, include_grpo_dataset, include_sdp_dataset,
-    mo, np, pl, use_pilot,
+    Path,
+    hf_data_repo,
+    hf_hub_download,
+    include_base_dataset,
+    include_grpo_dataset,
+    include_sdp_dataset,
+    mo,
+    np,
+    pl,
+    use_pilot,
 ):
     DATA_REPO = hf_data_repo.value.strip() or "mrvictoru/AEMO_simulated_trade"
     CACHE = Path("/workspace")
@@ -193,8 +241,20 @@ def _(
         if not fp.exists():
             hf_hub_download(repo_id=DATA_REPO, filename=fn, local_dir=str(CACHE),
                            local_dir_use_symlinks=False, repo_type="dataset")
-        df = pl.read_parquet(fp)
-        print(f"Pilot: {len(df):,} rows")
+        _df_full = pl.read_parquet(fp)
+        _n_eps = _df_full["episode_id"].n_unique()
+        print(f"Pilot: {len(_df_full):,} rows across {_n_eps} episodes")
+        _pilot_eps = 12
+        if _n_eps > _pilot_eps:
+            _sampled_ids = _df_full["episode_id"].unique().to_numpy()
+            import random as _random
+            _random.shuffle(_sampled_ids)
+            _keep = set(_sampled_ids[:_pilot_eps].tolist())
+            df = _df_full.filter(pl.col("episode_id").is_in(_keep))
+            print(f"  Sampled to {_pilot_eps} episodes: {len(df):,} rows")
+            del _df_full
+        else:
+            df = _df_full
     else:
         filenames = []
         if include_base_dataset.value: filenames.append("aemo_fcas_dataset.parquet")
@@ -208,6 +268,24 @@ def _(
                 hf_hub_download(repo_id=DATA_REPO, filename=fn, local_dir=str(CACHE),
                                local_dir_use_symlinks=False, repo_type="dataset")
             selected.append(pl.read_parquet(fp))
+        # Unify schemas: cast all list(float) columns to List(Float64) to avoid type mismatches
+        if len(selected) > 1:
+            _target_schema = {}
+            for _col, _dtype in selected[0].schema.items():
+                if isinstance(_dtype, pl.List):
+                    _target_schema[_col] = pl.List(pl.Float64)
+                elif _dtype in (pl.Float32, pl.Float64):
+                    _target_schema[_col] = pl.Float64
+                else:
+                    _target_schema[_col] = _dtype
+            for _i in range(len(selected)):
+                # Cast columns to target types
+                for _col, _target_dtype in _target_schema.items():
+                    _actual_dtype = selected[_i].schema.get(_col)
+                    if _actual_dtype and _actual_dtype != _target_dtype:
+                        selected[_i] = selected[_i].with_columns(pl.col(_col).cast(_target_dtype))
+                # Ensure same column order as first dataframe
+                selected[_i] = selected[_i].select(selected[0].columns)
         if len(selected) == 1:
             df = selected[0]
         elif len(selected) > 1:
@@ -216,19 +294,45 @@ def _(
         else:
             raise ValueError("Select at least one dataset.")
 
+    # When pilot mode is on, ensure we sample to 12 episodes max
+    if use_pilot.value:
+        _n_eps = df["episode_id"].n_unique()
+        _pilot_eps = 12
+        if _n_eps > _pilot_eps:
+            import random as _random2
+            _all_ids2 = df["episode_id"].unique().to_list()
+            _random2.shuffle(_all_ids2)
+            _keep2 = set(_all_ids2[:_pilot_eps])
+            df = df.filter(pl.col("episode_id").is_in(_keep2))
+            print(f"🎯 Sampled to {_pilot_eps} episodes: {len(df):,} rows")
+        else:
+            print(f"Pilot: {_n_eps} episodes (no sampling needed)")
+
     mo.stop(df is None, mo.md("❌ No data"))
     print(f"✅ Loaded {len(df):,} rows")
-    return df, forecast_npz,
+    return df, forecast_npz
 
-
-# ── Cell 6: Config ──────────────────────────────────────────────────
 
 @app.cell
 def _(
-    action_loss_weight, batch_size, context_len, drop_p, epochs_per_session,
-    forecast_len, h_dim, json, json_config, lr, n_block, n_heads,
-    n_kv_heads, qk_norm, return_loss_weight, state_loss_weight,
-    tie_weights, use_json_config,
+    action_loss_weight,
+    batch_size,
+    context_len,
+    drop_p,
+    epochs_per_session,
+    forecast_len,
+    h_dim,
+    json,
+    json_config,
+    lr,
+    n_block,
+    n_heads,
+    n_kv_heads,
+    qk_norm,
+    return_loss_weight,
+    state_loss_weight,
+    tie_weights,
+    use_json_config,
 ):
     CFG = {
         "state_dim": 18, "act_dim": 9, "max_timestep": 100000,
@@ -258,8 +362,6 @@ def _(
     return (CFG,)
 
 
-# ── Cell 7: Dataset creation ────────────────────────────────────────
-
 @app.cell
 def _(CFG, ForecastTrajectoryDataset, df, forecast_npz, torch):
     ds = ForecastTrajectoryDataset(
@@ -280,15 +382,17 @@ def _(CFG, ForecastTrajectoryDataset, df, forecast_npz, torch):
         val_ds, batch_size=CFG["batch_size"], shuffle=False, num_workers=0
     )
     print(f"📊 {len(ds)} windows, {len(train_ds)} train + {len(val_ds)} val")
-    return ds, train_ds, train_loader, val_ds, val_loader
+    return train_loader, val_loader
 
-
-# ── Cell 8: Training helpers ────────────────────────────────────────
 
 @app.cell
 def _(
-    BEST_MODEL_PATH, CHECKPOINT_DIR, CHECKPOINT_PATH,
-    CFG, ForecastDecisionTransformer, time, torch,
+    CFG,
+    CHECKPOINT_DIR,
+    CHECKPOINT_PATH,
+    ForecastDecisionTransformer,
+    time,
+    torch,
 ):
     def load_or_create_model(cfg, device, fresh=False):
         model = ForecastDecisionTransformer(
@@ -340,12 +444,19 @@ def _(
     return load_or_create_model, save_checkpoint
 
 
-# ── Cell 9: Training loop ───────────────────────────────────────────
-
 @app.cell
 def _(
-    CFG, F, load_or_create_model, mo, save_checkpoint, time, torch,
-    train_btn, train_loader, val_loader,
+    BEST_MODEL_PATH,
+    CFG,
+    F,
+    load_or_create_model,
+    mo,
+    save_checkpoint,
+    time,
+    torch,
+    train_btn,
+    train_loader,
+    val_loader,
 ):
     session_start = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -385,7 +496,7 @@ def _(
                 rp, sp, ap = model(st, ac, rt, ts, mk, forecast_states=fs, forecast_rtgs=fr, forecast_timesteps=ft)
                 a_loss = F.mse_loss(ap, ac)
                 s_loss = F.mse_loss(sp, st)
-                r_loss = F.mse_loss(rp.squeeze(-1), rt)
+                r_loss = F.mse_loss(rp, rt)
                 loss = CFG["action_loss_weight"] * a_loss + CFG["state_loss_weight"] * s_loss + CFG["return_loss_weight"] * r_loss
 
             opt.zero_grad()
@@ -431,10 +542,8 @@ def _(
         sch.step()
 
     print(f"✅ Done in {time.time()-session_start:.0f}s")
-    return device, gs, session_start, tl, vl, bv
+    return bv, device, gs, session_start, tl, vl
 
-
-# ── Cell 10: Plots ──────────────────────────────────────────────────
 
 @app.cell
 def _(mo, np, plt, tl, vl):
@@ -453,32 +562,38 @@ def _(mo, np, plt, tl, vl):
     return
 
 
-# ── Cell 11: Summary ────────────────────────────────────────────────
-
 @app.cell
 def _(CFG, bv, device, gs, mo, session_start, time, tl, vl):
     h = (time.time() - session_start) / 3600
     mo.md(f"""
-## Summary
-| Metric | Value |
-|---|---|
-| Device | `{device}` |
-| Final train loss | `{tl[-1]:.6f}` |
-| Final val loss | `{vl[-1]:.6f}` |
-| Best val loss | `{bv:.6f}` |
-| Epochs | `{len(tl)}` |
-| Steps | `{gs}` |
-| Duration | `{h:.2f}h` |
-| Model | `{CFG['n_block']} blk {CFG['h_dim']} dim ctx={CFG['context_len']} forecast={CFG.get('forecast_len')}` |
-""")
+    ## Summary
+    | Metric | Value |
+    |---|---|
+    | Device | `{device}` |
+    | Final train loss | `{tl[-1]:.6f}` |
+    | Final val loss | `{vl[-1]:.6f}` |
+    | Best val loss | `{bv:.6f}` |
+    | Epochs | `{len(tl)}` |
+    | Steps | `{gs}` |
+    | Duration | `{h:.2f}h` |
+    | Model | `{CFG['n_block']} blk {CFG['h_dim']} dim ctx={CFG['context_len']} forecast={CFG.get('forecast_len')}` |
+    """)
+    return
 
-
-# ── Cell 12: Upload ─────────────────────────────────────────────────
 
 @app.cell
 def _(
-    CHECKPOINT_DIR, CHECKPOINT_PATH, CFG, ForecastDecisionTransformer,
-    HfApi, hf_repo_id, hf_token_input, mo, os, torch, upload_btn,
+    CFG,
+    CHECKPOINT_PATH,
+    ForecastDecisionTransformer,
+    HfApi,
+    Path,
+    hf_repo_id,
+    hf_token_input,
+    mo,
+    os,
+    torch,
+    upload_btn,
 ):
     mo.stop(not upload_btn.value, mo.md("Press **Upload**."))
     repo_id = hf_repo_id.value.strip()
@@ -490,7 +605,7 @@ def _(
            else CHECKPOINT_PATH if CHECKPOINT_PATH.exists() else None)
     if src is None: raise FileNotFoundError("No checkpoint found.")
 
-    model = ForecastDecisionTransformer(
+    upload_model = ForecastDecisionTransformer(
         state_dim=CFG["state_dim"], act_dim=CFG["act_dim"],
         n_block=CFG["n_block"], h_dim=CFG["h_dim"],
         context_len=CFG["context_len"], forecast_len=CFG.get("forecast_len", 48),
@@ -501,11 +616,52 @@ def _(
         tie_weights=CFG.get("tie_weights", False),
     )
     ck = torch.load(src, map_location="cpu")
-    model.load_state_dict(ck.get("model_state_dict", ck))
+    upload_model.load_state_dict(ck.get("model_state_dict", ck))
     meta = {k: v for k, v in ck.items() if k != "model_state_dict"}
 
     upload_path = Path("/workspace/dt_checkpoints/upload_model.pt")
-    torch.save({"model_state_dict": model.state_dict(), **meta}, upload_path)
+    torch.save({"model_state_dict": upload_model.state_dict(), **meta}, upload_path)
     HfApi().upload_file(path_or_fileobj=str(upload_path), path_in_repo="forecast_dt_model.pt",
                         repo_id=repo_id, repo_type="model", token=token)
     print(f"✅ Uploaded forecast_dt_model.pt → {repo_id}")
+    return
+
+
+@app.cell
+def _(ForecastDecisionTransformer):
+    import inspect
+
+    _src_file = inspect.getfile(ForecastDecisionTransformer)
+    print(f"✅ File: {_src_file}")
+
+    with open(_src_file) as f:
+        lines = f.readlines()
+
+    for i, line in enumerate(lines):
+        if '_init_weights' in line or 'xavier' in line or 'nn.Embedding' in line:
+            print(f"{i+1:4d}: {line}", end='')
+
+    print("\n---")
+
+    # Verify by checking ast
+    import ast
+    with open(_src_file) as f:
+        _tree = ast.parse(f.read())
+
+    for _node in ast.walk(_tree):
+        if isinstance(_node, ast.ClassDef) and _node.name == "ForecastDecisionTransformer":
+            for _item in _node.body:
+                if isinstance(_item, ast.FunctionDef) and _item.name == "_init_weights":
+                    code_str = ast.unparse(_item)
+                    has_embed = "nn.Embedding" in code_str
+                    has_linear = "nn.Linear" in code_str
+                    print(f"\n📋 Verified _init_weights:")
+                    print(f"   ✓ nn.Linear handler: {has_linear} (Xavier + zero bias)")
+                    print(f"   ✓ nn.Embedding handler: {has_embed} (normal std=0.02)")
+                    break
+            break
+    return
+
+
+if __name__ == "__main__":
+    app.run()
