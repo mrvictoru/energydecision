@@ -81,14 +81,25 @@ def _(Path, torch):
 
 
 @app.cell
-def _(json, mo, os):
+def _(mo):
     use_pilot = mo.ui.checkbox(label="Pilot mode (12 eps, fast)", value=True)
     fresh_start = mo.ui.checkbox(label="Fresh start (delete checkpoint)", value=False)
-    use_json_config = mo.ui.checkbox(label="Use JSON config", value=False)
     include_base_dataset = mo.ui.checkbox(label="FCAS dataset", value=True)
     include_grpo_dataset = mo.ui.checkbox(label="GRPO dataset", value=True)
     include_sdp_dataset = mo.ui.checkbox(label="SDP dataset", value=True)
+    hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_trade", label="Data repo", full_width=True)
+    return (
+        fresh_start,
+        hf_data_repo,
+        include_base_dataset,
+        include_grpo_dataset,
+        include_sdp_dataset,
+        use_pilot,
+    )
 
+
+@app.cell
+def _(mo):
     n_block = mo.ui.number(value=8, label="Blocks")
     h_dim = mo.ui.number(value=768, label="Hidden dim")
     n_heads = mo.ui.number(value=12, label="Heads")
@@ -98,15 +109,28 @@ def _(json, mo, os):
     n_kv_heads = mo.ui.number(value=6, label="KV heads")
     qk_norm = mo.ui.checkbox(label="QK-Norm", value=True)
     tie_weights = mo.ui.checkbox(label="Tie weights", value=True)
+    return (
+        context_len,
+        drop_p,
+        forecast_len,
+        h_dim,
+        n_block,
+        n_heads,
+        n_kv_heads,
+        qk_norm,
+        tie_weights,
+    )
 
+
+@app.cell
+def _(json, mo):
     batch_size = mo.ui.number(value=64, label="Batch size")
     epochs_per_session = mo.ui.number(value=3, label="Epochs/session")
     lr = mo.ui.number(value=3e-5, label="Learning rate")
-
     action_loss_weight = mo.ui.number(value=0.999, label="Action loss weight")
     state_loss_weight = mo.ui.number(value=0.002, label="State loss weight")
     return_loss_weight = mo.ui.number(value=0.0001, label="Return loss weight")
-
+    use_json_config = mo.ui.checkbox(label="Use JSON config", value=False)
     _DFLT = json.dumps({
         "state_dim": 18, "act_dim": 9,
         "n_block": 8, "h_dim": 768, "n_heads": 12,
@@ -119,13 +143,46 @@ def _(json, mo, os):
         "return_scale": 2.0, "weight_decay": 1e-4, "grad_clip_norm": 1.0,
     }, indent=2)
     json_config = mo.ui.text_area(value=_DFLT, label="JSON config")
+    return (
+        action_loss_weight,
+        batch_size,
+        epochs_per_session,
+        json_config,
+        lr,
+        return_loss_weight,
+        state_loss_weight,
+        use_json_config,
+    )
 
+
+@app.cell
+def _(mo, os):
     train_btn = mo.ui.run_button(label="Start Training", kind="success")
     upload_btn = mo.ui.run_button(label="Upload to HuggingFace", kind="info")
-    hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2", label="HF model repo", full_width=True)
+    hf_repo_id = mo.ui.text(value="mrvictoru/energydecision-dt-v2-forecast", label="HF model repo", full_width=True)
     hf_token_input = mo.ui.text(value=os.environ.get("HF_TOKEN", ""), label="HF token", full_width=True)
-    hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_trade", label="Data repo", full_width=True)
+    return hf_repo_id, hf_token_input, train_btn, upload_btn
 
+
+@app.cell
+def _(
+    action_loss_weight,
+    batch_size,
+    context_len,
+    drop_p,
+    epochs_per_session,
+    forecast_len,
+    h_dim,
+    lr,
+    mo,
+    n_block,
+    n_heads,
+    n_kv_heads,
+    qk_norm,
+    return_loss_weight,
+    state_loss_weight,
+    tie_weights,
+):
     manual_controls = mo.vstack([
         mo.md("### Architecture"),
         mo.hstack([n_block, h_dim, n_heads], justify="start", gap=1),
@@ -135,36 +192,7 @@ def _(json, mo, os):
         mo.hstack([batch_size, epochs_per_session, lr], justify="start", gap=1),
         mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="start", gap=1),
     ], gap=0.5)
-    return (
-        action_loss_weight,
-        batch_size,
-        context_len,
-        drop_p,
-        epochs_per_session,
-        forecast_len,
-        fresh_start,
-        h_dim,
-        hf_data_repo,
-        hf_repo_id,
-        hf_token_input,
-        include_base_dataset,
-        include_grpo_dataset,
-        include_sdp_dataset,
-        json_config,
-        lr,
-        manual_controls,
-        n_block,
-        n_heads,
-        n_kv_heads,
-        qk_norm,
-        return_loss_weight,
-        state_loss_weight,
-        tie_weights,
-        train_btn,
-        upload_btn,
-        use_json_config,
-        use_pilot,
-    )
+    return (manual_controls,)
 
 
 @app.cell
@@ -188,15 +216,16 @@ def _(
 ):
     _ds = [
         mo.md("### Dataset"),
-        mo.hstack([use_pilot, fresh_start, use_json_config], justify="start", gap=2),
+        mo.hstack([use_pilot, fresh_start], justify="start", gap=2),
     ]
     if not use_pilot.value:
         _ds.append(mo.hstack([include_base_dataset, include_grpo_dataset, include_sdp_dataset], justify="start", gap=2))
+    _ds.append(hf_data_repo)
     mo.vstack([
-        mo.md(f"## Forecast DT — AEMO Training\n*forecast_len={forecast_len.value}, data repo: {hf_data_repo.value}*\n*ckpt: {ckpt_info}*"),
+        mo.md(f"## Forecast DT — AEMO Training\n*forecast_len={forecast_len.value}, ckpt: {ckpt_info}*"),
         mo.vstack(_ds, gap=0.5),
         json_config if use_json_config.value else manual_controls,
-        mo.md("### Training"),
+        mo.md("### Action"),
         mo.hstack([train_btn, upload_btn], justify="space-around", gap=3),
         hf_repo_id,
         hf_token_input,
@@ -660,6 +689,72 @@ def _(ForecastDecisionTransformer):
                     print(f"   ✓ nn.Embedding handler: {has_embed} (normal std=0.02)")
                     break
             break
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(f"""
+ 
+    """)
+    return
+
+
+@app.cell
+def _(CHECKPOINT_PATH, mo, plt, time, torch):
+    # Load training metrics from checkpoint
+
+    _cp = CHECKPOINT_PATH
+    if _cp and _cp.exists():
+        _ck = torch.load(_cp, map_location="cpu")
+        _tl = _ck.get("train_losses", [])
+        _vl = _ck.get("val_losses", [])
+        _bv = _ck.get("best_val_loss", float("inf"))
+        _ep = _ck.get("epoch", 0)
+        _gs = _ck.get("global_step", 0)
+        _ts = _ck.get("timestamp", None)
+        _since = time.strftime("%Y-%m-%d %H:%M", time.localtime(_ts)) if _ts else "unknown"
+
+        print(f"📊 Training metrics from checkpoint ({_since})")
+        print(f"   Epochs completed: {_ep}")
+        print(f"   Global steps: {_gs}")
+        print(f"   Best val loss: {_bv:.6f}")
+
+        # Print exact values for model card
+        print("\n=== MODEL CARD TABLE ===")
+        print("| Epoch | Train Loss | Val Loss |")
+        print("|---|---|---|")
+        for _idx, (_t, _v) in enumerate(zip(_tl, _vl)):
+            print(f"| {_idx+1} | {_t:.6f} | {_v:.6f} |")
+        print(f"\nBest validation loss: {_bv:.6f}")
+        print(f"Global steps: {_gs}")
+
+        if _tl:
+            _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(14, 4.5))
+            _epochs = list(range(1, len(_tl) + 1))
+
+            _ax1.plot(_epochs, _tl, "b-o", label="Train", markersize=8, linewidth=2)
+            _ax1.plot(_epochs, _vl, "r-s", label="Val", markersize=8, linewidth=2)
+            _ax1.set_xlabel("Epoch")
+            _ax1.set_ylabel("Loss")
+            _ax1.set_title("Training & Validation Loss")
+            _ax1.legend(fontsize=12)
+            _ax1.grid(True, alpha=0.3)
+
+            _ax2.bar([e - 0.15 for e in _epochs], _tl, 0.3, label="Train", color="steelblue", alpha=0.85)
+            _ax2.bar([e + 0.15 for e in _epochs], _vl, 0.3, label="Val", color="coral", alpha=0.85)
+            _ax2.set_xlabel("Epoch")
+            _ax2.set_ylabel("Loss")
+            _ax2.set_title(f"Best Val: {_bv:.6f}")
+            _ax2.legend(fontsize=12)
+            _ax2.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            mo.mpl.interactive(_fig)
+        else:
+            mo.md("> No loss history in checkpoint.")
+    else:
+        mo.md("> No checkpoint found. Complete a training run first.")
     return
 
 
