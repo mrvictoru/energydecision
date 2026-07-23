@@ -20,13 +20,13 @@ Decision Transformer** for the AEMO utility-scale battery trading environment.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| AEMO-adapted SDP solver (`src/aemo_sdp_solver.py`) | ✅ Done | Energy-only cost using RRP |
-| SDP trajectory generator + data | ✅ Done | 1200 episodes, 5 regions × 2 batteries, 2022–2023 |
-| Forecast token architecture (`src/forecast_decision_transformer.py`) | ✅ Done | New `ForecastDecisionTransformer` class with RoPE + `forecast_len` param. `ForecastTrajectoryDataset` yields history+forecast windows. 15/15 tests pass. |
-| MoLab notebook (`notebooks/molab_notebook_forecast.py`) | ✅ Done | Self-contained, inlines all model classes, supports SDP/FCAS/GRPO dataset loading |
-| **Next: Generate forecast-augmented training data** | ⏳ **Current** | Use IBM Granite TTM to forecast AEMO prices, append forecast tokens to existing trajectory datasets |
-| SDP trajectories → combined training | ⏳ Pending | Waiting on data upload to HuggingFace |
-| Forecast DT training + eval | ❌ Not started | Requires forecast-augmented data first |
+| AEMO-adapted SDP solver + trajectory generator | ✅ Done | 1200 episodes, 5 regions × 2 batteries, 2022–2023 |
+| Forecast token architecture + tests | ✅ Done | `ForecastDecisionTransformer` with RoPE, 48-step prefix, 15/15 tests |
+| TTM fine-tuning + forecast data generation | ✅ Done | Granite TTM-R3 fine-tuned on 6 price channels, 420K × 48 × 6 forecast lookup |
+| Forecast DT trained on MoLab | ✅ Done | Model uploaded to `mrvictoru/energydecision-dt-v2-forecast` |
+| HF datasets enriched + uploaded | ✅ Done | All trajectory datasets have `episode_start` for TTM alignment |
+| **Evaluator integration for forecast DT** | ⏳ **Next** | `AEMOAgent` needs forecast buffer; evaluator needs `ForecastDecisionTransformer` support |
+| Evaluate forecast DT | ❌ Not started | Requires evaluator integration first |
 
 ---
 
@@ -259,17 +259,36 @@ Success criteria:
 | 1 | AEMO-adapted SDP solver and trajectory generator | Path B' | None | 2h | ✅ Done |
 | 2 | Forecast token architecture (ForecastDecisionTransformer) | Path A1 | None | 1 week | ✅ Done |
 | 3 | 15 verification tests for forecast token mechanics | Path A1 | Milestone 2 | 2h | ✅ Done |
-| 4 | **Next: Generate forecast-augmented dataset (TTM or similar)** | Path A1 | None | 1–2 weeks | ⏳ |
-| 5 | Train ForecastDecisionTransformer on forecast-augmented data | Path A1 | Milestone 4 | 6h (MoLab) | ❌ |
-| 6 | Evaluate on dispatch-matched + standard surfaces | Both | Milestones 4, 5 | 2h | ❌ |
-| 7 | SDP-guided RTG inference (quick win) | Secondary | Milestone 1 | 2h | ❌ |
-| 8 | Combined SDP trajectories + forecast DT training | Both | Milestones 4, 6 | 6h | ❌ |
+| 4 | TTM fine-tuning + forecast data generation | Path A1 | None | 1–2 weeks | ✅ Done |
+| 5 | Train ForecastDecisionTransformer on MoLab | Path A1 | Milestone 4 | 6h | ✅ Done |
+| 6 | **Integrate evaluator with ForecastDecisionTransformer** | Both | Milestone 5 | 4h | ⏳ |
+| 7 | Evaluate forecast DT on dispatch-matched + standard | Both | Milestone 6 | 2h | ❌ |
+| 8 | SDP-guided RTG inference (quick win) | Secondary | Milestone 1 | 2h | ❌ |
+| 9 | Combined SDP trajectories + forecast DT training | Both | Milestones 4, 6 | 6h | ❌ |
 
-> **Note on dataset loading**: SDP trajectories will be uploaded to HuggingFace. The training script
-> (e.g. `scripts/pretrain_aemo_decision_transformer.py`) must be updated to load from **multiple
-> parquet sources** (the existing FCAS-rich dataset + the SDP dataset) and combine them into a single
-> `TrajectoryDataset`. The `--patterns` flag in `pretrain_decision_transformer.py` already supports
-> multi-pattern filtering, which can be extended to accept multiple parquet file paths.
+### Milestone 6 Details: Evaluator Integration
+
+The current evaluator (`scripts/autoresearch_evaluator.py`) imports `DecisionTransformer` from
+`decision_transformer` and has no support for forecast token inference. To evaluate the
+forecast-trained model properly, these changes are needed:
+
+**`src/decision.py`** (~40 lines):
+- Create `ForecastAEMOAgent` subclass (or add forecast mode to `AEMOAgent`) that:
+  - Maintains a rolling forecast buffer (48 timesteps of future market states)
+  - At each step, reads the next 48 timesteps from `env.aemo_data` (perfect foresight for eval)
+  - Passes `forecast_states`, `forecast_rtgs`, `forecast_timesteps` to `model.get_action()`
+  - Updates the forecast buffer after each step (slide window forward)
+
+**`scripts/autoresearch_evaluator.py`** (~30 lines):
+- Detect forecast model from `model_kwargs` (check for `forecast_len > 0`)
+- Import `ForecastDecisionTransformer` instead of `DecisionTransformer` when forecast model
+- Load checkpoint from state dict (MoLab saves as `model_state_dict`)
+- Use `ForecastAEMOAgent` instead of `AEMOAgent` when `forecast_len > 0`
+- Surface manifest should include `forecast_len` or model type field
+
+**Later: TTM at inference** — replace perfect foresight with actual TTM forecasts from
+`ttm_forecasts.npz` lookup (loaded alongside the evaluator). The model was trained on TTM
+forecasts, so perfect-foresight eval creates a train-eval gap.
 
 ---
 
