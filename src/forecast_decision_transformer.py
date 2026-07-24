@@ -479,23 +479,24 @@ class ForecastDecisionTransformer(nn.Module):
         forecast_rtgs: torch.Tensor | None = None,
         forecast_timesteps: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        orig_ndim = states.dim()
-        if orig_ndim == 2:
+        if states.dim() == 2:
             states = states.unsqueeze(0)
-        if actions.dim() == orig_ndim:
-            actions = actions.unsqueeze(0)
-        if returns_to_go.dim() == orig_ndim:
-            returns_to_go = returns_to_go.unsqueeze(0)
-        if timesteps.dim() == orig_ndim:
-            timesteps = timesteps.unsqueeze(0)
-        if attention_mask is not None and attention_mask.dim() == orig_ndim:
-            attention_mask = attention_mask.unsqueeze(0)
-        if forecast_states is not None and forecast_states.dim() == orig_ndim:
-            forecast_states = forecast_states.unsqueeze(0)
-        if forecast_rtgs is not None and forecast_rtgs.dim() == orig_ndim:
-            forecast_rtgs = forecast_rtgs.unsqueeze(0)
-        if forecast_timesteps is not None and forecast_timesteps.dim() == orig_ndim:
-            forecast_timesteps = forecast_timesteps.unsqueeze(0)
+            if actions.dim() == 2:
+                actions = actions.unsqueeze(0)
+            if returns_to_go.dim() == 2:
+                returns_to_go = returns_to_go.unsqueeze(0)
+            elif returns_to_go.dim() == 1:
+                returns_to_go = returns_to_go.unsqueeze(0).unsqueeze(-1)
+            if timesteps.dim() == 1:
+                timesteps = timesteps.unsqueeze(0)
+            if attention_mask is not None and attention_mask.dim() == 1:
+                attention_mask = attention_mask.unsqueeze(0)
+            if forecast_states is not None and forecast_states.dim() == 2:
+                forecast_states = forecast_states.unsqueeze(0)
+            if forecast_rtgs is not None and forecast_rtgs.dim() == 2:
+                forecast_rtgs = forecast_rtgs.unsqueeze(0)
+            if forecast_timesteps is not None and forecast_timesteps.dim() == 1:
+                forecast_timesteps = forecast_timesteps.unsqueeze(0)
 
         # Ensure rtgs has trailing dim
         if returns_to_go.dim() == 2:
@@ -524,6 +525,37 @@ class ForecastDecisionTransformer(nn.Module):
                 [action[..., :1], torch.clamp(action[..., 1:], 0.0, 1.0)], dim=-1
             )
         return action
+
+    def load_from_checkpoint(
+        self, checkpoint_or_state: str | dict, map_location: str | None = None,
+        strict: bool = True,
+    ) -> None:
+        if isinstance(checkpoint_or_state, (str, bytes)):
+            ckpt_path = (checkpoint_or_state.decode() if isinstance(checkpoint_or_state, bytes)
+                         else str(checkpoint_or_state))
+            state = torch.load(ckpt_path, map_location=map_location)
+        else:
+            state = checkpoint_or_state
+        meta = None
+        if isinstance(state, dict) and "model_state_dict" in state:
+            meta = state.get("meta")
+            if meta is None and "return_scale" in state:
+                meta = {"return_scale": state.get("return_scale")}
+            state = state["model_state_dict"]
+        if isinstance(meta, dict) and "return_scale" in meta:
+            try:
+                rs = float(meta["return_scale"])
+                if rs == rs and abs(rs) >= 1e-12:
+                    self.return_scale = rs
+            except Exception:
+                pass
+        try:
+            self.load_state_dict(state, strict=strict)
+        except RuntimeError:
+            if strict:
+                self.load_state_dict(state, strict=False)
+            else:
+                raise
 
 
 # ---------------------------------------------------------------------------

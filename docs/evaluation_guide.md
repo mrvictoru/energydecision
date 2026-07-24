@@ -106,6 +106,78 @@ python3 scripts/autoresearch_evaluator.py \
 
 ---
 
+## Forecast Decision Transformer
+
+The `ForecastDecisionTransformer` extends the modern v2 architecture with
+explicit forecast tokens (48-step prefix). Evaluating one requires extra steps:
+
+### Surface manifest
+
+The manifest must include `model_kwargs.model_class: "ForecastDecisionTransformer"`
+and `model_meta: {"return_scale": 2.0}`. Use the helper script:
+
+```bash
+# Creates models/aemo/dt/hf_forecast/surface_manifest.json
+python3 scripts/create_hf_forecast_surface_manifest.py \
+  --output-dir models/aemo/dt/hf_forecast
+```
+
+This downloads the checkpoint from `mrvictoru/energydecision-dt-v2-forecast`,
+loads `configs/aemo_decision_transformer_model_kwargs_forecast.json`, and
+injects the required extra fields.
+
+### Running the evaluator
+
+Pass the TTM forecast lookup file via `--forecast-npz-path`:
+
+```bash
+python3 scripts/autoresearch_evaluator.py \
+  --surface-manifest-path models/aemo/dt/hf_forecast/surface_manifest.json \
+  --evaluation-config configs/eval_tier_standard.json \
+  --output-dir eval_output/forecast_dt_standard \
+  --device cuda \
+  --forecast-npz-path data/aemo_dt_forecast/ttm_forecasts.npz
+```
+
+If omitted, the evaluator defaults to `data/aemo_dt_forecast/ttm_forecasts.npz`
+relative to the repo root.
+
+### Forecast index alignment
+
+The TTM forecast `.npz` is indexed by global position in the full merged AEMO
+dataset. The evaluator aligns it to the per-scenario data using the
+`SETTLEMENTDATE` timestamps — the `AEMOAgent` computes an offset that maps
+row 0 of the scenario slice to the correct npz position, then looks up
+forecasts at position `offset + episode_start_idx + context_len + fi`.
+
+### Current evaluation results
+
+The forecast DT underperforms the modern v2 baseline on the Standard tier:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep | Deg/ep |
+|-------|----------:|--------:|----------:|-------:|
+| Modern v2 DT (rtg=0.5) | **$4,726** | $3,063 | $1,896 | $232 |
+| Forecast DT (rtg=0.5) | -$302 | $25 | $283 | $610 |
+| Forecast DT (rtg=1.0) | -$291 | $25 | $282 | $598 |
+| Forecast DT (rtg=0.0) | -$324 | $25 | $283 | $633 |
+| dispatch_dalrymple_north | $4,660 | $2,287 | $3,394 | $1,020 |
+| ppo_reference | $2,353 | $2,192 | $396 | $236 |
+
+The forecast DT shows negligible FCAS revenue ($25/ep vs $3,063 for modern v2)
+and elevated degradation ($600+/ep vs $232). This is consistent with the plan
+document's finding that the modern v2 pretrained is SOTA — GRPO could not
+improve it, and the forecast architecture does not help on the Standard surface.
+
+**Known limitations of the current evaluation:**
+- The TTM npz channels map to obs[5:11] (RRP, DEMAND, 4 FCAS); the remaining
+  12 obs dims are zero. The model was trained with the same channel layout.
+- The forecast is a 48-step look-ahead starting at episode position
+  `context_len` (210), matching the training sliding-window convention.
+- `return_scale=2.0` is set via `model_meta` in the surface manifest. Calibrate
+  RTG for your model — start with `rtg=0.5` (which maps to 0.25 model-space).
+
+---
+
 ## Interpreting Results
 
 The `evaluation_summary.json` contains `aggregate_metrics` — one object per
