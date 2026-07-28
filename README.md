@@ -52,6 +52,7 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [x] **FCAS-rich DT training:** Retrain DT on the FCAS-rich dataset — DT now achieves **+$1,522/ep profit**, beating PPO (+$1,444/ep) on the example evaluator (Section 8.6.2 of `report.md`).
 *   [x] **RL Fine-tuning:** GRPO Phase 1 support for pretrained DT weights is now available through the current CLI workflow, including mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
 *   [x] **Hyperparameter Tuning:** using Autoresearch for DT.
+*   [x] **Forecast-conditioned DT (negative result):** Built and evaluated a ForecastDecisionTransformer with 48-step TTM forecast tokens. Result: $4,564/ep vs modern v2's $4,991/ep — explicit forecasts do not beat implicit context. See report.md §8.2.8.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
 *   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.

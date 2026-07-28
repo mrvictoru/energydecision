@@ -123,13 +123,27 @@ These changes target the current training pipeline and can run on the local RTX 
 
 ## Next Priority Items
 
+The following items are the open research questions after the current session. They
+align with the open checklist items in the root `README.md`.
+
 | # | Item | Why | Approach |
 |---|------|-----|----------|
-| 1 | **RTG calibration for all models** | Gain 5-75% profit immediately; the 0.0-2.0 range was too narrow | Add RTG sweep script; document optimal values per model; integrate into evaluator |
-| 2 | **Re-fine-tune TTM with diverse time sampling** | Current TTM trained on 14K rows of early 2021 only; misses market diversity | Replace `fewshot_location="first"` with curated three-season sampling in `ttm_finetune_and_forecast.py` |
-| 3 | **Forecast quality metrics** | Can't tell if TTM forecasts are good enough; need error baseline | Compare npz `forecast_map` vs actual `processed_*_0.0833h.parquet` values; report MAE/each channel |
-| 4 | **Longer context sweep** | Re-test ctx=288, 576, 1008 on modern v2 8x768 with FCAS data | Use existing context-sweep infrastructure |
-| 5 | **FCAS-weighted loss** | Add training weight on FCAS action dims to encourage bidding | Modify pretrain loss with per-dim weights |
+| 1 | **Offline dataset studies** | Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation. Which source policies contribute the most value? | Train DTs on ablated datasets (remove PPO trajs, remove FCAS rule, etc.) and compare profit on the standard tier. |
+| 2 | **Longer context sweep** | Re-test ctx=288, 576, 1008 on modern v2 8×768 with FCAS data. The original sweep used the old 8×384 model on FCAS-poor data. | Use existing context-sweep infrastructure (`--context-length`) on the full 8×768 modern v2 with the FCAS-rich dataset. |
+| 3 | **FCAS-weighted loss** | All 9 action dims are treated equally; weighting FCAS dims higher could close the FCAS gap to PPO. | Modify the pretrain loss in `transformer_training.py` to accept a per-dim weight vector. |
+| 4 | **Statistical confidence on AEMO headlines** | Apply bootstrap CIs and Wilcoxon tests to the per-surface profit headlines in `report.md`. Tooling exists in `src/helper.py`. | Run `bootstrap_confidence_intervals` and `paired_comparison` on `eval_output/` logs and add CI columns to the leaderboard tables. |
+| 5 | **Multi-agent extension** | Microgrid setting with multiple households and coordinated battery dispatch. | New environment wrapping `SolarBatteryEnv` in a `PettingZoo` parallel API. |
+
+### Completed this session (July 2026)
+
+| Item | Result |
+|------|--------|
+| RTG calibration (0–100) for all models | Done. All DT variants gain 5–75%. Best RTG is architecture-dependent (modern: 10, forecast: 50, legacy GRPO: 50). |
+| Forecast DT architecture + training + evaluation | Done. Negative result — $4,564/ep vs modern v2's $4,991/ep. See report.md §8.2.8. |
+| Forecast npz normalization (raw → [0,1]) | Done. Original data had 10,000× scale mismatch. Critical bug fix. |
+| TTM diverse few-shot fine-tuning | Done. `--fewshot-location diverse` added but produced no quality improvement (FCAS corr ~0.01 either way). |
+| TTM forecast quality measurement | Done. `scripts/measure_forecast_quality.py` — per-channel MAE/RMSE/corr using actual AEMO data. |
+| Evaluator infrastructure | Done. `model_class` dispatch, forecast buffer in `AEMOAgent`, `model_meta` support, `--forecast-npz-path`. |
 
 ## Standard Tier Leaderboard (Oct 2024, 5 regions, 144h, medium_1c)
 
