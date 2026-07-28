@@ -34,6 +34,31 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 - Environment reference: [docs/aemo/environment.md](docs/aemo/environment.md)
 - Evaluation: [docs/evaluation_guide.md](docs/evaluation_guide.md)
 
+### Roadmap
+*   [x] **Core:** Gymnasium environment & Rule-based agents.
+*   [x] **Optimization:** SDP & MRDP solvers.
+*   [x] **Online RL:** Training loop with SB3.
+*   [x] **Offline RL:** Decision Transformer training loop.
+*   [x] **Evaluation:** Metrics for return, risk proxies (Sharpe/Sortino), and degradation.
+*   [x] **Grid Market:** AEMO Environment Implementation.
+*   [x] **Grid battery degradation modelling:** Rainflow-based degradation and capacity fade in `AEMOBatteryTradingEnv`.
+*   [x] **Real-world BESS degradation model:** Combined calendar + cycle aging model (`RealWorldBESSDegradationModel`) for utility-scale BESS, with Arrhenius temperature dependency and NMC/LFP chemistry presets, adapted from the framework in Kampker et al. (2025, doi:10.3390/batteries11110392).
+*   [x] **Risk-sensitive evaluation:** CVaR/VaR tail-risk metrics (`var_5`, `cvar_5`) computed by `evaluate_experiment_logs`.
+*   [x] **Statistical comparisons:** Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired Wilcoxon signed-rank tests (`paired_comparison`) across customers/seeds.
+*   [x] **Conduct data gathering and training on AEMO env:** Run dispatch replay and RL-agent in `AEMOBatteryTradingEnv` to collect trajectories for offline training for DT and evaluation.
+*   [x] **Test out autoresearch:** Run the autoresearch loop for DT training.
+*   [x] **DT prompt calibration:** Use `recommended_rtg` / `recommended_return_scale` diagnostics to choose in-distribution prompts; calibrate against the target held-out scenario before inference.
+*   [x] **FCAS-aware offline data collection:** Generate a 2,425-episode FCAS-rich dataset (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) from PPO, TD3, A2C, DDPG, SAC, and `fcas_rule` policies.
+*   [x] **FCAS-rich DT training:** Retrain DT on the FCAS-rich dataset — DT now achieves **+$1,522/ep profit**, beating PPO (+$1,444/ep) on the example evaluator (Section 8.6.2 of `report.md`).
+*   [x] **RL Fine-tuning:** GRPO Phase 1 support for pretrained DT weights is now available through the current CLI workflow, including mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
+*   [x] **Hyperparameter Tuning:** using Autoresearch for DT.
+*   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
+*   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
+*   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.
+*   [ ] **Sim-to-real readiness:** Add safety wrappers and evaluate policies with hardware-in-the-loop (where available).
+*   [ ] **Statistical confidence on AEMO headlines:** Apply bootstrap confidence intervals and paired Wilcoxon signed-rank tests (`bootstrap_confidence_intervals`, `paired_comparison` in `src/helper.py`) to the per-surface AEMO profit headlines in `report.md` (see Appendix C: Implementation Notes and Known Mismatches).
+*   [ ] **Artifact provenance:** Add lightweight checksums/config logging for datasets, models, and evaluation outputs.
+
 ## Quick Setup
 
 ### Preferred runtime

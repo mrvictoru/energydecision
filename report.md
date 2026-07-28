@@ -572,7 +572,7 @@ Beyond DT-centric work, the AEMO results also highlight:
 
 ### Phase 3: Forecast- and Planning-Aware Sequence Modeling (Current Direction)
 
-The modern v2 DT is the current best-performing model, yet it conditions only on a 210-step history window and has **no explicit forward-looking signal**. The next phase injects planning/forecast awareness, building directly on Abdulla et al. [1] and the implemented SDP/MRDP solvers. This is the active research line tracked in `docs/aemo_hybrid_dt_plan.md` (PR #32).
+The modern v2 DT is the current best-performing model, yet it conditions only on a 210-step history window and has **no explicit forward-looking signal** — and its energy-arbitrage contribution is small (~$70/ep of the $10,138 dispatch-matched profit; the rest is FCAS). The next phase injects planning/forecast awareness, building directly on Abdulla et al. [1] and the implemented SDP/MRDP solvers. This is the active research line tracked in `docs/aemo_hybrid_dt_plan.md` (PR #32).
 
 **Status (July 2026)**:
 
