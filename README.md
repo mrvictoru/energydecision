@@ -133,10 +133,13 @@ tests/        Pytest suite
 
 - Report: [report.md](report.md)
 - Research notes index: [docs/research/README.md](docs/research/README.md)
-- Hugging Face models and data:
-  - [Pretrained Decision Transformer v1](https://huggingface.co/mrvictoru/energydecision-dt)
-  - [GRPO finetuned Decision Transformer v1](https://huggingface.co/mrvictoru/energydecision-dt-grpo)
-  - [Dataset](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade)
+- Hugging Face models:
+  - [Modern v2 Decision Transformer (8×768 GQA, SOTA)](https://huggingface.co/mrvictoru/energydecision-dt-v2)
+  - [Forecast-conditioned Decision Transformer (negative result)](https://huggingface.co/mrvictoru/energydecision-dt-v2-forecast)
+  - [Pretrained Decision Transformer v1 (legacy)](https://huggingface.co/mrvictoru/energydecision-dt)
+  - [GRPO finetuned Decision Transformer v1 (legacy)](https://huggingface.co/mrvictoru/energydecision-dt-grpo)
+- Hugging Face dataset:
+  - [AEMO simulated trade episodes (FCAS + SDP + GRPO + TTM forecasts)](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade)
 
 ## Notes For Contributors
 
