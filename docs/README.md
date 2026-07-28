@@ -53,7 +53,6 @@ These files are useful, but they are not the best place to start if you are new 
 - [research/README.md](research/README.md)
 - [grpo_experiments.md](grpo_experiments.md)
 - [dt_improvement_roadmap.md](dt_improvement_roadmap.md)
-- [aemo_hybrid_dt_plan.md](aemo_hybrid_dt_plan.md)
 - [modern_transformer_improvements.md](modern_transformer_improvements.md)
 
 ## Legacy Deep References

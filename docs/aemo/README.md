@@ -21,7 +21,6 @@ Use these when you need time-specific experiment context rather than stable oper
 
 - [../grpo_experiments.md](../grpo_experiments.md)
 - [../dt_improvement_roadmap.md](../dt_improvement_roadmap.md)
-- [../aemo_hybrid_dt_plan.md](../aemo_hybrid_dt_plan.md)
 - [recommended_data_generation.md](recommended_data_generation.md)
 
 ## Recommended Reading Order

@@ -9,7 +9,6 @@ These are not the best starting point for onboarding. Use [../README.md](../READ
 - [../../report.md](../../report.md): full report and benchmark narrative
 - [../grpo_experiments.md](../grpo_experiments.md): GRPO experiment notes and findings
 - [../dt_improvement_roadmap.md](../dt_improvement_roadmap.md): AEMO DT roadmap
-- [../aemo_hybrid_dt_plan.md](../aemo_hybrid_dt_plan.md): forecast-aware hybrid DT research direction
 - [../modern_transformer_improvements.md](../modern_transformer_improvements.md): model architecture improvement notes
 - [../grpo_finetuning_guide.md](../grpo_finetuning_guide.md): GRPO operational guide
 - [../aemo_full_corpus_manual_commands.md](../aemo_full_corpus_manual_commands.md): manual command reference for full-corpus work
