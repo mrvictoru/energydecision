@@ -145,6 +145,27 @@ architecture is already built and validated (15/15 tests pass). The immediate ne
 48 timesteps of predicted market conditions (RRP, FCAS prices, demand) as forecast tokens generated
 by IBM Granite TTM.
 
+#### TTM Fine-Tuning: Diverse Few-Shot Sampling
+
+The current TTM fine-tuning uses `fewshot_location="first"` on 5% of training data
+(only ~14K rows from Jan-Feb 2021). This undersamples market diversity. A simple
+improvement is to curate a diverse few-shot set spanning multiple seasons and years:
+
+```python
+# Instead of: get_datasets(tsp, pdf, split_config, fewshot_fraction=0.05, fewshot_location="first")
+# Sample from specific date ranges across different seasons:
+fewshot_indices = (
+    list(range(start_idx_apr_2021, end_idx_apr_2021)) +  # 1 week spring
+    list(range(start_idx_jun_2022, end_idx_jun_2022)) +  # 2 weeks summer
+    list(range(start_idx_dec_2023, end_idx_dec_2023))    # 1 week winter
+)
+# Pass as fewshot_indices or build custom dataset
+```
+
+This exposes the TTM to multiple market regimes within the same 5% few-shot
+budget, producing better generalisation across the full 2021-2025 range. See
+`scripts/ttm_finetune_and_forecast.py` for the current implementation.
+
 The TTM model runs on CPU/GPU and produces forecasts from historical price context. The output is a
 new parquet with the same schema as the original trajectory data, plus forecast columns appended as
 extra lists. The `ForecastTrajectoryDataset` reads these and yields both history and forecast windows.

@@ -78,9 +78,39 @@ def load_aemo_data(aemo_dir: str = "data/aemo") -> pd.DataFrame:
 
 # ── Fine-tuning ──────────────────────────────────────────────────────────
 
-def finetune_ttm(pdf: pd.DataFrame, device: str) -> TinyTimeMixerForPrediction:
-    """Few-shot fine-tune TTM on AEMO price data, using 5% of data."""
-    print("\n=== Fine-tuning TTM on AEMO data ===")
+def _build_diverse_fewshot_indices(
+    pdf: pd.DataFrame,
+    n_train: int,
+    fewshot_fraction: float,
+) -> np.ndarray:
+    """Return evenly-spaced indices across the training period.
+
+    Instead of ``fewshot_location="first"`` (which clusters all few-shot
+    samples at the very beginning of the training data), this spreads them
+    uniformly across the full training range so the TTM sees multiple
+    seasons and market regimes.
+    """
+    n_samples = max(1, int(n_train * fewshot_fraction))
+    indices = np.linspace(0, n_train - 1, n_samples, dtype=int)
+    print(f"[FT] Diverse few-shot: {n_samples} indices spread evenly across {n_train} training rows")
+    return indices
+
+
+def finetune_ttm(
+    pdf: pd.DataFrame,
+    device: str,
+    fewshot_location: str = "first",
+) -> TinyTimeMixerForPrediction:
+    """Few-shot fine-tune TTM on AEMO price data, using 5% of data.
+
+    Args:
+        fewshot_location: How to sample the few-shot subset.
+            ``"first"`` — original behaviour, takes 5% from the beginning of
+            the training split (14K rows from Jan-Feb 2021).
+            ``"diverse"`` — evenly spaced indices across the full training
+            period, exposing the TTM to multiple seasons and market regimes.
+    """
+    print(f"\n=== Fine-tuning TTM on AEMO data (fewshot_location={fewshot_location}) ===")
 
     # Prepare data splits (train/val/test)
     split_config = {
@@ -101,14 +131,32 @@ def finetune_ttm(pdf: pd.DataFrame, device: str) -> TinyTimeMixerForPrediction:
     # Fit preprocessor on full data
     tsp.train(pdf)
 
-    # Create datasets with few-shot (5% of training data)
-    train_dataset, valid_dataset, test_dataset = get_datasets(
-        tsp,
-        pdf,
-        split_config,
-        fewshot_fraction=0.05,
-        fewshot_location="first",
-    )
+    if fewshot_location == "diverse":
+        # Build custom few-shot dataset with evenly-spaced indices
+        n_train = int(len(pdf) * split_config["train"])
+        fewshot_indices = _build_diverse_fewshot_indices(
+            pdf, n_train, fewshot_fraction=0.05,
+        )
+        train_dataset, valid_dataset, test_dataset = get_datasets(
+            tsp,
+            pdf,
+            split_config,
+            fewshot_fraction=0.05,
+            fewshot_location="first",  # fallback, overridden below
+        )
+        # Replace the training dataset with our custom few-shot subset
+        from torch.utils.data import Subset
+        train_dataset = Subset(train_dataset, fewshot_indices)
+        print(f"[FT] Custom few-shot dataset: {len(train_dataset)} samples")
+    else:
+        # Original behaviour: few-shot from the beginning
+        train_dataset, valid_dataset, test_dataset = get_datasets(
+            tsp,
+            pdf,
+            split_config,
+            fewshot_fraction=0.05,
+            fewshot_location=fewshot_location,
+        )
     print(f"[FT] Datasets: train={len(train_dataset)}, val={len(valid_dataset)}, test={len(test_dataset)}")
 
     # Load base model
@@ -303,13 +351,21 @@ def main():
     parser.add_argument("--generate", action="store_true", help="Generate forecasts")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--aemo-data-dir", default="data/aemo")
+    parser.add_argument(
+        "--fewshot-location",
+        default="first",
+        choices=["first", "diverse"],
+        help="Few-shot sampling strategy: 'first' (original, 14K rows from Jan-Feb 2021) "
+             "or 'diverse' (evenly spaced across training period for multi-season exposure). "
+             "Default: 'first' for backward compatibility.",
+    )
     args = parser.parse_args()
 
     pdf = load_aemo_data(args.aemo_data_dir)
 
     model = None
     if args.finetune:
-        model = finetune_ttm(pdf, args.device)
+        model = finetune_ttm(pdf, args.device, fewshot_location=args.fewshot_location)
     else:
         # Load pre-finetuned model
         model_path = str(FINETUNE_DIR / "model")
