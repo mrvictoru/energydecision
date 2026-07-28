@@ -1,17 +1,26 @@
-# AEMO notebook-first offline RL and DT workflow
+# AEMO Workflow Guide
 
-This is the **workflow guide** for AEMO data generation, notebook-based experiments, and Decision Transformer training.
+This is the main workflow guide for AEMO data generation, experiments, Decision Transformer training, and held-out evaluation.
 
 Use this document when you need:
 
-- the end-to-end notebook flow
+- the end-to-end AEMO workflow
+- the notebook-first path
+- the canonical CLI training path
 - dataset generation steps
-- SB3 training entrypoints
 - AEMO DT dataset and training artifacts
 
 If you only need environment mechanics, read [environment.md](environment.md). If you want the full AEMO docs map, start with [README.md](README.md).
 
-The AEMO offline RL workflow is now centered on notebooks so you can inspect intermediate tables, debug trajectories, and change configs without leaving the notebook UI.
+The repo supports both notebook-first and CLI-first work. Notebooks remain the best inspection surface for interactive data analysis, but the canonical repeatable entrypoints for training and evaluation live under `scripts/`.
+
+## Recommended entrypoints
+
+- Interactive data generation and inspection: `notebooks/aemo_simrun.ipynb`
+- Online RL training experiments: `notebooks/aemo_sb3train.ipynb`
+- Canonical CLI training: `scripts/launch_aemo_training.py`
+- Lower-level AEMO DT wrapper: `scripts/pretrain_aemo_decision_transformer.py`
+- Held-out sim evaluation: `scripts/autoresearch_evaluator.py`
 
 ## Main files
 
@@ -270,10 +279,10 @@ the 2,425-episode FCAS dataset:
 
 ```bash
 # Step 1: generate stratified spec and build pilot parquet files
-python3 src/build_aemo_fcas_pilot_spec.py --build-pilot
+python3 scripts/build_aemo_fcas_pilot_spec.py --build-pilot
 
 # Step 1a: or generate spec only (inspect before building)
-python3 src/build_aemo_fcas_pilot_spec.py
+python3 scripts/build_aemo_fcas_pilot_spec.py
 
 # Step 2 (manual, only if customizing): build from a custom spec
 python3 scripts/build_aemo_autoresearch_pilot.py \
@@ -332,23 +341,9 @@ rollouts run in parallel by default for reference policies while DT candidate ro
 you explicitly opt in.
 
 If the broader AEMO corpus is still too dominated by the original multi-year episode spans, you can
-resegment it into shorter fixed-horizon episodes before launching the learning baseline. The repository
-includes a builder for that workflow:
-
-```bash
-python3 src/build_aemo_short_horizon_dataset.py \
-  --dataset-tag aemo_dt_8week \
-  --target-episode-hours 1344 \
-  --subset-episodes 24
-```
-
-That command:
-
-- rewrites the existing non-eval dataset into contiguous **8-week** episodes
-- preserves the original **rule + SB3 + dispatch replay** source-policy mix
-- writes:
-  - `data/aemo_dt/aemo_dt_8week_dataset.parquet`
-  - `data/aemo_dt/aemo_dt_8week_manifest.json`
+resegment it into shorter fixed-horizon episodes before launching the learning baseline. That workflow is
+not currently exposed through a maintained standalone builder in this repo, so treat any older references
+to a dedicated short-horizon dataset builder as historical notes rather than active instructions.
   - `data/aemo_dt/aemo_dt_8week_scenario_manifest.json`
   - `data/aemo_dt/aemo_dt_8week_dataset_subsets/`
 

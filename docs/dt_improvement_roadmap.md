@@ -1,5 +1,15 @@
 # AEMO Decision Transformer Roadmap
 
+This document is a research roadmap, not a stable onboarding or operations guide.
+
+Use it when you need:
+
+- historical and current AEMO DT findings
+- open research questions
+- candidate next experiments
+
+For current workflow and setup guidance, start with [README.md](README.md), [architecture.md](architecture.md), [development.md](development.md), and [aemo/README.md](aemo/README.md).
+
 ## Executive summary
 
 This roadmap consolidates the DT and GRPO work for AEMO trading. The central question is whether offline Decision Transformer training can match or exceed online RL on energy-plus-FCAS bidding, and whether GRPO fine-tuning can improve the pretrained policy further without sacrificing safety or profitability.
@@ -98,15 +108,52 @@ These changes target the current training pipeline and can run on the local RTX 
 
 ## Open questions
 
-1. Does RTG conditioning work as a reliable strategy selector for AEMO environments?
+1. ~~Does RTG conditioning work as a reliable strategy selector for AEMO environments?~~ **Resolved July 2026.**
+   RTG is a strong strategy selector. Every DT variant (pretrained, GRPO, forecast) responds to higher RTG values, with gains of 5-75% over the default 0.0-0.5 range. The original calibration range was too narrow — the peak is often at RTG=10-50 depending on the model's return_scale. See leaderboard below.
+
 2. Does the FCAS-rich result hold on the expanded evaluator at full scale?
+
 3. Can FCAS-aware loss weighting or longer context close the remaining margin to PPO?
+
 4. How many GRPO iterations are sustainable before the policy drifts from the pretrained reference?
+
+5. **TTM forecast quality**: can diverse few-shot fine-tuning improve TTM forecast accuracy and thereby boost forecast DT profit? (Currently $4,564/ep vs Mv2's $4,991/ep.)
+
+6. **Forecast quality measurement**: no metric currently exists to quantify TTM forecast accuracy. Need per-channel MAE/RMSE against actual normalized observations.
+
+## Next Priority Items
+
+| # | Item | Why | Approach |
+|---|------|-----|----------|
+| 1 | **RTG calibration for all models** | Gain 5-75% profit immediately; the 0.0-2.0 range was too narrow | Add RTG sweep script; document optimal values per model; integrate into evaluator |
+| 2 | **Re-fine-tune TTM with diverse time sampling** | Current TTM trained on 14K rows of early 2021 only; misses market diversity | Replace `fewshot_location="first"` with curated three-season sampling in `ttm_finetune_and_forecast.py` |
+| 3 | **Forecast quality metrics** | Can't tell if TTM forecasts are good enough; need error baseline | Compare npz `forecast_map` vs actual `processed_*_0.0833h.parquet` values; report MAE/each channel |
+| 4 | **Longer context sweep** | Re-test ctx=288, 576, 1008 on modern v2 8x768 with FCAS data | Use existing context-sweep infrastructure |
+| 5 | **FCAS-weighted loss** | Add training weight on FCAS action dims to encourage bidding | Modify pretrain loss with per-dim weights |
+
+## Standard Tier Leaderboard (Oct 2024, 5 regions, 144h, medium_1c)
+
+| Model | Profit/ep | FCAS/ep | Deg/ep | Best RTG |
+|---|:---:|:---:|:---:|:---:|
+| Modern v2 pretrained | **$4,991** | $4,836 | $229 | 10.0 |
+| Dispatch Dalrymple North | $4,660 | $2,287 | $1,020 | — |
+| Forecast DT (normalized) | $4,564 | $3,663 | $270 | 50.0 |
+| Phase C GRPO (mod v2) | $4,322 | $2,508 | $1,058 | 10.0 |
+| Modern v2 (default rtg=0.5) | $4,726 | $3,063 | $232 | 0.5 |
+| PPO reference | $2,353 | $2,192 | $236 | — |
+| Phase 1 GRPO (legacy) | $2,678 | $2,914 | $384 | 50.0 |
+
+All models evaluated on the same 5 regions × 144h Oct 2024 episodes with medium_1c battery.
+The forecast DT was trained on FCAS-rich + SDP + GRPO data with TTM forecast tokens
+and the npz normalized to [0,1] matching the observation space.
 
 ## Status summary
 
 - FCAS-rich dataset assembled: done.
 - FCAS rule baseline implemented: done.
 - GRPO post-training pipeline implemented: done.
-- RTG and reward-shaping improvements in progress: ongoing.
+- Forecast DT evaluator integration: done.
+- Forecast DT evaluated: done (3rd place at $4,564/ep with rtg=50).
+- TTM npz normalized to [0,1] (was raw — fixed July 2026): done.
+- RTG calibration sweep (0.0-50.0) for all models: done.
 - Full retraining and dataset regeneration: deferred until Phase 1 is exhausted.

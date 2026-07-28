@@ -600,7 +600,8 @@ class AEMOAgent:
                  reset_options: Optional[Dict[str, Any]] = None,
                  fcas_raise_threshold: float | None = None,
                  fcas_lower_threshold: float | None = None,
-                 fcas_pctile: float = 0.80):
+                 fcas_pctile: float = 0.80,
+                 forecast_npz_path: str | None = None):
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
@@ -633,6 +634,10 @@ class AEMOAgent:
         self.fcas_pctile = float(fcas_pctile)
         self._fcas_norm_max = self._compute_fcas_norm_max()
         self._init_fcas_thresholds()
+
+        # Forecast DT config
+        self.forecast_npz_path = forecast_npz_path
+        self._forecast_map: np.ndarray | None = None
 
     @staticmethod
     def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
@@ -853,6 +858,61 @@ class AEMOAgent:
             return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(self.env.action_space.shape[0], dtype=np.float32)
         return self.dispatch_actions[idx]
 
+    # ── Forecast DT helpers ─────────────────────────────────────────────
+
+    def _ensure_forecast_map(self) -> None:
+        if self._forecast_map is not None:
+            return
+        if self.forecast_npz_path:
+            try:
+                fc = np.load(str(self.forecast_npz_path))
+                self._forecast_map = fc["forecast_map"]
+                self._forecast_timestamps = fc["timestamps"]
+            except Exception:
+                self._forecast_map = np.array([], dtype=np.float32)
+                self._forecast_timestamps = np.array([], dtype=np.float32)
+        else:
+            self._forecast_map = np.array([], dtype=np.float32)
+            self._forecast_timestamps = np.array([], dtype=np.float32)
+
+    def _forecast_npz_offset(self) -> int:
+        fts = getattr(self, '_forecast_timestamps', np.array([], dtype=np.float32))
+        if len(fts) == 0:
+            return 0
+        df = getattr(self.env, 'aemo_data', None)
+        if df is None or 'SETTLEMENTDATE' not in df.columns:
+            return 0
+        first_row = df.row(0)
+        col_idx = df.columns.index('SETTLEMENTDATE')
+        raw_ts = first_row[col_idx]
+        if hasattr(raw_ts, 'timestamp'):
+            target = int(raw_ts.timestamp())
+        elif isinstance(raw_ts, (int, float)):
+            target = int(raw_ts)
+        else:
+            try:
+                target = int(raw_ts)
+            except (ValueError, TypeError):
+                return 0
+        idx = int(np.searchsorted(fts, target))
+        if idx >= len(fts):
+            return 0
+        return idx
+
+    def _build_forecast_window(self, episode_step: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        F = int(self.model.forecast_len)
+        f_states = np.zeros((F, self.model.state_dim), dtype=np.float32)
+        if self._forecast_map is not None and len(self._forecast_map) > 0:
+            offset = self._forecast_npz_offset()
+            fmap = self._forecast_map
+            for fi in range(F):
+                g_idx = offset + episode_step + fi
+                if 0 <= g_idx < len(fmap):
+                    f_states[fi, 5:11] = fmap[g_idx, 0, :6]
+        f_rtgs = np.zeros((F, 1), dtype=np.float32)
+        f_timesteps = np.zeros(F, dtype=np.int64)
+        return f_states, f_rtgs, f_timesteps
+
     def _compute_fcas_norm_max(self) -> float:
         if not hasattr(self.env, 'aemo_data') or self.env.aemo_data is None:
             return 100.0
@@ -1025,8 +1085,32 @@ class AEMOAgent:
             timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
             attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
 
-            with torch.no_grad():
-                action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+            is_forecast = hasattr(self.model, 'forecast_len') and self.model.forecast_len > 0
+            if is_forecast:
+                self._ensure_forecast_map()
+                # Training sliding window: history at start_idx..start_idx+T-1,
+                # forecast at start_idx+T..start_idx+T+F-1. At inference the
+                # right-aligned buffer means start_idx = max(0, buffer_len-T),
+                # so the forecast must be at max(T, buffer_len), not pinned
+                # at context_len (which leaves a stale forecast for 88% of
+                # a 1728-step episode).
+                episode_start = int(getattr(self.env, 'episode_start_idx', 0))
+                forecast_ep_step = episode_start + max(context_len, buffer_len)
+                f_states, f_rtgs, f_timesteps = self._build_forecast_window(forecast_ep_step)
+                f_states = torch.tensor(f_states, dtype=torch.float32, device=device).unsqueeze(0)
+                f_rtgs = torch.tensor(f_rtgs, dtype=torch.float32, device=device).unsqueeze(0)
+                f_timesteps = torch.tensor(f_timesteps, dtype=torch.long, device=device).unsqueeze(0)
+                with torch.no_grad():
+                    action = self.model.get_action(
+                        states, actions, rtgs, timesteps, attention_mask=attention_mask,
+                        forecast_states=f_states, forecast_rtgs=f_rtgs,
+                        forecast_timesteps=f_timesteps,
+                    )
+            else:
+                with torch.no_grad():
+                    action = self.model.get_action(
+                        states, actions, rtgs, timesteps, attention_mask=attention_mask,
+                    )
             action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
             action = action.detach().cpu().numpy()
             action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
@@ -1283,9 +1367,9 @@ def run_episodes_parallel(agent_class, envs, agent_kwargs=None, render=False, ma
     return episode_logs, incident_logs
 
 # This function runs a trained SB3 model on a vectorized environment and collects episode trajectories.
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-import json
 def run_sb3_model_on_vec_env(model, vec_env, deterministic=False, max_steps=None):
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+    import json
     """
     Runs a trained SB3 model on a vectorized environment and collects episode trajectories.
     Args:

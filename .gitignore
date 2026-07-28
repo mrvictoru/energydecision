@@ -173,74 +173,42 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# data
-/data
-**/data
+# data (large parquet/npz files, HF cache)
+data/
+**/data/
 
-# models
-/models
-*.zip
+# models (checkpoints on HF, not in git)
+models/
+**/models/
 
-# system telemetry logs (GPU, kernel, CPU/IO monitors)
-/system_logs/
+# system telemetry logs
+system_logs/
+**/system_logs/
 
-# local experiment / evaluation artifacts
+# all evaluation artifacts — ignored by default. copy curated results to
+# eval_output/final/ if they need to be tracked in git.
 /eval_output/
-/expo/
-/system_logs/
-opencode.json
-/eval_output/grpo_modern_v2_multibat_mb16_dispatch_matched_rtg_1.5/
-/eval_output/grpo_modern_v2_multibat_mb16_rtg_smoke/
-/eval_output/grpo_modern_v2_multibat_mb16_standard_rtg_1.5/
-/eval_output/legacy_pretrained_standard_rtg_0.5/
-/eval_output/modern_v2_dispatch_matched_rtg_0.5/
-/eval_output/modern_v2_rtg_smoke/
-/eval_output/modern_v2_standard_rtg_0.5/
 
-# keep only a small curated set of evaluation artifacts trackable
-!/eval_output/
+# whitelist only eval_output/final/ for curated report artifacts
 !/eval_output/final/
+/eval_output/final/*
 !/eval_output/final/**/
 !/eval_output/final/**/evaluation_summary.json
-!/eval_output/final/**/heldout_metrics.csv
-!/eval_output/final/**/heldout_metrics_by_scenario.csv
+!/eval_output/final/**/*.csv
 !/eval_output/final/**/plots/
 !/eval_output/final/**/plots/*.svg
-!/eval_output/final/**/plots/*.png
 
-/eval_output/household/**
-!/eval_output/household/
-!/eval_output/household/baseline/
-!/eval_output/household/baseline/evaluation_metrics.csv
-!/eval_output/household/baseline/mean_reward.svg
-!/eval_output/household/risk_metrics.csv
-!/eval_output/household/pairwise_summary.csv
-!/eval_output/household/pairwise_significance_heatmap.svg
+# large generated caches and rollouts (always ignored regardless of location)
+heldout_logs/
+reference_cache/
+cache/
+aemo_cache_prewarm/
+*.parquet
 
-/eval_output/autoresearch/**
-!/eval_output/autoresearch/
-!/eval_output/autoresearch/example_baseline_full_b64/
-!/eval_output/autoresearch/example_baseline_full_b64/plots/
-!/eval_output/autoresearch/example_baseline_full_b64/plots/mean_reward.svg
-!/eval_output/autoresearch/example_baseline_full_b64/plots/risk_return.svg
-!/eval_output/autoresearch/example_baseline_full_b64/plots/episode_distribution.svg
-!/eval_output/autoresearch/example_baseline_full_b64/plots/grid_energy.svg
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/evaluation_summary.json
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/heldout_metrics.csv
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/heldout_metrics_by_scenario.csv
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.png
-!/eval_output/autoresearch/dispatch_matched_hf_full_fcas/plots/*.svg
+# opencode configuration (project-specific, plugins are in .opencode/ which is tracked)
+opencode.json
 
-# ignore large generated caches and rollouts
-**/heldout_logs/
-**/reference_cache/
-**/cache/
-**/aemo_cache_prewarm/
-**/*.parquet
-
-# editor / temp files
+# temp files
 *.tmp
 *.temp
 *.bak

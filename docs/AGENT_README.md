@@ -1,128 +1,137 @@
-# Agent Guide
+# Agent Reference
 
-This document describes the agent-related modules that manage policy logic, optimization algorithms, and data collection for both the household (`SolarBatteryEnv`) and grid-scale (`AEMOBatteryTradingEnv`) environments.
+This document is the focused reference for agent logic in `src/decision.py`.
 
-## Agent Classes
+Use it when you need:
 
-### `Agent` (Solar battery)
-- **Purpose**: Runs rule-based heuristics, SDP/MRDP/Oracle solvers, RL policies (SB3), and Decision Transformer inference on `SolarBatteryEnv` instances.
-- **Key constructor arguments**:
-  - `env`: `SolarBatteryEnv` instance
-  - `algorithm`: `'rule' | 'sdp' | 'mrdp' | 'oracle' | 'rl' | 'dt'`
-  - `model`: pre-trained RL or DT model
-  - `horizon`, `soc_resolution`, `action_resolution`: configure DP solvers
-  - `dt_gamma`, `rtg_value`: RTG handling for Decision Transformer inference
-- **Mode behaviours**:
-  - **rule**: solar/load heuristic uses normalized raw observations
-  - **sdp/mrdp/oracle**: lazily instantiate solver classes, call `solve()` to obtain policy, index action by closest SoC
-  - **rl**: forwards normalized observation to SB3 policy (`model.predict`)
-  - **dt**: maintains rolling buffers of `(state, action, RTG, timestep)` and builds padded tensors for `model.get_action`
-- **Episode execution**: `run_episode()` resets env, chooses observation type (raw vs norm), logs transitions, updates DT buffers, and returns episode/incident DataFrames.
+- the role of `Agent` and `AEMOAgent`
+- the supported algorithm modes
+- the logging behavior of episode execution
+- dispatch replay and DT inference entrypoints
 
-### `AEMOAgent` (grid-scale)
-- **Purpose**: Specializes in interacting with `AEMOBatteryTradingEnv`; added after AEMO env development.
-- **Features**:
-  - **rule**: price-based arbitrage action using FCAS-aware observation slices
-  - **fcas_rule**: extends rule with percentile-based FCAS bidding on RAISEREG/LOWERREG; thresholds computed from env's `aemo_data` at init time
-  - **dispatch**: replays real AEMO dispatch data (via `fetch_aemo_unit_dispatch()`) by translating `TOTALCLEARED` into normalized actions
-  - **rl/dt**: forwards obs to provided RL or Decision Transformer models similar to `Agent` but with AEMO observation layout
-  - **DT buffering**: replicates `Agent`'s buffer logic to support `DecisionTransformer.get_action` (same context_len handling)
-- **Dispatch mapping helper**: `_build_dispatch_actions()` resamples dispatch time series to env step duration and aligns to `SETTLEMENTDATE`, producing actions in `[-1, 1]` and optional FCAS bid fractions.
-  - Supports a **single replay DUID** by deriving `NET_MW` directly from that DUID's `TOTALCLEARED` stream.
-  - Supports **paired generation/load DUIDs** when `dispatch_duid_gen` and `dispatch_duid_load` are supplied explicitly.
+For the repo-wide system view, use [architecture.md](architecture.md). For workflow entrypoints, use [development.md](development.md) and [aemo/workflow.md](aemo/workflow.md).
 
-## Running Multiple Agents
-- Use `run_episodes_parallel()` for `Agent` on `SolarBatteryEnv` with `algorithm` in `['rule','sdp','mrdp','dt','oracle','dispatch']` (new addition for `dispatch` replay).
-- `AEMOAgent` is not yet included in parallel runner and should be run serially or via custom wrappers.
-
-## Logging and Output
-- Both agents return `(episode_df, incident_df)` with mean/per-step metrics.
-- `Agent` collects `raw_observation` (if available) and normalized observation for RL/DT modes; `AEMOAgent` mirrors this for AEMO envs.
-- Use the dictionaries in `info` (from `_make_reward_info`) to extract revenues, SOC, and degradation tracking.
-
-## Usage Example
-```python
-from datetime import datetime
-from src.aemo_data import fetch_aemo_data_bundle, fetch_aemo_unit_dispatch
-from src.AEMOBatteryEnv import AEMODataPreprocessor, AEMOBatteryTradingEnv
-from src.decision import AEMOAgent
-
-bundle = fetch_aemo_data_bundle(start=datetime(2023,6,1), end=datetime(2023,6,2), region="NSW1")
-dispatch = fetch_aemo_unit_dispatch(start=datetime(2023,6,1), end=datetime(2023,6,2), duid="LBBG1")
-
-pre = AEMODataPreprocessor(step_duration_hours=0.5, add_normalized_features=True, update_stats_from_data=True)
-processed = pre.preprocess_aemo_data(bundle['prices'], bundle['fcas'], bundle['generation'])
-env = AEMOBatteryTradingEnv(
-  aemo_data=processed,
-  action_mode='simple',
-  normalize_obs=True,
-  return_raw_obs=True,
-)
-
-agent = AEMOAgent(env, algorithm='dispatch', dispatch_data=dispatch, dispatch_duid='LBBG1')
-episode_df, incident_df = agent.run_episode()
-```
-
-## Agent Methods
+## Main Agent Classes
 
 ### `Agent`
 
-- `choose_action(obs)`
-  - **Args**: `obs` is the current observation shipped from `SolarBatteryEnv.reset()`/`step()` (raw + cyclical features). The method is tolerant of `list` inputs for rule-based modes but prefers `numpy.ndarray` when passing into SB3 or Decision Transformer models.
-  - **Returns**: a normalized action or list of actions in `[-1, 1]`. Rule/DP/oracle modes wrap the result in a 1-element list; when interacting with AEMO multi-market environments rule-based policies may instead return a 3-element action vector `[dispatch, fcas_raise_bid, fcas_lower_bid]` (`multi_market`) or a 9-element action vector (energy + 8 FCAS bids) for `full_fcas` mode. RL returns the SB3 `model.predict` output (scalar or vector) and DT returns the action produced by `model.get_action` after padding its context.
-  - **Behaviour**: routes to the heuristic, solver, RL, or DT helper according to `algorithm`. DT requires buffering of `(state, action, RTG, timestep)` and applies return-scale clipping before inference.
+`Agent` is the general control wrapper for the household track and some shared logic.
 
-- `rule_based_action(obs)`
-  - **Args**: raw observation containing cyclical time features, the `SolarBatteryEnv.df` columns (SolarGen, HouseLoad…), `battery_level_kwh`, and `battery_deg_cost`.
-  - **Returns**: `[np.float32]` list with the normalized charger/discharger command when used with household environments. When used with AEMO multi-market environments, the rule returns a `np.ndarray` shaped `(3,)` representing `[dispatch, fcas_raise_bid, fcas_lower_bid]` where FCAS bids default to `0.0`. The policy compares solar vs. load to derive surplus/deficit, applies noise, enforces SOC safety windows, and biases toward charge/discharge when SoC strays outside the degradation-safe band.
+Supported modes include:
 
-- `_get_forecasts(current_step, horizon)`
-  - **Args**: `current_step` (int) and `horizon` (int) used by the SDP/MRDP solvers to fetch future observations from `self.env.df`.
-  - **Returns**: List of dictionaries with forecast columns (`SolarGen`, `HouseLoad`, `ImportEnergyPrice`, `ExportEnergyPrice`). If `FutureGen`/`FutureLoad` columns exist, they are renamed for backwards compatibility; otherwise the base columns are used. Returns an empty list when insufficient data remains.
+- `rule`
+- `sdp`
+- `mrdp`
+- `oracle`
+- `rl`
+- `dt`
 
-- `run_episode(render=False, display_progress=False)`
-  - **Args**: optional `render` flag to call `env.render()` and `display_progress` to print step updates (notebook progress bars are commented out but placeholders exist).
-  - **Returns**: Tuple `(episode_df, incident_df)`, both Polars DataFrames. `episode_df` collects `step`, `norm_observation`, `raw_observation`, `action`, `reward`, and `info`; `incident_df` mirrors `env.deg_incidents` or yields an empty schema when no degradation events were recorded.
-  - **Behaviour**: resets the env, initializes DT buffers if needed, chooses `raw_obs` for rule/Solver/oracle modes and normalized obs for RL/DT, logs transitions, updates DT buffers, and optionally renders per step.
+Main responsibilities:
 
-### `AEMOAgent` Specific Methods
+- choose actions based on the selected algorithm
+- manage DT rollout buffers for inference
+- run episodes and emit structured logs
+- bridge solver-style and policy-style controllers into a common interface
 
-- **Constructor additions for `fcas_rule`**:
-  - `fcas_pctile` (float, default 0.80): percentile for computing FCAS bid thresholds from training data.
-  - `fcas_raise_threshold` (float, optional): explicit raw price threshold for RAISEREG bidding (overrides percentile).
-  - `fcas_lower_threshold` (float, optional): explicit raw price threshold for LOWERREG bidding (overrides percentile).
+### `AEMOAgent`
 
-- `set_dispatch_data(dispatch_data, dispatch_duid=None, dispatch_duid_gen=None, dispatch_duid_load=None, assume_single_duid_is_generator=True)`
-  - **Args**: accepts the raw dispatch dataframe from `fetch_aemo_unit_dispatch()` plus optional DUID filters for separating generation/load streams.
-  - **Returns**: `None`. Side effect is populating `self.dispatch_actions` with a resampled, normalized action trace used by the `dispatch` algorithm.
-  - **Notes**: passing only `dispatch_duid` uses single-stream replay; passing `dispatch_duid_gen` and/or `dispatch_duid_load` uses the paired-stream branch.
+`AEMOAgent` is the grid-scale counterpart for `AEMOBatteryTradingEnv`.
 
-- `_build_dispatch_actions(dispatch_data, dispatch_duid=None, dispatch_duid_gen=None, dispatch_duid_load=None, assume_single_duid_is_generator=True)`
-  - **Args**: same inputs as `set_dispatch_data`. Internally groups data by `SETTLEMENTDATE` to the env cadence, coalesces generator/load rows when both sides are supplied, and otherwise falls back to single-stream replay from `TOTALCLEARED`.
-  - **Returns**: `np.ndarray` shaped `(steps, 1)` for simple mode, `(steps, 3)` for legacy `multi_market`, or `(steps, 9)` for `full_fcas` mode; values are clipped to `[-1, 1]` relative to `env.max_battery_flow`. Returns `None` when there is no dispatch data or when the env lacks `aemo_data`.
+Supported modes include:
 
-### Dispatch Unit Discovery
+- `rule`
+- `fcas_rule`
+- `dispatch`
+- `rl`
+- `dt`
 
-- Use `get_dispatch_active_battery_units(start_date, end_date, region=..., cache_dir=...)` from `src.aemo_data` to list static-table battery DUIDs that actually appear in `DISPATCHLOAD` for the chosen window.
-- Use `check_aemo_dispatch_availability(...)` to verify that a specific replay DUID has rows over the requested date range before running a notebook or collecting logs.
+Main responsibilities:
 
+- interpret AEMO observations
+- produce energy-only or FCAS-aware actions depending on `action_mode`
+- replay historical dispatch trajectories
+- support Decision Transformer inference on AEMO state/action shapes
+
+## Common Execution Pattern
+
+Both agent classes expose `run_episode(...)` as the main data-collection surface.
+
+The typical outcome is:
+
+- an episode log DataFrame
+- an incident or auxiliary DataFrame depending on the environment
+
+Those logs are later consumed by helper functions in [HELPER_README.md](HELPER_README.md), saved to parquet, or converted into DT datasets.
+
+## Decision Transformer Inference
+
+DT-backed modes maintain rolling buffers of:
+
+- states
+- actions
+- RTG values
+- timesteps
+
+These are padded and forwarded to `DecisionTransformer.get_action(...)` during rollout.
+
+Important operational details:
+
+- the DT dimensions must match the environment observation and action spaces
+- AEMO runs must keep `act_dim` aligned with the configured `action_mode`
+- RTG prompting behavior depends on `rtg_value` and `dt_gamma`
+
+## Dispatch Replay
+
+`AEMOAgent` owns the agent-side portion of dispatch replay.
+
+Key supporting surfaces:
+
+- `set_dispatch_data(...)`
+- `_build_dispatch_actions(...)`
 - `_dispatch_action()`
-  - **Args**: none; reads `self.env.current_step` internally.
-  - **Returns**: one timestep of replayed action (scalar or 3-vector); zero-fills if dispatch data is unavailable or the env index falls outside the recorded range.
 
-- `choose_action(obs)`
-  - **Args**: `obs` is either raw AEMO observation (rule/dispatch) or normalized vector (RL/DT).
-  - **Returns**: for `dispatch`, the replayed actions from `_dispatch_action`; for `rule`, either a single-element action or, if the environment uses `action_mode='multi_market'`, a 3-element `np.ndarray` `[dispatch, fcas_raise_bid, fcas_lower_bid]` (FCAS bids default to 0.0), or a 9-element array for `full_fcas` mode; for `fcas_rule`, same shape as `rule` but bids all 8 services when current price exceeds data-driven percentile thresholds (default p80) and SOC headroom permits; for RL/DT, same behaviour as `Agent.choose_action` albeit with the AEMO-specific observation layout (shorter state vector, extra FCAS fields).
+The usual workflow is:
 
-- `rule_based_action(obs)`
-  - **Args**: expects raw AEMO observation `[time⁵, RRP, TOTALDEMAND, FCAS×8, GEN×2, SOC]`; returns zero action when inputs are missing.
-  - **Returns**: `[np.float32]` scaled action for energy-only environments, a `np.ndarray` shaped `(3,)` `[dispatch, fcas_raise_bid, fcas_lower_bid]` for legacy `multi_market` mode (FCAS bids default to 0.0), or a `(9,)` array with all 8 FCAS zeros for `full_fcas` mode. The value is chosen by comparing the energy price to `charge_price`/`discharge_price` thresholds, enforcing SOC limits, and adding Gaussian noise for smoothing.
+1. resolve a station or DUID using AEMO data and dispatch helpers
+2. build a replay action trace aligned to the environment timestep
+3. run the episode through `AEMOAgent(algorithm='dispatch', ...)`
 
-- `fcas_rule_based_action(obs)`
-  - **Args**: expects normalized AEMO observation `[time⁵, RRP, DEMAND, FCAS×8, GEN×2, SOC]` (all in [0,1] range); returns zero action when inputs are missing.
-  - **Returns**: `np.ndarray` shaped `(1,)` for simple mode, `(3,)` `[dispatch, fcas_raise, fcas_lower]` for legacy `multi_market` mode, or `(9,)` for `full_fcas` mode. Energy dispatch uses the same logic as `rule_based_action` but denormalises the RRP using env's `_raw_col_bounds`. In `multi_market` mode, FCAS bidding compares denormalised RAISEREG/LOWERREG prices against thresholds computed from the training data at init time (default p80 percentile). In `full_fcas` mode, all 8 services are thresholded at their respective p80 prices. Bids are 1.0 when price exceeds threshold and SOC headroom permits (raise >15%, lower <85%), else 0.0. Constructor params: `fcas_pctile` (default 0.80), `fcas_raise_threshold`, `fcas_lower_threshold` (explicit overrides).
+For the broader replay workflow, use [aemo/dispatch-replay.md](aemo/dispatch-replay.md).
 
-- `run_episode(render=False, display_progress=False)`
-  - **Args**: same knobs as `Agent.run_episode` but also interprets `algorithm in ['rule','fcas_rule','dispatch']` as using `raw_obs` for logs.
-  - **Returns**: `(episode_df, incident_df)` where `episode_df` mirrors the same columns as `Agent` but logs both normalized and raw AEMO observations; `incident_df` is currently an empty `pl.DataFrame()` placeholder (no degradation tracking yet).
-  - **Behaviour**: if `algorithm == 'dt'`, initializes DT buffers with the shorter AEMO state/action dims. The loop calls `choose_action`, steps the env, logs, updates DT buffers with the returned actions/RTGs, and tracks dispatch playback when relevant.
+## Algorithm Notes
+
+### Rule-based modes
+
+- Household `rule` reacts to solar, load, and battery state.
+- AEMO `rule` reacts mainly to price thresholds and SoC.
+- AEMO `fcas_rule` extends this with percentile-based FCAS bidding.
+
+### Planning modes
+
+- `sdp`, `mrdp`, and `oracle` are exposed through `Agent`.
+- They depend on environment forecasts or forecast-like slices and solver configuration.
+
+### RL modes
+
+- `rl` forwards normalized observations to a provided SB3 policy.
+- The agent wrapper handles rollout and logging, not training.
+
+## Logging Shape
+
+Typical episode logs include fields such as:
+
+- `step`
+- `norm_observation`
+- `raw_observation` when available
+- `action`
+- `reward`
+- `info`
+
+This logging contract is important because downstream evaluation and DT dataset tooling assume it.
+
+## Related Docs
+
+- [HELPER_README.md](HELPER_README.md)
+- [DP_ALGORITHM_README.md](DP_ALGORITHM_README.md)
+- [aemo/dispatch-replay.md](aemo/dispatch-replay.md)
+- [architecture.md](architecture.md)

@@ -86,6 +86,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="auto",
         help="Inference device for DT rollouts: auto, cpu, cuda, cuda:0, ...",
     )
+    parser.add_argument(
+        "--forecast-npz-path",
+        type=Path,
+        default=None,
+        help="Path to TTM forecast npz for ForecastDecisionTransformer evaluation. "
+             "Defaults to data/aemo_dt_forecast/ttm_forecasts.npz relative to repo root.",
+    )
     return parser.parse_args(argv)
 
 
@@ -203,14 +210,32 @@ def summarize_loss_history(loss_csv_path: Path) -> dict[str, Any]:
     }
 
 
-def load_dt_model(surface_manifest: dict[str, Any], *, model_path: Path | None, device: str) -> tuple[DecisionTransformer, Path, str]:
+def load_dt_model(surface_manifest: dict[str, Any], *, model_path: Path | None, device: str) -> tuple[Any, Path, str]:
     resolved_device = _resolve_device(device)
     model_kwargs = dict(surface_manifest["model_kwargs"])
+    model_class = str(model_kwargs.pop("model_class", "DecisionTransformer"))
     weights_path = Path(model_path or surface_manifest["paths"]["save_path"]).resolve()
-    model = DecisionTransformer(**model_kwargs)
+
+    if model_class == "ForecastDecisionTransformer":
+        from forecast_decision_transformer import ForecastDecisionTransformer as DTClass
+    else:
+        from decision_transformer import DecisionTransformer as DTClass
+
+    model = DTClass(**model_kwargs)
     model.load_from_checkpoint(str(weights_path), map_location=resolved_device)
     model.to(resolved_device)
     model.eval()
+
+    # Apply model_meta (e.g., return_scale) from the surface manifest
+    meta = surface_manifest.get("model_meta")
+    if isinstance(meta, dict) and "return_scale" in meta:
+        try:
+            rs = float(meta["return_scale"])
+            if rs == rs and abs(rs) >= 1e-12:
+                model.return_scale = rs
+        except Exception:
+            pass
+
     return model, weights_path, resolved_device
 
 
@@ -437,7 +462,7 @@ def run_dt_episodes(
     *,
     processed_data: pl.DataFrame,
     battery_variant: dict[str, Any],
-    model: DecisionTransformer,
+    model: Any,
     num_episodes: int,
     max_step: int,
     step_duration: float,
@@ -448,6 +473,7 @@ def run_dt_episodes(
     random_episode_start: bool,
     rtg_value: float,
     base_seed: int,
+    forecast_npz_path: str | None = None,
 ) -> list[pl.DataFrame]:
     episodes: list[pl.DataFrame] = []
     for episode_idx in range(num_episodes):
@@ -468,6 +494,7 @@ def run_dt_episodes(
             model=model,
             rtg_value=rtg_value,
             reset_seed=base_seed + episode_idx if random_episode_start else None,
+            forecast_npz_path=forecast_npz_path,
         )
         episode_df, _ = agent.run_episode()
         episodes.append(episode_df)
@@ -482,8 +509,9 @@ def run_policy_episodes(
     battery_variant: dict[str, Any],
     heldout_cfg: dict[str, Any],
     training_summary: dict[str, Any],
-    dt_model: DecisionTransformer | None,
+    dt_model: Any | None,
     comparison_cfg: dict[str, Any] | None = None,
+    forecast_npz_path: str | None = None,
 ) -> list[pl.DataFrame]:
     policy_kind = str(policy_cfg["kind"]).lower()
     episodes_per_variant = int(policy_cfg.get("episodes_per_variant", heldout_cfg.get("episodes_per_variant", 1)))
@@ -518,6 +546,7 @@ def run_policy_episodes(
             random_episode_start=random_episode_start,
             rtg_value=_dt_rtg_value(policy_cfg, training_summary),
             base_seed=base_seed,
+            forecast_npz_path=forecast_npz_path,
         )
 
     if policy_kind == "rule":
@@ -859,7 +888,8 @@ def evaluate_aemo_heldout(
     training_summary: dict[str, Any],
     evaluation_config: dict[str, Any],
     output_dir: Path,
-    dt_model: DecisionTransformer | None,
+    dt_model: Any | None,
+    forecast_npz_path: str | None = None,
 ) -> dict[str, Any]:
     heldout_cfg = dict(evaluation_config.get("heldout", {}))
     comparison_cfg = _comparison_config(evaluation_config)
@@ -996,6 +1026,7 @@ def evaluate_aemo_heldout(
                 training_summary=training_summary,
                 dt_model=dt_model,
                 comparison_cfg=comparison_cfg,
+                forecast_npz_path=forecast_npz_path,
             )
             tagged = _with_episode_metadata(
                 episodes,
@@ -1238,12 +1269,20 @@ def main(argv: Sequence[str] | None = None) -> None:
     if track != "aemo":
         raise ValueError(f"Unsupported evaluation track: {track!r}. Only 'aemo' is currently implemented.")
 
+    forecast_npz_path = args.forecast_npz_path
+    if forecast_npz_path is None:
+        default_npz = repo_root() / "data" / "aemo_dt_forecast" / "ttm_forecasts.npz"
+        forecast_npz_path = default_npz if default_npz.exists() else None
+    else:
+        forecast_npz_path = forecast_npz_path.resolve()
+
     summary["heldout_evaluation"] = evaluate_aemo_heldout(
         surface_manifest=surface_manifest,
         training_summary=training_summary,
         evaluation_config=evaluation_config,
         output_dir=output_dir,
         dt_model=dt_model,
+        forecast_npz_path=str(forecast_npz_path) if forecast_npz_path is not None else None,
     )
 
     _write_json(output_dir / "evaluation_summary.json", summary)

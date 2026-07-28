@@ -1,33 +1,39 @@
-# AEMO documentation guide
+# AEMO Documentation Guide
 
-Use this page as the entry point for the AEMO-related docs in this repository. For the latest repo status, current GRPO findings, and the current evaluation methodology, start with [../README.md](../README.md), [../grpo_experiments.md](../grpo_experiments.md), and [roadmap.md](roadmap.md).
+This is the entrypoint for the grid-scale AEMO/NEM track.
 
-## Which document should I read?
+If you are new to the repository, read [../README.md](../README.md), [../architecture.md](../architecture.md), and [../development.md](../development.md) first.
+
+## Start Here
 
 | If you want to... | Read this | What it covers |
 | --- | --- | --- |
-| See the latest GRPO results and evaluation changes | [../grpo_experiments.md](../grpo_experiments.md) | Dispatch-matched evaluation, RTG calibration, and the latest GRPO findings |
-| Understand the environment itself | [`environment.md`](environment.md) | Observation space, action space, reward, market data, and environment behavior |
-| Run notebook-based offline RL and Decision Transformer experiments | [`workflow.md`](workflow.md) | Dataset creation, notebook flow, SB3 training, DT dataset assembly, and DT training entrypoints |
-| Regenerate the additive 2024 dispatch-heavy dataset | [`recommended_data_generation.md`](recommended_data_generation.md) | One-shot generation command, notebook config, and the current generated-vs-pending dispatch replay status |
-| Run or inspect dispatch replay experiments | [`dispatch-replay.md`](dispatch-replay.md) | Dispatch replay workflow, DUID discovery, sizing resolution, and API reference |
-| Understand battery degradation modeling choices | [`degradation.md`](degradation.md) | Design rationale, implementation summary, and model limitations |
-| See the short-term AEMO DT roadmap | [`roadmap.md`](roadmap.md) | Research priorities and near-term milestones, not day-to-day operating instructions |
+| Understand the AEMO track at a high level | [../architecture.md](../architecture.md) | Where AEMO modules, scripts, and artifacts live |
+| Run the main workflow | [workflow.md](workflow.md) | Dataset creation, notebook flow, CLI entrypoints, and training artifacts |
+| Understand the environment | [environment.md](environment.md) | Observation space, action space, reward, market data, and simulator behavior |
+| Run held-out evaluation | [../evaluation_guide.md](../evaluation_guide.md) | Evaluator configs, metrics, and result interpretation |
+| Work with dispatch replay | [dispatch-replay.md](dispatch-replay.md) | DUID discovery, sizing resolution, and replay helpers |
+| Understand degradation modeling | [degradation.md](degradation.md) | Design rationale and implementation summary |
 
-## Recommended reading order
+## Research Notes
 
-1. Start with [`environment.md`](environment.md) if you are new to the AEMO environment.
-2. Read [`workflow.md`](workflow.md) if you want to generate data, train models, or reproduce the notebook-first pipeline.
-3. Read [`recommended_data_generation.md`](recommended_data_generation.md) if you want the additive 2024 dataset recipe or the current replay-generation status.
-4. Use [`dispatch-replay.md`](dispatch-replay.md) when your workflow needs real dispatch replay data.
-5. Read [`degradation.md`](degradation.md) when you need the modeling rationale behind the degradation setup.
-6. Treat [`roadmap.md`](roadmap.md) as a roadmap note for future work rather than a setup guide.
+Use these when you need time-specific experiment context rather than stable operating guidance.
 
-## At a glance
+- [../grpo_experiments.md](../grpo_experiments.md)
+- [../dt_improvement_roadmap.md](../dt_improvement_roadmap.md)
+- [../aemo_hybrid_dt_plan.md](../aemo_hybrid_dt_plan.md)
+- [recommended_data_generation.md](recommended_data_generation.md)
 
-- **Reference docs:** `environment.md`, `dispatch-replay.md`
-- **Workflow guide:** `workflow.md`
-- **Generation status + recipe:** `recommended_data_generation.md`
-- **Design note:** `degradation.md`
-- **Roadmap note:** `roadmap.md`
-- **Manual static-table fallback:** see `workflow.md` and `environment.md` for the AEMO **NEM Registration and Exemption List** download URL and local override paths
+## Recommended Reading Order
+
+1. [workflow.md](workflow.md)
+2. [environment.md](environment.md)
+3. [../evaluation_guide.md](../evaluation_guide.md)
+4. [dispatch-replay.md](dispatch-replay.md) if your work depends on real dispatch traces
+5. [degradation.md](degradation.md) if you need the battery-aging model details
+
+## Notes
+
+- Prefer `scripts/launch_aemo_training.py` as the canonical CLI training entrypoint.
+- Treat `scripts/` as the executable surface and `src/` as reusable implementation.
+- Keep volatile benchmark narratives in the research-note docs, not in workflow docs.

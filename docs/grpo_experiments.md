@@ -1,5 +1,15 @@
 # GRPO Post-Training Experiments
 
+This document is an experiment log and interpretation note for GRPO work on the AEMO track.
+
+Use it when you need:
+
+- historical GRPO findings
+- dispatch-matched comparison context
+- ablation and calibration results
+
+For stable workflow guidance, use [grpo_finetuning_guide.md](grpo_finetuning_guide.md), [evaluation_guide.md](evaluation_guide.md), and [aemo/README.md](aemo/README.md).
+
 ## Overview
 
 Group Relative Policy Optimization (GRPO) is applied as an online fine-tuning

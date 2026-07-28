@@ -1,5 +1,11 @@
 # AEMO FCAS Dataset Training Commands
 
+This document is an advanced command reference for full-corpus AEMO training work.
+
+It should be treated as a specialist companion to [aemo/workflow.md](aemo/workflow.md), not as the primary onboarding guide.
+
+For the current canonical workflow, start with [aemo/README.md](aemo/README.md), [aemo/workflow.md](aemo/workflow.md), and [evaluation_guide.md](evaluation_guide.md).
+
 ## Training corpus
 
 The primary training dataset is the FCAS-rich assembly:
@@ -8,13 +14,15 @@ The primary training dataset is the FCAS-rich assembly:
 - **Size**: 2,425 episodes, 78.4M rows, 3.1 GB
 - **Sources**: PPO (905), A2C (300), DDPG (300), SAC (300), TD3 (300), FCAS rule (300), old rule (20)
 - **State**: 18-dim normalized observation vector
-- **Action**: 3-dim (energy dispatch, FCAS raise, FCAS lower)
+- **Action**: depends on the model config used for training.
+  - Legacy/default config example in this file: `configs/aemo_decision_transformer_model_kwargs.json` with `act_dim=3`
+  - Modern full-FCAS config: `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json` with `act_dim=9`
 
 ## Pilot (fast iteration)
 
 ```bash
 # Generate stratified pilot spec and build parquet files
-python3 src/build_aemo_fcas_pilot_spec.py --build-pilot
+python3 scripts/build_aemo_fcas_pilot_spec.py --build-pilot
 
 # Train on pilot
 python3 scripts/launch_aemo_training.py --run-tier proxy-baseline

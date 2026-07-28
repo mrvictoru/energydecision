@@ -1,5 +1,15 @@
 # AEMO Data Generation Status
 
+This document is a status-heavy companion to [workflow.md](workflow.md).
+
+Use it when you need:
+
+- the current recommended FCAS-rich dataset recipe
+- a summary of which generation steps produced the main corpus
+- historical context on supplementary dispatch-replay data
+
+If you are new to the AEMO track, start with [README.md](README.md) and [workflow.md](workflow.md) first.
+
 ## Primary dataset: FCAS-rich (2021-2023)
 
 The main training dataset is the FCAS-rich assembly. It was generated in three phases:
@@ -46,6 +56,8 @@ These can be re-added to the dataset if needed by running `memory_safe_assemble.
 with the raw log files included. The 2024 additive plan is otherwise superseded
 by the 2021-2023 FCAS dataset.
 
+This means the file should be treated as a research-status note, not as the primary operating guide for new contributors.
+
 ## FCAS rule algorithm
 
 `fcas_rule` extends the original rule with percentile-based FCAS bidding:
@@ -53,4 +65,4 @@ by the 2021-2023 FCAS dataset.
 - FCAS bidding: bids 1.0 on RAISEREG/LOWERREG when price exceeds p80 threshold
 - $2,941 FCAS rev / ep vs $0 for old rule
 
-See `src/decision.py` and `AGENTS.md` for usage.
+See `src/decision.py`, [../AGENT_README.md](../AGENT_README.md), and [../research/README.md](../research/README.md) for related context.

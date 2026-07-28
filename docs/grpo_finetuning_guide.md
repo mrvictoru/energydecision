@@ -1,5 +1,16 @@
 # GRPO Fine-Tuning Guide
 
+This guide documents the GRPO post-training workflow for advanced AEMO experiments.
+
+Use it when you need:
+
+- the GRPO CLI entrypoints
+- the currently recommended GRPO flags
+- post-training evaluation commands
+- RTG prompt calibration for GRPO-tuned models
+
+If you are new to the repo, start with [README.md](README.md), [architecture.md](architecture.md), [development.md](development.md), and [aemo/README.md](aemo/README.md) first.
+
 Group Relative Policy Optimization (GRPO) improves a pretrained Decision
 Transformer through online interaction with the simulation environment.
 No dataset regeneration or SB3 retraining is needed — the model learns by
@@ -62,8 +73,7 @@ python3 scripts/run_grpo_multi_region.py \
 > to try via the `stable_rtg_update` clamp, but validate against a `gamma=1.0`
 > baseline first.
 
-Expected improvement: +$8,242/ep profit, $1,030/MWh normalized, beats PPO
-and dispatch Dalrymple North on a matched battery.
+The example figures in this guide are historical reference points, not guaranteed outcomes for a fresh run. Treat them as experiment context rather than as the stable contract of the workflow.
 
 **GPU memory**: `--group-size 8` requires ~14 GB VRAM; `--group-size 4` requires
 ~8 GB. Both work on a 22 GB RTX 2080 Ti. Use 4 if you encounter OOM.
@@ -126,7 +136,7 @@ After training completes, the `--output-dir` contains:
 
 ## Post-Training Evaluation
 
-After GRPO, evaluate against baselines using the standardised tiers:
+After GRPO, evaluate against baselines using the standardised tiers described in [evaluation_guide.md](evaluation_guide.md):
 
 ```bash
 # Smoke test (fast)
@@ -178,3 +188,5 @@ done
 ```
 
 Use the best RTG for the Standard and Comprehensive tiers.
+
+For broader experiment context and historical comparisons, see [research/README.md](research/README.md) and [grpo_experiments.md](grpo_experiments.md).
