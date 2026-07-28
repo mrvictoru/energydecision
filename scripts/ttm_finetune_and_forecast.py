@@ -132,22 +132,26 @@ def finetune_ttm(
     tsp.train(pdf)
 
     if fewshot_location == "diverse":
-        # Build custom few-shot dataset with evenly-spaced indices
-        n_train = int(len(pdf) * split_config["train"])
-        fewshot_indices = _build_diverse_fewshot_indices(
-            pdf, n_train, fewshot_fraction=0.05,
-        )
+        # First get the full training dataset to know its actual size
         train_dataset, valid_dataset, test_dataset = get_datasets(
-            tsp,
-            pdf,
-            split_config,
-            fewshot_fraction=0.05,
-            fewshot_location="first",  # fallback, overridden below
+            tsp, pdf, split_config,
+            fewshot_fraction=1.0, fewshot_location="first",
         )
-        # Replace the training dataset with our custom few-shot subset
-        from torch.utils.data import Subset
-        train_dataset = Subset(train_dataset, fewshot_indices)
-        print(f"[FT] Custom few-shot dataset: {len(train_dataset)} samples")
+        n_actual = len(train_dataset)
+        fewshot_indices = _build_diverse_fewshot_indices(
+            pdf, n_actual, fewshot_fraction=0.05,
+        )
+        from torch.utils.data import Dataset as _Dataset
+        class _IndexDataset(_Dataset):
+            def __init__(self, base_dataset, indices):
+                self.base = base_dataset
+                self.indices = list(indices)
+            def __len__(self):
+                return len(self.indices)
+            def __getitem__(self, idx):
+                return self.base[self.indices[idx]]
+        train_dataset = _IndexDataset(train_dataset, fewshot_indices)
+        print(f"[FT] Custom diverse few-shot dataset: {len(train_dataset)} samples (from {n_actual} total)")
     else:
         # Original behaviour: few-shot from the beginning
         train_dataset, valid_dataset, test_dataset = get_datasets(
@@ -181,7 +185,7 @@ def finetune_ttm(
         eval_strategy="epoch",
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        dataloader_num_workers=4,
+        dataloader_num_workers=0 if fewshot_location == "diverse" else 4,
         report_to=None,
         save_strategy="epoch",
         logging_strategy="epoch",
