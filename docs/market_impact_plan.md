@@ -130,11 +130,11 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 
 ### Phase 1 — AEMO Oracle (rigor) (~1.5 wk)
 
-- [ ] Create `src/aemo_oracle_algo.py` — perfect-foresight LP co-optimizer over energy + 8 FCAS services with SOC dynamics, ramp, and enablement constraints mirroring `_compute_fcas_enablement` (`src/AEMOBatteryEnv.py:942-998`). Use `pulp` (zero-friction, no solver install).
-  - [ ] `Oracle_PT` (price-taking): consumes exogenous `RRP` + `FCAS_*` → ceiling for the existing price-taking env.
-  - [ ] `Oracle_MI` (market-impact-aware): same constraints but uses the impact function (Phase 2) in its objective → ceiling under self-impact.
-- [ ] Register both Oracle variants as evaluator baselines in `scripts/autoresearch_evaluator.py` and `AEMOAgent(algorithm='aemo_oracle', ...)`.
-- [ ] Invariant tests: `Oracle_PT ≥ any replayed policy`, `Oracle_PT ≥ Oracle_MI` (self-impact only hurts).
+- [x] Create `src/aemo_oracle_algo.py` — perfect-foresight LP co-optimizer over energy + 8 FCAS services with SOC dynamics, ramp, and enablement constraints matching `_compute_fcas_enablement`. Uses scipy.linprog (HiGHS). ~0.02s for 288 intervals.
+  - [x] `Oracle_PT` (price-taking): consumes exogenous `RRP` + `FCAS_*` → ceiling for the existing price-taking env. Validated: 0.1% gap vs env execution.
+  - [ ] `Oracle_MI` (market-impact-aware): same constraints but uses the impact function (Phase 2) in its objective → ceiling under self-impact. Deferred to Phase 3.
+- [x] Register Oracle_PT as evaluator baseline in `scripts/autoresearch_evaluator.py` and `AEMOAgent(algorithm='aemo_oracle', ...)`.
+- [ ] Invariant tests: `Oracle_PT ≥ any replayed policy` (tbd, requires running Oracle + DT on same episodes).
 - [ ] Run `Oracle_PT` against the dispatch-matched benchmark — must beat DT ($10,138/ep); sanity check.
 
 ### Phase 2 — Market-impact env extension (novel method) (~2.5 wk total)
@@ -266,6 +266,28 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 - Added cross-reference from `docs/dt_improvement_roadmap.md`.
 
 ### 2026-07-29 — Phase 0.2–0.5: aggregate helpers + preprocessor wiring
+
+### 2026-07-29 — Phase 1: AEMO Oracle (Oracle_PT) complete
+- Created `src/aemo_oracle_algo.py` — LP co-optimizer for energy + 8 FCAS
+  services. Uses scipy.linprog (HiGHS). Solves 288 intervals in ~0.02s.
+- **Validated with 0.1% gap**: Oracle profit $10,117 vs env execution
+  $10,111 on a 1-day SA1 test (zero degradation). Energy rev matches within
+  $2, FCAS rev within $4.
+- **Bugs found and fixed during validation**:
+  1. `fetch_aemo_data_bundle_with_dispatch` argument-ordering bug
+     (pre-existing, region passed as duids positionally).
+  2. LP headroom constraints swapped (raise↔lower vs charge↔discharge).
+  3. Oracle dispatch sign convention opposite to env's convention
+     (positive=discharge vs positive=charge).
+  4. FCAS bid slot order mismatched env's `_fcas_services` ordering
+     (RAISEREG first, not logical-order first).
+- **Integrated** into AEMOAgent (`src/decision.py`) via `_init_oracle()`
+  and `_oracle_action()`. Registered as evaluator baseline
+  (`scripts/autoresearch_evaluator.py` via `policy_kind="oracle"`).
+- Added `oracle_pt` policy entry to
+  `configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json`.
+
+_Next: Phase 2 — Market-impact env extension._
 - **`aggregate_fcas_market_depth`**: sums per-unit DISPATCHLOAD enablement
   per 5-min interval. Falls back to TOTALDEMAND-ratio heuristic when
   enablement is zero (SA1 imports FCAS via interconnectors → zero local
@@ -285,4 +307,4 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
   `_normalized` suffix columns.
 - Tests: 320 pass, 3 pre-existing Distrobox path failures.
 
-_Next: Phase 1 — AEMO Oracle (price-taking LP co-optimizer)._
+_Next: Phase 2 — Market-impact env extension._

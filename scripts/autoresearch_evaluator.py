@@ -589,9 +589,28 @@ def run_policy_episodes(
             device=str(policy_cfg.get("device", "auto")),
         )
 
+    if policy_kind == "oracle":
+        return run_rule_episodes(
+            processed_data=processed_data,
+            num_episodes=episodes_per_variant,
+            battery_capacity=float(battery_variant["battery_capacity"]),
+            max_battery_flow=float(battery_variant["max_battery_flow"]),
+            init_soc=float(battery_variant["init_soc"]),
+            step_duration=step_duration,
+            battery_life_cost=float(battery_variant["battery_life_cost"]),
+            max_step=max_step,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+            base_seed=base_seed,
+            algorithm=str(policy_cfg.get("algorithm", "aemo_oracle")),
+        )
+
     if policy_kind == "dispatch":
         should_run, dispatch_region = should_run_dispatch_for_scenario(
-            scenario_region=str(scenario["region"]),
+            scenario=scenario,
             dispatch_station=policy_cfg.get("station_name"),
             dispatch_duid=policy_cfg.get("dispatch_duid"),
             start_date=scenario["start_date"],

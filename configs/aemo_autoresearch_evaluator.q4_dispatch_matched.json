@@ -10,6 +10,7 @@
     "require_full_fcas_dispatch": true,
     "required_policy_names": [
       "candidate_dt",
+      "oracle_pt",
       "dispatch_dalrymple_north",
       "dispatch_torrens_island",
       "dispatch_hornsdale",
@@ -84,6 +85,11 @@
       "kind": "dispatch",
       "station_name": "hornsdale",
       "dispatch_index": 0
+    },
+    {
+      "name": "oracle_pt",
+      "kind": "oracle",
+      "algorithm": "aemo_oracle"
     },
     {
       "name": "fcas_rule",
