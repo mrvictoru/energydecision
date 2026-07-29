@@ -26,6 +26,97 @@ DT's advantage persist when the battery moves the market?"
 extension), plus statistical rigor on the AEMO headline tables that have been
 point-estimate-only.
 
+## Complementary research thread: synthetic FCAS generation
+
+A separate motivation for impact modeling surfaced during planning: instead
+of perturbing historical prices with an impact function, generate *synthetic*
+price trajectories that already embed market impact. This avoids the domain
+shift caused by ESS-trained-on-historical-prices vs. ESS-evaluated-on-impacted
+prices (Phase 4 retrain approach). It would also unlock unlimited training
+data.
+
+**Blocker:** TTM (and any pure price-history conditional model) cannot
+generate realistic FCAS prices — measured TTM-FCAS correlations are ~0.01–0.07
+(report.md §8.2.8). The reason is documented below: FCAS prices are
+spike-driven, regime-switching, and not predictable from price history alone.
+A generator that conditions only on past prices cannot reproduce their
+distribution.
+
+Nonetheless, the *impact model produces exactly the training signal that a
+future FCAS generator would need*: the impact function computes `(base_price,
+battery_mw, depth) -> realized_price`. A learned generator can be trained to
+reproduce this mapping across many unseen market states. So the impact model
+is a prerequisite and enables a future generative FCAS pipeline (see Phase 7).
+
+### FCAS data characteristics (measured on cached 5-min 2024 H1, 3 regions)
+
+**Distribution shape (pool SA1+NSW1+QLD1, 5-min, H1 2024):**
+
+| Service | Mean | Std | Median | p99 | Max | %Zero | Skew | lag1 ACF |
+|---------|---:|---:|---:|---:|---:|---:|---:|---:|
+| LOWER5MIN | 0.39 | 3.18 | 0.20 | 4.0 | 999 | 8.7% | 208 | 0.25 |
+| LOWER60SEC | 3.27 | 128.7 | 0.39 | 27.7 | 16600 | 0.6% | 114 | 0.90 |
+| LOWER6SEC | 9.87 | 347.2 | 0.30 | 40.6 | 16600 | 5.9% | 42 | 0.92 |
+| LOWERREG | 2.99 | 4.82 | 1.84 | 19.5 | 999 | 2.7% | 62 | 0.33 |
+| RAISE5MIN | 0.37 | 0.47 | 0.38 | 0.7 | 43.8 | 1.4% | 61 | 0.72 |
+| RAISE60SEC | 0.57 | 3.44 | 0.39 | 3.0 | 788.9 | 2.3% | 158 | 0.73 |
+| RAISE6SEC | 1.12 | 5.18 | 0.39 | 19.9 | 269.4 | 3.5% | 18 | 0.71 |
+| RAISEREG | 5.47 | 5.03 | 4.22 | 20.7 | 158.5 | 0.1% | 5 | 0.58 |
+
+Key patterns:
+
+- **Two regimes within FCAS.** Contingency services (6SEC, 60SEC, 5MIN) have
+  extreme skew (17–208), heavy tails, and price-cap spikes (capped at
+  \$16,600). Regulation services (RAISEREG, LOWERREG) are far smoother
+  (skew 5–62) and rarely hit caps.
+- **Linear autocorrelation collapses fast for some services.** LOWER5MIN
+  lag12 ACF ≈ 0.02; LOWER6SEC lag12 ≈ 0.001. RAISEREG retains lag288 ACF =
+  0.21. So pure autoregressive/TTM-style generators fail for the contingency
+  services.
+- **Cross-service correlation matches physical structure.** Within-direction
+  spike co-occurrence is 43–71% (RAISE→RAISE, LOWER→LOWER). Across-direction
+  spike co-occurrence is only 1–6%. RAISE and LOWER services are essentially
+  independent processes with separate drivers.
+- **Linear correlation with RRP/demand/wind/solar is near zero** (all < 0.10)
+  — confirming §8.2.8's TTM-near-zero-correlation finding. **But** spike
+  co-occurrence with RRP spikes is strongly asymmetric: when RRP spikes,
+  RAISE6SEC averages 9× its normal value; LOWER services often go *down*
+  when RRP spikes. This means the signal lives in joint spike events, not
+  linear levels — generative models must capture tail dependence, not
+  correlation.
+- **Weak diurnal pattern.** RAISE6SEC averages 0.25 at midday vs 6.07 at
+  18:00 (the evening ramp). Useful as a baseline, not a generator.
+
+### Candidate generative models for FCAS
+
+Ranked by fit to the observed structure (spike regime, weak linear autocorr,
+tail dependence, direction-asymmetric drivers):
+
+1. **HMM regime-switching + copula (recommended v1).** Hidden Markov model
+   with 2–3 states (normal, RAISE-stressed, LOWER-stressed) per direction;
+   per-state emissions from heavy-tailed distributions (generalized Pareto
+   for the tail, lognormal for the body); copula binding within-direction
+   services to reproduce 43–71% spike co-occurrence; transition probabilities
+   conditioned on exogenous features (demand ramp, wind/solar change, RRP
+   spike indicator, hour). Captures the dominant structure with low complexity
+   and high interpretability.
+2. **Conditional diffusion model.** Generate (RRP, 8×FCAS) jointly, conditioned
+   on (demand, wind, solar, hour, day-of-week, RRP-spike indicator).
+   Diffusion handles heavy tails and joint spike dependence natively. Stronger
+   research contribution but more compute and harder to validate.
+3. **Conditional VAE with a "market stress" latent.** Shared latent encodes
+   the directional stress state; per-service decoder emits heavy-tailed
+   prices. Natural for the "shared RAISE trigger" structure, but VAEs tend to
+   underrepresent tail magnitude.
+4. **Heavy-tailed sequence model (Student-t output head).** Reuse the DT/TTM
+   transformer stack with a Student-t or generalized-Pareto output
+   distribution and exogenous conditioning. Lowest implementation cost (since
+   the transformer infra exists), but likely remains weakest on rare spikes.
+
+**Recommendation:** ship (1) as v1 — interpretable, captures regime-switching
+and within-direction tail dependence, addresses the documented TTM failure
+mode directly. Try (2) only if v1 is insufficiently expressive.
+
 ## Trackable checklist
 
 ### Phase 0 — Data foundation (~1 wk)
@@ -83,10 +174,39 @@ point-estimate-only.
 
 ### Phase 5 — Documentation & wrap-up
 
-- [ ] Write `docs/market_impact_plan.md` (this file) — finalize, add learnings, and publish results.
+- [ ] Finalize this plan file with experimental learnings.
 - [ ] Add new report.md §8.2.9 "Market-Impact-Aware Evaluation".
 - [ ] Check off relevant README roadmap items: "AEMO Oracle upper bound", "Statistical confidence on AEMO headlines", "Market-impact BESS evaluation".
 - [ ] Update `docs/research/README.md` to link this plan.
+
+### Phase 6 — Synthetic FCAS data generation (parallel/research thread)
+
+Standalone research direction that both complements the impact model and
+addresses the open §8.2.8 negative result on forecast DT. Decisions on whether
+to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
+
+- [ ] Build evaluation harness for FCAS generators (per-service MAE/RMSE, tail
+      KS-test, spike-event recall, joint spike co-occurrence, discriminative
+      score vs. real held-out episodes).
+- [ ] Implement v1: HMM regime-switching + copula generator conditioned on
+      exogenous features (demand ramp, wind/solar delta, RRP-spike indicator,
+      hour). Direction-asymmetric (two HMMs: RAISE family, LOWER family).
+      Generalized Pareto tail per service.
+- [ ] Compare v1 generator vs. real held-out FCAS distribution (KS test,
+      autocorrelation match, spike-rate match).
+- [ ] Conditional diffusion model v2 (only if v1 is insufficient).
+- [ ] Validate downstream utility: train DT on synthetic-only episodes,
+      evaluate against real-data-trained DT on the standard surface.
+
+### Phase 7 — Combine impact model + synthetic FCAS (speculative)
+
+- [ ] Use the impact model to generate interactions between battery and FCAS
+      market depth.
+- [ ] Train the FCAS generator on `(base_price, battery_mw, depth, state) →
+      realized_price` samples from the impact model.
+- [ ] Generate unlimited synthetic episodes with impact baked in.
+- [ ] Retrain DT on synthetic under-impact data; compare with
+      impact-aware-trained DT (Phase 4).
 
 ## Key code hooks (verified by explore)
 
@@ -120,5 +240,20 @@ point-estimate-only.
 - Branch `feature/market-impact-modeling` created off `main` (7ea332d).
 - Plan finalized: piecewise-linear merit-order impact, energy + FCAS, free aggregate depth v1, dual obs-mode config flag.
 - Companion rigor item: AEMO Oracle (perfect-foresight LP co-optimizer).
+
+### 2026-07-29 — Synthetic FCAS direction added after FCAS data investigation
+- Analysed cached 5-min 2024-H1 data across SA1/NSW1/QLD1 (157K rows).
+- FCAS data are regime-switching with heavy tails (skew 17–208 for
+  contingency services, 5–62 for regulation) and price-cap spikes
+  (\$16,600) — not a smooth time series.
+- Within-direction spike co-occurrence 43–71%; cross-direction <6%. RAISE
+  and LOWER services are essentially independent processes.
+- Linear correlation with RRP/demand/wind/solar is near zero (all <0.10),
+  explaining the §8.2.8 TTM-FCAS negative result; the signal lives in joint
+  spike *events*, not levels.
+- Added Phase 6 (synthetic FCAS generation) and Phase 7 (combine with impact
+  model) as parallel/research threads. Recommended v1: HMM + copula with
+  heavy-tailed emissions and exogenous conditioning. Deferred until Phase 2–3
+  base results land.
 
 _Next: Phase 0 — extend DISPATCHLOAD columns_to_keep and implement aggregate helpers._
