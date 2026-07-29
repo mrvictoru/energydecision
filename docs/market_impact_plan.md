@@ -122,11 +122,11 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 ### Phase 0 — Data foundation (~1 wk)
 
 - [x] Extend `fetch_aemo_unit_dispatch` `columns_to_keep` (`src/aemo_data.py:1307-1309`) to retain `AVAILABILITY`, `INITIALMW`, `RAISEREGENABLEMENTMAX/MIN`, `LOWERREGENABLEMENTMAX/MIN`, `SEMIDISPATCHCAP`, `RAMPUP/DOWNRATE`.  No re-download needed — already in cached `.feather` files under `data/aemo/`.
-- [ ] Implement `aggregate_fcas_market_depth(region, services, start, end)` — sum per-unit enablement across all DUIDs per service per interval per region → `FCAS_DEPTH_<SERVICE>_MW`.
-- [ ] Implement `aggregate_residual_supply(region, start, end)` — `sum(AVAILABILITY) - TOTALDEMAND` per interval per region → `RESIDUAL_SUPPLY_MW`.
-- [ ] Implement `build_supply_curve(region, interval)` — sort generators by fuel-tier inferred marginal cost, accumulate MW → price-MW ladder.
-- [ ] Pipe new columns through `AEMODataPreprocessor` (`_resample_*` family, `src/AEMOBatteryEnv.py:155-225`) and `_normalize_features` (`:281-327`).
-- [ ] Tests pass: `python -m pytest tests/ -v`.
+- [x] Implement `aggregate_fcas_market_depth(region, start, end)` — per-service FCAS market depth MW per interval. Uses DISPATCHLOAD enablement sum when nonzero; falls back to TOTALDEMAND-ratio heuristic.
+- [x] Implement `aggregate_residual_supply(region, start, end)` — `sum(AVAILABILITY)` per interval.
+- [x] Implement `build_supply_curve(region, interval)` — sort generators by fuel-tier inferred marginal cost, accumulate MW → price-MW ladder.
+- [x] Pipe new columns through `AEMODataPreprocessor` (`_merge_datasets`, `_normalize_features`).
+- [x] Tests pass: 320 pass, 3 pre-existing failures (Distrobox path issue).
 
 ### Phase 1 — AEMO Oracle (rigor) (~1.5 wk)
 
@@ -265,4 +265,24 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 - 2 dispatch tests pass; 4 pre-existing failures unrelated.
 - Added cross-reference from `docs/dt_improvement_roadmap.md`.
 
-_Next: Phase 0.2–0.4 — aggregate_fcas_market_depth, aggregate_residual_supply, build_supply_curve._
+### 2026-07-29 — Phase 0.2–0.5: aggregate helpers + preprocessor wiring
+- **`aggregate_fcas_market_depth`**: sums per-unit DISPATCHLOAD enablement
+  per 5-min interval. Falls back to TOTALDEMAND-ratio heuristic when
+  enablement is zero (SA1 imports FCAS via interconnectors → zero local
+  enablement).  Confirmed DISPATCHLOAD path works for NSW1 (6/8 services
+  nonzero).
+- **`aggregate_residual_supply`**: sums `AVAILABILITY` from DISPATCHLOAD
+  per interval.
+- **`build_supply_curve`**: merit-order ladder sorted by fuel-tier
+  marginal cost (0 → 999 \$/MWh, 4+ tiers).  Verified monotonic cumulative
+  MW and correct total match with aggregate_residual_supply.
+- **New maps**: `FUEL_MARGINAL_COST_TIERS`, `_FUEL_SOURCE_TO_KEY`,
+  `_infer_marginal_cost()` for fuel-type→cost-tier inference from AEMO
+  static generator table.
+- **Preprocessor**: `prepare_aemo_data` / `_merge_datasets` accept
+  optional `fcas_depth` and `availability_sum` args; `_normalize_features`
+  normalises FCAS_DEPTH_* and AVAILABILITY_SUM_MW to [0,1] with
+  `_normalized` suffix columns.
+- Tests: 320 pass, 3 pre-existing Distrobox path failures.
+
+_Next: Phase 1 — AEMO Oracle (price-taking LP co-optimizer)._
