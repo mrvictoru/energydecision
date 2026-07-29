@@ -2548,9 +2548,12 @@ def fetch_aemo_data_bundle_with_dispatch(
         start_date, end_date, region, fuel_types, generator_info_path, cache_dir, refresh
     )
     
-    # Fetch unit-specific dispatch data
+    # Fetch unit-specific dispatch data (use keyword args to avoid position mismatch)
     unit_dispatch = fetch_aemo_unit_dispatch(
-        start_date, end_date, duid, region, generator_info_path, cache_dir, refresh
+        start_date, end_date,
+        duid=duid, region=region,
+        generator_info_path=generator_info_path,
+        cache_dir=cache_dir, refresh=refresh,
     )
     
     return {
