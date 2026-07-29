@@ -65,18 +65,23 @@ class AEMODataPreprocessor:
         prices: pl.DataFrame,
         fcas: pl.DataFrame,
         generation: pl.DataFrame,
+        fcas_depth: Optional[pl.DataFrame] = None,
+        availability_sum: Optional[pl.DataFrame] = None,
     ) -> pl.DataFrame:
         prices_resampled = self._resample_data(prices, 'SETTLEMENTDATE')
         fcas_resampled = self._resample_fcas(fcas)
         gen_resampled = self._resample_generation(generation)
-        merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled)
+        merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled,
+                                      fcas_depth, availability_sum)
         merged = self._handle_missing_data(merged)
         return self._add_time_features(merged)
     
     def preprocess_aemo_data(self, 
                              prices: pl.DataFrame,
                              fcas: pl.DataFrame,
-                             generation: pl.DataFrame) -> pl.DataFrame:
+                             generation: pl.DataFrame,
+                             fcas_depth: Optional[pl.DataFrame] = None,
+                             availability_sum: Optional[pl.DataFrame] = None) -> pl.DataFrame:
         """
         Preprocess AEMO data for the environment.
         
@@ -84,11 +89,13 @@ class AEMODataPreprocessor:
             prices: Energy price DataFrame from fetch_aemo_dispatch_price
             fcas: FCAS price DataFrame from fetch_aemo_fcas_price
             generation: Generation DataFrame from fetch_aemo_generation_by_fuel
+            fcas_depth: Optional FCAS market depth from aggregate_fcas_market_depth
+            availability_sum: Optional aggregate availability from aggregate_residual_supply
             
         Returns:
             Preprocessed Polars DataFrame ready for environment use
         """
-        merged = self.prepare_aemo_data(prices, fcas, generation)
+        merged = self.prepare_aemo_data(prices, fcas, generation, fcas_depth, availability_sum)
         
         # Update stats from data
         if self.update_stats_from_data:
@@ -224,7 +231,14 @@ class AEMODataPreprocessor:
         rename_map = {c: f"GEN_{c}" for c in wide.columns if c != 'SETTLEMENTDATE'}
         return wide.rename(rename_map)
     
-    def _merge_datasets(self, prices: pl.DataFrame, fcas: pl.DataFrame, gen: pl.DataFrame) -> pl.DataFrame:
+    def _merge_datasets(
+        self,
+        prices: pl.DataFrame,
+        fcas: pl.DataFrame,
+        gen: pl.DataFrame,
+        fcas_depth: Optional[pl.DataFrame] = None,
+        availability_sum: Optional[pl.DataFrame] = None,
+    ) -> pl.DataFrame:
         """Merge all datasets on timestamp."""
         merged = prices
 
@@ -233,6 +247,26 @@ class AEMODataPreprocessor:
 
         if gen.height > 0 and 'SETTLEMENTDATE' in gen.columns:
             merged = merged.join(gen, on='SETTLEMENTDATE', how='left')
+
+        if fcas_depth is not None and fcas_depth.height > 0 and 'SETTLEMENTDATE' in fcas_depth.columns:
+            depth_cols = [c for c in fcas_depth.columns if c != 'SETTLEMENTDATE']
+            existing = set(merged.columns)
+            depth_cols = [c for c in depth_cols if c not in existing]
+            if depth_cols:
+                merged = merged.join(
+                    fcas_depth.select(['SETTLEMENTDATE'] + depth_cols),
+                    on='SETTLEMENTDATE', how='left'
+                )
+
+        if availability_sum is not None and availability_sum.height > 0 and 'SETTLEMENTDATE' in availability_sum.columns:
+            avail_cols = [c for c in availability_sum.columns if c != 'SETTLEMENTDATE']
+            existing = set(merged.columns)
+            avail_cols = [c for c in avail_cols if c not in existing]
+            if avail_cols:
+                merged = merged.join(
+                    availability_sum.select(['SETTLEMENTDATE'] + avail_cols),
+                    on='SETTLEMENTDATE', how='left'
+                )
 
         return merged
     
@@ -313,6 +347,30 @@ class AEMODataPreprocessor:
                 .alias(f'{col}_normalized')
                 for col in fcas_cols
             ])
+
+        # Normalize FCAS market depth (FCAS_DEPTH_*)
+        depth_cols = [col for col in out.columns if col.startswith('FCAS_DEPTH_')]
+        if depth_cols:
+            depth_max_val = max(out.select([pl.col(c).max() for c in depth_cols]).row(0))
+            denom = max(depth_max_val, 1e-9) if depth_max_val is not None else 1e-9
+            out = out.with_columns([
+                (pl.col(col).cast(pl.Float64, strict=False) / denom)
+                .clip(0.0, 1.0)
+                .alias(f'{col}_normalized')
+                for col in depth_cols
+            ])
+
+        # Normalize availability supply (RESIDUAL_SUPPLY_MW if derived, or AVAILABILITY_SUM_MW raw)
+        for avail_col in ('AVAILABILITY_SUM_MW', 'RESIDUAL_SUPPLY_MW'):
+            if avail_col in out.columns:
+                min_v = float(out[avail_col].min() or 0)
+                max_v = float(out[avail_col].max() or 1)
+                denom = max(max_v - min_v, 1e-9)
+                out = out.with_columns(
+                    ((pl.col(avail_col).cast(pl.Float64, strict=False) - min_v) / denom)
+                    .clip(0.0, 1.0)
+                    .alias(f'{avail_col}_normalized')
+                )
 
         # Normalize generation (as percentage of total)
         gen_cols = [col for col in out.columns if col.startswith('GEN_')]
