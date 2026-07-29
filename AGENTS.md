@@ -143,7 +143,7 @@ python3 src/generate_fcas_dataset.py --mode assemble
 ```
 Output: `data/aemo_dt_fcas/aemo_fcas_dataset.parquet`
 
-`src/convert_dispatch_to_episodes.py` converts raw AEMO DISPATCHLOAD + DISPATCHPRICE data directly into episode logs without running the simulator environment. Unlike the legacy `generate_dispatch_replays.py` (energy-only), it captures **all 8 FCAS services** from actual AEMO-cleared values and computes revenue using historical market prices:
+`src/convert_dispatch_to_episodes.py` converts raw AEMO DISPATCHLOAD + DISPATCHPRICE data directly into episode logs without running the simulator environment. Unlike the deprecated energy-only approach, it captures **all 8 FCAS services** from actual AEMO-cleared values and computes revenue using historical market prices:
 ```bash
 python3 src/convert_dispatch_to_episodes.py \
     --station dalrymple_north \

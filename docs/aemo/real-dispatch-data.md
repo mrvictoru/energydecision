@@ -13,20 +13,18 @@ set for the DT, measuring the sim-to-real gap.
 
 ## Execution Script
 
-Run from repo root (inside distrobox):
+Run from repo root (inside distrobox) using the replacement `convert_dispatch_to_episodes.py`:
 
 ```bash
-# Full generation (all stations, all windows)
-python3 scripts/generate_dispatch_replays.py
-
-# Single window
-python3 scripts/generate_dispatch_replays.py --window 2024
-
-# Single station
-python3 scripts/generate_dispatch_replays.py --station hornsdale
+# Single station, all of 2024
+python3 src/convert_dispatch_to_episodes.py \
+    --station dalrymple_north \
+    --start-date 2024-01-01 \
+    --end-date 2024-07-01 \
+    --output data/aemo_dispatch_episodes/dalrymple_north_2024h1.parquet
 ```
 
-Output goes to `data/aemo_dispatch_replays/`.
+Output goes to the path specified by `--output`.
 
 ## Battery Registry Sizing (from AEMO)
 

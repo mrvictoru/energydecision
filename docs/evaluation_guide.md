@@ -118,8 +118,12 @@ and `model_meta: {"return_scale": 2.0}`. Use the helper script:
 
 ```bash
 # Creates models/aemo/dt/hf_forecast/surface_manifest.json
-python3 scripts/create_hf_forecast_surface_manifest.py \
-  --output-dir models/aemo/dt/hf_forecast
+# Uses the shared create_hf_surface_manifest.py with forecast-specific flags
+python3 scripts/create_hf_surface_manifest.py \
+  --hf-repo mrvictoru/energydecision-dt-v2-forecast \
+  --model-config configs/aemo_decision_transformer_model_kwargs_forecast.json \
+  --output-dir models/aemo/dt/hf_forecast \
+  --surface-preset hf_modern_forecast
 ```
 
 This downloads the checkpoint from `mrvictoru/energydecision-dt-v2-forecast`,
