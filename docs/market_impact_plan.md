@@ -139,22 +139,20 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 
 ### Phase 2 — Market-impact env extension (novel method) (~2.5 wk total)
 
-- [ ] Create `src/market_impact.py` with:
-  - [ ] `MarketImpactModel` base class — interface `realized_price(base_price, battery_mw, market_state) -> realized_price`.
-  - [ ] `IdentityImpact` — default; must reproduce existing env byte-for-byte (golden-value test).
-  - [ ] `PiecewiseMeritOrderEnergyImpact` — shift residual demand curve by battery net injection; read realized RRP off the supply ladder.
-  - [ ] `PiecewiseMeritOrderFCASImpact` — per-service enablement MW shifts per-service depth curve; read realized FCAS price off the reserve-cost ladder.
-  - [ ] Combined `PiecewiseMeritOrderImpact` that wraps both.
-- [ ] Hook into `AEMOBatteryTradingEnv`:
-  - [ ] At `src/AEMOBatteryEnv.py:879` — replace `market_data.get('RRP', 0)` with `self._impact.realized_energy(...)`.
-  - [ ] At `src/AEMOBatteryEnv.py:895` (full_fcas loop) and `:918-919` (multi_market) — replace `market_data.get(f'FCAS_{service}')` with `self._impact.realized_fcas(...)`.
-  - [ ] Degradation, SOC, FCAS enablement clipping unchanged.
-- [ ] Config surfacing:
-  - [ ] env kwargs: `impact_model`, `impact_intensity` (sweepable).
-  - [ ] Evaluator surfaces gain per-policy `impact_config` field.
-- [ ] Observation config flag `expose_impact_state`: default `False` → obs_dim stays 18 (all current checkpoints load). When `True` → obs gains `RESIDUAL_SUPPLY_MW` + per-service `FCAS_DEPTH_*_MW` (only used for Phase 4 retrain).
-- [ ] Golden-value test: `identity` impact must reproduce existing trajectory logs within numerical tolerance.
-- [ ] Pytest gate green.
+- [x] Create `src/market_impact.py` with:
+  - [x] `MarketImpactModel` base class — interface `realized_price(base_price, battery_mw, market_state) -> realized_price`.
+  - [x] `IdentityImpact` — default; must reproduce existing env byte-for-byte (golden-value test).
+  - [x] `PiecewiseMeritOrderImpact` — energy + FCAS combined. Energy: supply-curve shift. FCAS: depth-proportional price attenuation.
+- [x] Hook into `AEMOBatteryTradingEnv`:
+  - [x] At `_calculate_reward` — replace `market_data.get('RRP', 0)` with `self._impact.realized_energy_price(...)`.
+  - [x] At FCAS loop and multi_market — replace `market_data.get(f'FCAS_{service}')` with `self._impact.realized_fcas_price(...)`.
+  - [x] Degradation, SOC, FCAS enablement clipping unchanged.
+- [x] Config surfacing:
+  - [x] env kwargs: `impact_model`, `impact_intensity`, `supply_curves`, `fcas_depth`.
+  - [ ] Evaluator surfaces gain per-policy `impact_config` field. (Deferred to Phase 3.)
+- [ ] Observation config flag `expose_impact_state`. (Deferred to Phase 4.)
+- [x] Golden-value test: `identity` impact matches default env across 100 random steps (byte-for-byte identical).
+- [x] Pytest gate green (320 pass).
 
 ### Phase 3 — Re-evaluation under impact (no retraining) (~1.5 wk)
 
@@ -287,7 +285,24 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 - Added `oracle_pt` policy entry to
   `configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json`.
 
-_Next: Phase 2 — Market-impact env extension._
+### 2026-07-29 — Phase 2: src/market_impact.py + env hook
+- Created `src/market_impact.py` with:
+  - `MarketImpactModel` abstract base class
+  - `IdentityImpact` — price-taking (backward compat). Golden-value test
+    passes: byte-for-byte identical to default env across 100 random steps.
+  - `PiecewiseMeritOrderImpact` — realized energy price from supply-curve
+    shift; realized FCAS price from depth-proportional attenuation.
+  - `create_impact_model()` factory function.
+- Wired into `AEMOBatteryTradingEnv`:
+  - New kwargs: `impact_model` (str or instance), `impact_intensity`,
+    `supply_curves`, `fcas_depth`.
+  - Energy price read at `_calculate_reward` (line 937) → routed through
+    `self._impact.realized_energy_price()`.
+  - FCAS price read (line 953) and multi_market reads (976-977) → routed
+    through `self._impact.realized_fcas_price()`.
+- Tests: 320 pass, 3 pre-existing.
+
+_Next: Phase 3 — Re-evaluation of existing policies under market impact._
 - **`aggregate_fcas_market_depth`**: sums per-unit DISPATCHLOAD enablement
   per 5-min interval. Falls back to TOTALDEMAND-ratio heuristic when
   enablement is zero (SA1 imports FCAS via interconnectors → zero local

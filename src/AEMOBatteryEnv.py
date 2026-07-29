@@ -20,6 +20,7 @@ from pathlib import Path
 from EnergySimEnv import SolarBatteryEnv
 from aemo_data import fetch_aemo_data_bundle
 from batterydeg import DegradationModel, RainflowCounter, RealWorldBESSDegradationModel
+from market_impact import create_impact_model, MarketImpactModel
 
 
 class AEMODataPreprocessor:
@@ -414,7 +415,11 @@ class AEMOBatteryTradingEnv(gym.Env):
                  random_episode_start: bool = False,
                  degradation_mode: str = 'rainflow',  # 'rainflow', 'real_world', or 'simple'
                  degradation_temperature: float = 25.0,
-                 degradation_chemistry: str = 'NMC'):
+                 degradation_chemistry: str = 'NMC',
+                 impact_model: str | MarketImpactModel = 'identity',
+                 impact_intensity: float = 1.0,
+                 supply_curves: Optional[pl.DataFrame] = None,
+                 fcas_depth: Optional[pl.DataFrame] = None):
         """
         Initialize AEMO Battery Trading Environment.
         
@@ -465,6 +470,17 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.degradation_mode = degradation_mode
         self.degradation_temperature = float(degradation_temperature)
         self.degradation_chemistry = degradation_chemistry
+
+        # Market-impact model
+        if isinstance(impact_model, str):
+            self._impact = create_impact_model(
+                impact_model,
+                impact_intensity=impact_intensity,
+                supply_curves=supply_curves,
+                fcas_depth=fcas_depth,
+            )
+        else:
+            self._impact = impact_model
 
         self._fcas_services = [
             'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
@@ -933,8 +949,14 @@ class AEMOBatteryTradingEnv(gym.Env):
         Returns (normalized_reward, energy_revenue, fcas_revenue, fcas_revenue_by_service).
         ``fcas_revenue_by_service`` maps each FCAS service name to its revenue ($).
         """
-        # Energy market revenue
-        energy_price = market_data.get('RRP', 0)  # $/MWh
+        # Energy market revenue (with optional market-impact)
+        base_energy_price = market_data.get('RRP', 0)
+        energy_price = self._impact.realized_energy_price(
+            base_price=base_energy_price,
+            battery_dispatch_mw=actual_power,
+            energy_price=base_energy_price,
+            market_state=dict(market_data),
+        )
 
         if actual_power < 0:  # Discharging (selling)
             energy_revenue = abs(actual_energy) * energy_price
@@ -950,7 +972,13 @@ class AEMOBatteryTradingEnv(gym.Env):
             enabled_mw = self._compute_fcas_enablement(fcas_bids, actual_power, old_soc)
             for service in self._fcas_services:
                 if service in enabled_mw:
-                    price = market_data.get(f'FCAS_{service}', 0)
+                    base_fcas_price = market_data.get(f'FCAS_{service}', 0)
+                    price = self._impact.realized_fcas_price(
+                        service=service,
+                        base_price=base_fcas_price,
+                        battery_enabled_mw=enabled_mw[service],
+                        market_state=dict(market_data),
+                    )
                     svc_rev = enabled_mw[service] * price * self.step_duration
                     fcas_revenue_by_service[service] = svc_rev
                     fcas_revenue += svc_rev
@@ -973,8 +1001,12 @@ class AEMOBatteryTradingEnv(gym.Env):
             raise_cap = min(requested_raise_mw, float(self.max_battery_flow), available_raise_mw)
             lower_cap = min(requested_lower_mw, float(self.max_battery_flow), available_lower_mw)
 
-            raisereg_price = market_data.get('FCAS_RAISEREG', 0)
-            lowerreg_price = market_data.get('FCAS_LOWERREG', 0)
+            raisereg_base = market_data.get('FCAS_RAISEREG', 0)
+            lowerreg_base = market_data.get('FCAS_LOWERREG', 0)
+            raisereg_price = self._impact.realized_fcas_price(
+                'RAISEREG', raisereg_base, raise_cap, dict(market_data))
+            lowerreg_price = self._impact.realized_fcas_price(
+                'LOWERREG', lowerreg_base, lower_cap, dict(market_data))
 
             svc_rev_raise = raise_cap * raisereg_price * self.step_duration
             svc_rev_lower = lower_cap * lowerreg_price * self.step_duration
