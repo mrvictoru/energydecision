@@ -204,13 +204,6 @@ class TestRealWorldBESSDegradationModel:
         val_lfp = lfp.calendar_aging_per_step(T_celsius=25.0, soc_frac=0.5, dt_hours=1.0)
         assert val_nmc > val_lfp
 
-    def test_describe_returns_dict(self):
-        model = RealWorldBESSDegradationModel(chemistry='LFP')
-        d = model.describe()
-        assert d['model'] == 'RealWorldBESSDegradationModel'
-        assert d['chemistry'] == 'LFP'
-
-
 # ===========================================================================
 # Integration tests — AEMOBatteryTradingEnv with 'real_world' mode
 # ===========================================================================

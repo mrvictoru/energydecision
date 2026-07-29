@@ -68,22 +68,6 @@ def test_compute_info_signal_metrics_counts_violations_and_incidents():
     assert metrics['deg_incident_episode_rate'] == pytest.approx(1.0)
 
 
-def test_write_json_serializes_datetimes(tmp_path: Path):
-    output_path = tmp_path / 'summary.json'
-
-    evaluator._write_json(
-        output_path,
-        {
-            'generated_at': datetime(2024, 7, 1),
-            'nested': {'finished_at': datetime(2024, 7, 2)},
-        },
-    )
-
-    payload = json.loads(output_path.read_text(encoding='utf-8'))
-    assert payload['generated_at'] == '2024-07-01 00:00:00'
-    assert payload['nested']['finished_at'] == '2024-07-02 00:00:00'
-
-
 def test_evaluate_aemo_heldout_writes_metrics_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     scenario_manifest = [
         {

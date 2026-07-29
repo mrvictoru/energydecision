@@ -60,46 +60,6 @@ class DegradationCalculator:
             DOD=DoD,
         )
     
-    def compute_linearized_degradation(self, Id: float, Ich: float, soc_percent: float, 
-                                      energy_kwh: float, base_DoD: float = 80.0,
-                                      correction_factor: float = 1.0) -> float:
-        """
-        Compute degradation fraction using linearized per-kWh model.
-        
-        This method converts a representative full-cycle wear into a per-kWh wear 
-        using a base DoD, then scales by the energy moved in this step.
-        
-        Args:
-            Id: Discharge current C-rate
-            Ich: Charge current C-rate
-            soc_percent: Average state of charge in percent (0-100)
-            energy_kwh: Energy throughput in kWh
-            base_DoD: Base depth of discharge for reference cycle (default 80%)
-            correction_factor: Static correction factor to apply
-            
-        Returns:
-            Degradation fraction (0-1) for this energy throughput
-        """
-        if energy_kwh <= 0:
-            return 0.0
-        
-        # Calculate energy for a full base cycle (charge + discharge)
-        energy_full_base_cycle = self.battery_capacity * (base_DoD / 100.0) * 2.0
-        if energy_full_base_cycle <= 0:
-            return 0.0
-        
-        # Get degradation for one full cycle at base DoD
-        cycle_wear = self.degradation_per_cycle(Id, Ich, soc_percent, base_DoD)
-        
-        # Convert to per-kWh wear and apply to actual energy
-        wear_per_kwh = cycle_wear / energy_full_base_cycle
-        frac = wear_per_kwh * energy_kwh * correction_factor
-        
-        # Sanitize: ensure non-negative and finite
-        if not np.isfinite(frac) or frac <= 0.0:
-            return 0.0
-        return float(min(frac, 1.0))
-    
     def compute_rainflow_degradation(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
         """
         Estimate degradation for a single step using rainflow counting.

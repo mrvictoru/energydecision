@@ -200,7 +200,7 @@ def test_grpo_train_adapts_prompt_rtgs_between_iterations():
         minibatch_size=2,
         adaptive_rtg=True,
         adaptive_rtg_spread=0.25,
-        adaptive_rtg_dist="uniform",
+        adaptive_rtg_dist="gaussian",
         adaptive_rtg_seed=123,
     )
 
@@ -241,23 +241,6 @@ def test_sample_rtg_values_gaussian_centers_on_optimum():
     assert abs(np.mean(others) - 10.0) < 0.5  # sample mean within 0.5 of optimum
     # Standard deviation should be close to the input spread
     assert abs(np.std(others) - 2.0) < 0.5
-
-
-def test_sample_rtg_values_uniform_stays_in_range():
-    values = sample_rtg_values(
-        optimum=0.0, spread=5.0, count=100, distribution="uniform", seed=7
-    )
-    others = [v for v in values if v != 0.0]
-    assert all(-5.0 <= v <= 5.0 for v in others)
-
-
-def test_sample_rtg_values_lognormal_positive():
-    values = sample_rtg_values(
-        optimum=5.0, spread=0.5, count=100, distribution="lognormal", seed=3
-    )
-    others = [v for v in values if v != 5.0]
-    assert all(v > 0 for v in others)
-    # Mean of lognormal is exp(mu + sigma^2/2) where mu = ln(5)
 
 
 def test_stable_rtg_update_undiscounted_is_exact():

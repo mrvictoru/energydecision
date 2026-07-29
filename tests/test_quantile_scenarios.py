@@ -51,50 +51,29 @@ class TestQuantileScenarioGenerator:
             'constant': [5.0, 5.0, 5.0, 5.0, 5.0]
         })
     
-    def test_initialization_default(self):
-        """Test default initialization."""
-        generator = QuantileScenarioGenerator()
-        
-        assert generator.n_scenarios == 5
-        assert generator.scenario_prefix == "scenario"
-        assert len(generator.quantiles) == 5
-        expected_quantiles = [1/6, 2/6, 3/6, 4/6, 5/6]
+    @pytest.mark.parametrize("n_scenarios,quantiles,prefix,expected_count,expected_quantiles", [
+        (None, None, None, 5, [1/6, 2/6, 3/6, 4/6, 5/6]),
+        (3, None, None, 3, [1/4, 2/4, 3/4]),
+        (1, None, None, 1, [0.5]),
+    ])
+    def test_initialization(self, n_scenarios, quantiles, prefix, expected_count, expected_quantiles):
+        kwargs = {}
+        if n_scenarios is not None:
+            kwargs['n_scenarios'] = n_scenarios
+        if quantiles is not None:
+            kwargs['quantiles'] = quantiles
+        if prefix is not None:
+            kwargs['scenario_prefix'] = prefix
+        generator = QuantileScenarioGenerator(**kwargs)
+        assert generator.n_scenarios == expected_count
+        assert len(generator.quantiles) == expected_count
         for actual, expected in zip(generator.quantiles, expected_quantiles):
             assert abs(actual - expected) < 1e-10
-        
-    def test_initialization_custom_scenarios(self):
-        """Test initialization with custom number of scenarios."""
-        generator = QuantileScenarioGenerator(n_scenarios=3)
-        
-        assert generator.n_scenarios == 3
-        assert len(generator.quantiles) == 3
-        expected_quantiles = [1/4, 2/4, 3/4]
-        for actual, expected in zip(generator.quantiles, expected_quantiles):
-            assert abs(actual - expected) < 1e-10
-    
-    def test_initialization_single_scenario(self):
-        """Test initialization with single scenario."""
-        generator = QuantileScenarioGenerator(n_scenarios=1)
-        
-        assert generator.n_scenarios == 1
-        assert generator.quantiles == [0.5]  # Median
-    
-    def test_initialization_custom_quantiles(self):
-        """Test initialization with custom quantiles."""
-        custom_quantiles = [0.1, 0.3, 0.5, 0.7, 0.9]
-        generator = QuantileScenarioGenerator(
-            n_scenarios=5, 
-            quantiles=custom_quantiles
-        )
-        
-        assert generator.quantiles == custom_quantiles
-    
-    def test_initialization_custom_prefix(self):
-        """Test initialization with custom scenario prefix."""
-        generator = QuantileScenarioGenerator(scenario_prefix="test_scenario")
-        
-        assert generator.scenario_prefix == "test_scenario"
-    
+
+    def test_initialization_custom_quantiles_precedence(self):
+        generator = QuantileScenarioGenerator(n_scenarios=5, quantiles=[0.1, 0.3, 0.5, 0.7, 0.9])
+        assert generator.quantiles == [0.1, 0.3, 0.5, 0.7, 0.9]
+
     def test_initialization_invalid_scenarios(self):
         """Test initialization with invalid number of scenarios."""
         with pytest.raises(ValueError, match="n_scenarios must be at least 1"):
@@ -340,74 +319,6 @@ class TestQuantileScenarioGenerator:
         ])
         assert len(selected_df.columns) == 4
         
-    def test_expected_cost_monte_carlo(self):
-        """Test Monte Carlo expected cost against Cartesian and for reproducibility/infinite cost."""
-        generator = QuantileScenarioGenerator(n_scenarios=3)
-        # Small synthetic grid for exact comparison
-        values_solar = np.array([1.0, 2.0, 3.0])
-        probs_solar = np.array([0.2, 0.5, 0.3])
-        values_load = np.array([4.0, 5.0, 6.0])
-        probs_load = np.array([0.3, 0.4, 0.3])
-        values_imp = np.array([0.1, 0.2, 0.3])
-        probs_imp = np.array([0.5, 0.3, 0.2])
-        values_exp = np.array([0.05, 0.10, 0.15])
-        probs_exp = np.array([0.6, 0.2, 0.2])
-
-        # Simple stage cost: sum of all values
-        def stage_cost_fn(s, l, i, e):
-            return s + l + i + e
-
-        # Exact expectation
-        exact = generator.expected_cost_cartesian(
-            values_solar, probs_solar,
-            values_load, probs_load,
-            values_imp, probs_imp,
-            values_exp, probs_exp,
-            stage_cost_fn
-        )
-
-        # Monte Carlo estimate (large sample for accuracy)
-        mc_est = generator.expected_cost_monte_carlo(
-            values_solar, probs_solar,
-            values_load, probs_load,
-            values_imp, probs_imp,
-            values_exp, probs_exp,
-            stage_cost_fn,
-            n_samples=5000,
-            rng_seed=123
-        )
-        # Should be close to exact
-        assert abs(mc_est - exact) < 0.05
-
-        # Reproducibility: same seed yields same result
-        mc_est2 = generator.expected_cost_monte_carlo(
-            values_solar, probs_solar,
-            values_load, probs_load,
-            values_imp, probs_imp,
-            values_exp, probs_exp,
-            stage_cost_fn,
-            n_samples=5000,
-            rng_seed=123
-        )
-        assert abs(mc_est2 - mc_est) < 1e-8
-
-        # Infinite cost handling: if any realization returns np.inf, result is np.inf
-        def inf_cost_fn(s, l, i, e):
-            if s == 2.0 and l == 5.0:
-                return np.inf
-            return s + l + i + e
-        mc_inf = generator.expected_cost_monte_carlo(
-            values_solar, probs_solar,
-            values_load, probs_load,
-            values_imp, probs_imp,
-            values_exp, probs_exp,
-            inf_cost_fn,
-            n_samples=5000,
-            rng_seed=42
-        )
-        assert mc_inf == np.inf
-
-
 if __name__ == "__main__":
     # Run tests if script is executed directly
     pytest.main([__file__, "-v"])

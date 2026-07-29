@@ -115,19 +115,6 @@ class TestSDPSolver:
         valid_policies = (policy_table >= -1) & (policy_table < sdp_agent.action_resolution)
         assert np.all(valid_policies), "All policy values should be valid"
 
-    def test_scenario_cache_initialization(self, sdp_agent):
-        """Test that scenario cache is properly initialized."""
-        # Initially cache should be None
-        assert sdp_agent.sdp_solver._scenario_cache is None
-        
-        # After solving, cache may be populated
-        forecasts = sdp_agent._get_forecasts(sdp_agent.env.current_step, sdp_agent.sdp_solver.horizon)
-        sdp_agent.sdp_solver.solve(forecasts, start_index=sdp_agent.env.current_step)
-        
-        # Cache may or may not be set depending on settings
-        # Just check it doesn't raise an error
-
-
 class TestSDPPerformance:
     """Performance tests for SDP solver."""
     

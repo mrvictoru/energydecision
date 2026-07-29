@@ -14,14 +14,6 @@ from sdp_algorithm import SDPSolver
 from mrdp_algorithm import MRDPSolver
 from oracle_algorithm import OracleSolver
 
-def test_algorithm_imports():
-    """Test that all algorithm modules can be imported."""
-    print("Testing algorithm imports...")
-    assert SDPSolver is not None
-    assert MRDPSolver is not None
-    assert OracleSolver is not None
-    print("  ✓ All algorithm classes imported successfully")
-
 def test_sdp_solver_initialization():
     """Test SDPSolver can be initialized."""
     print("\nTesting SDPSolver initialization...")

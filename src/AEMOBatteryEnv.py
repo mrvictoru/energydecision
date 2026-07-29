@@ -12,7 +12,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import polars as pl
-from copy import deepcopy
+
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
@@ -59,9 +59,6 @@ class AEMODataPreprocessor:
             key: {'min': float(value['min']), 'max': float(value['max'])}
             for key, value in stats.items()
         }
-
-    def copy_stats(self) -> Dict[str, Dict[str, float]]:
-        return deepcopy(self.stats)
 
     def prepare_aemo_data(
         self,

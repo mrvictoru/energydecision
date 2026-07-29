@@ -48,6 +48,87 @@ def _reset_env(env, seed: Optional[int] = None, options: Optional[Dict[str, Any]
     return env.reset(seed=seed, **options)
 
 
+def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
+    """Convert a list of RTGs to a safe float32 numpy array."""
+    if not data:
+        return np.zeros(default_shape, dtype=dtype)
+    arr = np.array(data, dtype=np.float64)
+    finite = np.isfinite(arr)
+    if not finite.all():
+        arr = np.where(finite, arr, 0.0)
+    clip_max = np.finfo(np.float32).max
+    arr = np.clip(arr, -clip_max, clip_max)
+    return arr.astype(dtype)
+
+
+def _build_dt_inference_context(model, states_buffer, actions_buffer, rtgs_buffer, timesteps_buffer):
+    """Build padded, scaled, sanitized numpy arrays for DT inference.
+
+    Returns (states, actions, rtgs, timesteps, mask) as numpy arrays,
+    all shaped [context_len, ...].
+    """
+    context_len = model.context_len
+    state_dim = model.state_dim
+    act_dim = model.act_dim
+    buffer_len = len(states_buffer)
+
+    buffer_states = (
+        np.array(states_buffer, dtype=np.float32)
+        if buffer_len > 0 else np.zeros((0, state_dim), dtype=np.float32)
+    )
+    if buffer_states.ndim == 1 and buffer_len > 0:
+        buffer_states = buffer_states.reshape(buffer_len, state_dim)
+
+    buffer_actions = (
+        np.array(actions_buffer, dtype=np.float32)
+        if buffer_len > 0 else np.zeros((0, act_dim), dtype=np.float32)
+    )
+    if buffer_actions.ndim == 1 and buffer_len > 0:
+        buffer_actions = buffer_actions.reshape(buffer_len, act_dim)
+
+    buffer_rtgs = _safe_float32_array(
+        rtgs_buffer, default_shape=(0,), dtype=np.float32
+    ) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
+
+    buffer_timesteps = (
+        np.array(timesteps_buffer, dtype=np.int64)
+        if buffer_len > 0 else np.zeros(0, dtype=np.int64)
+    )
+
+    if buffer_len < context_len:
+        pad_len = context_len - buffer_len
+        states = np.vstack([np.zeros((pad_len, state_dim), dtype=np.float32), buffer_states])
+        actions = np.vstack([np.zeros((pad_len, act_dim), dtype=np.float32), buffer_actions])
+        rtgs = np.concatenate([np.zeros(pad_len, dtype=np.float32), buffer_rtgs])
+        timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), buffer_timesteps])
+        mask = np.concatenate([np.zeros(pad_len, dtype=np.bool_), np.ones(buffer_len, dtype=np.bool_)])
+    else:
+        states = buffer_states[-context_len:]
+        actions = buffer_actions[-context_len:]
+        rtgs = buffer_rtgs[-context_len:]
+        timesteps = buffer_timesteps[-context_len:]
+        mask = np.ones(context_len, dtype=np.bool_)
+
+    return_scale_attr = getattr(model, 'return_scale', 1.0)
+    return_scale = float(return_scale_attr.detach().cpu().item()) if isinstance(return_scale_attr, torch.Tensor) else float(return_scale_attr)
+    if not np.isfinite(return_scale) or abs(return_scale) < 1e-12:
+        raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
+    if return_scale != 1.0:
+        rtgs = rtgs / return_scale
+
+    states = np.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
+    actions = np.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
+    rtgs = np.nan_to_num(rtgs, nan=0.0, posinf=0.0, neginf=0.0)
+
+    rtgs = np.clip(rtgs, -1e3, 1e3)
+
+    max_time = getattr(model.embed_timestep, 'num_embeddings', None)
+    if max_time is not None and max_time > 0:
+        timesteps = np.clip(timesteps, 0, max_time - 1)
+
+    return states, actions, rtgs, timesteps, mask
+
+
 class Agent:
     def __init__(self, env: SolarBatteryEnv, algorithm='rule', model=None,
                  horizon=72, soc_resolution=20, action_resolution=41,
@@ -163,19 +244,6 @@ class Agent:
         
         
 
-    @staticmethod
-    def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
-        """Convert a list of RTGs to a safe float32 numpy array."""
-        if not data:
-            return np.zeros(default_shape, dtype=dtype)
-        arr = np.array(data, dtype=np.float64)
-        finite = np.isfinite(arr)
-        if not finite.all():
-            arr = np.where(finite, arr, 0.0)
-        clip_max = np.finfo(np.float32).max
-        arr = np.clip(arr, -clip_max, clip_max)
-        return arr.astype(dtype)
-
     def choose_action(self, obs):
         if self.algorithm == 'rule':
             return self.rule_based_action(obs)
@@ -195,102 +263,15 @@ class Agent:
             self.model.eval()
             device = next(self.model.parameters()).device
             
-            # Build inputs from rolling buffers
-            context_len = self.model.context_len
-            state_dim = self.model.state_dim
-            act_dim = self.model.act_dim
-            buffer_len = len(self.dt_states_buffer)
-
-            buffer_states = (
-                np.array(self.dt_states_buffer, dtype=np.float32)
-                if buffer_len > 0 else np.zeros((0, state_dim), dtype=np.float32)
+            states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
+                self.model, self.dt_states_buffer, self.dt_actions_buffer,
+                self.dt_rtgs_buffer, self.dt_timesteps_buffer,
             )
-            if buffer_states.ndim == 1 and buffer_len > 0:
-                buffer_states = buffer_states.reshape(buffer_len, state_dim)
-
-            buffer_actions = (
-                np.array(self.dt_actions_buffer, dtype=np.float32)
-                if buffer_len > 0 else np.zeros((0, act_dim), dtype=np.float32)
-            )
-            if buffer_actions.ndim == 1 and buffer_len > 0:
-                buffer_actions = buffer_actions.reshape(buffer_len, act_dim)
-
-            buffer_rtgs = self._safe_float32_array(
-                self.dt_rtgs_buffer,
-                default_shape=(0, ),
-                dtype=np.float32
-            ) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
-
-            buffer_timesteps = (
-                np.array(self.dt_timesteps_buffer, dtype=np.int64)
-                if buffer_len > 0 else np.zeros(0, dtype=np.int64)
-            )
-            
-            # Prepare tensors with left-padding if buffer is shorter than context_len
-            if buffer_len < context_len:
-                # Left-pad with zeros
-                pad_len = context_len - buffer_len
-                states = np.vstack([
-                    np.zeros((pad_len, state_dim), dtype=np.float32),
-                    buffer_states
-                ])
-                actions = np.vstack([
-                    np.zeros((pad_len, act_dim), dtype=np.float32),
-                    buffer_actions
-                ])
-                rtgs = np.concatenate([
-                    np.zeros(pad_len, dtype=np.float32),
-                    buffer_rtgs
-                ])
-                timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), buffer_timesteps])
-                # Attention mask: 0 for padding, 1 for valid
-                mask = np.concatenate([
-                    np.zeros(pad_len, dtype=np.bool_),
-                    np.ones(buffer_len, dtype=np.bool_)
-                ])
-            else:
-                # Use the last context_len items
-                states = buffer_states[-context_len:]
-                actions = buffer_actions[-context_len:]
-                rtgs = buffer_rtgs[-context_len:]
-                timesteps = buffer_timesteps[-context_len:]
-                mask = np.ones(context_len, dtype=np.bool_)
-            
-            # Apply return_scale to RTGs (matching training behavior)
-            return_scale_attr = getattr(self.model, 'return_scale', 1.0)
-            if isinstance(return_scale_attr, torch.Tensor):
-                return_scale = float(return_scale_attr.detach().cpu().item())
-            else:
-                return_scale = float(return_scale_attr)
-
-            # Guard against invalid scaling factors that would introduce NaNs
-            if not np.isfinite(return_scale) or abs(return_scale) < 1e-12:
-                raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
-            if return_scale != 1.0:
-                rtgs = rtgs / return_scale
-
-            # Sanitize numeric inputs
-            states = np.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
-            actions = np.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
-            rtgs = np.nan_to_num(rtgs, nan=0.0, posinf=0.0, neginf=0.0)
-
-            # Clip RTGs to stay within a safe numerical range (tuned to dataset scale if needed)
-            rtg_clip = 1e3
-            rtgs = np.clip(rtgs, -rtg_clip, rtg_clip)
-
-            # Clamp timesteps to embedding range
-            max_time = getattr(self.model.embed_timestep, 'num_embeddings', None)
-            if max_time is not None and max_time > 0:
-                timesteps = np.clip(timesteps, 0, max_time - 1)
-            
-            # Convert to tensors
-            states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, state_dim]
-            actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)  # [1, T, act_dim]
-            rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)  # [1, T, 1]
-            timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)  # [1, T]
-            attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)  # [1, T]
-            
-            # Get action prediction using get_action() helper
+            states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)
+            actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)
+            rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)
+            timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
+            attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
             with torch.no_grad():
                 action = self.model.get_action(states, actions, rtgs, timesteps, attention_mask=attention_mask)
             action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
@@ -638,18 +619,6 @@ class AEMOAgent:
         # Forecast DT config
         self.forecast_npz_path = forecast_npz_path
         self._forecast_map: np.ndarray | None = None
-
-    @staticmethod
-    def _safe_float32_array(data, default_shape=(0,), dtype=np.float32):
-        if not data:
-            return np.zeros(default_shape, dtype=dtype)
-        arr = np.array(data, dtype=np.float64)
-        finite = np.isfinite(arr)
-        if not finite.all():
-            arr = np.where(finite, arr, 0.0)
-        clip_max = np.finfo(np.float32).max
-        arr = np.clip(arr, -clip_max, clip_max)
-        return arr.astype(dtype)
 
     def set_dispatch_data(self,
                           dispatch_data: pl.DataFrame,
@@ -1005,80 +974,10 @@ class AEMOAgent:
             self.model.eval()
             device = next(self.model.parameters()).device
 
-            context_len = self.model.context_len
-            state_dim = self.model.state_dim
-            act_dim = self.model.act_dim
-            buffer_len = len(self.dt_states_buffer)
-
-            buffer_states = (
-                np.array(self.dt_states_buffer, dtype=np.float32)
-                if buffer_len > 0 else np.zeros((0, state_dim), dtype=np.float32)
+            states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
+                self.model, self.dt_states_buffer, self.dt_actions_buffer,
+                self.dt_rtgs_buffer, self.dt_timesteps_buffer,
             )
-            if buffer_states.ndim == 1 and buffer_len > 0:
-                buffer_states = buffer_states.reshape(buffer_len, state_dim)
-
-            buffer_actions = (
-                np.array(self.dt_actions_buffer, dtype=np.float32)
-                if buffer_len > 0 else np.zeros((0, act_dim), dtype=np.float32)
-            )
-            if buffer_actions.ndim == 1 and buffer_len > 0:
-                buffer_actions = buffer_actions.reshape(buffer_len, act_dim)
-
-            buffer_rtgs = self._safe_float32_array(
-                self.dt_rtgs_buffer,
-                default_shape=(0, ),
-                dtype=np.float32
-            ) if buffer_len > 0 else np.zeros(0, dtype=np.float32)
-
-            buffer_timesteps = (
-                np.array(self.dt_timesteps_buffer, dtype=np.int64)
-                if buffer_len > 0 else np.zeros(0, dtype=np.int64)
-            )
-
-            if buffer_len < context_len:
-                pad_len = context_len - buffer_len
-                states = np.vstack([
-                    np.zeros((pad_len, state_dim), dtype=np.float32),
-                    buffer_states
-                ])
-                actions = np.vstack([
-                    np.zeros((pad_len, act_dim), dtype=np.float32),
-                    buffer_actions
-                ])
-                rtgs = np.concatenate([
-                    np.zeros(pad_len, dtype=np.float32),
-                    buffer_rtgs
-                ])
-                timesteps = np.concatenate([np.zeros(pad_len, dtype=np.int64), buffer_timesteps])
-                mask = np.concatenate([
-                    np.zeros(pad_len, dtype=np.bool_),
-                    np.ones(buffer_len, dtype=np.bool_)
-                ])
-            else:
-                states = buffer_states[-context_len:]
-                actions = buffer_actions[-context_len:]
-                rtgs = buffer_rtgs[-context_len:]
-                timesteps = buffer_timesteps[-context_len:]
-                mask = np.ones(context_len, dtype=np.bool_)
-
-            return_scale_attr = getattr(self.model, 'return_scale', 1.0)
-            return_scale = float(return_scale_attr.detach().cpu().item()) if isinstance(return_scale_attr, torch.Tensor) else float(return_scale_attr)
-            if not np.isfinite(return_scale) or abs(return_scale) < 1e-12:
-                raise ValueError(f"Invalid Decision Transformer return_scale: {return_scale}")
-            if return_scale != 1.0:
-                rtgs = rtgs / return_scale
-
-            states = np.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0)
-            actions = np.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0)
-            rtgs = np.nan_to_num(rtgs, nan=0.0, posinf=0.0, neginf=0.0)
-
-            rtg_clip = 1e3
-            rtgs = np.clip(rtgs, -rtg_clip, rtg_clip)
-
-            max_time = getattr(self.model.embed_timestep, 'num_embeddings', None)
-            if max_time is not None and max_time > 0:
-                timesteps = np.clip(timesteps, 0, max_time - 1)
-
             states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)
             actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)
             rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)
@@ -1094,6 +993,8 @@ class AEMOAgent:
                 # so the forecast must be at max(T, buffer_len), not pinned
                 # at context_len (which leaves a stale forecast for 88% of
                 # a 1728-step episode).
+                context_len = self.model.context_len
+                buffer_len = len(self.dt_states_buffer)
                 episode_start = int(getattr(self.env, 'episode_start_idx', 0))
                 forecast_ep_step = episode_start + max(context_len, buffer_len)
                 f_states, f_rtgs, f_timesteps = self._build_forecast_window(forecast_ep_step)

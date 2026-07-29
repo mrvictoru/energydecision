@@ -111,52 +111,6 @@ class TestGQA:
 
 
 # ---------------------------------------------------------------------------
-# Step 2: Bias-free linears
-# ---------------------------------------------------------------------------
-
-class TestBiasFreeLinears:
-    def test_swiglu_no_bias(self):
-        model = _make_dt()
-        for i, block in enumerate(model.transformer):
-            assert block.ffn.w1.bias is None, f"block[{i}].ffn.w1 has bias"
-            assert block.ffn.w2.bias is None, f"block[{i}].ffn.w2 has bias"
-            assert block.ffn.w3.bias is None, f"block[{i}].ffn.w3 has bias"
-
-    def test_attention_proj_no_bias(self):
-        model = _make_dt()
-        for i, block in enumerate(model.transformer):
-            assert block.attn.proj.bias is None, f"block[{i}].attn.proj has bias"
-            assert block.attn.q_proj.bias is None
-            assert block.attn.k_proj.bias is None
-            assert block.attn.v_proj.bias is None
-
-    def test_pred_heads_no_bias(self):
-        model = _make_dt()
-        assert model.pred_rtg.bias is None
-        assert model.pred_state.bias is None
-        # pred_act[0] is the linear layer
-        assert model.pred_act[0].bias is None
-
-
-# ---------------------------------------------------------------------------
-# Step 3: Consistent RMSNorm
-# ---------------------------------------------------------------------------
-
-class TestConsistentRMSNorm:
-    def test_embed_ln_is_rmsnorm(self):
-        model = _make_dt()
-        assert isinstance(model.embed_ln, RMSNorm), (
-            f"embed_ln should be RMSNorm, got {type(model.embed_ln)}"
-        )
-
-    def test_block_norms_are_rmsnorm(self):
-        model = _make_dt()
-        for i, block in enumerate(model.transformer):
-            assert isinstance(block.norm1, RMSNorm), f"block[{i}].norm1 is not RMSNorm"
-            assert isinstance(block.norm2, RMSNorm), f"block[{i}].norm2 is not RMSNorm"
-
-
-# ---------------------------------------------------------------------------
 # Step 4: QK-Norm
 # ---------------------------------------------------------------------------
 

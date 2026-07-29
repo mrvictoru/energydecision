@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import aemo_dt_hf  # noqa: E402
 import create_hf_surface_manifest as manifest_creator  # noqa: E402
-import run_aemo_dt_rtg_sweep as rtg_sweep  # noqa: E402
 
 
 def _load_module_with_stubs(module_name: str, path: Path):
@@ -122,7 +121,7 @@ def test_set_dt_rtg_value_updates_only_candidate_dt():
         ]
     }
 
-    updated = rtg_sweep.set_dt_rtg_value(config, rtg_value=1.5, candidate_policy_name="candidate_dt")
+    updated = aemo_dt_hf.set_dt_rtg_value(config, rtg_value=1.5, candidate_policy_name="candidate_dt")
 
     assert updated["policies"][0]["rtg_value"] == 1.5
     assert updated["policies"][1]["rtg_value"] == 5.0
@@ -141,34 +140,11 @@ def test_extract_candidate_metrics_reads_summary_payload():
         }
     }
 
-    metrics = rtg_sweep.extract_candidate_metrics(summary, "candidate_dt")
+    metrics = aemo_dt_hf.extract_candidate_metrics(summary, "candidate_dt")
 
     assert metrics["avg_profit_per_episode"] == 123.0
     assert metrics["paired_mean_diff_vs_reference"] == pytest.approx(1.2)
     assert metrics["reference_policy"] == "dispatch_dalrymple_north"
 
 
-def test_run_grpo_posttraining_defaults_to_modern_v2_paths():
-    module = _load_module_with_stubs(
-        "run_grpo_posttraining_stub",
-        Path(__file__).resolve().parents[1] / "scripts" / "run_grpo_posttraining.py",
-    )
 
-    args = module.parse_args([])
-
-    assert args.hf_repo == aemo_dt_hf.MODERN_V2_HF_REPO
-    assert args.hf_filename == aemo_dt_hf.MODERN_V2_HF_FILENAME
-    assert args.model_config == aemo_dt_hf.modern_v2_model_config_path()
-
-
-def test_run_grpo_multi_region_defaults_to_modern_v2_paths():
-    module = _load_module_with_stubs(
-        "run_grpo_multi_region_stub",
-        Path(__file__).resolve().parents[1] / "scripts" / "run_grpo_multi_region.py",
-    )
-
-    args = module.parse_args([])
-
-    assert args.hf_repo == aemo_dt_hf.MODERN_V2_HF_REPO
-    assert args.hf_filename == aemo_dt_hf.MODERN_V2_HF_FILENAME
-    assert args.model_config == aemo_dt_hf.modern_v2_model_config_path()

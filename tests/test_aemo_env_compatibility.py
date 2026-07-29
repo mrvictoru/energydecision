@@ -19,32 +19,6 @@ import polars as pl
 import pytest
 from datetime import datetime, timedelta
 
-# Test imports
-def test_imports():
-    """Test that all necessary modules can be imported."""
-    print("=" * 80)
-    print("TEST 1: Module Imports")
-    print("=" * 80)
-    
-    try:
-        import gymnasium as gym
-        print("✓ gymnasium imported successfully")
-    except ImportError as e:
-        pytest.fail(f"gymnasium import failed: {e}")
-    
-    try:
-        from AEMOBatteryEnv import AEMOBatteryTradingEnv, create_aemo_env_from_data, AEMODataPreprocessor
-        print("✓ AEMOBatteryEnv imported successfully")
-    except ImportError as e:
-        pytest.fail(f"AEMOBatteryEnv import failed: {e}")
-    
-    try:
-        from EnergySimEnv import SolarBatteryEnv
-        print("✓ SolarBatteryEnv imported successfully")
-    except ImportError as e:
-        pytest.fail(f"SolarBatteryEnv import failed: {e}")
-    
-    print("\n✓ All imports successful\n")
 def test_gymnasium_api():
     """Test that AEMOBatteryTradingEnv follows Gymnasium API."""
     print("=" * 80)

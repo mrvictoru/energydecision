@@ -308,41 +308,16 @@ def sample_rtg_values(
 ) -> list[float]:
     """Sample ``count`` RTG values around ``optimum`` for group diversity.
 
-    Always includes ``optimum`` itself as one of the values.  The remaining
-    ``count - 1`` values are sampled from the chosen distribution.
-
-    Args:
-        optimum: The optimal / recommended RTG (e.g. from model calibration).
-        spread: Spread parameter — standard deviation for ``'gaussian'``,
-            half-width for ``'uniform'``.
-        count: Number of RTG values to produce (including the optimum).
-        distribution: ``'gaussian'`` (normal), ``'uniform'``, or ``'lognormal'``.
-        seed: Optional RNG seed for reproducibility.
-
-    Returns:
-        A shuffled list of ``count`` RTG values.
+    Always includes ``optimum`` itself as one of the values.
     """
     rng = np.random.default_rng(seed)
     n = max(0, int(count) - 1)
 
-    if distribution == "lognormal" and optimum > 0:
-        log_opt = np.log(optimum)
-        raw = rng.normal(log_opt, spread, size=n).tolist()
-        samples = [max(1e-6, np.exp(v)) for v in raw]
-    elif distribution == "uniform":
-        half = abs(float(spread))
-        low = optimum - half
-        high = optimum + half
-        if low >= high:
-            low, high = optimum - 1.0, optimum + 1.0
-        samples = rng.uniform(low, high, size=n).tolist()
-    else:
-        # default: gaussian
-        std = abs(float(spread))
-        low = optimum - 3.0 * std if std > 0 else optimum - 1.0
-        high = optimum + 3.0 * std if std > 0 else optimum + 1.0
-        samples = rng.normal(optimum, std, size=n).tolist()
-        samples = [max(low, min(high, v)) for v in samples]
+    std = abs(float(spread))
+    low = optimum - 3.0 * std if std > 0 else optimum - 1.0
+    high = optimum + 3.0 * std if std > 0 else optimum + 1.0
+    samples = rng.normal(optimum, std, size=n).tolist()
+    samples = [max(low, min(high, v)) for v in samples]
 
     all_values = [float(optimum)] + samples
     rng.shuffle(all_values)

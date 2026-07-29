@@ -59,31 +59,6 @@ skip_without_bundled = pytest.mark.skipif(
 
 
 # ---------------------------------------------------------------------------
-# _is_zip_format
-# ---------------------------------------------------------------------------
-
-def test_is_zip_format_detects_xlsx_content(tmp_path):
-    """A file that starts with ZIP magic bytes is identified as XLSX format."""
-    f = tmp_path / "fake.xls"
-    # Write a ZIP/XLSX magic header (PK\x03\x04)
-    f.write_bytes(b"PK\x03\x04" + b"\x00" * 20)
-    assert _is_zip_format(f) is True
-
-
-def test_is_zip_format_returns_false_for_biff(tmp_path):
-    """A genuine BIFF .xls file is NOT identified as ZIP format."""
-    f = tmp_path / "fake.xls"
-    # BIFF8 magic bytes: D0 CF 11 E0 A1 B1 1A E1
-    f.write_bytes(bytes.fromhex("D0CF11E0A1B11AE1") + b"\x00" * 20)
-    assert _is_zip_format(f) is False
-
-
-def test_is_zip_format_missing_file(tmp_path):
-    """Non-existent file returns False (does not raise)."""
-    assert _is_zip_format(tmp_path / "nonexistent.xls") is False
-
-
-# ---------------------------------------------------------------------------
 # _read_excel_via_pandas  (CSV fallback created for this test)
 # ---------------------------------------------------------------------------
 

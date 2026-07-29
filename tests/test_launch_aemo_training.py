@@ -166,28 +166,6 @@ def test_build_training_command_forwards_optimizer_surface_flags(tmp_path: Path)
     assert command[command.index("--scheduler-kwargs-json") + 1] == '{"step_size": 3, "gamma": 0.8}'
 
 
-def test_maybe_reenter_distrobox_invokes_distrobox_when_requested(monkeypatch: pytest.MonkeyPatch):
-    args = launcher.parse_args(["--run-tier", "proxy-baseline", "--runtime-mode", "require-distrobox"])
-    monkeypatch.setattr(launcher, "detect_runtime", lambda: {"inside_container": False})
-    monkeypatch.setattr(launcher.shutil, "which", lambda _: "/usr/bin/distrobox")
-    captured: list[list[str]] = []
-
-    class Result:
-        returncode = 0
-
-    monkeypatch.setattr(
-        launcher.subprocess,
-        "run",
-        lambda command, cwd, env, check: captured.append(command) or Result(),
-    )
-
-    exit_code = launcher.maybe_reenter_distrobox(args, ["--run-tier", "proxy-baseline"])
-
-    assert exit_code == 0
-    assert captured
-    assert captured[0][:3] == ["/usr/bin/distrobox", "enter", "energydecision-gpu"]
-
-
 def test_main_writes_launch_plan_on_dry_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

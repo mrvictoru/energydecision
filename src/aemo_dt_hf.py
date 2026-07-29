@@ -68,3 +68,43 @@ def build_surface_manifest(
             "filename": hf_filename,
         }
     return manifest
+
+
+def set_dt_rtg_value(
+    evaluation_config: dict[str, Any],
+    *,
+    rtg_value: float,
+    candidate_policy_name: str,
+) -> dict[str, Any]:
+    updated = json.loads(json.dumps(evaluation_config))
+    matched = False
+    for policy in updated.get("policies", []):
+        if policy.get("kind") == "dt" and policy.get("name") == candidate_policy_name:
+            policy["rtg_value"] = rtg_value
+            matched = True
+    if not matched:
+        raise ValueError(f"Did not find DT policy named {candidate_policy_name!r} in evaluation config.")
+    return updated
+
+
+def extract_candidate_metrics(summary: dict[str, Any], candidate_policy_name: str) -> dict[str, Any]:
+    heldout = summary.get("heldout_evaluation", {})
+    metrics = next(
+        (
+            item for item in heldout.get("aggregate_metrics", [])
+            if item.get("experiment") == candidate_policy_name
+        ),
+        None,
+    )
+    if metrics is None:
+        raise ValueError(f"Summary did not include aggregate metrics for {candidate_policy_name!r}.")
+    paired = heldout.get("paired_comparisons_vs_reference", {}).get(candidate_policy_name, {})
+    return {
+        "avg_reward_per_episode": metrics.get("avg_reward_per_episode"),
+        "avg_profit_per_episode": metrics.get("avg_profit_per_episode"),
+        "avg_fcas_revenue_per_episode": metrics.get("avg_fcas_revenue_per_episode"),
+        "avg_degradation_cost_per_episode": metrics.get("avg_degradation_cost_per_episode"),
+        "paired_mean_diff_vs_reference": paired.get("mean_diff"),
+        "paired_p_value_vs_reference": paired.get("p_value"),
+        "reference_policy": heldout.get("reference_policy"),
+    }

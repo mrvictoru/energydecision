@@ -132,17 +132,6 @@ class TestFullFCASStep:
         # but FCAS revenue should be non-zero
         assert info["fcas_revenue"] > 0
 
-    def test_step_smoke_multiple_steps(self, env_full_fcas):
-        """Run several steps to ensure no exceptions."""
-        env_full_fcas.reset()
-        for _ in range(10):
-            action = env_full_fcas.action_space.sample()
-            obs, reward, terminated, truncated, info = env_full_fcas.step(action)
-            if terminated:
-                break
-        assert True
-
-
 class TestCoOptimization:
     """Co-optimized enablement scaling tests."""
 

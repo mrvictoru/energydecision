@@ -639,17 +639,5 @@ class RealWorldBESSDegradationModel:
 
         return self.k_cyc * arr * dod_factor * c_rate_factor
 
-    def describe(self) -> dict:
-        """Return a dict summarising the model parameters."""
-        return {
-            "model": "RealWorldBESSDegradationModel",
-            "chemistry": self.chemistry,
-            "k_cal_rate_per_h": self.k_cal_rate,
-            "Ea_cal_J_per_mol": self.Ea_cal,
-            "k_soc": self.k_soc,
-            "k_cyc_per_cycle": self.k_cyc,
-            "Ea_cyc_J_per_mol": self.Ea_cyc,
-            "alpha_dod": self.alpha_dod,
-            "beta_crate": self.beta_crate,
-        }
+
 
