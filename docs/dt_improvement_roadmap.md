@@ -10,6 +10,14 @@ Use it when you need:
 
 For current workflow and setup guidance, start with [README.md](README.md), [architecture.md](architecture.md), [development.md](development.md), and [aemo/README.md](aemo/README.md).
 
+> **Cross-reference:** The active PR #33 / branch
+> `feature/market-impact-modeling` adds **endogenous** **market-impact** modeling
+> (battery dispatch feeds back on energy + FCAS prices) and a
+> **perfect-foresight AEMO Oracle**. See
+> [`docs/market_impact_plan.md`](market_impact_plan.md). The two roadmaps are
+> orthogonal: this one improves the DT model; market\_impact\_plan.md adds
+> new realism to the environment.
+
 ## Executive summary
 
 This roadmap consolidates the DT and GRPO work for AEMO trading. The central question is whether offline Decision Transformer training can match or exceed online RL on energy-plus-FCAS bidding, and whether GRPO fine-tuning can improve the pretrained policy further without sacrificing safety or profitability.

@@ -1238,6 +1238,13 @@ def fetch_aemo_unit_dispatch(
             - TOTALCLEARED: Total energy dispatch target (MW)
             - RAISE6SEC / RAISE60SEC / RAISE5MIN / RAISEREG: FCAS raise enablement (MW)
             - LOWER6SEC / LOWER60SEC / LOWER5MIN / LOWERREG: FCAS lower enablement (MW)
+            - AVAILABILITY: Unit availability (MW)
+            - INITIALMW: Initial MW before dispatch
+            - RAISEREGENABLEMENTMAX / RAISEREGENABLEMENTMIN: Regulation raise range
+            - LOWERREGENABLEMENTMAX / LOWERREGENABLEMENTMIN: Regulation lower range
+            - SEMIDISPATCHCAP: Semi-dispatch capacity flag
+            - RAMPUPRATE / RAMPDOWNRATE: Ramp rate limits (MW/min)
+            - AGCSTATUS: AGC control status
 
     Memory note:
         DISPATCHLOAD contains all NEM units (~1 000–2 000 DUIDs, ~850 K rows/month).
@@ -1306,7 +1313,12 @@ def fetch_aemo_unit_dispatch(
 
     columns_to_keep = ['SETTLEMENTDATE', 'DUID', 'TOTALCLEARED',
                        'RAISE6SEC', 'RAISE60SEC', 'RAISE5MIN', 'RAISEREG',
-                       'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN', 'LOWERREG']
+                       'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN', 'LOWERREG',
+                       'AVAILABILITY', 'INITIALMW',
+                       'RAISEREGENABLEMENTMAX', 'RAISEREGENABLEMENTMIN',
+                       'LOWERREGENABLEMENTMAX', 'LOWERREGENABLEMENTMIN',
+                       'SEMIDISPATCHCAP', 'RAMPUPRATE', 'RAMPDOWNRATE',
+                       'AGCSTATUS']
 
     dispatch_frames: list[pl.DataFrame] = []
     windows = _iter_month_windows(start_date, end_date)
@@ -1361,6 +1373,11 @@ def fetch_aemo_unit_dispatch(
             'RAISE6SEC': pl.Float64, 'RAISE60SEC': pl.Float64, 'RAISE5MIN': pl.Float64,
             'RAISEREG': pl.Float64, 'LOWER6SEC': pl.Float64, 'LOWER60SEC': pl.Float64,
             'LOWER5MIN': pl.Float64, 'LOWERREG': pl.Float64,
+            'AVAILABILITY': pl.Float64, 'INITIALMW': pl.Float64,
+            'RAISEREGENABLEMENTMAX': pl.Float64, 'RAISEREGENABLEMENTMIN': pl.Float64,
+            'LOWERREGENABLEMENTMAX': pl.Float64, 'LOWERREGENABLEMENTMIN': pl.Float64,
+            'SEMIDISPATCHCAP': pl.Float64, 'RAMPUPRATE': pl.Float64,
+            'RAMPDOWNRATE': pl.Float64, 'AGCSTATUS': pl.Utf8,
         })
 
     dispatch_pl = pl.concat(dispatch_frames, how='vertical_relaxed')

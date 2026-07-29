@@ -121,7 +121,7 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 
 ### Phase 0 — Data foundation (~1 wk)
 
-- [ ] Extend `fetch_aemo_unit_dispatch` `columns_to_keep` (`src/aemo_data.py:1307-1309`) to retain `AVAILABILITY`, `INITIALMW`, `RAISEREGENABLEMENTMAX/MIN`, `LOWERREGENABLEMENTMAX/MIN`, `SEMIDISPATCHCAP`, `RAMPUP/DOWNRATE`.  No re-download needed — already in cached `.feather` files under `data/aemo/`.
+- [x] Extend `fetch_aemo_unit_dispatch` `columns_to_keep` (`src/aemo_data.py:1307-1309`) to retain `AVAILABILITY`, `INITIALMW`, `RAISEREGENABLEMENTMAX/MIN`, `LOWERREGENABLEMENTMAX/MIN`, `SEMIDISPATCHCAP`, `RAMPUP/DOWNRATE`.  No re-download needed — already in cached `.feather` files under `data/aemo/`.
 - [ ] Implement `aggregate_fcas_market_depth(region, services, start, end)` — sum per-unit enablement across all DUIDs per service per interval per region → `FCAS_DEPTH_<SERVICE>_MW`.
 - [ ] Implement `aggregate_residual_supply(region, start, end)` — `sum(AVAILABILITY) - TOTALDEMAND` per interval per region → `RESIDUAL_SUPPLY_MW`.
 - [ ] Implement `build_supply_curve(region, interval)` — sort generators by fuel-tier inferred marginal cost, accumulate MW → price-MW ladder.
@@ -256,4 +256,13 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
   heavy-tailed emissions and exogenous conditioning. Deferred until Phase 2–3
   base results land.
 
-_Next: Phase 0 — extend DISPATCHLOAD columns_to_keep and implement aggregate helpers._
+### 2026-07-29 — Phase 0.1: Extended columns_to_keep in fetch_aemo_unit_dispatch
+- `columns_to_keep` at `src/aemo_data.py:1307-1311` extended to retain
+  `AVAILABILITY`, `INITIALMW`, `RAISEREGENABLEMENTMAX/MIN`,
+  `LOWERREGENABLEMENTMAX/MIN`, `SEMIDISPATCHCAP`, `RAMPUPRATE`,
+  `RAMPDOWNRATE`, `AGCSTATUS`.
+- Empty-return schema and docstring updated to match.
+- 2 dispatch tests pass; 4 pre-existing failures unrelated.
+- Added cross-reference from `docs/dt_improvement_roadmap.md`.
+
+_Next: Phase 0.2–0.4 — aggregate_fcas_market_depth, aggregate_residual_supply, build_supply_curve._
