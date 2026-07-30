@@ -187,6 +187,24 @@ if __name__ == "__main__":
             print(f"  {'oracle':>12}: ${result['profit']:>8,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
             del env, agent
 
+            # ── Oracle_MI (impact-aware, only under piecewise_merit_order) ──
+            if impact_kind != 'identity':
+                solver = AEMOOracleSolver(
+                    battery_capacity=BATTERY['capacity'],
+                    max_battery_flow=BATTERY['max_flow'],
+                    step_duration=BATTERY['step_h'],
+                    init_soc=BATTERY['init_soc'],
+                    min_soc=0.0, max_soc=BATTERY['capacity'],
+                )
+                result_mi = solver.solve_mi(processed, curves, depth, impact_intensity=1.0,
+                                            max_iter=5, verbose=False)
+                results.append(dict(label=f"{impact_kind}_oraclemi_{label}",
+                                    profit=result_mi.total_profit,
+                                    energy=result_mi.energy_revenue,
+                                    fcas=result_mi.fcas_revenue,
+                                    deg=0.0, steps=result_mi.n_intervals, time_s=0.0))
+                print(f"  {'oracle_mi':>12}: ${result_mi.total_profit:>8,.0f}  (E=${result_mi.energy_revenue:>6,.0f}  F=${result_mi.fcas_revenue:>6,.0f})  0.0s")
+
             # ── DT with RTG sweep ──
             for rtg in RTG_VALUES:
                 env = AEMOBatteryTradingEnv(

@@ -346,3 +346,142 @@ class AEMOOracleSolver:
             print(f"  Dispatch: {total_dispatch_mwh:.0f} MWh, charge: {total_charge_mwh:.0f} MWh")
 
         return result
+
+    def solve_mi(
+        self,
+        prices: pl.DataFrame,
+        supply_curves: pl.DataFrame,
+        fcas_depth: pl.DataFrame,
+        impact_intensity: float = 1.0,
+        max_iter: int = 5,
+        tol: float = 1e-3,
+        verbose: bool = False,
+    ) -> OracleResult:
+        """
+        Oracle_MI: impact-aware LP via iterative price convergence.
+
+        Repeatedly solves the Oracle LP, updating prices at each iteration
+        using the piecewise-linear merit-order impact model so that the
+        LP sees the realized (impacted) prices its own actions would create.
+        Converges to a fixed point where the solution is consistent with the
+        impacted prices it generates.
+
+        Args:
+            prices: DataFrame with RRP, FCAS_* columns.
+            supply_curves: from build_supply_curve(); indexed by SETTLEMENTDATE.
+            fcas_depth: from aggregate_fcas_market_depth().
+            impact_intensity: scaling factor for impact effect.
+            max_iter: maximum fixed-point iterations.
+            tol: convergence tolerance on profit change.
+            verbose: print iteration progress.
+        """
+        # Pre-index supply curves for O(1) lookup
+        supply_map: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+        if supply_curves is not None and supply_curves.height > 0:
+            for row in supply_curves.group_by('SETTLEMENTDATE', maintain_order=True).agg([
+                pl.col('MARGINAL_COST'), pl.col('CUMULATIVE_MW'),
+            ]).iter_rows(named=True):
+                dt = row['SETTLEMENTDATE']
+                ts = int(dt.timestamp()) if hasattr(dt, 'timestamp') else int(dt)
+                supply_map[ts] = (
+                    np.asarray(row['MARGINAL_COST'], dtype=float),
+                    np.asarray(row['CUMULATIVE_MW'], dtype=float),
+                )
+
+        # Pre-index FCAS depth
+        fcas_depth_map: dict[int, dict[str, float]] = {}
+        if fcas_depth is not None and fcas_depth.height > 0:
+            depth_cols = [c for c in fcas_depth.columns if c.startswith('FCAS_DEPTH_')]
+            if depth_cols:
+                for row in fcas_depth.select(['SETTLEMENTDATE'] + depth_cols).iter_rows(named=True):
+                    dt = row['SETTLEMENTDATE']
+                    ts = int(dt.timestamp()) if hasattr(dt, 'timestamp') else int(dt)
+                    svc_map = {}
+                    for c in depth_cols:
+                        svc_name = c.replace('FCAS_DEPTH_', '').replace('_MW', '')
+                        svc_map[svc_name] = float(row[c] or 0)
+                fcas_depth_map[ts] = svc_map
+
+        # --- Iterative fixed-point loop ---
+        current_prices = prices
+        prev_profit = -1e12
+        result = None
+
+        for iteration in range(max_iter):
+            result = self.solve(current_prices, verbose=False)
+
+            if verbose:
+                tag = "identity" if iteration == 0 else f"iter {iteration}"
+                print(f"  [Oracle_MI] {tag}: profit=${result.total_profit:,.0f} "
+                      f"(energy ${result.energy_revenue:,.0f} + FCAS ${result.fcas_revenue:,.0f})")
+
+            profit_change = abs(result.total_profit - prev_profit)
+            if iteration > 0 and profit_change < tol * abs(prev_profit) + 0.1:
+                if verbose:
+                    print(f"  [Oracle_MI] Converged at iter {iteration}")
+                break
+            prev_profit = result.total_profit
+
+            # Apply impact model: compute realized prices from trajectory
+            T = result.n_intervals
+            new_rrp = np.zeros(T)
+            new_fcas = np.zeros((T, N_FCAS))
+            ts_list = []
+            if 'SETTLEMENTDATE' in current_prices.columns:
+                ts_list = [int(dt.timestamp()) if hasattr(dt, 'timestamp') else int(dt)
+                           for dt in current_prices['SETTLEMENTDATE']]
+
+            for t in range(T):
+                net_disp = result.optimal_dispatch[t]
+                demand = float(current_prices['TOTALDEMAND'][t]) if 'TOTALDEMAND' in current_prices.columns else 1000.0
+                ts = ts_list[t] if ts_list else t
+
+                # Energy impact: shift supply curve to clear at base_rrp, then compute
+                # marginal effect of battery dispatch at that operating point.
+                sup = supply_map.get(ts)
+                if sup is not None and demand > 0:
+                    costs, cum_mw = sup
+                    # Calibrate: shift supply curve so it clears at base_rrp.
+                    baseline = float(np.interp(demand, cum_mw, costs))
+                    shift = float(current_prices['RRP'][t]) - baseline
+                    costs_adj = costs + shift
+                    eff = demand - net_disp  # discharge reduces effective demand
+                    if eff <= cum_mw[0]:
+                        sup_price = costs_adj[0]
+                    elif eff >= cum_mw[-1]:
+                        sup_price = costs_adj[-1]
+                    else:
+                        sup_price = float(np.interp(eff, cum_mw, costs_adj))
+                    new_rrp[t] = float(current_prices['RRP'][t]) + impact_intensity * (sup_price - float(current_prices['RRP'][t]))
+                else:
+                    new_rrp[t] = float(current_prices['RRP'][t])
+
+                # FCAS impact
+                for i, svc in enumerate(FCAS_SERVICES):
+                    col = f'FCAS_{svc}'
+                    bp = float(current_prices[col][t]) if col in current_prices.columns else 0.0
+                    if svc in FCAS_SERVICES_RAISE:
+                        bmw = result.optimal_raise_bids[t, FCAS_SERVICES_RAISE.index(svc)]
+                    else:
+                        bmw = result.optimal_lower_bids[t, FCAS_SERVICES_LOWER.index(svc)]
+                    if bmw > 0 and bp > 0:
+                        svc_map = fcas_depth_map.get(ts, {})
+                        dp = svc_map.get(svc.upper(), 0.0)
+                        if dp > 0:
+                            bp = max(bp * (1.0 - impact_intensity * bmw / (dp + bmw)), 0.0)
+                    new_fcas[t, i] = bp
+
+            # Build updated prices for next iteration
+            new_price_df = current_prices.clone()
+            new_price_df = new_price_df.with_columns(pl.Series('RRP', new_rrp))
+            for i, svc in enumerate(FCAS_SERVICES):
+                col = f'FCAS_{svc}'
+                if col in new_price_df.columns:
+                    new_price_df = new_price_df.with_columns(pl.Series(col, new_fcas[:, i]))
+            current_prices = new_price_df
+
+        if verbose:
+            print(f"  [Oracle_MI] Final: ${result.total_profit:,.0f}/ep "
+                  f"(energy ${result.energy_revenue:,.0f} + FCAS ${result.fcas_revenue:,.0f})")
+
+        return result

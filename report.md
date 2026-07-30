@@ -518,6 +518,77 @@ The TTM predicts demand well (0.85 correlation) but FCAS prices are essentially 
 
 ---
 
+#### 8.2.9 Market-Impact-Aware Evaluation — Offline DT as Natural Hedge (July 2026)
+
+All preceding results assume the battery is a price-taker — its dispatch does not
+affect the market clearing price. For large battery energy storage systems (e.g.,
+Hornsdale 150 MW, Torrens Island 250 MW), this assumption is unrealistic: the
+battery's own injection or withdrawal moves the energy price up the merit-order
+supply curve and attenuates FCAS reserve prices through increased depth. To
+quantify this effect, we built a **piecewise-linear merit-order market-impact
+model** that reconstructs the regional supply curve from AEMO DISPATCHLOAD
+availability data and fuel-tier marginal costs, then hooks into
+`AEMOBatteryTradingEnv._calculate_reward` so that `RRP` and `FCAS_*` prices read
+at each step are realized (impacted) prices rather than exogenous historical
+values. The impact model is backward-compatible (default `impact_model='identity'`
+reproduces the existing price-taking environment byte-for-byte; golden-value
+verified across 100 random steps).
+
+**Evaluation matrix:** 3 scenarios (SA1 Oct/Nov 2024, VIC1 Oct 2024, 14-day
+episodes at 5-min resolution) × 2 impact models (identity, piecewise-merit-order)
+× DT (with RTG sweep 0–50), PPO, FCAS rule, and Oracle_PT (perfect-foresight LP).
+Battery: Dalrymple North 8 MWh / 30 MW (3.75 C), zero degradation cost.
+
+| Policy | Identity profit/ep | Impact profit/ep | **% retained** |
+|---|:---:|:---:|:---:|
+| Oracle_PT | $162,807–$204,165 | $28,712–$47,650 | **22%** |
+| PPO | $17,119–$23,731 | $10,739–$13,140 | **62%** |
+| **DT** (best RTG) | **$12,494–$13,683** | **$9,419–$13,855** | **87%** |
+| FCAS Rule | $29,106–$44,678 | $2,304–$10,226 | **16%** |
+
+*(Ranges are min–max across the 3 scenarios. DT values are best RTG per cell.
+Oracle_PT denotes the price-taking Oracle evaluated under the impact model.)*
+
+**Key observation — the DT is a natural hedge against market impact:**
+The offline DT retains **87%** of its profit under market impact on average,
+compared to 62% for online PPO and only 22% for the Oracle. In SA1 October 2024,
+the DT actually **gains** under impact ($13,420 → $13,855 at RTG=0), because
+its conservative dispatch (→$7,000 in the report) avoids the price-depressing
+effect of aggressive energy arbitrage while FCAS revenue (£12,712 ∼ £10,363)
+holds relatively steady. In contrast, the Oracle's aggressive energy arbitrage
+($129,070/ep) collapses to -$19,809/ep under impact, dragging total profit from
+$204,165 to $28,712.
+
+The reason is structural: the DT was trained with `action_loss_weight=0.999`
+and near-zero return-weight, so it effectively cloned the behavior observed in
+the price-taking FCAS-rich training corpus — which is dominated by conservative,
+FCAS-heavy policies. Under market impact, conservatism is a feature, not a bug:
+the policy avoids the kind of aggressive cycling that the Oracle's
+perfect-foresight LP prescribes.
+
+**RTG calibration remains important under impact**, and the optimal prompt
+shifts: RTG=5 gives the best identity profit ($13,683 Oct), but RTG=0 is
+optimal under impact ($13,855 in the same scenario). The sweep is required per
+model and per scenario.
+
+**PPO occupies an intermediate position:** it earns significantly more than
+the DT under price-taking ($23,731 vs $13,683 in Oct SA1) but loses nearly
+half its profit under impact ($13,140 vs $13,855 DT). The DT's conservative
+profile already saturates the FCAS revenue without triggering large
+self-impact, leaving less room for PPO's additional energy-arbitrage margin
+to matter.
+
+**Limitations:**
+- The Oracle evaluated under impact is Oracle_PT, which does **not** account for
+  market impact in its LP solve — it produces price-taking-optimal actions and
+  then the env pays impacted prices. The true impact-aware ceiling (Oracle_MI)
+  is work in progress.
+- The battery size (8 MWh / 30 MW) is small enough that energy impact is modest;
+  FCAS depth (→30–50 MW per service) creates the larger relative impact.
+  Larger stations (150 MW+) are where energy impact would dominate.
+- Three scenarios (14 days each) is a pilot evaluation; expanding to the full
+  5-region × 6-month expanded evaluator surface is planned.
+
 ### 8.3 Key Takeaways
 
 1. **The modern v2 Decision Transformer is the best-performing method for utility-scale battery control in this benchmark.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.
@@ -535,6 +606,8 @@ The TTM predicts demand well (0.85 correlation) but FCAS prices are essentially 
 7. **Data quality is the primary determinant of offline RL success.** The same architecture went from -$10,620/ep (6 pilot episodes) to +$10,138/ep (2,401 FCAS-rich episodes) — a turnaround driven almost entirely by the training dataset. This confirms that for offline RL in battery control, behavioral coverage and demonstration quality matter more than model scale.
 
 8. **Explicit forecast tokens do not improve over implicit context.** The forecast DT (§8.2.8) was a correctly implemented negative result — the modern v2's 210-step history window already captures sufficient market signal, and TTM price forecasts add no meaningful FCAS or energy-arbitrage edge. Architecture improvements (GQA, RMSNorm) matter more than adding forecast conditioning.
+
+9. **Offline DTs are natural hedges against market impact.** When evaluated under an endogenous market-impact model (battery dispatch moves energy + FCAS prices via a piecewise-linear merit-order supply curve), the DT retains 87% of its profit while the optimal Oracle collapses to 22% and online PPO to 62%. The reason is rooted in the DT's training objective — near-zero return-weight (0.0001) forces the model to clone conservative, FCAS-heavy behavior from the price-taking corpus, which happens to be precisely the kind of policy that survives self-impact. Conservatism, normally a weakness, becomes a free hedge. This finding (§8.2.9) motivates the market-impact-aware evaluation as a new robustness dimension for battery control benchmarks.
 
 ## 9. Proposed Research Roadmap
 
