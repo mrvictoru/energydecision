@@ -35,11 +35,11 @@ from aemo_oracle_algo import AEMOOracleSolver
 SCENARIOS = [
     ("sa1_oct_2024", "SA1", "2024-10-01", "2024-10-14"),
     ("sa1_nov_2024", "SA1", "2024-11-01", "2024-11-14"),
-    # ("qld1_oct_2024", "QLD1", "2024-10-01", "2024-10-14"),
-    # ("vic1_oct_2024", "VIC1", "2024-10-01", "2024-10-14"),
+    ("vic1_oct_2024", "VIC1", "2024-10-01", "2024-10-14"),
 ]
 BATTERY = dict(capacity=8.0, max_flow=30.0, step_h=0.08333, init_soc=4.0)
 RTG_VALUES = [0.0, 5.0, 10.0, 20.0, 50.0]  # DT prompt sweep
+PPO_RTG = [0.0]  # PPO doesn't use RTG, but we add it as a policy for comparison
 DEVICE = "cuda"
 FP16 = False  # skip FP16 — the AEMOAgent code doesn't cast inputs to match model dtype
 
@@ -124,6 +124,16 @@ if __name__ == "__main__":
         dt_model = dt_model.half()
     print(f"  Model loaded: {time.time()-t0:.1f}s, params: {sum(p.numel() for p in dt_model.parameters())/1e6:.1f}M")
     report_util("after DT model load")
+
+    # 1b. Load PPO reference model
+    print("\n── Loading PPO reference model ──")
+    t0 = now_s()
+    from aemo_notebook_utils import get_sb3_model_class
+    PPO = get_sb3_model_class('PPO')
+    ppo_path = str(Path(__file__).resolve().parents[1] / "models" / "aemo_sb3" / "ppo_aemo_fcas_model.zip")
+    ppo_model = PPO.load(ppo_path, device=DEVICE)
+    print(f"  PPO loaded: {time.time()-t0:.1f}s")
+    report_util("after PPO model load")
 
     # 2. Build supply curves + depth (once, shared across all runs)
     print("\n── Building market data for scenarios ──")
@@ -217,6 +227,42 @@ if __name__ == "__main__":
             results.append(result)
             print(f"  {'fcas_rule':>12}: ${result['profit']:>8,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
             del env, agent
+
+            # ── PPO reference ──
+            env = AEMOBatteryTradingEnv(
+                aemo_data=processed,
+                battery_capacity=BATTERY['capacity'],
+                max_battery_flow=BATTERY['max_flow'],
+                step_duration=BATTERY['step_h'],
+                init_battery_level=BATTERY['init_soc'],
+                max_step=max_step,
+                action_mode='full_fcas', degradation_mode='none', battery_life_cost=0.0,
+                random_episode_start=False,
+                impact_model=impact_kind, impact_intensity=1.0,
+                supply_curves=curves if impact_kind != 'identity' else None,
+                fcas_depth=depth if impact_kind != 'identity' else None,
+            )
+            t_ep = now_s()
+            env.reset()
+            done = False
+            infos_ppo = []
+            while not done:
+                obs = env._get_observation()
+                act, _ = ppo_model.predict(obs, deterministic=True)
+                if isinstance(act, np.ndarray) and act.ndim > 1:
+                    act = act.flatten()
+                obs, reward, done, _, info = env.step(act)
+                infos_ppo.append(info)
+            elapsed = now_s() - t_ep
+            energy = sum(i.get('energy_revenue', 0) for i in infos_ppo)
+            fcas = sum(i.get('fcas_revenue', 0) for i in infos_ppo)
+            deg = sum(i.get('degradation_cost', 0) for i in infos_ppo)
+            profit = energy + fcas - deg
+            result = dict(label=f"{impact_kind}_ppo_{label}", profit=profit,
+                          energy=energy, fcas=fcas, deg=deg, steps=len(infos_ppo), time_s=elapsed)
+            results.append(result)
+            print(f"  {'ppo':>12}: ${profit:>8,.0f}  (E=${energy:>6,.0f}  F=${fcas:>6,.0f})  {elapsed:.1f}s")
+            del env
 
     # 5. Summary
     print("\n\n── SUMMARY ──")
