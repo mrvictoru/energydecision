@@ -310,9 +310,27 @@ DT inference: 21.6s per 14-day episode (3744 steps). Not memory-bound.
   RTG calibration might improve DT under impact.
 - Oracle evaluated with price-taking-optimal actions under impact
   (Oracle_PT-in-impact), not Oracle_MI (impact-aware ceiling).
-- Only 2 scenarios; needs expansion for CIs.
+- Only 3 scenarios; expand to 5 regions for full CIs later.
 
-_Next: extend Phase 3 to dispatch replays + run PPO, then decide on Phase 4 retraining._
+### 2026-07-30 — Phase 3: PPO + VIC1 added, RTG calibration complete
+
+Added PPO reference policy via single-obs predict (no VecEnv) and VIC1
+Oct 2024 scenario. Confirmed RTG calibration with `run_episode()`.
+DT responds to RTG prompts now; optimal RTG depends on both scenario and
+impact mode.
+
+**Impact resilience (% profit retained under impact, best RTG per cell):**
+
+| Policy | SA1 Oct | SA1 Nov | VIC1 Oct | Avg |
+|---|:---:|:---:|:---:|:---:|
+| DT | +3% | -9% | -33% | -13% |
+| PPO | -45% | -37% | -33% | -38% |
+| Oracle | -86% | -76% | -71% | -78% |
+| FCAS Rule | -93% | -94% | -65% | -84% |
+
+DT reaches 48% of Oracle under impact (vs 6.7% without).
+
+_Next: decide on Phase 4 retraining._
 - Created `src/market_impact.py` with:
   - `MarketImpactModel` abstract base class
   - `IdentityImpact` — price-taking (backward compat). Golden-value test
