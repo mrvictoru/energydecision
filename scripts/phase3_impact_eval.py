@@ -40,7 +40,7 @@ SCENARIOS = [
 ]
 BATTERY = dict(capacity=8.0, max_flow=30.0, step_h=0.08333, init_soc=4.0)
 DEVICE = "cuda"
-FP16 = True
+FP16 = False  # skip FP16 — the AEMOAgent code doesn't cast inputs to match model dtype
 
 def now_s():
     return time.perf_counter()
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     print(f"  Device: {DEVICE}")
     print(f"  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none'}")
     if torch.cuda.is_available():
-        print(f"  VRAM: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.0f} GB")
+        print(f"  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.0f} GB")
     report_util("start")
 
     # 1. Load DT model
