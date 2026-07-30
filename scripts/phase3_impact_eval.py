@@ -29,16 +29,17 @@ from aemo_dt_hf import (
     load_model_kwargs,
 )
 from market_impact import create_impact_model, PiecewiseMeritOrderImpact
-from aemo_notebook_utils import get_sb3_model_class
 from aemo_oracle_algo import AEMOOracleSolver
-from stable_baselines3.common.vec_env import DummyVecEnv
 
 # ── Config ──────────────────────────────────────────────────────────────────
 SCENARIOS = [
     ("sa1_oct_2024", "SA1", "2024-10-01", "2024-10-14"),
     ("sa1_nov_2024", "SA1", "2024-11-01", "2024-11-14"),
+    # ("qld1_oct_2024", "QLD1", "2024-10-01", "2024-10-14"),
+    # ("vic1_oct_2024", "VIC1", "2024-10-01", "2024-10-14"),
 ]
 BATTERY = dict(capacity=8.0, max_flow=30.0, step_h=0.08333, init_soc=4.0)
+RTG_VALUES = [0.0, 5.0, 10.0, 20.0, 50.0]  # DT prompt sweep
 DEVICE = "cuda"
 FP16 = False  # skip FP16 — the AEMOAgent code doesn't cast inputs to match model dtype
 
@@ -82,15 +83,9 @@ def build_market_data(region, start, end, processed):
 # ── Run a policy on one env instance ────────────────────────────────────────
 def run_policy(env, agent, label):
     t0 = now_s()
-    env.reset()
-    done = False
-    infos = []
-    while not done:
-        obs = env._get_observation()
-        act = agent.choose_action(obs)
-        obs, reward, done, _, info = env.step(act)
-        infos.append(info)
+    episode_df, _ = agent.run_episode()
     elapsed = now_s() - t0
+    infos = episode_df['info'].to_list()
     energy = sum(i.get('energy_revenue', 0) for i in infos)
     fcas = sum(i.get('fcas_revenue', 0) for i in infos)
     deg = sum(i.get('degradation_cost', 0) for i in infos)
@@ -130,16 +125,7 @@ if __name__ == "__main__":
     print(f"  Model loaded: {time.time()-t0:.1f}s, params: {sum(p.numel() for p in dt_model.parameters())/1e6:.1f}M")
     report_util("after DT model load")
 
-    # 2. Load PPO reference model
-    print("\n── Loading PPO reference model ──")
-    t0 = now_s()
-    ppo_cls = get_sb3_model_class('PPO')
-    sb3_path = str(Path(__file__).resolve().parents[1] / "models" / "aemo_sb3" / "ppo_aemo_fcas_model.zip")
-    ppo_model = ppo_cls.load(sb3_path, device=DEVICE)
-    print(f"  PPO loaded: {time.time()-t0:.1f}s")
-    report_util("after PPO model load")
-
-    # 3. Build supply curves + depth (once, shared across all runs)
+    # 2. Build supply curves + depth (once, shared across all runs)
     print("\n── Building market data for scenarios ──")
     scenario_data = {}
     for label, region, start_str, end_str in SCENARIOS:
@@ -170,16 +156,29 @@ if __name__ == "__main__":
 
             print(f"\n  Scenario: {label} ({max_step} intervals)")
 
-            for policy_name in ['oracle_pt', 'dt', 'fcas_rule']:
-                t_ep = now_s()
+            # ── Oracle ──
+            t_ep = now_s()
+            env = AEMOBatteryTradingEnv(
+                aemo_data=processed,
+                battery_capacity=BATTERY['capacity'],
+                max_battery_flow=BATTERY['max_flow'],
+                step_duration=BATTERY['step_h'],
+                init_battery_level=BATTERY['init_soc'],
+                max_step=max_step,
+                action_mode='full_fcas', degradation_mode='none', battery_life_cost=0.0,
+                random_episode_start=False,
+                impact_model=impact_kind, impact_intensity=1.0,
+                supply_curves=curves if impact_kind != 'identity' else None,
+                fcas_depth=depth if impact_kind != 'identity' else None,
+            )
+            agent = AEMOAgent(env, algorithm='aemo_oracle')
+            result = run_policy(env, agent, f"{impact_kind}_oracle_{label}")
+            results.append(result)
+            print(f"  {'oracle':>12}: ${result['profit']:>8,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
+            del env, agent
 
-                # Create env
-                impact_args = dict(
-                    impact_model=impact_kind,
-                    impact_intensity=1.0,
-                    supply_curves=curves if impact_kind != 'identity' else None,
-                    fcas_depth=depth if impact_kind != 'identity' else None,
-                )
+            # ── DT with RTG sweep ──
+            for rtg in RTG_VALUES:
                 env = AEMOBatteryTradingEnv(
                     aemo_data=processed,
                     battery_capacity=BATTERY['capacity'],
@@ -187,31 +186,37 @@ if __name__ == "__main__":
                     step_duration=BATTERY['step_h'],
                     init_battery_level=BATTERY['init_soc'],
                     max_step=max_step,
-                    action_mode='full_fcas',
-                    degradation_mode='none',
-                    battery_life_cost=0.0,
+                    action_mode='full_fcas', degradation_mode='none', battery_life_cost=0.0,
                     random_episode_start=False,
-                    **impact_args,
+                    impact_model=impact_kind, impact_intensity=1.0,
+                    supply_curves=curves if impact_kind != 'identity' else None,
+                    fcas_depth=depth if impact_kind != 'identity' else None,
                 )
-
-                if policy_name == 'oracle_pt':
-                    agent = AEMOAgent(env, algorithm='aemo_oracle')
-                    result = run_policy(env, agent, f"{impact_kind}_{policy_name}_{label}")
-
-                elif policy_name == 'dt':
-                    agent = AEMOAgent(env, algorithm='dt', model=dt_model, rtg_value=10.0)
-                    result = run_policy(env, agent, f"{impact_kind}_{policy_name}_{label}")
-
-                else:  # fcas_rule
-                    agent = AEMOAgent(env, algorithm='fcas_rule')
-                    result = run_policy(env, agent, f"{impact_kind}_{policy_name}_{label}")
-
+                agent = AEMOAgent(env, algorithm='dt', model=dt_model, rtg_value=rtg)
+                result = run_policy(env, agent, f"{impact_kind}_dt_rtg{rtg}_{label}")
                 results.append(result)
-                print(f"  {policy_name:>12}: ${result['profit']:>8,.0f}  "
-                      f"(E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f}  D=${result['deg']:>5,.0f})  "
-                      f"{result['time_s']:.1f}s")
-                report_util(f"after {impact_kind}/{policy_name}/{label}")
+                print(f"  {'dt_rtg'+str(rtg):>12}: ${result['profit']:>8,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
                 del env, agent
+
+            # ── FCAS rule ──
+            env = AEMOBatteryTradingEnv(
+                aemo_data=processed,
+                battery_capacity=BATTERY['capacity'],
+                max_battery_flow=BATTERY['max_flow'],
+                step_duration=BATTERY['step_h'],
+                init_battery_level=BATTERY['init_soc'],
+                max_step=max_step,
+                action_mode='full_fcas', degradation_mode='none', battery_life_cost=0.0,
+                random_episode_start=False,
+                impact_model=impact_kind, impact_intensity=1.0,
+                supply_curves=curves if impact_kind != 'identity' else None,
+                fcas_depth=depth if impact_kind != 'identity' else None,
+            )
+            agent = AEMOAgent(env, algorithm='fcas_rule')
+            result = run_policy(env, agent, f"{impact_kind}_fcasrule_{label}")
+            results.append(result)
+            print(f"  {'fcas_rule':>12}: ${result['profit']:>8,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
+            del env, agent
 
     # 5. Summary
     print("\n\n── SUMMARY ──")
