@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.3-runtime-ubuntu22.04
+FROM docker.io/nvidia/cuda:13.0.2-runtime-ubuntu22.04
 
 WORKDIR /code
 
@@ -13,14 +13,12 @@ RUN apt-get update && apt-get install -y \
     tini \
     && rm -rf /var/lib/apt/lists/*
 
-# PyTorch with CUDA 12.6 (stable, thoroughly tested; unlike CUDA 13 which is
-# experimental — see pytorch.org/get-started/locally for supported CUDA versions).
-# Installs all nvidia-*-cu12 stub libraries automatically as dependencies.
-RUN pip install --no-cache-dir \
-    --index-url https://download.pytorch.org/whl/cu126 \
-    torch==2.7.1 torchvision==0.22.1
-
 COPY ./requirements.txt ./
+
+COPY ./torch_req.txt ./
+
+RUN pip install --no-cache-dir -r torch_req.txt
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN chmod +x /usr/bin/tini
