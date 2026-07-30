@@ -285,7 +285,34 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 - Added `oracle_pt` policy entry to
   `configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json`.
 
-### 2026-07-29 — Phase 2: src/market_impact.py + env hook
+### 2026-07-29 — Phase 3: first market-impact re-evaluation results
+
+**Hardware:** 2080 Ti (0.44/21 GB VRAM), 24-core CPU (62 GB RAM).
+DT inference: 21.6s per 14-day episode (3744 steps). Not memory-bound.
+
+**Key findings** (SA1 Oct+Nov 2024, 8MWh/30MW, full_fcas, zero degradation):
+
+| Impact | Oracle_PT | DT (RTG=10) | DT as % of Oracle |
+|--------|----------:|------------:|:-----------------:|
+| identity | $204,165 → $195,368 | $13,358 → $10,325 | **6.5%** |
+| merit-order | $28,712 → $46,936 | $11,846 → $9,142 | **41%** |
+| **Change** | **-81%** | **-12%** | — |
+
+- **DT is the most impact-resilient policy.** Loses only 12% under
+  market impact while Oracle collapses 81% and FCAS rule drops 93%.
+- **Conservative dispatch is a natural hedge.** DT earns $374 energy
+  rev vs Oracle's $129K. Under impact, the Oracle's aggressive
+  arbitrage moves the price heavily against itself.
+- **FCAS-rule is the worst under impact** ($33K → $2.6K in Oct).
+
+**Caveats:**
+- DT evaluated at RTG=10 (calibrated for price-taking). Impact-aware
+  RTG calibration might improve DT under impact.
+- Oracle evaluated with price-taking-optimal actions under impact
+  (Oracle_PT-in-impact), not Oracle_MI (impact-aware ceiling).
+- Only 2 scenarios; needs expansion for CIs.
+
+_Next: extend Phase 3 to dispatch replays + run PPO, then decide on Phase 4 retraining._
 - Created `src/market_impact.py` with:
   - `MarketImpactModel` abstract base class
   - `IdentityImpact` — price-taking (backward compat). Golden-value test
@@ -302,7 +329,7 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
     through `self._impact.realized_fcas_price()`.
 - Tests: 320 pass, 3 pre-existing.
 
-_Next: Phase 3 — Re-evaluation of existing policies under market impact._
+_Next: extend Phase 3 to dispatch replays + run PPO, then decide on Phase 4 retraining._
 - **`aggregate_fcas_market_depth`**: sums per-unit DISPATCHLOAD enablement
   per 5-min interval. Falls back to TOTALDEMAND-ratio heuristic when
   enablement is zero (SA1 imports FCAS via interconnectors → zero local
