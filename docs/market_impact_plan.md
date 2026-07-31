@@ -437,3 +437,32 @@ _Next: bootstrap CI + Wilcoxon, then update report §8.2.9 with v2 numbers._
 
 Phase 3 complete. Remaining: Phase 4 (impact-aware retrain, optional, MoLab)
 and Phase 6 (synthetic FCAS) are the open research threads.
+
+### 2026-07-31 — Phase 4 finalized: impact-aware dataset design + generation started
+
+**Dataset spec (finalized with user):**
+- **Batteries:** diverse 8 / 50 / 150 / 250 MWh (FCAS impact visible at 8–50;
+  energy impact only at 150–250).
+- **Sources (mix):** Oracle_MI ~600 (impact-optimal), PPO ~400, modern-v2 DT
+  self-generated ~300, A2C ~200, Oracle_PT ~150 (failure-mode contrast),
+  fcas_rule ~150. Total ~1,800 eps.
+- **Oracle diversity:** Oracle_MI/Oracle_PT are deterministic LP solves —
+  diversity comes from solving over sampled 14-day sub-windows per region
+  (distinct trajectory per window), not re-running.
+- **Horizons:** short 12-day (40%, matches eval), medium 8-week (30%),
+  long 26-week (20%), ~9-month (10%). Long horizons teach capacity-fade-aware
+  operation (degradation). Oracle LP sources restricted to short/medium
+  (LP size grows with horizon).
+- **Dates:** reuse 2021-2023 training windows (processed data cached); supply
+  curves + FCAS depth precomputed for these windows (~7 hr DISPATCHLOAD
+  download, one-time, launched in background).
+- **Degradation:** real_world (LFP, 30C) in training AND eval. Phase 3 impact
+  eval switched none -> real_world to match.
+- **Obs:** state_dim stays 18 (no horizon feature added — model learns horizon
+  from day/sin-cos time features + timestep embedding + RTG scale; matches the
+  real-world setting where remaining-fraction isn't a fixed input).
+- **Files:** `scripts/generate_impact_dataset.py` (generator),
+  `scripts/precompute_supply_curves.py` (7 hr supply/depth precompute).
+- **Next:** after precompute -> generate ~1,800 eps -> assemble -> upload to
+  HF (`mrvictoru/AEMO_simulated_impact_trade`) -> MoLab pilot retrain (~500 eps)
+  -> validate vs pretrained v2 on Phase 3 surface -> full retrain.
