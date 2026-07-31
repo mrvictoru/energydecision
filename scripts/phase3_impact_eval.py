@@ -142,15 +142,26 @@ if __name__ == "__main__":
 
     # 2. Build supply curves + depth (once, shared across all runs)
     print("\n── Building market data for scenarios ──")
+    import pickle as _pkl
+    cache_dir = Path("/tmp/scenario_cache"); cache_dir.mkdir(exist_ok=True)
     scenario_data = {}
     for label, region, start_str, end_str in SCENARIOS:
         from datetime import datetime
         start = datetime.strptime(start_str, "%Y-%m-%d")
         end = datetime.strptime(end_str, "%Y-%m-%d")
+        cache_file = cache_dir / f"{label}.pkl"
+        if cache_file.exists():
+            print(f"  Loading {label} from cache ...", flush=True)
+            with open(cache_file, 'rb') as f:
+                scenario_data[label] = _pkl.load(f)
+            continue
         processed = fetch_scenario(region, start, end)
         curves, depth = build_market_data(region, start, end, processed)
-        scenario_data[label] = dict(processed=processed, curves=curves, depth=depth,
-                                    region=region, start=start, end=end)
+        entry = dict(processed=processed, curves=curves, depth=depth,
+                     region=region, start=start, end=end)
+        scenario_data[label] = entry
+        with open(cache_file, 'wb') as f:
+            _pkl.dump(entry, f)
     report_util("after data build")
 
     # 4. Run evaluations
