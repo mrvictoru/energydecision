@@ -116,7 +116,8 @@ if __name__ == "__main__":
                  'drop_p','max_timestep','rope_enabled','rope_max_position','rope_base',
                  'n_kv_heads','qk_norm','tie_weights'}
     model_init_kwargs = {k: v for k, v in model_kwargs.items() if k in init_keys}
-    checkpoint_path = str(Path(__file__).resolve().parents[1] / "models" / "aemo" / "dt" / "hf_eval" / "aemo_dt_fcas_model.pt")
+    checkpoint_path = str(Path(__file__).resolve().parents[1] / "models" / "aemo" / "dt" / "hf_v2_modern" / "aemo_dt_fcas_model.pt")
+    print(f"  Loading modern v2 checkpoint from: {checkpoint_path}")
     dt_model = DecisionTransformer(**model_init_kwargs)
     state = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
     dt_model.load_from_checkpoint(state)
