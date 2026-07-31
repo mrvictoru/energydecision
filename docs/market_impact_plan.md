@@ -396,3 +396,23 @@ re-run with v2 (launched 2026-07-31, ~2 hr). Bootstrap CI + Wilcoxon script
 in the diary/report are superseded by the v2 run.
 
 _Next: v2 full sweep → bootstrap CIs → update report §8.2.9 with v2 numbers._
+
+### 2026-07-31 — v2 Phase 3 sweep complete (supersedes all legacy numbers)
+
+Full 3-scenario × 3-battery × 2-impact sweep with the modern v2 (8×768) model.
+Legacy 8×384 numbers in earlier diary/report entries are WRONG and superseded.
+
+**Corrected v2 impact resilience (avg % profit retained):**
+| battery | DT | PPO | Oracle |
+|---|---:|---:|---:|
+| small (8 MWh) | 62% | 62% | 22% |
+| hornsdale (150 MW) | 83% | 40% | 4% |
+| torrens (250 MW) | 49% | 32% | 2% |
+
+Key: at small scale v2 DT == PPO resilience (62%); the DT edge is
+scale-dependent (83% vs 40% at 150 MW). v2 DT earns 1.4–1.8× PPO absolute
+identity profit. Oracle collapses at scale (model-independent).
+
+Per-episode ~59s (v2). Results: eval_output/phase3_v2/ (gitignored).
+
+_Next: bootstrap CI + Wilcoxon, then update report §8.2.9 with v2 numbers._
