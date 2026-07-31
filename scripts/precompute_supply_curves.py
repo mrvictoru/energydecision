@@ -12,8 +12,28 @@ from pathlib import Path
 from datetime import datetime
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from aemo_data import build_supply_curve, aggregate_fcas_market_depth
+from aemo_data import build_supply_curve
 import polars as pl
+
+# Fast demand-heuristic FCAS depth (mirrors aggregate_fcas_market_depth fallback).
+# Avoids the very slow multi-year DISPATCHLOAD aggregation; depth is an
+# approximation used only to attenuate FCAS prices by battery share.
+_FCAS_HEURISTIC = {
+    'RAISE6SEC': (50.0, 0.10), 'RAISE60SEC': (30.0, 0.05), 'RAISE5MIN': (15.0, 0.02),
+    'RAISEREG': (30.0, 0.03),
+    'LOWER6SEC': (50.0, 0.10), 'LOWER60SEC': (30.0, 0.05), 'LOWER5MIN': (15.0, 0.02),
+    'LOWERREG': (30.0, 0.03),
+}
+
+
+def fast_fcas_depth(processed: pl.DataFrame) -> pl.DataFrame:
+    """Compute FCAS_DEPTH_*_MW from TOTALDEMAND heuristically (fast, no DISPATCHLOAD)."""
+    dem = processed.select('SETTLEMENTDATE', 'TOTALDEMAND')
+    exprs = [pl.col('SETTLEMENTDATE')]
+    for svc, (min_mw, ratio) in _FCAS_HEURISTIC.items():
+        exprs.append(pl.max_horizontal(pl.lit(min_mw), pl.col('TOTALDEMAND') * ratio)
+                     .alias(f'FCAS_DEPTH_{svc}_MW'))
+    return dem.select(exprs)
 
 REGIONS = {
     "NSW1": ("2021-01-01", "2023-04-01", "data/aemo/processed_NSW1_2021-01-01_2023-04-01_0.0833h.parquet"),
@@ -40,9 +60,8 @@ def main():
         t0 = time.time()
         print(f"{region}: building supply curves {s}..{e} ...", flush=True)
         curves = build_supply_curve(region, start, end)
-        print(f"{region}: supply {curves.height if curves.height>0 else 0} rows in {time.time()-t0:.0f}s; fcas depth...", flush=True)
-        dem = pl.read_parquet(proc_path).select(['SETTLEMENTDATE', 'TOTALDEMAND'])
-        depth = aggregate_fcas_market_depth(region, start, end, demand_series=dem)
+        print(f"{region}: supply {curves.height if curves.height>0 else 0} rows in {time.time()-t0:.0f}s; fcas depth (heuristic)...", flush=True)
+        depth = fast_fcas_depth(pl.read_parquet(proc_path))
         with open(out, 'wb') as f:
             pickle.dump((curves, depth), f)
         print(f"{region}: cached ({time.time()-t0:.0f}s)", flush=True)
