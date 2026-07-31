@@ -117,7 +117,7 @@ def run_oracle(processed, battery, max_step, impact, curves, depth, start_idx, i
                               min_soc=0.0, max_soc=cap)
     sub = processed.slice(start_idx, max_step)
     if is_mi:
-        res = solver.solve_mi(sub, curves, depth, impact_intensity=1.0, max_iter=5, verbose=False)
+        res = solver.solve_mi(sub, curves, depth, impact_intensity=1.0, max_iter=3, verbose=False)
     else:
         res = solver.solve(sub, verbose=False)
     return res
@@ -197,9 +197,10 @@ def build_episode_plan(regions, n_total):
         # Oracle sources: short/medium only
         policy = rng.choices(SOURCES, weights=[SOURCE_WEIGHTS[s] for s in SOURCES])[0]
         if policy in ('oracle_mi', 'oracle_pt'):
-            h = rng.choice(ORACLE_HORIZONS)
+            # Bias to short (fast LP); a minority at medium (slower 8-wk LP).
+            h = rng.choices(ORACLE_HORIZONS, weights=[0.75, 0.25])[0]
         else:
-            h = rng.choice(horizon_names, weights=[0.4, 0.3, 0.2, 0.1])
+            h = rng.choices(horizon_names, weights=[0.4, 0.3, 0.2, 0.1])[0]
         max_step = HORIZONS[h]
         processed_path = REGION_WINDOWS[region][0]
         n_rows = pl.scan_parquet(processed_path).select(pl.len()).collect().item()
@@ -210,20 +211,51 @@ def build_episode_plan(regions, n_total):
     return plan
 
 
+def worker(task):
+    """Process a chunk of episodes in a spawned process. Returns list of written paths."""
+    import time as _t
+    from pathlib import Path
+    out = Path(task['out'])
+    scenario = task['scenario_data']
+    written = []
+    model = None
+    for i, ep in enumerate(task['episodes']):
+        region = ep['region']
+        if region not in scenario:
+            continue
+        proc = scenario[region]['processed']; curves = scenario[region]['curves']
+        depth = scenario[region]['depth']
+        bat = BATTERIES[ep['battery']]
+        if ep['policy'] == 'dt_v2' and model is None:
+            model = load_dt_v2()
+        t0 = _t.time()
+        try:
+            df = generate_one(ep['policy'], proc, bat, ep['max_step'], 'piecewise_merit_order',
+                              curves, depth, ep['start_idx'], model=model)
+            tag = f"{region}__{ep['policy']}__{ep['horizon']}__{ep['battery']}__ep{i:04d}"
+            (out / 'raw_logs').mkdir(parents=True, exist_ok=True)
+            df.write_parquet(out / 'raw_logs' / f"{tag}.parquet")
+            written.append(tag)
+            print(f"    [{ep['region']}] {tag} ({len(df)} steps, {_t.time()-t0:.0f}s)", flush=True)
+        except Exception as e:
+            print(f"    [ERR] {region}/{ep['policy']}/{ep['battery']}/{ep['horizon']}: {e}", flush=True)
+    return written
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--regions', default='NSW1,QLD1,SA1,TAS1,VIC1')
     ap.add_argument('--n-episodes', type=int, default=50)
     ap.add_argument('--out', default='data/aemo_dt_impact')
     ap.add_argument('--supply-cache', default='/tmp/scenario_cache')
+    ap.add_argument('--workers', type=int, default=8)
     args = ap.parse_args()
 
     regions = [r for r in args.regions.split(',') if r]
     out = Path(args.out); (out / 'raw_logs').mkdir(parents=True, exist_ok=True)
 
-    # Load processed data + supply/depth per region (from precompute cache)
+    import pickle, os
     scenario = {}
-    import pickle
     for region in regions:
         proc_path = Path(REGION_WINDOWS[region][0])
         if not proc_path.exists():
@@ -232,36 +264,46 @@ def main():
         processed = pl.read_parquet(proc_path)
         sc = Path(args.supply_cache) / f"{REGION_WINDOWS[region][1]}_supply.pkl"
         if not sc.exists():
-            print(f"[WARN] no supply cache for {region} ({sc}); generating identity-only?")
-            curves = None; depth = None
-        else:
-            with open(sc, 'rb') as f:
-                curves, depth = pickle.load(f)
+            print(f"[WARN] no supply cache for {region} ({sc}); skipping region")
+            continue
+        with open(sc, 'rb') as f:
+            curves, depth = pickle.load(f)
         scenario[region] = {'processed': processed, 'curves': curves, 'depth': depth}
         print(f"{region}: {processed.shape[0]} rows")
 
-    model = load_dt_v2()
-    plan = build_episode_plan(regions, args.n_episodes)
-    print(f"plan: {len(plan)} episodes")
+    if not scenario:
+        print("No regions have both processed data and supply caches. "
+              "Wait for precompute_supply_curves.py to finish.")
+        return
 
-    saved = []
-    for i, ep in enumerate(plan):
-        region = ep['region']
-        if region not in scenario: continue
-        proc = scenario[region]['processed']; curves = scenario[region]['curves']
-        depth = scenario[region]['depth']
-        bat = BATTERIES[ep['battery']]
-        impact = 'piecewise_merit_order'
-        t0 = time.time()
-        df = generate_one(ep['policy'], proc, bat, ep['max_step'], impact, curves, depth,
-                          ep['start_idx'], model=model)
-        tag = f"{region}__{ep['policy']}__{ep['horizon']}__{ep['battery']}__ep{i:04d}"
-        df.write_parquet(out / 'raw_logs' / f"{tag}.parquet")
-        saved.append(tag)
-        print(f"  [{i+1}/{len(plan)}] {tag} ({len(df)} steps, {time.time()-t0:.0f}s)")
+    plan = build_episode_plan(list(scenario), args.n_episodes)
+    print(f"plan: {len(plan)} episodes, {args.workers} workers")
 
-    print(f"\nWrote {len(saved)} episodes to {out}/raw_logs")
-    print("Next: assemble via --mode assemble (mirror generate_fcas_dataset.py), then upload to HF.")
+    # Split plan across workers
+    import concurrent.futures as cf
+    import multiprocessing as mp
+    n_workers = min(args.workers, len(plan))
+    chunks = [plan[i::n_workers] for i in range(n_workers)]
+    tasks = [{'episodes': ch, 'scenario_data': scenario, 'out': str(out)} for ch in chunks]
+
+    t_start = time.time()
+    all_written = []
+    with cf.ProcessPoolExecutor(max_workers=n_workers,
+                                mp_context=mp.get_context('spawn')) as pool:
+        for result in pool.map(worker, tasks):
+            all_written.extend(result)
+    total = time.time() - t_start
+    print(f"\nWrote {len(all_written)} episodes to {out}/raw_logs in {total:.0f}s")
+
+    # Assemble into a single parquet (mirror generate_fcas_dataset.py schema)
+    frames = []
+    for tag in all_written:
+        frames.append(pl.read_parquet(out / 'raw_logs' / f"{tag}.parquet"))
+    if frames:
+        combined = pl.concat(frames, how='vertical_relaxed')
+        combined.write_parquet(out / 'aemo_impact_dataset.parquet')
+        print(f"Assembled {out / 'aemo_impact_dataset.parquet'} ({len(combined)} rows)")
+    print("Next: upload to HF (mrvictoru/AEMO_simulated_impact_trade), then MoLab retrain.")
 
 
 if __name__ == '__main__':
