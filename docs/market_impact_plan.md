@@ -466,3 +466,23 @@ and Phase 6 (synthetic FCAS) are the open research threads.
 - **Next:** after precompute -> generate ~1,800 eps -> assemble -> upload to
   HF (`mrvictoru/AEMO_simulated_impact_trade`) -> MoLab pilot retrain (~500 eps)
   -> validate vs pretrained v2 on Phase 3 surface -> full retrain.
+
+### 2026-08-01 — Phase 4 dataset generation LAUNCHED (running)
+
+- **Precompute** (`precompute_supply_curves.py`) running: 2021-2023 supply
+  curves + FCAS depth per region. DISPATCHLOAD backfill (~2020-12→2022-12)
+  now cached; remaining regions reuse it. FCAS depth switched to fast
+  demand-heuristic (the multi-year DISPATCHLOAD aggregation was 30+ min/
+  region; heuristic is instant and consistent across regions).
+- **Generation** (`generate_impact_dataset.py`, `run_impact_gen_all.sh`)
+  launched with a 10-worker process pool (uses the 12-core CPU). Orchestrator
+  auto-launches each region as its supply cache appears. Validated with a
+  12-episode pilot (all sources write valid parquet).
+- **Sources:** oracle_mi (LP, short-biased 75%), oracle_pt, ppo, dt_v2
+  (self-gen), a2c, fcas_rule. Batteries 8/50/150/250. Horizons short/medium/
+  long/xlong. Degradation real_world (LFP, 30C). Impact piecewise_merit_order.
+- **Known cost:** medium-horizon oracle_mi is slow (~5-9 min/LP); oracle LP
+  iterations cut to 3. Full ~1800-ep run is a multi-hour background job
+  (expected ~3-5 hr given long-horizon rollouts).
+- **Next (after completion):** assemble parquet → upload to HF
+  (`mrvictoru/AEMO_simulated_impact_trade`) → MoLab pilot retrain.
