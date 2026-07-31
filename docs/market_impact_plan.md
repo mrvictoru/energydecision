@@ -368,3 +368,31 @@ _Next: extend Phase 3 to dispatch replays + run PPO, then decide on Phase 4 retr
 - Tests: 320 pass, 3 pre-existing Distrobox path failures.
 
 _Next: Phase 2 — Market-impact env extension._
+
+### 2026-07-31 — CRITICAL CORRECTION: Phase 3 used the LEGACY model, not v2
+
+All Phase 3 impact-resilience numbers up to this point were generated with
+`models/aemo/dt/hf_eval/aemo_dt_fcas_model.pt`, which is the **legacy 8×384
+MoLab-style checkpoint** (confirmed: `embed_return`/`blocks`/`predict_` keys,
+loads as `LegacyDecisionTransformer`). The SOTA **modern v2** (8×768 GQA,
+12 heads, ctx=210, return_scale=1.0) lives at `mrvictoru/energydecision-dt-v2`
+and was NOT being used.
+
+**Fix:** copied the v2 checkpoint to `models/aemo/dt/hf_v2_modern/` and pointed
+`phase3_impact_eval.py` at it. Verified: loads as modern `DecisionTransformer`,
+forward returns `act_preds [B,T,9]`, return_scale=1.0.
+
+**v2 validation (SA1 Oct, small battery):**
+| impact | rtg | v2 profit | legacy profit (WRONG) |
+|---|---|---|---|
+| identity | 0.0 | $19,310 | $13,420 |
+| identity | 10.0 | $33,985 | $11,772 |
+| impact | 0.0 | $14,920 | $13,855 |
+| impact | 10.0 | $22,518 | $7,375 |
+
+**Action:** the full 3-scenario × 3-battery × 2-impact sweep is being
+re-run with v2 (launched 2026-07-31, ~2 hr). Bootstrap CI + Wilcoxon script
+(`scripts/phase3_bootstrap.py`) ready to run after. All prior Phase 3 tables
+in the diary/report are superseded by the v2 run.
+
+_Next: v2 full sweep → bootstrap CIs → update report §8.2.9 with v2 numbers._
