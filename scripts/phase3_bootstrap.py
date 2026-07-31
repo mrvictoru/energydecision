@@ -33,13 +33,13 @@ BATTERIES = [
     dict(name="small", capacity=8.0, max_flow=30.0, step_h=0.08333, init_soc=4.0),
     dict(name="hornsdale", capacity=194.0, max_flow=150.0, step_h=0.08333, init_soc=97.0),
 ]
-# Best RTG per cell from the phase3 sweep (tuned per model/impact/battery);
-# defaults to 10.0 for v2 identity, 0.0 for impact (to be refined after full sweep).
+# Best RTG per cell from the v2 phase3 sweep (SA1 Oct, average-friendly):
+# identity peaks at rtg=10 for small, rtg=5-10 for hornsdale; impact varies.
 DT_RTG = {
     ('identity', 'small'): 10.0,
     ('identity', 'hornsdale'): 10.0,
-    ('piecewise_merit_order', 'small'): 0.0,
-    ('piecewise_merit_order', 'hornsdale'): 0.0,
+    ('piecewise_merit_order', 'small'): 10.0,   # 22,518 vs 14,920 at rtg=0
+    ('piecewise_merit_order', 'hornsdale'): 50.0,  # 77,761 at rtg=50 in Oct
 }
 
 
