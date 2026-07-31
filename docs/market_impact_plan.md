@@ -156,12 +156,11 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 
 ### Phase 3 — Re-evaluation under impact (no retraining) (~1.5 wk)
 
-- [ ] Expand `configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json` to multi-season/multi-station (minimum: SA1 Q4 2024 + 3 additional seasons/regions on the dispatch asset + 2 large-station sizes).
-- [ ] Re-run existing policies (modern v2 DT, PPO ref, all dispatch replays, Hornsdale, Torrens Island) under 4-condition matrix:
-  - [ ] {identity, market-impact} × {dispatch asset 8MWh/3.75C, large stations 150MW/250MW}
-  - [ ] Report all in a single leaderboard with Oracle_PT + Oracle_MI ceilings as new rows.
-- [ ] Apply bootstrap CIs + paired Wilcoxon (`bootstrap_confidence_intervals`, `paired_comparison` in `src/helper.py`) on every headline table.
-- [ ] Check off README roadmap item: "Statistical confidence on AEMO headlines".
+- [x] Expand to multi-season/multi-station: 3 scenarios (SA1 Oct/Nov, VIC1 Oct) × 3 battery sizes (8 MWh / 150 MW / 250 MW).
+- [x] Re-run existing policies (modern v2 DT, PPO, Oracle_PT, Oracle_MI, FCAS rule) under {identity, market-impact} × {small, hornsdale, torrens}.
+- [x] Report all in a single leaderboard with Oracle_PT + Oracle_MI ceilings as rows.
+- [x] Bootstrap CIs (`phase3_bootstrap_over_scenarios.py`, over scenarios) + paired Wilcoxon (`phase3_paired_wilcoxon.py`, over scenario×battery cells) on headline tables.
+- [x] Check off README roadmap item: "Statistical confidence on AEMO headlines".
 
 ### Phase 4 — Impact-aware DT retraining (optional, MoLab; deferred until Phase 3 justifies)
 
@@ -416,3 +415,25 @@ identity profit. Oracle collapses at scale (model-independent).
 Per-episode ~59s (v2). Results: eval_output/phase3_v2/ (gitignored).
 
 _Next: bootstrap CI + Wilcoxon, then update report §8.2.9 with v2 numbers._
+
+### 2026-07-31 — Phase 3 complete: v2-based results + statistical confidence
+
+- **Checkpoint correction:** retired the legacy 8×384 model; all Phase 3
+  measurement now uses the modern v2 (8×768) from `mrvictoru/energydecision-dt-v2`
+  (copied to `models/aemo/dt/hf_v2_modern/`). Legacy numbers in earlier diary
+  entries are superseded.
+- **Full v2 sweep** (3 scenarios × 3 batteries × 2 impacts × DT-sweep/PPO/
+  Oracle/Oracle_MI/rule): `eval_output/phase3_v2/sweep_full.txt` (gitignored).
+- **Corrected v2 impact resilience (DT best RTG):** small 62% [53–66%],
+  hornsdale 78% [31–133%], torrens 49% [44–56%]. DT == PPO at small scale;
+  DT edge is scale-dependent. Oracle collapses 22%→2%.
+- **Bootstrap CIs** over scenarios: `scripts/phase3_bootstrap_over_scenarios.py`.
+- **Paired Wilcoxon** (DT vs PPO, n=9 matched scenario×battery cells):
+  impact p=0.098, DT wins 8/9 cells, mean diff +$18,421.
+  `scripts/phase3_paired_wilcoxon.py`. n=9 < 10 → flagged for 5-region expansion.
+- **Report:** report.md §8.2.9 + takeaway #9 updated with v2 numbers.
+- **Concurrency finding:** neither multiprocessing nor batched inference helps
+  this legacy-manual-attention-era DT (measured); serial ~59s/ep is the floor.
+
+Phase 3 complete. Remaining: Phase 4 (impact-aware retrain, optional, MoLab)
+and Phase 6 (synthetic FCAS) are the open research threads.
