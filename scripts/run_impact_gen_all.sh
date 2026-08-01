@@ -22,7 +22,7 @@ while true; do
             echo "[orchestrator] launching $R generation ($N eps) at $(date)"
             setsid nohup distrobox enter energydecision-gpu -- python3 -u \
                 scripts/generate_impact_dataset.py --regions "$R" --n-episodes "$N" \
-                --workers 10 --out "$OUT_DIR" \
+                --workers 6 --out "$OUT_DIR" \
                 > "$LOG_DIR/${R}.log" 2>&1 < /dev/null &
             disown
         fi

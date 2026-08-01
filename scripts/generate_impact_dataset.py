@@ -155,7 +155,7 @@ def generate_one(policy, processed, battery, max_step, impact, curves, depth, st
         env = make_env(processed, battery, max_step, impact, curves, depth, start_idx)
         mdl = get_sb3_model_class(policy.upper())
         mdl_path = f"models/aemo_sb3/{policy}_aemo_fcas_model.zip"
-        m = mdl.load(mdl_path, device='cuda')
+        m = mdl.load(mdl_path, device='cpu')  # CPU: small MLP, avoids GPU OOM with many workers
         logs = []
         done = False
         step = 0
@@ -226,15 +226,19 @@ def worker(task):
         proc = scenario[region]['processed']; curves = scenario[region]['curves']
         depth = scenario[region]['depth']
         bat = BATTERIES[ep['battery']]
+        tag = f"{region}__{ep['policy']}__{ep['horizon']}__{ep['battery']}__ep{i:04d}"
+        out_path = out / 'raw_logs' / f"{tag}.parquet"
+        if out_path.exists():  # resume: skip already-generated episodes
+            written.append(tag)
+            continue
         if ep['policy'] == 'dt_v2' and model is None:
             model = load_dt_v2()
         t0 = _t.time()
         try:
             df = generate_one(ep['policy'], proc, bat, ep['max_step'], 'piecewise_merit_order',
                               curves, depth, ep['start_idx'], model=model)
-            tag = f"{region}__{ep['policy']}__{ep['horizon']}__{ep['battery']}__ep{i:04d}"
             (out / 'raw_logs').mkdir(parents=True, exist_ok=True)
-            df.write_parquet(out / 'raw_logs' / f"{tag}.parquet")
+            df.write_parquet(out_path)
             written.append(tag)
             print(f"    [{ep['region']}] {tag} ({len(df)} steps, {_t.time()-t0:.0f}s)", flush=True)
         except Exception as e:
@@ -248,7 +252,7 @@ def main():
     ap.add_argument('--n-episodes', type=int, default=50)
     ap.add_argument('--out', default='data/aemo_dt_impact')
     ap.add_argument('--supply-cache', default='/tmp/scenario_cache')
-    ap.add_argument('--workers', type=int, default=8)
+    ap.add_argument('--workers', type=int, default=6)
     args = ap.parse_args()
 
     regions = [r for r in args.regions.split(',') if r]
