@@ -17,6 +17,14 @@ while true; do
         DONE_MARK="$LOG_DIR/${R}.done"
         LOCK="$LOG_DIR/${R}.lock"
         if [ -f "$PKL" ] && [ ! -f "$DONE_MARK" ] && [ ! -f "$LOCK" ]; then
+            # SERIALIZE: only one region generation at a time (each spawns 6
+            # workers that load the v2 DT model ~1.4GB; concurrent regions
+            # over-subscribe the 22GB VRAM and OOM).
+            RUNNING=$(ps -eo cmd | grep "generate_impact_dataset.py --regions" | grep -v grep | wc -l)
+            if [ "$RUNNING" -gt 0 ]; then
+                echo "[orchestrator] $R ready but generation busy ($RUNNING running); waiting"
+                continue
+            fi
             touch "$LOCK"
             N=${EPISODES[$R]}
             echo "[orchestrator] launching $R generation ($N eps) at $(date)"
