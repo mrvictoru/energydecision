@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.14"
+__generated_with = "0.23.15"
 app = marimo.App(width="medium", auto_download=["html"])
 
 
@@ -88,31 +88,73 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    n_block = mo.ui.number(value=8, label="Blocks")
-    h_dim = mo.ui.number(value=768, label="Hidden dim")
-    n_heads = mo.ui.number(value=12, label="Heads")
-    context_len = mo.ui.number(value=210, label="Context len")
-    drop_p = mo.ui.number(value=0.15, label="Dropout")
-    n_kv_heads = mo.ui.number(value=6, label="KV heads")
+    n_block = mo.ui.number(value=8, label="Blocks", full_width=True)
+    h_dim = mo.ui.number(value=768, label="Hidden dim", full_width=True)
+    n_heads = mo.ui.number(value=12, label="Heads", full_width=True)
+    context_len = mo.ui.number(value=210, label="Context len", full_width=True)
+    drop_p = mo.ui.number(value=0.15, label="Dropout", full_width=True)
+    n_kv_heads = mo.ui.number(value=6, label="KV heads", full_width=True)
     qk_norm = mo.ui.checkbox(label="QK-Norm", value=True)
     tie_weights = mo.ui.checkbox(label="Tie weights", value=True)
-    return context_len, drop_p, h_dim, n_block, n_heads, n_kv_heads, qk_norm, tie_weights
+    return (
+        context_len,
+        drop_p,
+        h_dim,
+        n_block,
+        n_heads,
+        n_kv_heads,
+        qk_norm,
+        tie_weights,
+    )
 
 
 @app.cell
-def _(json, mo):
-    batch_size = mo.ui.number(value=64, label="Batch size")
-    epochs_per_session = mo.ui.number(value=2, label="Epochs/session")
-    lr = mo.ui.number(value=3e-5, label="Learning rate")
-    action_loss_weight = mo.ui.number(value=0.999, label="Action loss weight")
-    state_loss_weight = mo.ui.number(value=0.002, label="State loss weight")
-    return_loss_weight = mo.ui.number(value=0.0001, label="Return loss weight")
+def _(
+    context_len,
+    drop_p,
+    h_dim,
+    mo,
+    n_block,
+    n_heads,
+    n_kv_heads,
+    qk_norm,
+    tie_weights,
+):
+    batch_size = mo.ui.number(value=128, label="Batch size", full_width=True)
+    epochs_per_session = mo.ui.number(value=4, label="Epochs/session", full_width=True)
+    lr = mo.ui.number(value=3e-5, label="Learning rate", full_width=True)
+    action_loss_weight = mo.ui.number(value=0.999, label="Action loss weight", full_width=True)
+    state_loss_weight = mo.ui.number(value=0.002, label="State loss weight", full_width=True)
+    return_loss_weight = mo.ui.number(value=0.0001, label="Return loss weight", full_width=True)
     use_json_config = mo.ui.checkbox(label="Use JSON config", value=False)
     _DFLT = '{\n  "state_dim": 18, "act_dim": 9, "max_timestep": 100000,\n  "discount_factor": 0.95, "val_split": 0.1, "return_scale": 1.0,\n  "weight_decay": 1e-4, "grad_clip_norm": 1.0,\n  "checkpoint_every_n_batches": 500, "max_training_seconds": 11 * 3600\n}'
-    json_config = mo.ui.text_area(value=_DFLT, label="JSON config")
+    json_config = mo.ui.text_area(value=_DFLT, label="", full_width=True)
+
+    def _snapshot_config(_):
+        """Snapshot all UI config values when the user clicks Apply."""
+        return {
+            "n_block": n_block.value, "h_dim": h_dim.value,
+            "n_heads": n_heads.value, "context_len": context_len.value,
+            "drop_p": drop_p.value, "n_kv_heads": n_kv_heads.value,
+            "qk_norm": qk_norm.value, "tie_weights": tie_weights.value,
+            "batch_size": batch_size.value, "lr": lr.value,
+            "epochs_per_session": epochs_per_session.value,
+            "action_loss_weight": action_loss_weight.value,
+            "state_loss_weight": state_loss_weight.value,
+            "return_loss_weight": return_loss_weight.value,
+            "use_json_config": use_json_config.value,
+            "json_config": json_config.value,
+        }
+
+
+    commit_btn = mo.ui.button(
+        label="Apply config", kind="success",
+        on_click=_snapshot_config,
+    )
     return (
         action_loss_weight,
         batch_size,
+        commit_btn,
         epochs_per_session,
         json_config,
         lr,
@@ -133,58 +175,77 @@ def _(mo, os):
 
 @app.cell
 def _(
+    action_loss_weight,
     batch_size,
+    commit_btn,
     context_len,
+    drop_p,
     epochs_per_session,
     h_dim,
+    json_config,
     lr,
     mo,
     n_block,
     n_heads,
+    n_kv_heads,
+    qk_norm,
     return_loss_weight,
     state_loss_weight,
-    action_loss_weight,
-    drop_p,
-    qk_norm,
     tie_weights,
-    n_kv_heads,
+    use_json_config,
 ):
-    mo.md("### Architecture"),
-    mo.hstack([n_block, h_dim, n_heads, context_len], justify="space-around", gap=1),
-    mo.hstack([drop_p, n_kv_heads, qk_norm, tie_weights], justify="space-around", gap=1),
-    mo.md("### Optimization"),
-    mo.hstack([batch_size, epochs_per_session, lr], justify="space-around", gap=1),
-    mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="space-around", gap=1)
+    _commit_cfg = commit_btn.value  # None until first click, then a dict
+    if isinstance(_commit_cfg, dict):
+        _applied_info = (
+            f"✅ **Applied** — {_commit_cfg['n_block']} blk, "
+            f"{_commit_cfg['h_dim']} dim, ctx={_commit_cfg['context_len']}, "
+            f"lr={_commit_cfg['lr']}, bs={_commit_cfg['batch_size']}"
+        )
+    else:
+        _applied_info = "_Modify settings above, then click **Apply config** to lock them in._"
+
+    mo.vstack([
+        mo.md("### Architecture"),
+        mo.hstack([n_block, h_dim, n_heads, context_len], justify="start", widths="equal", gap=1),
+        mo.hstack([drop_p, n_kv_heads, qk_norm, tie_weights], justify="start", widths="equal", gap=1),
+        mo.md("### Optimization"),
+        mo.hstack([batch_size, epochs_per_session, lr], justify="start", widths="equal", gap=1),
+        mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="start", widths="equal", gap=1),
+        mo.md("### JSON Config"),
+        mo.hstack([use_json_config, mo.md("_Override all fields above with this JSON._")], gap=1),
+        json_config,
+        mo.md("---"),
+        mo.hstack([commit_btn, mo.md(_applied_info)], gap=1),
+    ])
+    return
 
 
 @app.cell
 def _(
-    use_pilot,
+    ckpt_info,
+    context_len,
+    fresh_start,
     hf_data_repo,
-    train_btn,
-    upload_btn,
     hf_repo_id,
     hf_token_input,
     mo,
-    ckpt_info,
+    train_btn,
+    upload_btn,
+    use_pilot,
 ):
-    mo.md("### Dataset"),
-    mo.md(f"Pilot: **{'ON' if use_pilot.value else 'OFF'}** · Data repo: `{hf_data_repo.value}`"),
-    mo.md(f"## Impact-Aware DT — AEMO Training\n*{h_dim}? ctx, ckpt: {ckpt_info}*"),
-    mo.md("### Action"),
-    mo.hstack([train_btn, upload_btn], justify="space-around", gap=3),
-    mo.md(f"HF model repo: `{hf_repo_id.value}`")
+    mo.vstack([
+        mo.md("### Dataset"),
+        mo.hstack([use_pilot, fresh_start, hf_data_repo], widths=["auto", "auto", 1], gap=1),
+        mo.md(f"## Impact-Aware DT — AEMO Training\n*ctx={context_len.value}, ckpt: {ckpt_info}*"),
+        mo.md("### Action"),
+        mo.hstack([train_btn, upload_btn], justify="start", gap=1),
+        mo.hstack([hf_repo_id, hf_token_input], widths=[1, 1], gap=1),
+    ])
+    return
 
 
 @app.cell
-def _(
-    Path,
-    hf_data_repo,
-    hf_hub_download,
-    mo,
-    pl,
-    use_pilot,
-):
+def _(Path, hf_data_repo, hf_hub_download, mo, pl, use_pilot):
     DATA_REPO = hf_data_repo.value.strip() or "mrvictoru/AEMO_simulated_trade_impact"
     CACHE = Path("/workspace")
     CACHE.mkdir(exist_ok=True)
@@ -215,60 +276,53 @@ def _(
 
     mo.stop(df is None, mo.md("❌ No data"))
     print(f"✅ Loaded {len(df):,} rows, {df['episode_id'].n_unique()} episodes")
-    return df
+    return CACHE, df
 
 
 @app.cell
-def _(
-    action_loss_weight,
-    batch_size,
-    context_len,
-    drop_p,
-    epochs_per_session,
-    h_dim,
-    json,
-    json_config,
-    lr,
-    n_block,
-    n_heads,
-    n_kv_heads,
-    qk_norm,
-    return_loss_weight,
-    state_loss_weight,
-    tie_weights,
-    use_json_config,
-):
+def _(commit_btn, json):
     CFG = {
         "state_dim": 18, "act_dim": 9, "max_timestep": 100000,
         "discount_factor": 0.95, "val_split": 0.1, "return_scale": 1.0,
         "weight_decay": 1e-4, "grad_clip_norm": 1.0,
         "checkpoint_every_n_batches": 500, "max_training_seconds": 11 * 3600,
     }
-    if use_json_config.value:
-        try:
-            CFG.update(json.loads(json_config.value))
-        except Exception:
-            pass
+
+    # Only update from the snapshot after user clicks "Apply config"
+    _snapshot = commit_btn.value
+    if isinstance(_snapshot, dict):
+        if _snapshot.get("use_json_config"):
+            try:
+                CFG.update(json.loads(_snapshot["json_config"]))
+            except Exception:
+                pass
+        else:
+            CFG.update(dict(
+                n_block=_snapshot["n_block"], h_dim=_snapshot["h_dim"],
+                n_heads=_snapshot["n_heads"], context_len=_snapshot["context_len"],
+                drop_p=_snapshot["drop_p"],
+                batch_size=_snapshot["batch_size"], lr=_snapshot["lr"],
+                n_kv_heads=int(_snapshot["n_kv_heads"]) if _snapshot["n_kv_heads"] else None,
+                qk_norm=_snapshot["qk_norm"], tie_weights=_snapshot["tie_weights"],
+                epochs_per_session=_snapshot["epochs_per_session"],
+                action_loss_weight=_snapshot["action_loss_weight"],
+                state_loss_weight=_snapshot["state_loss_weight"],
+                return_loss_weight=_snapshot["return_loss_weight"],
+            ))
+        print(f"📋 [committed] {CFG['n_block']} blk, {CFG['h_dim']} dim, ctx={CFG['context_len']}")
     else:
-        CFG.update(dict(
-            n_block=n_block.value, h_dim=h_dim.value, n_heads=n_heads.value,
-            context_len=context_len.value, drop_p=drop_p.value,
-            batch_size=batch_size.value, lr=lr.value,
-            n_kv_heads=int(n_kv_heads.value) if n_kv_heads.value else None,
-            qk_norm=qk_norm.value, tie_weights=tie_weights.value,
-            epochs_per_session=epochs_per_session.value,
-            action_loss_weight=action_loss_weight.value,
-            state_loss_weight=state_loss_weight.value,
-            return_loss_weight=return_loss_weight.value,
-        ))
-    print(f"📋 {CFG['n_block']} blk, {CFG['h_dim']} dim, ctx={CFG['context_len']}")
+        print("📋 [defaults] Click 'Apply config' to commit your settings")
     return (CFG,)
 
 
 @app.cell
-def _(CFG, TrajectoryDataset, df, torch):
+def _(CACHE, CFG, TrajectoryDataset, df, torch):
+    # TrajectoryDataset expects a parquet file path, not an in-memory DataFrame
+    DS_PATH = CACHE / "aemo_impact_dataset_ds.parquet"
+    df.write_parquet(DS_PATH)
+
     ds = TrajectoryDataset(
-        df,
+        str(DS_PATH),
         context_length=CFG["context_len"],
         state_dim=CFG["state_dim"],
         act_dim=CFG["act_dim"],
@@ -287,14 +341,7 @@ def _(CFG, TrajectoryDataset, df, torch):
 
 
 @app.cell
-def _(
-    CFG,
-    CHECKPOINT_DIR,
-    CHECKPOINT_PATH,
-    DecisionTransformer,
-    time,
-    torch,
-):
+def _(CFG, CHECKPOINT_DIR, CHECKPOINT_PATH, DecisionTransformer, time, torch):
     def load_or_create_model(cfg, device, fresh=False):
         model = DecisionTransformer(
             state_dim=cfg["state_dim"], act_dim=cfg["act_dim"],
@@ -347,6 +394,7 @@ def _(
     BEST_MODEL_PATH,
     CFG,
     F,
+    fresh_start,
     load_or_create_model,
     mo,
     save_checkpoint,
@@ -355,7 +403,6 @@ def _(
     train_btn,
     train_loader,
     val_loader,
-    fresh_start,
 ):
     session_start = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -531,3 +578,27 @@ def _(mo):
     > pretrained modern v2 on identity + impact surfaces (incl. Oracle_MI).
     """)
     return
+
+
+@app.cell
+def _(TrajectoryDataset):
+    import inspect, textwrap
+
+    _src = inspect.getsource(TrajectoryDataset.__init__)
+    print(textwrap.dedent(_src)[:4000])
+    return
+
+
+@app.cell
+def _(mo):
+    import inspect as _inspect
+    print("marimo version:", mo.__version__)
+    print("mo.ui.form sig:", _inspect.signature(mo.ui.form))
+    print("mo.ui.button sig:", _inspect.signature(mo.ui.button))
+    print("mo.ui.run_button sig:", _inspect.signature(mo.ui.run_button))
+    print("has mo.ui.dictionary:", hasattr(mo.ui, "dictionary"))
+    return
+
+
+if __name__ == "__main__":
+    app.run()
