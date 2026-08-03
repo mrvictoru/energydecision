@@ -464,7 +464,7 @@ and Phase 6 (synthetic FCAS) are the open research threads.
 - **Files:** `scripts/generate_impact_dataset.py` (generator),
   `scripts/precompute_supply_curves.py` (7 hr supply/depth precompute).
 - **Next:** after precompute -> generate ~1,800 eps -> assemble -> upload to
-  HF (`mrvictoru/AEMO_simulated_impact_trade`) -> MoLab pilot retrain (~500 eps)
+  HF (`mrvictoru/AEMO_simulated_trade_impact`) -> MoLab pilot retrain (~500 eps)
   -> validate vs pretrained v2 on Phase 3 surface -> full retrain.
 
 ### 2026-08-01 — Phase 4 dataset generation LAUNCHED (running)
@@ -485,4 +485,4 @@ and Phase 6 (synthetic FCAS) are the open research threads.
   iterations cut to 3. Full ~1800-ep run is a multi-hour background job
   (expected ~3-5 hr given long-horizon rollouts).
 - **Next (after completion):** assemble parquet → upload to HF
-  (`mrvictoru/AEMO_simulated_impact_trade`) → MoLab pilot retrain.
+  (`mrvictoru/AEMO_simulated_trade_impact`) → MoLab pilot retrain.

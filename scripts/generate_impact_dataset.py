@@ -307,7 +307,7 @@ def main():
         combined = pl.concat(frames, how='vertical_relaxed')
         combined.write_parquet(out / 'aemo_impact_dataset.parquet')
         print(f"Assembled {out / 'aemo_impact_dataset.parquet'} ({len(combined)} rows)")
-    print("Next: upload to HF (mrvictoru/AEMO_simulated_impact_trade), then MoLab retrain.")
+    print("Next: upload to HF (mrvictoru/AEMO_simulated_trade_impact), then MoLab retrain.")
 
 
 if __name__ == '__main__':

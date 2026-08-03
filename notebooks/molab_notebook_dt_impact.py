@@ -82,7 +82,7 @@ def _(Path, torch):
 def _(mo):
     use_pilot = mo.ui.checkbox(label="Pilot mode (12 eps, fast)", value=True)
     fresh_start = mo.ui.checkbox(label="Fresh start (delete checkpoint)", value=False)
-    hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_impact_trade", label="Data repo (impact-aware dataset)", full_width=True)
+    hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_trade_impact", label="Data repo (impact-aware dataset)", full_width=True)
     return fresh_start, hf_data_repo, use_pilot
 
 
@@ -185,7 +185,7 @@ def _(
     pl,
     use_pilot,
 ):
-    DATA_REPO = hf_data_repo.value.strip() or "mrvictoru/AEMO_simulated_impact_trade"
+    DATA_REPO = hf_data_repo.value.strip() or "mrvictoru/AEMO_simulated_trade_impact"
     CACHE = Path("/workspace")
     CACHE.mkdir(exist_ok=True)
 
