@@ -43,7 +43,8 @@ def _():
     from decision_transformer import DecisionTransformer
     from transformer_training import TrajectoryDataset
 
-    print("✅ Imports ready")
+    _NOTEBOOK_VERSION = "2025-08-04-stride-v2"
+    print(f"✅ Imports ready  |  notebook version: {_NOTEBOOK_VERSION}")
     return (
         DecisionTransformer,
         F,
@@ -317,13 +318,15 @@ def _(commit_btn, json):
 
 @app.cell
 def _(CFG, TrajectoryDataset, df, torch):
+    _stride = CFG["context_len"] // 2
+    print(f"🔧 STRIDE = {_stride} (context_len={CFG['context_len']}) — expect ~{len(df) // _stride // CFG['batch_size']:,} batches/epoch")
     ds = TrajectoryDataset(
         data=df,
         context_length=CFG["context_len"],
         state_dim=CFG["state_dim"],
         act_dim=CFG["act_dim"],
         discount_factor=CFG["discount_factor"],
-        stride=CFG["context_len"] // 2,
+        stride=_stride,
     )
     split = int(len(ds) * (1 - CFG["val_split"]))
     train_ds, val_ds = torch.utils.data.random_split(ds, [split, len(ds) - split])
@@ -334,6 +337,7 @@ def _(CFG, TrajectoryDataset, df, torch):
         val_ds, batch_size=CFG["batch_size"], shuffle=False, num_workers=0
     )
     print(f"📊 {len(ds)} windows, {len(train_ds)} train + {len(val_ds)} val")
+    print(f"🎯 Actual batches/epoch: {len(train_ds) // CFG['batch_size']:,}")
     return train_loader, val_loader
 
 
