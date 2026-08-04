@@ -417,7 +417,7 @@ def _(
     print("=" * 60)
 
     model, opt, sch, se, gs, tl, vl, bv, ss = load_or_create_model(CFG, device, fresh=fresh_start.value)
-    scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
+    scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
     if scaler and ss:
         try: scaler.load_state_dict(ss)
         except: pass
@@ -435,7 +435,7 @@ def _(
             rt = batch["rtgs"].to(device) / rs
             ts = batch["timesteps"].to(device)
 
-            with torch.cuda.amp.autocast(enabled=scaler is not None):
+                with torch.amp.autocast("cuda", enabled=scaler is not None):
                 rp, sp, ap = model(st, rt, ts, ac)
                 a_loss = F.mse_loss(ap, ac)
                 s_loss = F.mse_loss(sp, st)
@@ -469,7 +469,7 @@ def _(
                 vs = batch["states"].to(device); va = batch["actions"].to(device)
                 vr = batch["rtgs"].to(device) / rs
                 vt = batch["timesteps"].to(device)
-                with torch.cuda.amp.autocast(enabled=scaler is not None):
+            with torch.amp.autocast("cuda", enabled=scaler is not None):
                     rp, sp, ap = model(vs, vr, vt, va)
                     v_loss += F.mse_loss(ap, va).item()
         v_loss /= max(1, len(val_loader))
