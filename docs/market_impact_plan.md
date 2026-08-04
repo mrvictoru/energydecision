@@ -164,9 +164,10 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 
 ### Phase 4 — Impact-aware DT retraining (optional, MoLab; deferred until Phase 3 justifies)
 
-- [ ] Hook impact-enabled env into `src/generate_fcas_dataset.py`.
-- [ ] Regenerate FCAS dataset at true grid-scale asset sizes with `expose_impact_state=True`.
-- [ ] Retrain DT on MoLab; compare impact-aware vs impact-naive DT under MI-enabled evaluation.
+- [x] Regenerate dataset at true grid-scale asset sizes under market impact (via `scripts/generate_impact_dataset.py`; not `generate_fcas_dataset.py`).
+- [x] Assemble parquet + upload to HF `mrvictoru/AEMO_simulated_trade_impact` (1,169 eps, 29.3M rows).
+- [x] Create Marimo MoLab retrain notebook `notebooks/molab_notebook_dt_impact.py`; training launched on MoLab (assumed complete 2026-08-04, uploads to `mrvictoru/energydecision-dt-v2-impact`).
+- [ ] Validate impact-aware DT checkpoint (architecture + load), then compare impact-aware vs impact-naive DT under MI-enabled evaluation on the Phase 3 surface.
 - [ ] Check if DT learns to moderate dispatch to avoid self-impact (a robustness dimension untouched by §8 results).
 
 ### Phase 5 — Documentation & wrap-up
@@ -486,3 +487,36 @@ and Phase 6 (synthetic FCAS) are the open research threads.
   (expected ~3-5 hr given long-horizon rollouts).
 - **Next (after completion):** assemble parquet → upload to HF
   (`mrvictoru/AEMO_simulated_trade_impact`) → MoLab pilot retrain.
+
+### 2026-08-04 — Phase 4 dataset + retrain DONE (training assumed complete)
+
+- **Dataset finalized:** `data/aemo_dt_impact/aemo_impact_dataset.parquet`
+  (1,169 eps, 29,270,943 rows, 1.5 GB) assembled with exact 18-dim
+  normalized obs reconstructed from aemo_data + recorded SOC (validated 0.0
+  diff vs env replay). Uploaded to HF
+  `mrvictoru/AEMO_simulated_trade_impact` (live, last modified 2026-08-03).
+- **Composition:** regions NSW1/QLD1/SA1/TAS1/VIC1 (2021-23); batteries
+  b08/b50/b150/b250; horizons short/medium/long/xlong; real_world deg (LFP,
+  30C); impact piecewise_merit_order. Sources: oracle_mi 342, ppo 245,
+  dt_v2 213, a2c 170, oracle_pt 100, fcas_rule 99.
+- **MoLab retrain:** launched via
+  `notebooks/molab_notebook_dt_impact.py` (data repo
+  `AEMO_simulated_trade_impact`). TRAINING ASSUMED COMPLETE; model uploads
+  to **`mrvictoru/energydecision-dt-v2-impact`**.
+- **Config caveat:** notebook default `epochs_per_session=2`. Halved dataset
+  (~4,300 gradient steps) vs original 2,401-ep run (~11,400). If the run
+  used 2 epochs, treat any under-performance vs pretrained v2 as partly
+  under-training; a 3-4 epoch rerun is the cheap mitigation.
+- **Next agent session (validate → evaluate → report):**
+  1. Download `mrvictoru/energydecision-dt-v2-impact`; verify it loads with
+     the modern-v2 config (`src/aemo_dt_hf.py` helpers). Verify architecture
+     from embedded weights, not docs (AGENTS.md rule).
+  2. Evaluate on the Phase 3 surface with `scripts/phase3_impact_eval.py`
+     (3 scenarios × 3 batteries × identity/impact), comparing impact-aware
+     DT vs canonical v2 (`models/aemo/dt/hf_v2_modern/aemo_dt_fcas_model.pt`).
+  3. Re-run bootstrap CIs (`phase3_bootstrap_over_scenarios.py`) + paired
+     Wilcoxon (`phase3_paired_wilcoxon.py`) with the new model added.
+  4. Answer the research question: does the DT moderate dispatch to avoid
+     self-impact? Compare per-interval dispatch/FCAS action magnitudes under
+     MI-enabled eval vs the naive v2.
+  5. Update report §8.2.9 + Phase 5 docs with results.
