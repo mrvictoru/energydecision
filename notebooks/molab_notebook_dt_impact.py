@@ -41,7 +41,6 @@ def _():
     from huggingface_hub import HfApi, hf_hub_download
 
     from decision_transformer import DecisionTransformer
-    from transformer_training import TrajectoryDataset
 
     print("✅ Imports ready")
     return (
@@ -49,7 +48,6 @@ def _():
         F,
         HfApi,
         Path,
-        TrajectoryDataset,
         hf_hub_download,
         json,
         mo,
@@ -316,13 +314,74 @@ def _(commit_btn, json):
 
 
 @app.cell
-def _(CACHE, CFG, TrajectoryDataset, df, torch):
-    # TrajectoryDataset expects a parquet file path, not an in-memory DataFrame
-    DS_PATH = CACHE / "aemo_impact_dataset_ds.parquet"
-    df.write_parquet(DS_PATH)
+def _(np, pl, torch):
+    class TrajectoryDataset(torch.utils.data.Dataset):
+        def __init__(self, df, context_length=210, state_dim=18, act_dim=9, discount_factor=0.95):
+            self.context_length = context_length
+            self.state_dim = state_dim
+            self.act_dim = act_dim
+            self.discount_factor = discount_factor
 
+            df_clean = df.filter(
+                (pl.col("action").list.len() == act_dim) &
+                (pl.col("norm_observation").list.len() == state_dim)
+            )
+            n_removed = len(df) - len(df_clean)
+            if n_removed > 0:
+                print(f"⚠️ Filtered out {n_removed:,} rows ({n_removed/len(df)*100:.1f}%) with mismatched dims")
+
+            episodes = df_clean.group_by("episode_id").agg(
+                pl.col("step").len().alias("n_steps"),
+                pl.col("norm_observation").alias("obs"),
+                pl.col("action").alias("act"),
+                pl.col("reward").alias("rew"),
+            )
+            episodes = episodes.filter(pl.col("n_steps") >= context_length * 3)
+
+            all_states, all_actions, all_rtgs, all_timesteps = [], [], [], []
+            for row in episodes.iter_rows(named=True):
+                obs_arr = np.array(row["obs"], dtype=np.float32)
+                act_arr = np.array(row["act"], dtype=np.float32)
+                rew_arr = np.array(row["rew"], dtype=np.float32)
+                n = len(rew_arr)
+                rtg = np.zeros(n, dtype=np.float32)
+                running = 0.0
+                for t in reversed(range(n)):
+                    running = rew_arr[t] + discount_factor * running
+                    rtg[t] = running
+
+                stride = context_length // 2
+                for i in range(0, n - context_length + 1, stride):
+                    end = i + context_length
+                    all_states.append(obs_arr[i:end])
+                    all_actions.append(act_arr[i:end])
+                    all_rtgs.append(rtg[i:end])
+                    all_timesteps.append(np.arange(i, end, dtype=np.int64))
+
+            self.states = np.stack(all_states).astype(np.float32)
+            self.actions = np.stack(all_actions).astype(np.float32)
+            self.rtgs = np.stack(all_rtgs).astype(np.float32)
+            self.timesteps = np.stack(all_timesteps).astype(np.int64)
+
+        def __len__(self):
+            return len(self.states)
+
+        def __getitem__(self, idx):
+            return (
+                torch.tensor(self.states[idx]),
+                torch.tensor(self.actions[idx]),
+                torch.tensor(self.rtgs[idx]),
+                torch.tensor(self.timesteps[idx]),
+            )
+
+    print("✅ TrajectoryDataset ready (stride=context//2)")
+    return (TrajectoryDataset,)
+
+
+@app.cell
+def _(CFG, TrajectoryDataset, df, torch):
     ds = TrajectoryDataset(
-        str(DS_PATH),
+        df,
         context_length=CFG["context_len"],
         state_dim=CFG["state_dim"],
         act_dim=CFG["act_dim"],
@@ -428,16 +487,14 @@ def _(
     for epoch in range(se, se + CFG["epochs_per_session"]):
         model.train()
         loss_acc = al_acc = sl_acc = rl_acc = count = 0.0
-        for bi, batch in enumerate(train_loader):
-            st = batch["states"].to(device)
-            ac = batch["actions"].to(device)
-            rt = batch["rtgs"].to(device) / rs
-            ts = batch["timesteps"].to(device)
-            mk = batch["mask"].to(device)
+        for bi, (st, ac, rt, ts) in enumerate(train_loader):
+            st = st.to(device)
+            ac = ac.to(device)
+            rt = rt.to(device) / rs
+            ts = ts.to(device)
 
             with torch.cuda.amp.autocast(enabled=scaler is not None):
-                # modern DecisionTransformer.forward(state, rtg, timestep, actions)
-                rp, sp, ap = model(st, rt, ts, ac, mk)
+                rp, sp, ap = model(st, rt, ts, ac)
                 a_loss = F.mse_loss(ap, ac)
                 s_loss = F.mse_loss(sp, st)
                 r_loss = F.mse_loss(rp, rt)
@@ -467,11 +524,12 @@ def _(
         v_loss = 0.0
         with torch.no_grad():
             for batch in val_loader:
-                vs = batch["states"].to(device); va = batch["actions"].to(device)
-                vr = batch["rtgs"].to(device) / rs
-                vt = batch["timesteps"].to(device); vm = batch["mask"].to(device)
+                vs, va, vr, vt = batch
+                vs = vs.to(device); va = va.to(device)
+                vr = vr.to(device) / rs
+                vt = vt.to(device)
                 with torch.cuda.amp.autocast(enabled=scaler is not None):
-                    rp, sp, ap = model(vs, vr, vt, va, vm)
+                    rp, sp, ap = model(vs, vr, vt, va)
                     v_loss += F.mse_loss(ap, va).item()
         v_loss /= max(1, len(val_loader))
         vl.append(v_loss)
