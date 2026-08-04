@@ -432,7 +432,7 @@ def _(
         for bi, batch in enumerate(train_loader):
             st = batch["states"].to(device)
             ac = batch["actions"].to(device)
-            rt = batch["rtgs"].to(device).squeeze(-1) / rs
+            rt = batch["rtgs"].to(device) / rs
             ts = batch["timesteps"].to(device)
 
             with torch.cuda.amp.autocast(enabled=scaler is not None):
@@ -467,7 +467,7 @@ def _(
         with torch.no_grad():
             for batch in val_loader:
                 vs = batch["states"].to(device); va = batch["actions"].to(device)
-                vr = batch["rtgs"].to(device).squeeze(-1) / rs
+                vr = batch["rtgs"].to(device) / rs
                 vt = batch["timesteps"].to(device)
                 with torch.cuda.amp.autocast(enabled=scaler is not None):
                     rp, sp, ap = model(vs, vr, vt, va)
