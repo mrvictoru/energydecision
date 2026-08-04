@@ -43,7 +43,7 @@ def _():
     from decision_transformer import DecisionTransformer
     from transformer_training import TrajectoryDataset
 
-    _NOTEBOOK_VERSION = "2025-08-04-stride-v2"
+    _NOTEBOOK_VERSION = "2025-08-04-stride-v2.1"
     print(f"✅ Imports ready  |  notebook version: {_NOTEBOOK_VERSION}")
     return (
         DecisionTransformer,
@@ -435,7 +435,7 @@ def _(
             rt = batch["rtgs"].to(device) / rs
             ts = batch["timesteps"].to(device)
 
-                with torch.amp.autocast("cuda", enabled=scaler is not None):
+            with torch.amp.autocast("cuda", enabled=scaler is not None):
                 rp, sp, ap = model(st, rt, ts, ac)
                 a_loss = F.mse_loss(ap, ac)
                 s_loss = F.mse_loss(sp, st)
