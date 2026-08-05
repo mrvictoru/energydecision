@@ -571,3 +571,52 @@ and Phase 6 (synthetic FCAS) are the open research threads.
      action magnitudes of impact-DT vs v2 under impact.
   4. If impact-DT underperforms v2, consider the epochs=3–4 rerun
      (config caveat above) before drawing conclusions.
+
+### 2026-08-05 — Head-to-head eval complete (243 results)
+
+- **Ran the same Phase 3 surface with the canonical v2 checkpoint**
+  (`--label dt_v2`), merging into `results.json` → 243 total (153 impact-DT +
+  90 v2). Apple-to-apple: identical scenarios/batteries/impact modes/RTG
+  sweep, only the checkpoint differs. Best-RTG selected per model per cell.
+- **Impact-trained DT vs v2 under piecewise impact (best RTG/cell):**
+
+  | scenario | battery | impact-DT | v2 | PPO | oracle_mi |
+  |---|---|---:|---:|---:|---:|
+  | sa1_oct | small | $14,573 | $22,139 | $11,804 | $185,969 |
+  | sa1_oct | hornsdale | $530,379 | $77,383 | $75,270 | $2,490,279 |
+  | sa1_oct | torrens | $474,582 | $68,392 | $94,399 | $5,184,927 |
+  | sa1_nov | small | $29,306 | $15,327 | $9,143 | $182,473 |
+  | sa1_nov | hornsdale | $102,184 | $164,039 | $56,316 | $2,256,722 |
+  | sa1_nov | torrens | $101,344 | $92,069 | $65,845 | $5,185,500 |
+  | vic1_oct | small | $21,243 | $21,828 | $12,145 | $162,162 |
+  | vic1_oct | hornsdale | $81,442 | $53,920 | $38,034 | $1,187,081 |
+  | vic1_oct | torrens | $92,735 | $64,699 | $48,277 | $1,843,932 |
+
+- **Stats (impact-DT vs v2, under impact, n=9 cells, best RTG each):**
+  - Wins: **impact-DT 6/9**, v2 3/9 (sign-test p=0.254, one-sided).
+  - Mean delta **+$96,444/cell**; sum **+$867,994**; median +$13,980.
+  - Bootstrap 95% CI: [−$4,864, +$234,517] (crosses zero).
+  - Paired Wilcoxon: p=0.164 (n=9, not significant).
+- **Stats (impact-DT vs PPO, under impact):** mean delta **+$115,173/cell**;
+  bootstrap 95% CI [+$24,500, +$237,247]; paired Wilcoxon **p=0.004**
+  (significant).
+- **Reading:** retraining on the impact dataset gave a **clear edge over PPO**
+  (+$115K/cell, significant) and a **positive but not-significant edge over
+  the naive v2** (+$96K/cell, wins 6/9, CI crosses zero). The biggest wins
+  are at grid scale (hornsdale/torrens), where self-impact matters most. The
+  naive v2 still edges the impact-DT on small batteries (7.6K, 0.6K) and
+  hornsdale nov (62K).
+- **Caveat:** impact-DT trained at epochs=2 on the halved dataset (~4,300
+  steps vs v2's ~11,400). A 3–4 epoch rerun could close the small-battery gap.
+- **Dispatch replay** (Dalrymple North, SA1) added to eval via `--with-dispatch`
+  but NOT yet run (data fetch needed). Optional follow-up.
+- **Results:** `eval_output/phase3_impact/results.json` (243 entries).
+
+### Next steps
+1. (Optional) Run dispatch replay: `phase3_impact_eval.py --with-dispatch
+   --checkpoint <ckpt> --label <lbl>` for SA1 scenarios.
+2. Dispatch-moderation analysis: compare per-interval |dispatch|/FCAS action
+   magnitudes of impact-DT vs v2 under impact (does the retrained DT bid less
+   aggressively?).
+3. Decide on epochs=3–4 rerun of impact-DT to close the small-battery gap.
+4. Update report §8.2.9 + Phase 5 docs.
