@@ -96,6 +96,20 @@ def run_policy(env, agent, label):
     profit = energy + fcas - deg
     return dict(label=label, profit=profit, energy=energy, fcas=fcas, deg=deg, steps=len(infos), time_s=elapsed)
 
+
+RESULTS_PATH = Path(__file__).resolve().parents[1] / "eval_output" / "phase3_impact" / "results.json"
+def load_results():
+    if RESULTS_PATH.exists():
+        try:
+            return json.loads(RESULTS_PATH.read_text())
+        except Exception:
+            return []
+    return []
+
+def save_results(results):
+    RESULTS_PATH.write_text(json.dumps(results, indent=2))
+    print(f"  💾 saved {len(results)} results → {RESULTS_PATH}")
+
 # ── Main ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Phase 3 market-impact evaluation")
@@ -179,7 +193,12 @@ if __name__ == "__main__":
     report_util("after data build")
 
     # 4. Run evaluations
-    results = []
+    results = load_results()
+    if results:
+        print(f"  📂 Resuming with {len(results)} prior results; skipping completed labels")
+        _done_labels = {r['label'] for r in results}
+    else:
+        _done_labels = set()
     IMPACT_KINDS = ['identity', 'piecewise_merit_order']
 
     for impact_kind in IMPACT_KINDS:
@@ -220,69 +239,94 @@ if __name__ == "__main__":
                     )
 
                 # ── Oracle ──
-                env = _mk_env()
-                agent = AEMOAgent(env, algorithm='aemo_oracle')
-                result = run_policy(env, agent, f"{impact_kind}_oracle_{bname}_{label}")
-                results.append(result)
-                print(f"    {'oracle':>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
-                del env, agent
+                _lab = f"{impact_kind}_oracle_{bname}_{label}"
+                if _lab in _done_labels:
+                    print(f"    oracle: skip (done)")
+                else:
+                    env = _mk_env()
+                    agent = AEMOAgent(env, algorithm='aemo_oracle')
+                    result = run_policy(env, agent, _lab)
+                    results.append(result)
+                    save_results(results)
+                    print(f"    {'oracle':>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
+                    del env, agent
 
                 # ── Oracle_MI (impact-aware, only under piecewise_merit_order) ──
                 if impact_kind != 'identity':
-                    solver = AEMOOracleSolver(
-                        battery_capacity=bcap, max_battery_flow=bflow,
-                        step_duration=battery['step_h'], init_soc=binit,
-                        min_soc=0.0, max_soc=bcap,
-                    )
-                    result_mi = solver.solve_mi(processed, curves, depth, impact_intensity=1.0,
-                                                max_iter=5, verbose=False)
-                    results.append(dict(label=f"{impact_kind}_oraclemi_{bname}_{label}",
-                                        profit=result_mi.total_profit,
-                                        energy=result_mi.energy_revenue,
-                                        fcas=result_mi.fcas_revenue,
-                                        deg=0.0, steps=result_mi.n_intervals, time_s=0.0))
-                    print(f"    {'oracle_mi':>10}: ${result_mi.total_profit:>9,.0f}  (E=${result_mi.energy_revenue:>6,.0f}  F=${result_mi.fcas_revenue:>6,.0f})  0.0s")
+                    _lab = f"{impact_kind}_oraclemi_{bname}_{label}"
+                    if _lab in _done_labels:
+                        print(f"    oracle_mi: skip (done)")
+                    else:
+                        solver = AEMOOracleSolver(
+                            battery_capacity=bcap, max_battery_flow=bflow,
+                            step_duration=battery['step_h'], init_soc=binit,
+                            min_soc=0.0, max_soc=bcap,
+                        )
+                        result_mi = solver.solve_mi(processed, curves, depth, impact_intensity=1.0,
+                                                    max_iter=5, verbose=False)
+                        results.append(dict(label=_lab,
+                                            profit=result_mi.total_profit,
+                                            energy=result_mi.energy_revenue,
+                                            fcas=result_mi.fcas_revenue,
+                                            deg=0.0, steps=result_mi.n_intervals, time_s=0.0))
+                        save_results(results)
+                        print(f"    {'oracle_mi':>10}: ${result_mi.total_profit:>9,.0f}  (E=${result_mi.energy_revenue:>6,.0f}  F=${result_mi.fcas_revenue:>6,.0f})  0.0s")
 
                 # ── DT with RTG sweep ──
                 for rtg in RTG_VALUES:
+                    _lab = f"{impact_kind}_{dt_label}_rtg{rtg}_{bname}_{label}"
+                    if _lab in _done_labels:
+                        print(f"    dt_rtg{rtg}: skip (done)")
+                        continue
                     env = _mk_env()
                     agent = AEMOAgent(env, algorithm='dt', model=dt_model, rtg_value=rtg)
-                    result = run_policy(env, agent, f"{impact_kind}_{dt_label}_rtg{rtg}_{bname}_{label}")
+                    result = run_policy(env, agent, _lab)
                     results.append(result)
+                    save_results(results)
                     print(f"    {'dt_rtg'+str(rtg):>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
                     del env, agent
 
                 # ── FCAS rule ──
-                env = _mk_env()
-                agent = AEMOAgent(env, algorithm='fcas_rule')
-                result = run_policy(env, agent, f"{impact_kind}_fcasrule_{bname}_{label}")
-                results.append(result)
-                print(f"    {'fcas_rule':>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
+                _lab = f"{impact_kind}_fcasrule_{bname}_{label}"
+                if _lab in _done_labels:
+                    print(f"    fcas_rule: skip (done)")
+                else:
+                    env = _mk_env()
+                    agent = AEMOAgent(env, algorithm='fcas_rule')
+                    result = run_policy(env, agent, _lab)
+                    results.append(result)
+                    save_results(results)
+                    print(f"    {'fcas_rule':>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
                 del env, agent
 
                 # ── PPO reference ──
-                env = _mk_env()
-                t_ep = now_s()
-                env.reset()
-                done = False
-                infos_ppo = []
-                while not done:
-                    obs = env._get_observation()
-                    act, _ = ppo_model.predict(obs, deterministic=True)
-                    if isinstance(act, np.ndarray) and act.ndim > 1:
-                        act = act.flatten()
-                    obs, reward, done, _, info = env.step(act)
-                    infos_ppo.append(info)
-                elapsed = now_s() - t_ep
-                energy = sum(i.get('energy_revenue', 0) for i in infos_ppo)
-                fcas = sum(i.get('fcas_revenue', 0) for i in infos_ppo)
-                deg = sum(i.get('degradation_cost', 0) for i in infos_ppo)
-                profit = energy + fcas - deg
-                result = dict(label=f"{impact_kind}_ppo_{bname}_{label}", profit=profit,
-                              energy=energy, fcas=fcas, deg=deg, steps=len(infos_ppo), time_s=elapsed)
-                results.append(result)
-                print(f"    {'ppo':>10}: ${profit:>9,.0f}  (E=${energy:>6,.0f}  F=${fcas:>6,.0f})  {elapsed:.1f}s")
-                del env
+                _lab = f"{impact_kind}_ppo_{bname}_{label}"
+                if _lab in _done_labels:
+                    print(f"    ppo: skip (done)")
+                else:
+                    env = _mk_env()
+                    t_ep = now_s()
+                    env.reset()
+                    done = False
+                    infos_ppo = []
+                    while not done:
+                        obs = env._get_observation()
+                        act, _ = ppo_model.predict(obs, deterministic=True)
+                        if isinstance(act, np.ndarray) and act.ndim > 1:
+                            act = act.flatten()
+                        obs, reward, done, _, info = env.step(act)
+                        infos_ppo.append(info)
+                    elapsed = now_s() - t_ep
+                    energy = sum(i.get('energy_revenue', 0) for i in infos_ppo)
+                    fcas = sum(i.get('fcas_revenue', 0) for i in infos_ppo)
+                    deg = sum(i.get('degradation_cost', 0) for i in infos_ppo)
+                    profit = energy + fcas - deg
+                    result = dict(label=_lab, profit=profit,
+                                  energy=energy, fcas=fcas, deg=deg, steps=len(infos_ppo), time_s=elapsed)
+                    results.append(result)
+                    save_results(results)
+                    print(f"    {'ppo':>10}: ${profit:>9,.0f}  (E=${energy:>6,.0f}  F=${fcas:>6,.0f})  {elapsed:.1f}s")
+                    del env
 
     # 5. Summary
     print("\n\n── SUMMARY ──")
