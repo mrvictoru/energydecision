@@ -311,7 +311,7 @@ if __name__ == "__main__":
                     results.append(result)
                     save_results(results)
                     print(f"    {'fcas_rule':>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
-                del env, agent
+                    del env, agent
 
                 # ── PPO reference ──
                 _lab = f"{impact_kind}_ppo_{bname}_{label}"
