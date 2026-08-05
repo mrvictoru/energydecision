@@ -43,7 +43,7 @@ def _():
     from decision_transformer import DecisionTransformer
     from transformer_training import TrajectoryDataset
 
-    _NOTEBOOK_VERSION = "2025-08-04-stride-v2.1"
+    _NOTEBOOK_VERSION = "2025-08-04-stride-v2.2"
     print(f"✅ Imports ready  |  notebook version: {_NOTEBOOK_VERSION}")
     return (
         DecisionTransformer,
@@ -571,7 +571,7 @@ def _(
                     repo_id=repo_id, repo_type="model", token=token)
     print(f"✅ Uploaded aemo_dt_fcas_model.pt → {repo_id}")
 
-    if BEST_MODEL_PATH.exists() and str(BEST_MODEL_PATH) != str(src):
+    if BEST_MODEL_PATH.exists():
         print(f"📤 Also uploading aemo_dt_fcas_best_checkpoint.pt → {repo_id} ...")
         api.upload_file(path_or_fileobj=str(BEST_MODEL_PATH), path_in_repo="aemo_dt_fcas_best_checkpoint.pt",
                         repo_id=repo_id, repo_type="model", token=token)
