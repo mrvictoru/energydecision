@@ -469,7 +469,7 @@ def _(
                 vs = batch["states"].to(device); va = batch["actions"].to(device)
                 vr = batch["rtgs"].to(device) / rs
                 vt = batch["timesteps"].to(device)
-            with torch.amp.autocast("cuda", enabled=scaler is not None):
+                with torch.amp.autocast("cuda", enabled=scaler is not None):
                     rp, sp, ap = model(vs, vr, vt, va)
                     v_loss += F.mse_loss(ap, va).item()
         v_loss /= max(1, len(val_loader))
