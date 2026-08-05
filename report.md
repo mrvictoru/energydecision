@@ -588,6 +588,57 @@ DT's energy arbitrage is far smaller.
 - Three scenarios (14 days each) is a pilot; bootstrap CIs and the full
   5-region × 6-month expanded evaluator surface are planned.
 
+#### 8.2.9.1 Impact-Aware Retraining — Offline DT Learned to Hedge (Aug 2026)
+
+Phase 4 tested whether retraining the DT on impact-aware trajectories (rather
+than price-taking ones) improves performance under market impact. We generated
+a **1,169-episode impact-aware dataset** (29.3M rows, `piecewise_merit_order`
+impact baked in; sources: Oracle_MI 342, PPO 245, DT-v2 self-gen 213, A2C 170,
+Oracle_PT 100, FCAS rule 99; batteries 8/50/194/250 MWh; horizons short–xlong;
+real-world LFP degradation), trained a fresh modern-v2-architecture DT
+(`mrvictoru/energydecision-dt-v2-impact`), and evaluated it on the identical
+Phase 3 surface (3 scenarios × 3 batteries × identity/piecewise, best RTG per
+cell) head-to-head against the price-taking-pretrained v2.
+
+**Head-to-head under market impact (best RTG per model per cell):**
+
+| Scenario | Battery | Impact-DT | v2 | PPO | Oracle_MI |
+|---|---:|---:|---:|---:|
+| SA1 Oct | 8 MWh | $14,573 | $22,139 | $11,804 | $185,969 |
+| SA1 Oct | 150 MW | $530,379 | $77,383 | $75,270 | $2,490,279 |
+| SA1 Oct | 250 MW | $474,582 | $68,392 | $94,399 | $5,184,927 |
+| SA1 Nov | 8 MWh | $29,306 | $15,327 | $9,143 | $182,473 |
+| SA1 Nov | 150 MW | $102,184 | $164,039 | $56,316 | $2,256,722 |
+| SA1 Nov | 250 MW | $101,344 | $92,069 | $65,845 | $5,185,500 |
+| VIC1 Oct | 8 MWh | $21,243 | $21,828 | $12,145 | $162,162 |
+| VIC1 Oct | 150 MW | $81,442 | $53,920 | $38,034 | $1,187,081 |
+| VIC1 Oct | 250 MW | $92,735 | $64,699 | $48,277 | $1,843,932 |
+
+**Impact-DT vs v2 (under impact, n=9 cells):** wins **6/9**, mean
+**+$96,444/cell** (sum +$867,994, median +$13,980); bootstrap 95% CI
+[−$4,864, +$234,517]; paired Wilcoxon p=0.164 (positive but not significant).
+The largest wins are at grid scale where self-impact is strongest (Hornsdale
+SA1 Oct +$453K, Torrens SA1 Oct +$406K); the naive v2 still wins small
+batteries (8 MWh) and Hornsdale SA1 Nov.
+
+**Impact-DT vs PPO (under impact, n=9):** mean **+$115,173/cell**, bootstrap
+95% CI [+$24,500, +$237,247], paired Wilcoxon **p=0.004** — retraining on
+impact-aware data gives a **statistically significant** edge over the generic
+RL baseline.
+
+**Reading:** the impact-aware DT is a *strictly better hedge* than PPO and a
+*probable* (positive-but-not-significant) improvement over the price-taking
+v2. Retraining on impact-aware trajectories largely closed the grid-scale
+self-impact gap; the residual v2 edge at small scale is consistent with the
+impact-DT being trained at epochs=2 on the halved dataset (~4,300 vs v2's
+~11,400 gradient steps) — a 3–4 epoch rerun is the planned mitigation.
+
+**Status vs prior §8.2.9 finding:** the earlier "DT is a natural hedge" claim
+was based on the *pretrained* v2's resilience ratio (62/83/49%). Phase 4
+confirms retraining *improves* absolute under-impact profit, but the headline
+resilience ratios did not change materially — the impact-aware DT retains the
+v2's conservative, FCAS-heavy behavior rather than becoming more aggressive.
+
 ### 8.3 Key Takeaways
 
 1. **The modern v2 Decision Transformer is the best-performing method for utility-scale battery control in this benchmark.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.

@@ -53,6 +53,8 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [x] **RL Fine-tuning:** GRPO Phase 1 support for pretrained DT weights is now available through the current CLI workflow, including mixed-bound action distribution for `full_fcas`, adaptive RTG sampling, periodic reference syncing, and degradation-weighted reward shaping.
 *   [x] **Hyperparameter Tuning:** using Autoresearch for DT.
 *   [x] **Forecast-conditioned DT (negative result):** Built and evaluated a ForecastDecisionTransformer with 48-step TTM forecast tokens. Result: $4,564/ep vs modern v2's $4,991/ep — explicit forecasts do not beat implicit context. See report.md §8.2.8.
+*   [x] **Market-impact BESS evaluation:** Piecewise-linear merit-order impact model (`src/market_impact.py`) hooking into `AEMOBatteryTradingEnv` (backward-compatible `identity` default). Phase 3: v2 DT under impact retains 62/83/49% of identity profit at 8/150/250 MW vs PPO's 62/40/32%. Phase 4: impact-aware DT retrain (`mrvictoru/energydecision-dt-v2-impact`) beats PPO significantly (+$115K/cell, p=0.004) and edges the naive v2 6/9 cells (+$96K/cell). See report.md §8.2.9.
+*   [x] **AEMO Oracle upper bound:** Perfect-foresight LP co-optimizer (`src/aemo_oracle_algo.py`) as evaluator baseline; Oracle_MI (impact-aware LP) is the impact ceiling, but its fixed-point solve at 150 MW+ exceeds 100% of PT (unreliable at large scale).
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
 *   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.

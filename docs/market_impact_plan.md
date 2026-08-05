@@ -167,15 +167,15 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 - [x] Regenerate dataset at true grid-scale asset sizes under market impact (via `scripts/generate_impact_dataset.py`; not `generate_fcas_dataset.py`).
 - [x] Assemble parquet + upload to HF `mrvictoru/AEMO_simulated_trade_impact` (1,169 eps, 29.3M rows).
 - [x] Create Marimo MoLab retrain notebook `notebooks/molab_notebook_dt_impact.py`; training launched on MoLab (assumed complete 2026-08-04, uploads to `mrvictoru/energydecision-dt-v2-impact`).
-- [ ] Validate impact-aware DT checkpoint (architecture + load), then compare impact-aware vs impact-naive DT under MI-enabled evaluation on the Phase 3 surface.
+- [x] Validate impact-aware DT checkpoint (architecture + load), then compare impact-aware vs impact-naive DT under MI-enabled evaluation on the Phase 3 surface. **Result:** impact-DT wins 6/9 cells vs v2 (+$96K/cell, not sig), beats PPO significantly (+$115K/cell, p=0.004). See diary 2026-08-05.
 - [ ] Check if DT learns to moderate dispatch to avoid self-impact (a robustness dimension untouched by §8 results).
 
 ### Phase 5 — Documentation & wrap-up
 
 - [ ] Finalize this plan file with experimental learnings.
-- [ ] Add new report.md §8.2.9 "Market-Impact-Aware Evaluation".
-- [ ] Check off relevant README roadmap items: "AEMO Oracle upper bound", "Statistical confidence on AEMO headlines", "Market-impact BESS evaluation".
-- [ ] Update `docs/research/README.md` to link this plan.
+- [x] Add report.md §8.2.9 "Market-Impact-Aware Evaluation" (+ §8.2.9.1 impact-aware retraining results, Aug 2026).
+- [x] Check off relevant README roadmap items: "AEMO Oracle upper bound", "Market-impact BESS evaluation" (added; "Statistical confidence on AEMO headlines" still open in README — impact-surface CIs are in the plan diary §8.2.9.1).
+- [x] Update `docs/research/README.md` to link this plan.
 
 ### Phase 6 — Synthetic FCAS data generation (parallel/research thread)
 
