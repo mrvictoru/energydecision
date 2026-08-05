@@ -110,6 +110,18 @@ def save_results(results):
     RESULTS_PATH.write_text(json.dumps(results, indent=2))
     print(f"  💾 saved {len(results)} results → {RESULTS_PATH}")
 
+
+DISPATCH_DUID = "DALNTH1"  # Dalrymple North BESS (8 MWh / 30 MW, SA1)
+def build_dispatch_agent(env, region, start, end, label):
+    """Replay the actual Dalrymple North cleared dispatch as the agent's actions."""
+    from aemo_data import fetch_aemo_unit_dispatch
+    disp = fetch_aemo_unit_dispatch(start, end, duid=DISPATCH_DUID, region=region)
+    if disp is None or disp.height == 0:
+        raise RuntimeError(f"No dispatch data for {DISPATCH_DUID} in {region} {start}–{end}")
+    agent = AEMOAgent(env, algorithm='dispatch', dispatch_data=disp,
+                      dispatch_duid=DISPATCH_DUID, dispatch_duid_gen=DISPATCH_DUID)
+    return agent
+
 # ── Main ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Phase 3 market-impact evaluation")
@@ -121,6 +133,8 @@ if __name__ == "__main__":
                         help="Policy label for the DT being evaluated.")
     parser.add_argument("--rtg", type=float, nargs="*", default=None,
                         help="RTG values to sweep (overrides RTG_VALUES).")
+    parser.add_argument("--with-dispatch", action="store_true",
+                        help="Add Dalrymple North dispatch replay baseline (SA1 scenarios only).")
     args = parser.parse_args()
 
     if args.rtg:
@@ -327,6 +341,24 @@ if __name__ == "__main__":
                     save_results(results)
                     print(f"    {'ppo':>10}: ${profit:>9,.0f}  (E=${energy:>6,.0f}  F=${fcas:>6,.0f})  {elapsed:.1f}s")
                     del env
+
+                # ── Dispatch replay (Dalrymple North, SA1 scenarios only) ──
+                if args.with_dispatch and region == "SA1":
+                    _lab = f"{impact_kind}_dispatch_{bname}_{label}"
+                    if _lab in _done_labels:
+                        print(f"    dispatch: skip (done)")
+                    else:
+                        env = _mk_env()
+                        try:
+                            agent = build_dispatch_agent(env, region, sd['start'], sd['end'], _lab)
+                            result = run_policy(env, agent, _lab)
+                            results.append(result)
+                            save_results(results)
+                            print(f"    {'dispatch':>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
+                        except Exception as e:
+                            print(f"    dispatch: SKIPPED ({e})")
+                        finally:
+                            del env
 
     # 5. Summary
     print("\n\n── SUMMARY ──")
