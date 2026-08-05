@@ -629,15 +629,44 @@ RL baseline.
 **Reading:** the impact-aware DT is a *strictly better hedge* than PPO and a
 *probable* (positive-but-not-significant) improvement over the price-taking
 v2. Retraining on impact-aware trajectories largely closed the grid-scale
-self-impact gap; the residual v2 edge at small scale is consistent with the
-impact-DT being trained at epochs=2 on the halved dataset (~4,300 vs v2's
-~11,400 gradient steps) — a 3–4 epoch rerun is the planned mitigation.
+self-impact gap. The residual v2 edge at small scale is behavioral, not
+under-training: the impact-DT was trained at **3 epochs** on the halved
+dataset (~6,450 gradient steps vs v2's ~11,400).
 
 **Status vs prior §8.2.9 finding:** the earlier "DT is a natural hedge" claim
 was based on the *pretrained* v2's resilience ratio (62/83/49%). Phase 4
 confirms retraining *improves* absolute under-impact profit, but the headline
 resilience ratios did not change materially — the impact-aware DT retains the
 v2's conservative, FCAS-heavy behavior rather than becoming more aggressive.
+
+#### 8.2.9.2 Dispatch Replay Baseline and Moderation Evidence (Aug 2026)
+
+**Dispatch replay (real-market reference):** replayed the actual cleared
+Dalrymple North BESS (DALNTH1) dispatch as actions on the same SA1 scenarios,
+under impact (`--with-dispatch`). Result: a battery-size-independent
+$15.8K–$24.8K/ep — modest. Both DTs beat it at grid scale (impact-DT
+$102K–$530K); at 8 MWh it is competitive with the DTs (dispatch $21.2K vs
+impact-DT $14.6K, v2 $22.1K, SA1 Oct).
+
+**Dispatch-moderation analysis** (`scripts/phase4_dispatch_moderation.py`,
+SA1 Oct, piecewise impact, best RTG per model; action magnitudes on the
+9-dim `full_fcas` action):
+
+| Battery | mean\|E\| impact-DT | mean\|E\| v2 | ratio | mean FCAS sum impact-DT | v2 | ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| 8 MWh | 0.275 | 0.953 | **0.29×** | 1.970 | 1.705 | 1.16× |
+| 150 MW | 0.182 | 0.966 | **0.19×** | 1.953 | 4.950 | **0.39×** |
+| 250 MW | 0.178 | 0.541 | **0.33×** | 1.985 | 3.760 | **0.53×** |
+
+**Direct answer to the Phase 4 research question — YES, the impact-aware DT
+learned to moderate dispatch to avoid self-impact.** It trades 67–81% less
+energy (0.19–0.33× the v2's |dispatch|) while also cutting grid-scale FCAS
+bidding to 0.39–0.53×. At 8 MWh — where FCAS-depth impact dominates — it
+*keeps* FCAS bidding near the v2's level (1.16×). This is a learned,
+scale-aware hedge, not merely inherited conservatism: the pretrained v2 bids
+near-max energy at every scale (0.54–0.97), whereas the impact-DT's energy
+dispatch collapses to a low, flat ~0.18 at grid scale, exactly where
+self-impact is most damaging.
 
 ### 8.3 Key Takeaways
 
