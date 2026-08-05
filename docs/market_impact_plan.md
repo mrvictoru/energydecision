@@ -520,3 +520,54 @@ and Phase 6 (synthetic FCAS) are the open research threads.
      self-impact? Compare per-interval dispatch/FCAS action magnitudes under
      MI-enabled eval vs the naive v2.
   5. Update report §8.2.9 + Phase 5 docs with results.
+
+### 2026-08-05 — Phase 4 impact-DT trained + evaluated (v1)
+
+- **Impact-DT checkpoint:** `mrvictoru/energydecision-dt-v2-impact`
+  `aemo_dt_fcas_model.pt` (1.2 GB) downloaded to
+  `models/aemo/dt/hf_v2_impact/`. Verified loads with modern-v2 config
+  (147.6M params, return_scale=1.0).
+- **Eval tooling fixed along the way:**
+  - `phase3_impact_eval.py` now accepts `--checkpoint/--config/--label/--rtg`
+    (commit d19b708).
+  - Val-loss indentation bug in the MoLab notebook fixed (forward was outside
+    the val loop → val loss ~len(val_loader)× too small).
+  - Added incremental `results.json` saving + resume (skip completed labels)
+    so a stuck sim no longer loses progress (commit de09ef4). Stuck sim was
+    transient (reproduced hornsdale piecewise DT rtg20 in isolation: 58.6s,
+    no hang) — the long single-process run hit memory pressure.
+- **Full eval DONE (153 results, all 3 scenarios × 3 batteries ×
+  identity/piecewise).** Impact-trained DT (best RTG) under impact:
+
+  | scenario | battery | identity | piecewise | delta |
+  |---|---|---:|---:|---:|
+  | sa1_oct | small | $24,805 | $14,573 | −$10,231 |
+  | sa1_oct | hornsdale | $469,818 | $530,379 | +$60,562 |
+  | sa1_oct | torrens | $593,034 | $474,582 | −$118,452 |
+  | sa1_nov | small | $50,441 | $29,306 | −$21,134 |
+  | sa1_nov | hornsdale | $254,920 | $102,184 | −$152,735 |
+  | sa1_nov | torrens | $403,262 | $101,344 | −$301,918 |
+  | vic1_oct | small | $38,342 | $21,243 | −$17,099 |
+  | vic1_oct | hornsdale | $264,620 | $81,442 | −$183,178 |
+  | vic1_oct | torrens | $362,394 | $92,735 | −$269,659 |
+
+  **Reading:** self-impact cost the impact-trained DT real money in most
+  cells (−$17K to −$300K); it only *gained* on hornsdale sa1_oct
+  (+$60K). Oracle_MI ceiling confirms the headroom is large
+  ($162K–$5.2M/cell). **Open question:** is the naive v2 DT better or worse
+  under impact? (Phase 3 v2 sweep earlier: small +62%, hornsdale +78%,
+  torrens +49% resilience — but that was the *pretrained* v2, not
+  impact-retrained.) Need to eval v2 on the same surface for the
+  head-to-head.
+- **Results file:** `eval_output/phase3_impact/results.json` (153 entries,
+  gitignored). Full log: `eval_output/phase3_impact/impact_dt_eval.log`.
+- **Next agent session:**
+  1. Run the SAME eval with the canonical v2 checkpoint
+     (`--checkpoint models/aemo/dt/hf_v2_modern/aemo_dt_fcas_model.pt
+     --label dt_v2`); reuse `results.json` (resume merges).
+  2. Build the impact-trained-DT vs v2 head-to-head table + bootstrap CIs +
+     paired Wilcoxon across the 9 cells.
+  3. Dispatch-moderation analysis: compare per-interval |dispatch| / FCAS
+     action magnitudes of impact-DT vs v2 under impact.
+  4. If impact-DT underperforms v2, consider the epochs=3–4 rerun
+     (config caveat above) before drawing conclusions.
