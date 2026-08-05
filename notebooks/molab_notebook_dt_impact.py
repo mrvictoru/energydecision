@@ -525,6 +525,7 @@ def _(CFG, bv, device, gs, mo, session_start, time, tl, vl):
 
 @app.cell
 def _(
+    BEST_MODEL_PATH,
     CFG,
     CHECKPOINT_PATH,
     DecisionTransformer,
@@ -563,9 +564,18 @@ def _(
 
     upload_path = Path("/workspace/dt_checkpoints/upload_model.pt")
     torch.save({"model_state_dict": upload_model.state_dict(), **meta}, upload_path)
-    HfApi().upload_file(path_or_fileobj=str(upload_path), path_in_repo="aemo_dt_fcas_model.pt",
-                        repo_id=repo_id, repo_type="model", token=token)
+
+    api = HfApi(token=token)
+    print(f"📤 Uploading aemo_dt_fcas_model.pt → {repo_id} ...")
+    api.upload_file(path_or_fileobj=str(upload_path), path_in_repo="aemo_dt_fcas_model.pt",
+                    repo_id=repo_id, repo_type="model", token=token)
     print(f"✅ Uploaded aemo_dt_fcas_model.pt → {repo_id}")
+
+    if BEST_MODEL_PATH.exists() and str(BEST_MODEL_PATH) != str(src):
+        print(f"📤 Also uploading aemo_dt_fcas_best_checkpoint.pt → {repo_id} ...")
+        api.upload_file(path_or_fileobj=str(BEST_MODEL_PATH), path_in_repo="aemo_dt_fcas_best_checkpoint.pt",
+                        repo_id=repo_id, repo_type="model", token=token)
+        print(f"✅ Uploaded aemo_dt_fcas_best_checkpoint.pt → {repo_id}")
     return
 
 
