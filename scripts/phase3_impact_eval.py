@@ -5,7 +5,7 @@ Reports profit, timing, and GPU/CPU utilisation for {identity, piecewise_merit_o
 × {DT, PPO, Oracle_PT, dispatch, FCAS rule} on SA1 Oct/Nov 2024.
 """
 
-import sys, time, json, os
+import sys, time, json, os, argparse
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -98,6 +98,19 @@ def run_policy(env, agent, label):
 
 # ── Main ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Phase 3 market-impact evaluation")
+    parser.add_argument("--checkpoint", type=str, default=None,
+                        help="Path to DT checkpoint (.pt). Default: modern v2 pretrained.")
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to model kwargs JSON. Default: modern v2 config.")
+    parser.add_argument("--label", type=str, default=None,
+                        help="Policy label for the DT being evaluated.")
+    parser.add_argument("--rtg", type=float, nargs="*", default=None,
+                        help="RTG values to sweep (overrides RTG_VALUES).")
+    args = parser.parse_args()
+
+    if args.rtg:
+        RTG_VALUES = args.rtg
     print(f"Phase 3 — Market Impact Evaluation")
     print(f"  Device: {DEVICE}")
     print(f"  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none'}")
@@ -106,18 +119,19 @@ if __name__ == "__main__":
     report_util("start")
 
     # 1. Load DT model
-    print("\n── Loading modern v2 DT model ──")
+    dt_label = args.label or "dt"
+    print(f"\n── Loading DT model ({dt_label}) ──")
     t0 = now_s()
     from decision_transformer import DecisionTransformer
-    config_path = modern_v2_model_config_path()
+    config_path = args.config or modern_v2_model_config_path()
     model_kwargs = load_model_kwargs(config_path)
     # Filter to only constructor args
     init_keys = {'state_dim','act_dim','n_block','h_dim','context_len','n_heads',
                  'drop_p','max_timestep','rope_enabled','rope_max_position','rope_base',
                  'n_kv_heads','qk_norm','tie_weights'}
     model_init_kwargs = {k: v for k, v in model_kwargs.items() if k in init_keys}
-    checkpoint_path = str(Path(__file__).resolve().parents[1] / "models" / "aemo" / "dt" / "hf_v2_modern" / "aemo_dt_fcas_model.pt")
-    print(f"  Loading modern v2 checkpoint from: {checkpoint_path}")
+    checkpoint_path = args.checkpoint or str(Path(__file__).resolve().parents[1] / "models" / "aemo" / "dt" / "hf_v2_modern" / "aemo_dt_fcas_model.pt")
+    print(f"  Loading checkpoint from: {checkpoint_path}")
     dt_model = DecisionTransformer(**model_init_kwargs)
     state = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
     dt_model.load_from_checkpoint(state)
@@ -233,7 +247,7 @@ if __name__ == "__main__":
                 for rtg in RTG_VALUES:
                     env = _mk_env()
                     agent = AEMOAgent(env, algorithm='dt', model=dt_model, rtg_value=rtg)
-                    result = run_policy(env, agent, f"{impact_kind}_dt_rtg{rtg}_{bname}_{label}")
+                    result = run_policy(env, agent, f"{impact_kind}_{dt_label}_rtg{rtg}_{bname}_{label}")
                     results.append(result)
                     print(f"    {'dt_rtg'+str(rtg):>10}: ${result['profit']:>9,.0f}  (E=${result['energy']:>6,.0f}  F=${result['fcas']:>6,.0f})  {result['time_s']:.1f}s")
                     del env, agent
