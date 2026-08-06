@@ -12,7 +12,7 @@ These are not the best starting point for onboarding. Use [../README.md](../READ
 - [../modern_transformer_improvements.md](../modern_transformer_improvements.md): model architecture improvement notes
 - [../grpo_finetuning_guide.md](../grpo_finetuning_guide.md): GRPO operational guide
 - [../aemo_full_corpus_manual_commands.md](../aemo_full_corpus_manual_commands.md): manual command reference for full-corpus work
-- [../market_impact_plan.md](../market_impact_plan.md): market-impact modeling plan, Phase 0–4 checklist, and experiment diary
+- [../market_impact_plan.md](../market_impact_plan.md): market-impact modeling plan, Phases 0–5 checklist (complete) + Phase 6 synthetic-FCAS v2 design, and experiment diary
 
 ## How To Use These Docs
 

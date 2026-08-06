@@ -36,6 +36,12 @@ point-estimate-only.
 > work is the **v2 conditional-diffusion generator** and the **downstream
 > synthetic-only DT training/validation**. Phase 7 is contingent on Phase 6
 > panning out.
+>
+> **PR split (2026-08-06):** PR #33 merges Phases 0–5 **plus** the Phase 6 v1
+> work (harness + generator + documented insufficiency finding) — a complete,
+> reviewable unit. **Phase 6 v2 (conditional diffusion) and the downstream
+> synthetic-only DT training move to a new branch/PR** branched off this
+> branch after the merge. The v2 design below is the handoff spec for that PR.
 
 ## Complementary research thread: synthetic FCAS generation
 
@@ -199,10 +205,11 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 > metrics) and transfers co-occurrence + spike rates to held-out periods, but
 > **fails the tail-value KS** on held-out data (fit-window price-cap events
 > dominate the empirical tail). Per the plan's criterion, **v1 is
-> insufficient → v2 (conditional diffusion) is the active open item**;
-> downstream synthetic-only DT training waits on v2 (or a robust
-> peaks-over-threshold GPD tail upgrade of v1). Full findings in the diary
-> 2026-08-06.
+> insufficient → v2 (conditional diffusion) is the active open item**.
+> Decision (2026-08-06): **go straight to conditional diffusion v2** — the
+> v1.5 parametric-tail fix is deliberately skipped and kept only as a
+> fallback if diffusion training is blocked. Downstream synthetic-only DT
+> training waits on v2. Full findings in the diary 2026-08-06.
 
 - [x] Build evaluation harness for FCAS generators (per-service MAE/RMSE, tail
       KS-test, spike-event recall, joint spike co-occurrence, discriminative
@@ -223,15 +230,77 @@ to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
       0.39–0.40) and spike rates (~0.005 error) but fails tail-value KS
       (p≈1e-22–1e-25). Cross-period H1→H2 is not a usable gate: real-vs-real
       H1→H2 fails tail KS (p≈1e-32–1e-61). See diary.
-- [ ] Conditional diffusion model v2 (only if v1 is insufficient). **Triggered:
-      v1 is insufficient** — this is the active open item. Generate (RRP +
-      8×FCAS) jointly conditioned on (demand, wind, solar, hour, day-of-week,
-      RRP-spike); score with `src/fcas_generator_eval.py` against the same
-      held-out splits.
+- [ ] Conditional diffusion model v2. **Triggered: v1 is insufficient — the
+      active open item, to be implemented in the new Phase 6 v2 PR.** See the
+      "Phase 6 v2 design (handoff spec)" section below.
 - [ ] Validate downstream utility: train DT on synthetic-only episodes,
       evaluate against real-data-trained DT on the standard surface.
       **Blocked on v2** (v1 tails are too unrealistic to be useful for
       training).
+
+### Phase 6 v2 design (handoff spec for the new PR)
+
+Goal: learn p(FCAS sequence | exogenous market state) and sample realistic
+FCAS price paths, scored with the existing `src/fcas_generator_eval.py` harness.
+
+**Data.** Train on cached 5-min processed parquets (H1 2024: SA1 + NSW1 + QLD1,
+~52k rows/region; no NEMOSIS fetches needed). Target channels = `[RRP] + 8×FCAS`
+in **log1p space** (heavy tails), prices clipped at their service cap (16,600
+for contingency, 999 for regulation) exactly as `scripts/eval_fcas_generator.py`
+does. Conditioning channels = TOTALDEMAND, GEN_wind, GEN_solar, hour_sin/cos,
+day_sin/cos, and a **lagged RRP-spike indicator** (spike in the trailing 12 bars
+— not the current bar, to avoid circularity with the jointly generated RRP).
+Generate windows of T=288 (24 h) with stride ~12 → ~13k training windows.
+
+**Model.** Compact 1D temporal U-Net DDPM over (T × 9) target channels
+(~10–20M params), sinusoidal timestep embedding, conditioning injected by
+concatenation + AdaLN on the time embedding. Plain PyTorch with a hand-written
+DDPM/DDIM loop (~200 lines) — **do not add `diffusers` or other deps unless one
+is already installed**. ~100–200 diffusion steps for training, DDIM 20–50 for
+sampling. Tail handling via the log1p space plus a higher loss weight on the
+upper tail quantiles of the 8 FCAS channels.
+
+**Training budget / GPU.** Fits the 2080 Ti (22 GB) comfortably; a few hours of
+GPU. Use the telemetry wrapper pattern from AGENTS.md
+(`scripts/run_full_learning_baseline.sh`) for any long run.
+
+**Gates — same-period split (fit Jan–Apr, holdout Apr–Jun per region), via the
+existing harness:**
+- Tail KS p ≥ 0.05 on all 8 services × 3 regions.
+- Within-direction spike co-occurrence within ±0.10 of real data.
+- Spike-rate error ≤ 0.01.
+- ACF lag1 absolute error ≤ 0.10 (mean over services).
+- Discriminator AUC ≤ 0.65 (near chance).
+Cross-period H1→H2 is **reported, not gated** (real-vs-real already fails it;
+regime shift documented).
+
+**Long-episode generation.** DT episodes are 4,032 steps (14 days). Generate
+window-by-window with a small overlap and blend the overlap (linear crossfade),
+then verify ACF continuity at the seams. 🐴 ceiling: overlap blending can lose
+long-range (multi-day) dependence; upgrade: autoregressive conditioning where
+each window is generated conditioned on the previous window's tail.
+
+**Downstream DT training.** Build synthetic episodes by swapping the synthetic
+RRP + FCAS columns into real exogenous frames, then reuse the
+`generate_fcas_dataset.py` machinery to roll out policies (PPO, fcas_rule,
+dt_v2) and assemble the parquet; train the DT via
+`scripts/pretrain_aemo_decision_transformer.py`; evaluate on the standard and
+dispatch-matched surfaces vs. the real-data-trained DT baseline ($1,522/ep on
+the example evaluator). Success = the synthetic-trained DT is within a
+reasonable band of the real-data-trained DT (not necessarily better — the test
+is whether synthetic-only data carries the FCAS signal).
+
+### Follow-up idea: distributional conditioning (revisit of §8.2.8)
+
+Contingent on v2 validating. §8.2.8's failure was **point** forecasting (TTM
+predicted a single FCAS value; near-zero predictability). A generator provides
+**probabilistic** forecasting — p(FCAS | state), i.e. spike-risk features. Once
+v2 can produce a calibrated conditional distribution, extract cheap risk
+features per interval — P(service spikes | state), conditional tail quantiles —
+and add them to the DT observation/conditioning as distributional features
+instead of TTM point-forecast tokens. This is a genuine, principled revisit of
+§8.2.8, but speculative: the v2 DT's 210-step context may already encode the
+same signal. **No code until v2 passes the gates.**
 
 ### Phase 7 — Combine impact model + synthetic FCAS (speculative)
 
@@ -764,4 +833,28 @@ and Phase 6 (synthetic FCAS) are the open research threads.
   insufficient → conditional diffusion v2"** escalation trigger. Downstream
   synthetic-only DT training should wait for v2 (or a robust peaks-over-threshold
   GPD upgrade of v1's tail).
+
+### 2026-08-06 — PR split + v2 handoff spec (decision)
+
+- **Decision:** PR #33 merges Phases 0–5 **plus** the Phase 6 v1 work (harness +
+  generator + documented insufficiency finding). Phase 6 **v2 (conditional
+  diffusion) and the downstream synthetic-only DT training move to a new PR**,
+  branched off this branch after the merge. Reason: Phases 0–5 form a complete,
+  reviewable unit (audit confirmed every Phase 1–5 goal was achieved); v2 is
+  open-ended multi-day generative-modeling work that would block the merge.
+- **v2 path decision:** **go straight to conditional diffusion** (user call).
+  The v1.5 parametric-tail fix is deliberately skipped, kept only as a fallback
+  if diffusion training is blocked.
+- **v2 handoff spec written into the plan** ("Phase 6 v2 design" section):
+  data windows (log1p [RRP+8×FCAS], T=288), conditioning (demand/wind/solar/
+  hour/day + *lagged* RRP-spike to avoid circularity), 1D temporal U-Net DDPM
+  in plain PyTorch (no new deps), same-period gates via the existing harness
+  (tail KS p≥0.05, co-occurrence ±0.10, spike-rate ≤0.01, ACF lag1 ≤0.10,
+  discriminator AUC ≤0.65), cross-period reported-not-gated, overlap-blend
+  long-episode generation, and the downstream DT-training path.
+- **Follow-up idea recorded:** distributional conditioning — generator-derived
+  spike-risk features (P(spike | state), conditional quantiles) into the DT as a
+  principled revisit of §8.2.8 (which failed on *point* forecasting). Noted as
+  speculative and contingent on v2 passing the gates; no code until then.
+
 
