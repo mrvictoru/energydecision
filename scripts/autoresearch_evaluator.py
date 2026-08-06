@@ -610,7 +610,7 @@ def run_policy_episodes(
 
     if policy_kind == "dispatch":
         should_run, dispatch_region = should_run_dispatch_for_scenario(
-            scenario=scenario,
+            scenario_region=str(scenario["region"]),
             dispatch_station=policy_cfg.get("station_name"),
             dispatch_duid=policy_cfg.get("dispatch_duid"),
             start_date=scenario["start_date"],
