@@ -26,6 +26,17 @@ DT's advantage persist when the battery moves the market?"
 extension), plus statistical rigor on the AEMO headline tables that have been
 point-estimate-only.
 
+> **Status (2026-08-06): Phases 0–5 are complete.** The Oracle ceiling
+> (revenue, verified on 9/9 Phase-3 cells + 6/6 dispatch-matched episodes),
+> the market-impact env extension, the impact-aware DT retrain (Phase 4), and
+> the documentation/statistics wrap-up (Phase 5) are all done and pushed to
+> `feature/market-impact-modeling`. **Only Phase 6 (synthetic FCAS
+> generation) remains**: the eval harness and v1 HMM/copula generator are
+> built, v1 was found insufficient on tail-value KS (see below), so the open
+> work is the **v2 conditional-diffusion generator** and the **downstream
+> synthetic-only DT training/validation**. Phase 7 is contingent on Phase 6
+> panning out.
+
 ## Complementary research thread: synthetic FCAS generation
 
 A separate motivation for impact modeling surfaced during planning: instead
@@ -132,7 +143,7 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
 
 - [x] Create `src/aemo_oracle_algo.py` — perfect-foresight LP co-optimizer over energy + 8 FCAS services with SOC dynamics, ramp, and enablement constraints matching `_compute_fcas_enablement`. Uses scipy.linprog (HiGHS). ~0.02s for 288 intervals.
   - [x] `Oracle_PT` (price-taking): consumes exogenous `RRP` + `FCAS_*` → ceiling for the existing price-taking env. Validated: 0.1% gap vs env execution.
-  - [ ] `Oracle_MI` (market-impact-aware): same constraints but uses the impact function (Phase 2) in its objective → ceiling under self-impact. Deferred to Phase 3.
+  - [x] `Oracle_MI` (market-impact-aware): same constraints but uses the impact function (Phase 2) in its objective → ceiling under self-impact. **Done via Phase 3:** `AEMOOracleSolver.solve_mi()` implemented and evaluated on all 9 Phase-3 cells (`piecewise_merit_order_oraclemi_*` in `eval_output/phase3_impact/results.json`). Caveat: its fixed-point solve exceeds 100% of PT at 150 MW+ (unreliable at large scale).
 - [x] Register Oracle_PT as evaluator baseline in `scripts/autoresearch_evaluator.py` and `AEMOAgent(algorithm='aemo_oracle', ...)`.
 - [x] Invariant tests: `Oracle_PT ≥ any replayed policy` (tbd, requires running Oracle + DT on same episodes). **Done 2026-08-06:** revenue ceiling 9/9 Phase-3 cells and 6/6 dispatch-matched episodes; formal zero-degradation invariant via `scripts/phase1_oracle_invariant.py`; net-profit gap under real_world degradation documented (2/9 cells, LP is degradation-blind). See diary.
 - [x] Run `Oracle_PT` against the dispatch-matched benchmark — must beat DT ($10,138/ep); sanity check. **Done 2026-08-06:** oracle nets $238.8K/ep (6-mo mean, CI [$25K,$614K]) vs DT $23.4K (CI [$7.8K,$52.8K]); per-episode oracle wins 4/6 net (2 small-asset losses are the degradation gap) and 6/6 revenue. See diary.
@@ -149,8 +160,8 @@ mode directly. Try (2) only if v1 is insufficiently expressive.
   - [x] Degradation, SOC, FCAS enablement clipping unchanged.
 - [x] Config surfacing:
   - [x] env kwargs: `impact_model`, `impact_intensity`, `supply_curves`, `fcas_depth`.
-  - [ ] Evaluator surfaces gain per-policy `impact_config` field. (Deferred to Phase 3.)
-- [ ] Observation config flag `expose_impact_state`. (Deferred to Phase 4.)
+  - [x] Evaluator surfaces gain per-policy `impact_config` field. **Resolved without the generic-evaluator extension:** the Phase 3/4 impact surface is driven by `scripts/phase3_impact_eval.py`, which exposes `impact_model`/`impact_intensity` per run; extending the autoresearch evaluator was deemed unnecessary (scope decision, see diary 2026-08-06).
+- [x] Observation config flag `expose_impact_state`. **Superseded:** Phase 4 deliberately kept `obs_dim=18` (impact reaches the DT via the reward; the learned dispatch-moderation confirms it was sufficient — see diary 2026-08-04).
 - [x] Golden-value test: `identity` impact matches default env across 100 random steps (byte-for-byte identical).
 - [x] Pytest gate green (320 pass).
 
@@ -183,20 +194,50 @@ Standalone research direction that both complements the impact model and
 addresses the open §8.2.8 negative result on forecast DT. Decisions on whether
 to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 
-- [ ] Build evaluation harness for FCAS generators (per-service MAE/RMSE, tail
+> **Phase 6 status (2026-08-06):** harness + v1 generator built and validated.
+> v1 reproduces the training FCAS distribution (same-fit eval passes all
+> metrics) and transfers co-occurrence + spike rates to held-out periods, but
+> **fails the tail-value KS** on held-out data (fit-window price-cap events
+> dominate the empirical tail). Per the plan's criterion, **v1 is
+> insufficient → v2 (conditional diffusion) is the active open item**;
+> downstream synthetic-only DT training waits on v2 (or a robust
+> peaks-over-threshold GPD tail upgrade of v1). Full findings in the diary
+> 2026-08-06.
+
+- [x] Build evaluation harness for FCAS generators (per-service MAE/RMSE, tail
       KS-test, spike-event recall, joint spike co-occurrence, discriminative
-      score vs. real held-out episodes).
-- [ ] Implement v1: HMM regime-switching + copula generator conditioned on
+      score vs. real held-out episodes). **Done:** `src/fcas_generator_eval.py`
+      (also reports ACF lag1/12/288 + diurnal profile).
+- [x] Implement v1: HMM regime-switching + copula generator conditioned on
       exogenous features (demand ramp, wind/solar delta, RRP-spike indicator,
       hour). Direction-asymmetric (two HMMs: RAISE family, LOWER family).
-      Generalized Pareto tail per service.
-- [ ] Compare v1 generator vs. real held-out FCAS distribution (KS test,
-      autocorrelation match, spike-rate match).
-- [ ] Conditional diffusion model v2 (only if v1 is insufficient).
+      Generalized Pareto tail per service. **Done:** `src/synthetic_fcas.py`.
+      Deviation: k-means state labels + logistic exogenous-conditioned
+      transitions (not a fitted EM-HMM), latent-Gaussian spike coupling with
+      per-family pairwise rho calibrated to global p99 co-occurrence, and
+      **empirical-tail spike magnitudes instead of GPD** (the GPD fit
+      degenerated on sparse, outlier-dominated tails; see diary).
+- [x] Compare v1 generator vs. real held-out FCAS distribution (KS test,
+      autocorrelation match, spike-rate match). **Done:** same-period split
+      transfers within-direction co-occurrence (synth 0.34–0.38 vs real
+      0.39–0.40) and spike rates (~0.005 error) but fails tail-value KS
+      (p≈1e-22–1e-25). Cross-period H1→H2 is not a usable gate: real-vs-real
+      H1→H2 fails tail KS (p≈1e-32–1e-61). See diary.
+- [ ] Conditional diffusion model v2 (only if v1 is insufficient). **Triggered:
+      v1 is insufficient** — this is the active open item. Generate (RRP +
+      8×FCAS) jointly conditioned on (demand, wind, solar, hour, day-of-week,
+      RRP-spike); score with `src/fcas_generator_eval.py` against the same
+      held-out splits.
 - [ ] Validate downstream utility: train DT on synthetic-only episodes,
       evaluate against real-data-trained DT on the standard surface.
+      **Blocked on v2** (v1 tails are too unrealistic to be useful for
+      training).
 
 ### Phase 7 — Combine impact model + synthetic FCAS (speculative)
+
+> **Not started; contingent on Phase 6 v2 validating.** Only pursue if the v2
+> generator passes the held-out gates and the synthetic-only DT training
+> (Phase 6 last item) is competitive with real-data training.
 
 - [ ] Use the impact model to generate interactions between battery and FCAS
       market depth.
