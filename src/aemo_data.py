@@ -1238,6 +1238,13 @@ def fetch_aemo_unit_dispatch(
             - TOTALCLEARED: Total energy dispatch target (MW)
             - RAISE6SEC / RAISE60SEC / RAISE5MIN / RAISEREG: FCAS raise enablement (MW)
             - LOWER6SEC / LOWER60SEC / LOWER5MIN / LOWERREG: FCAS lower enablement (MW)
+            - AVAILABILITY: Unit availability (MW)
+            - INITIALMW: Initial MW before dispatch
+            - RAISEREGENABLEMENTMAX / RAISEREGENABLEMENTMIN: Regulation raise range
+            - LOWERREGENABLEMENTMAX / LOWERREGENABLEMENTMIN: Regulation lower range
+            - SEMIDISPATCHCAP: Semi-dispatch capacity flag
+            - RAMPUPRATE / RAMPDOWNRATE: Ramp rate limits (MW/min)
+            - AGCSTATUS: AGC control status
 
     Memory note:
         DISPATCHLOAD contains all NEM units (~1 000–2 000 DUIDs, ~850 K rows/month).
@@ -1306,7 +1313,12 @@ def fetch_aemo_unit_dispatch(
 
     columns_to_keep = ['SETTLEMENTDATE', 'DUID', 'TOTALCLEARED',
                        'RAISE6SEC', 'RAISE60SEC', 'RAISE5MIN', 'RAISEREG',
-                       'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN', 'LOWERREG']
+                       'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN', 'LOWERREG',
+                       'AVAILABILITY', 'INITIALMW',
+                       'RAISEREGENABLEMENTMAX', 'RAISEREGENABLEMENTMIN',
+                       'LOWERREGENABLEMENTMAX', 'LOWERREGENABLEMENTMIN',
+                       'SEMIDISPATCHCAP', 'RAMPUPRATE', 'RAMPDOWNRATE',
+                       'AGCSTATUS']
 
     dispatch_frames: list[pl.DataFrame] = []
     windows = _iter_month_windows(start_date, end_date)
@@ -1361,6 +1373,11 @@ def fetch_aemo_unit_dispatch(
             'RAISE6SEC': pl.Float64, 'RAISE60SEC': pl.Float64, 'RAISE5MIN': pl.Float64,
             'RAISEREG': pl.Float64, 'LOWER6SEC': pl.Float64, 'LOWER60SEC': pl.Float64,
             'LOWER5MIN': pl.Float64, 'LOWERREG': pl.Float64,
+            'AVAILABILITY': pl.Float64, 'INITIALMW': pl.Float64,
+            'RAISEREGENABLEMENTMAX': pl.Float64, 'RAISEREGENABLEMENTMIN': pl.Float64,
+            'LOWERREGENABLEMENTMAX': pl.Float64, 'LOWERREGENABLEMENTMIN': pl.Float64,
+            'SEMIDISPATCHCAP': pl.Float64, 'RAMPUPRATE': pl.Float64,
+            'RAMPDOWNRATE': pl.Float64, 'AGCSTATUS': pl.Utf8,
         })
 
     dispatch_pl = pl.concat(dispatch_frames, how='vertical_relaxed')
@@ -2531,9 +2548,12 @@ def fetch_aemo_data_bundle_with_dispatch(
         start_date, end_date, region, fuel_types, generator_info_path, cache_dir, refresh
     )
     
-    # Fetch unit-specific dispatch data
+    # Fetch unit-specific dispatch data (use keyword args to avoid position mismatch)
     unit_dispatch = fetch_aemo_unit_dispatch(
-        start_date, end_date, duid, region, generator_info_path, cache_dir, refresh
+        start_date, end_date,
+        duid=duid, region=region,
+        generator_info_path=generator_info_path,
+        cache_dir=cache_dir, refresh=refresh,
     )
     
     return {
@@ -2542,6 +2562,333 @@ def fetch_aemo_data_bundle_with_dispatch(
         'generation': generation,
         'unit_dispatch': unit_dispatch,
     }
+
+
+def aggregate_fcas_market_depth(
+    region: str,
+    start_date: datetime,
+    end_date: datetime,
+    demand_series: Optional[pl.DataFrame] = None,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """
+    Aggregate FCAS market depth (total cleared MW per service) per 5-min interval.
+
+    Strategy (auto-detected):
+      1.  First tries to sum per-unit cleared enablement from DISPATCHLOAD
+          (columns RAISE6SEC … LOWERREG).  If any are > 0 across the date range,
+          those sums are the depth.
+      2.  If DISPATCHLOAD enablement is uniformly zero (common for regions such as
+          SA1 that import FCAS via interconnectors), falls back to demand-ratio
+          heuristics based on TOTALDEMAND, provided via *demand_series*.
+
+    Args:
+        region: AEMO region code (NSW1, QLD1, SA1, TAS1, VIC1).
+        start_date: Start date for data retrieval.
+        end_date: End date for data retrieval.
+        demand_series: Optional DataFrame with ``SETTLEMENTDATE``, ``TOTALDEMAND``
+            columns.  Required when DISPATCHLOAD enablement is zero (fallback path).
+        cache_dir: Directory to cache downloaded data.
+        refresh: If True, re-download even if cached data exists.
+
+    Returns:
+        Polars DataFrame with ``SETTLEMENTDATE`` and ``FCAS_DEPTH_{SERVICE}_MW``
+        columns for all 8 services.
+
+    Notes on APPROXIMATE heuristics (fallback path):
+    ::
+
+          Regulation      = max(30 MW, 0.03 × TOTALDEMAND)
+          Contingency 6s  = max(50 MW, 0.10 × TOTALDEMAND)
+          Contingency 60s  = max(30 MW, 0.05 × TOTALDEMAND)
+          Contingency 5min = max(20 MW, 0.02 × TOTALDEMAND)
+
+        These are rough per-region minimums intended to give the impact model
+        a realistic denominator.  Replace with MMSDM aggregate-table data
+        when per-service precision matters (Phase 3+).
+    """
+    region = region.upper()
+    if region not in AEMO_REGIONS:
+        raise ValueError(f"Region must be one of {AEMO_REGIONS}")
+
+    fcas_services = ['RAISE6SEC', 'RAISE60SEC', 'RAISE5MIN', 'RAISEREG',
+                     'LOWER6SEC', 'LOWER60SEC', 'LOWER5MIN', 'LOWERREG']
+
+    # -------- 1. Try DISPATCHLOAD per-unit enablement first ----------
+    dispatch = fetch_aemo_unit_dispatch(
+        start_date=start_date, end_date=end_date,
+        region=region, duid=None, duids=None,
+        cache_dir=cache_dir, refresh=refresh,
+    )
+    if dispatch.height > 0:
+        # Check if at least one FCAS-enablement column has meaningful nonzero values.
+        cols_present = [s for s in fcas_services if s in dispatch.columns]
+        if cols_present:
+            max_mean = max(dispatch[c].mean() for c in cols_present)
+            if max_mean > 0.01:
+                agg = {s: pl.col(s).sum().alias(f'FCAS_DEPTH_{s}_MW')
+                       for s in cols_present}
+                return (
+                    dispatch
+                    .group_by('SETTLEMENTDATE')
+                    .agg(*agg.values())
+                    .sort('SETTLEMENTDATE')
+                )
+
+    # -------- 2. Fallback: demand-ratio heuristics ----------
+    # Heuristic ratios derived from typical NEM FCAS requirements per region.
+    # Per-service depth = max(min_mw, ratio * TOTALDEMAND).
+    HEURISTIC: dict[str, tuple[float, float]] = {
+        'RAISE6SEC':   (50.0, 0.10),
+        'RAISE60SEC':  (30.0, 0.05),
+        'RAISE5MIN':   (15.0, 0.02),
+        'RAISEREG':    (30.0, 0.03),
+        'LOWER6SEC':   (50.0, 0.10),
+        'LOWER60SEC':  (30.0, 0.05),
+        'LOWER5MIN':   (15.0, 0.02),
+        'LOWERREG':    (30.0, 0.03),
+    }
+
+    if demand_series is None or 'TOTALDEMAND' not in demand_series.columns:
+        print("Warning: No demand_series provided (TOTALDEMAND required). "
+              "Returning empty FCAS depth.")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            **{f'FCAS_DEPTH_{s}_MW': pl.Float64 for s in fcas_services},
+        })
+
+    dem = demand_series.select('SETTLEMENTDATE', 'TOTALDEMAND').drop_nulls().sort('SETTLEMENTDATE')
+    if dem.height == 0:
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            **{f'FCAS_DEPTH_{s}_MW': pl.Float64 for s in fcas_services},
+        })
+
+    expr = [pl.col('SETTLEMENTDATE')]
+    for srv, (min_mw, ratio) in HEURISTIC.items():
+        colname = f'FCAS_DEPTH_{srv}_MW'
+        expr.append(
+            pl.max_horizontal(
+                pl.lit(min_mw),
+                pl.col('TOTALDEMAND') * ratio
+            ).alias(colname)
+        )
+    result = dem.select(expr)
+    print("FCAS depth: using TOTALDEMAND heuristic (DISPATCHLOAD enablement was zero for this region)")
+    return result
+
+
+def aggregate_residual_supply(
+    region: str,
+    start_date: datetime,
+    end_date: datetime,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """
+    Compute total available generation (MW) per 5-min interval in a region,
+    calculated as sum(AVAILABILITY) across all DISPATCHLOAD DUIDs.
+
+    The consumer (e.g. AEMODataPreprocessor or impact model) can subtract
+    TOTALDEMAND from the returned AVAILABILITY_SUM to get residual supply.
+
+    Args:
+        region: AEMO region code.
+        start_date: Start date for data retrieval.
+        end_date: End date for data retrieval.
+        cache_dir: Directory to cache downloaded data.
+        refresh: If True, re-download even if cached data exists.
+
+    Returns:
+        Polars DataFrame with SETTLEMENTDATE and AVAILABILITY_SUM_MW.
+    """
+    region = region.upper()
+    if region not in AEMO_REGIONS:
+        raise ValueError(f"Region must be one of {AEMO_REGIONS}")
+
+    dispatch = fetch_aemo_unit_dispatch(
+        start_date=start_date, end_date=end_date,
+        region=region, duid=None, duids=None,
+        cache_dir=cache_dir, refresh=refresh,
+    )
+    if dispatch.height == 0 or 'AVAILABILITY' not in dispatch.columns:
+        print("Warning: No AVAILABILITY data in DISPATCHLOAD result")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            'AVAILABILITY_SUM_MW': pl.Float64,
+        })
+    return (
+        dispatch
+        .group_by('SETTLEMENTDATE')
+        .agg(pl.col('AVAILABILITY').sum().alias('AVAILABILITY_SUM_MW'))
+        .sort('SETTLEMENTDATE')
+    )
+
+
+# Marginal-cost tier labels for NEM fuel types (AUD/MWh, approximate order).
+# These determine the position in the merit-order supply curve.
+FUEL_MARGINAL_COST_TIERS: dict[str, float] = {
+    'solar': 0.0,
+    'wind': 0.0,
+    'hydro': 5.0,
+    'battery_discharging': 10.0,
+    'coal_brown': 15.0,
+    'coal_black': 30.0,
+    'gas_ccgt': 70.0,
+    'gas_recip': 120.0,
+    'gas_ocgt': 180.0,
+    'gas_steam': 200.0,
+    'diesel': 300.0,
+    'other': 999.0,
+}
+
+# Inverse mapping from NEM "Fuel Source - Descriptor" strings to our keys.
+_FUEL_SOURCE_TO_KEY: dict[str, str] = {
+    'Solar': 'solar',
+    'Wind': 'wind',
+    'Water': 'hydro',
+    'Hydro': 'hydro',
+    'Battery': 'battery_discharging',
+    'Brown Coal': 'coal_brown',
+    'Black Coal': 'coal_black',
+    'Natural Gas / Fuel Oil': 'gas_ocgt',
+    'Natural Gas (Pipeline)': 'gas_ccgt',
+    'Gas / Oil': 'gas_recip',
+    'Gas / Diesel': 'gas_recip',
+    'Diesel / Oil': 'diesel',
+    'Diesel': 'diesel',
+    'Other': 'other',
+}
+
+
+def _infer_marginal_cost(
+    gen_info_df: pl.DataFrame,
+    fuel_col: str = 'Fuel Source - Descriptor',
+) -> pl.DataFrame:
+    """Add MARGINAL_COST column to a DataFrame of static generator info."""
+    if fuel_col not in gen_info_df.columns:
+        return gen_info_df.with_columns(pl.lit(999.0).alias('MARGINAL_COST'))
+    return gen_info_df.with_columns(
+        pl.col(fuel_col)
+        .replace_strict(_FUEL_SOURCE_TO_KEY, default='other')
+        .replace_strict(FUEL_MARGINAL_COST_TIERS, default=999.0)
+        .alias('MARGINAL_COST')
+    )
+
+
+def build_supply_curve(
+    region: str,
+    start_date: datetime,
+    end_date: datetime,
+    generator_info_path: Optional[str] = None,
+    cache_dir: str = "data/aemo",
+    refresh: bool = False,
+) -> pl.DataFrame:
+    """
+    Build a merit-order supply curve for a region over a date range.
+
+    For each 5-min DISPATCHLOAD interval, generators are sorted by inferred
+    marginal cost (from fuel type) and accumulated available MW.  The result
+    is a DataFrame where every (SETTLEMENTDATE, row-index) is a step on the
+    supply ladder: price tier and cumulative MW at that tier.
+
+    Args:
+        region: AEMO region code.
+        start_date: Start date for data retrieval.
+        end_date: End date for data retrieval.
+        generator_info_path: Optional path to NEM registration spreadsheet.
+        cache_dir: Directory to cache downloaded data.
+        refresh: If True, re-download even if cached data exists.
+
+    Returns:
+        Polars DataFrame with columns:
+            - SETTLEMENTDATE: Datetime of the dispatch interval
+            - MARGINAL_COST: $/MWh cost tier for this supply step
+            - AVAILABILITY_MW: MW available at this tier (per-interval)
+            - CUMULATIVE_MW: Cumulative MW up to this tier
+    """
+    region = region.upper()
+    if region not in AEMO_REGIONS:
+        raise ValueError(f"Region must be one of {AEMO_REGIONS}")
+
+    cache_path = get_cache_dir(cache_dir)
+
+    # 1. Load static generator info for fuel-type → marginal cost mapping.
+    try:
+        gen_info = _get_generators_static_table(cache_path, refresh)
+    except Exception:
+        gen_info = _get_generator_info(cache_path, generator_info_path=generator_info_path)
+
+    if gen_info is None or len(gen_info) == 0:
+        print("Warning: Could not load generator static info; supply curve cannot be built.")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            'MARGINAL_COST': pl.Float64,
+            'AVAILABILITY_MW': pl.Float64,
+            'CUMULATIVE_MW': pl.Float64,
+        })
+
+    gen_pl = _normalize_columns(_as_polars(gen_info))
+    fuel_col = 'Fuel Source - Descriptor'
+    if 'DUID' not in gen_pl.columns or 'Region' not in gen_pl.columns:
+        print("Warning: Generator info missing 'DUID' or 'Region' columns.")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            'MARGINAL_COST': pl.Float64,
+            'AVAILABILITY_MW': pl.Float64,
+            'CUMULATIVE_MW': pl.Float64,
+        })
+
+    # Filter to region, then infer marginal cost on the subset.
+    region_gen = gen_pl.filter(pl.col('Region') == region)
+    duid_costs = (
+        _infer_marginal_cost(region_gen, fuel_col)
+        .select(['DUID', 'MARGINAL_COST'])
+        .unique(subset=['DUID'])
+    )
+    if duid_costs.height == 0:
+        print(f"Warning: No generators found for region {region}")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            'MARGINAL_COST': pl.Float64,
+            'AVAILABILITY_MW': pl.Float64,
+            'CUMULATIVE_MW': pl.Float64,
+        })
+
+    # 2. Fetch DISPATCHLOAD with AVAILABILITY for the region.
+    dispatch = fetch_aemo_unit_dispatch(
+        start_date=start_date, end_date=end_date,
+        region=region, duid=None, duids=None,
+        cache_dir=cache_dir, refresh=refresh,
+    )
+    if dispatch.height == 0 or 'AVAILABILITY' not in dispatch.columns:
+        print("Warning: No AVAILABILITY data in DISPATCHLOAD result; supply curve empty.")
+        return pl.DataFrame(schema={
+            'SETTLEMENTDATE': pl.Datetime,
+            'MARGINAL_COST': pl.Float64,
+            'AVAILABILITY_MW': pl.Float64,
+            'CUMULATIVE_MW': pl.Float64,
+        })
+
+    # 3. Join DUID → marginal cost, group by interval + cost tier, sum MW.
+    supply = (
+        dispatch
+        .join(duid_costs, on='DUID', how='inner')
+        .group_by(['SETTLEMENTDATE', 'MARGINAL_COST'])
+        .agg(pl.col('AVAILABILITY').sum().alias('AVAILABILITY_MW'))
+        .sort(['SETTLEMENTDATE', 'MARGINAL_COST'])
+    )
+    # Cumulative sum per interval.
+    supply = supply.with_columns(
+        pl.col('AVAILABILITY_MW')
+        .cum_sum()
+        .over('SETTLEMENTDATE')
+        .alias('CUMULATIVE_MW')
+    )
+    print(f"Built supply curve: {supply.shape[0]} rows, "
+          f"{supply['SETTLEMENTDATE'].n_unique()} intervals")
+    return supply
 
 
 def example_fetch_short_range() -> Dict[str, pl.DataFrame]:

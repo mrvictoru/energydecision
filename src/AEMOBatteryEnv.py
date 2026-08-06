@@ -20,6 +20,7 @@ from pathlib import Path
 from EnergySimEnv import SolarBatteryEnv
 from aemo_data import fetch_aemo_data_bundle
 from batterydeg import DegradationModel, RainflowCounter, RealWorldBESSDegradationModel
+from market_impact import create_impact_model, MarketImpactModel
 
 
 class AEMODataPreprocessor:
@@ -65,18 +66,23 @@ class AEMODataPreprocessor:
         prices: pl.DataFrame,
         fcas: pl.DataFrame,
         generation: pl.DataFrame,
+        fcas_depth: Optional[pl.DataFrame] = None,
+        availability_sum: Optional[pl.DataFrame] = None,
     ) -> pl.DataFrame:
         prices_resampled = self._resample_data(prices, 'SETTLEMENTDATE')
         fcas_resampled = self._resample_fcas(fcas)
         gen_resampled = self._resample_generation(generation)
-        merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled)
+        merged = self._merge_datasets(prices_resampled, fcas_resampled, gen_resampled,
+                                      fcas_depth, availability_sum)
         merged = self._handle_missing_data(merged)
         return self._add_time_features(merged)
     
     def preprocess_aemo_data(self, 
                              prices: pl.DataFrame,
                              fcas: pl.DataFrame,
-                             generation: pl.DataFrame) -> pl.DataFrame:
+                             generation: pl.DataFrame,
+                             fcas_depth: Optional[pl.DataFrame] = None,
+                             availability_sum: Optional[pl.DataFrame] = None) -> pl.DataFrame:
         """
         Preprocess AEMO data for the environment.
         
@@ -84,11 +90,13 @@ class AEMODataPreprocessor:
             prices: Energy price DataFrame from fetch_aemo_dispatch_price
             fcas: FCAS price DataFrame from fetch_aemo_fcas_price
             generation: Generation DataFrame from fetch_aemo_generation_by_fuel
+            fcas_depth: Optional FCAS market depth from aggregate_fcas_market_depth
+            availability_sum: Optional aggregate availability from aggregate_residual_supply
             
         Returns:
             Preprocessed Polars DataFrame ready for environment use
         """
-        merged = self.prepare_aemo_data(prices, fcas, generation)
+        merged = self.prepare_aemo_data(prices, fcas, generation, fcas_depth, availability_sum)
         
         # Update stats from data
         if self.update_stats_from_data:
@@ -224,7 +232,14 @@ class AEMODataPreprocessor:
         rename_map = {c: f"GEN_{c}" for c in wide.columns if c != 'SETTLEMENTDATE'}
         return wide.rename(rename_map)
     
-    def _merge_datasets(self, prices: pl.DataFrame, fcas: pl.DataFrame, gen: pl.DataFrame) -> pl.DataFrame:
+    def _merge_datasets(
+        self,
+        prices: pl.DataFrame,
+        fcas: pl.DataFrame,
+        gen: pl.DataFrame,
+        fcas_depth: Optional[pl.DataFrame] = None,
+        availability_sum: Optional[pl.DataFrame] = None,
+    ) -> pl.DataFrame:
         """Merge all datasets on timestamp."""
         merged = prices
 
@@ -233,6 +248,26 @@ class AEMODataPreprocessor:
 
         if gen.height > 0 and 'SETTLEMENTDATE' in gen.columns:
             merged = merged.join(gen, on='SETTLEMENTDATE', how='left')
+
+        if fcas_depth is not None and fcas_depth.height > 0 and 'SETTLEMENTDATE' in fcas_depth.columns:
+            depth_cols = [c for c in fcas_depth.columns if c != 'SETTLEMENTDATE']
+            existing = set(merged.columns)
+            depth_cols = [c for c in depth_cols if c not in existing]
+            if depth_cols:
+                merged = merged.join(
+                    fcas_depth.select(['SETTLEMENTDATE'] + depth_cols),
+                    on='SETTLEMENTDATE', how='left'
+                )
+
+        if availability_sum is not None and availability_sum.height > 0 and 'SETTLEMENTDATE' in availability_sum.columns:
+            avail_cols = [c for c in availability_sum.columns if c != 'SETTLEMENTDATE']
+            existing = set(merged.columns)
+            avail_cols = [c for c in avail_cols if c not in existing]
+            if avail_cols:
+                merged = merged.join(
+                    availability_sum.select(['SETTLEMENTDATE'] + avail_cols),
+                    on='SETTLEMENTDATE', how='left'
+                )
 
         return merged
     
@@ -314,6 +349,30 @@ class AEMODataPreprocessor:
                 for col in fcas_cols
             ])
 
+        # Normalize FCAS market depth (FCAS_DEPTH_*)
+        depth_cols = [col for col in out.columns if col.startswith('FCAS_DEPTH_')]
+        if depth_cols:
+            depth_max_val = max(out.select([pl.col(c).max() for c in depth_cols]).row(0))
+            denom = max(depth_max_val, 1e-9) if depth_max_val is not None else 1e-9
+            out = out.with_columns([
+                (pl.col(col).cast(pl.Float64, strict=False) / denom)
+                .clip(0.0, 1.0)
+                .alias(f'{col}_normalized')
+                for col in depth_cols
+            ])
+
+        # Normalize availability supply (RESIDUAL_SUPPLY_MW if derived, or AVAILABILITY_SUM_MW raw)
+        for avail_col in ('AVAILABILITY_SUM_MW', 'RESIDUAL_SUPPLY_MW'):
+            if avail_col in out.columns:
+                min_v = float(out[avail_col].min() or 0)
+                max_v = float(out[avail_col].max() or 1)
+                denom = max(max_v - min_v, 1e-9)
+                out = out.with_columns(
+                    ((pl.col(avail_col).cast(pl.Float64, strict=False) - min_v) / denom)
+                    .clip(0.0, 1.0)
+                    .alias(f'{avail_col}_normalized')
+                )
+
         # Normalize generation (as percentage of total)
         gen_cols = [col for col in out.columns if col.startswith('GEN_')]
         if gen_cols:
@@ -356,7 +415,11 @@ class AEMOBatteryTradingEnv(gym.Env):
                  random_episode_start: bool = False,
                  degradation_mode: str = 'rainflow',  # 'rainflow', 'real_world', or 'simple'
                  degradation_temperature: float = 25.0,
-                 degradation_chemistry: str = 'NMC'):
+                 degradation_chemistry: str = 'NMC',
+                 impact_model: str | MarketImpactModel = 'identity',
+                 impact_intensity: float = 1.0,
+                 supply_curves: Optional[pl.DataFrame] = None,
+                 fcas_depth: Optional[pl.DataFrame] = None):
         """
         Initialize AEMO Battery Trading Environment.
         
@@ -407,6 +470,17 @@ class AEMOBatteryTradingEnv(gym.Env):
         self.degradation_mode = degradation_mode
         self.degradation_temperature = float(degradation_temperature)
         self.degradation_chemistry = degradation_chemistry
+
+        # Market-impact model
+        if isinstance(impact_model, str):
+            self._impact = create_impact_model(
+                impact_model,
+                impact_intensity=impact_intensity,
+                supply_curves=supply_curves,
+                fcas_depth=fcas_depth,
+            )
+        else:
+            self._impact = impact_model
 
         self._fcas_services = [
             'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
@@ -875,8 +949,14 @@ class AEMOBatteryTradingEnv(gym.Env):
         Returns (normalized_reward, energy_revenue, fcas_revenue, fcas_revenue_by_service).
         ``fcas_revenue_by_service`` maps each FCAS service name to its revenue ($).
         """
-        # Energy market revenue
-        energy_price = market_data.get('RRP', 0)  # $/MWh
+        # Energy market revenue (with optional market-impact)
+        base_energy_price = market_data.get('RRP', 0)
+        energy_price = self._impact.realized_energy_price(
+            base_price=base_energy_price,
+            battery_dispatch_mw=actual_power,
+            energy_price=base_energy_price,
+            market_state=dict(market_data),
+        )
 
         if actual_power < 0:  # Discharging (selling)
             energy_revenue = abs(actual_energy) * energy_price
@@ -892,7 +972,13 @@ class AEMOBatteryTradingEnv(gym.Env):
             enabled_mw = self._compute_fcas_enablement(fcas_bids, actual_power, old_soc)
             for service in self._fcas_services:
                 if service in enabled_mw:
-                    price = market_data.get(f'FCAS_{service}', 0)
+                    base_fcas_price = market_data.get(f'FCAS_{service}', 0)
+                    price = self._impact.realized_fcas_price(
+                        service=service,
+                        base_price=base_fcas_price,
+                        battery_enabled_mw=enabled_mw[service],
+                        market_state=dict(market_data),
+                    )
                     svc_rev = enabled_mw[service] * price * self.step_duration
                     fcas_revenue_by_service[service] = svc_rev
                     fcas_revenue += svc_rev
@@ -915,8 +1001,12 @@ class AEMOBatteryTradingEnv(gym.Env):
             raise_cap = min(requested_raise_mw, float(self.max_battery_flow), available_raise_mw)
             lower_cap = min(requested_lower_mw, float(self.max_battery_flow), available_lower_mw)
 
-            raisereg_price = market_data.get('FCAS_RAISEREG', 0)
-            lowerreg_price = market_data.get('FCAS_LOWERREG', 0)
+            raisereg_base = market_data.get('FCAS_RAISEREG', 0)
+            lowerreg_base = market_data.get('FCAS_LOWERREG', 0)
+            raisereg_price = self._impact.realized_fcas_price(
+                'RAISEREG', raisereg_base, raise_cap, dict(market_data))
+            lowerreg_price = self._impact.realized_fcas_price(
+                'LOWERREG', lowerreg_base, lower_cap, dict(market_data))
 
             svc_rev_raise = raise_cap * raisereg_price * self.step_duration
             svc_rev_lower = lower_cap * lowerreg_price * self.step_duration

@@ -264,34 +264,44 @@ class TrajectoryDataset(Dataset):
 
     def __init__(
         self,
-        data_path: str,
-        context_length: int,
-        state_dim: int,
+        data_path: str = None,
+        context_length: int = 180,
+        state_dim: int = 18,
         act_dim: int = 1,
         discount_factor: float = 0.99,
+        stride: int = 1,
+        data=None,
     ):
         """
-        Loads the dataset from a parquet file, groups by episode, and builds a list of all possible sliding windows.
-        Each window is a contiguous sequence of up to `context_length` steps from a single episode.
+        Loads the dataset from a parquet file or DataFrame, groups by episode,
+        and builds overlapping sliding windows.
+
         Args:
-            data_path: Path to a parquet file with trajectory data. Expects columns [episode_id, step, norm_observation, action, reward].
+            data_path: Path to a parquet file with trajectory data.
+                       Expects columns [episode_id, step, norm_observation, action, reward].
             context_length: Fixed length of each sequence/window (T).
             state_dim: Dimensionality of the normalized observation vector.
             act_dim: Dimensionality of the action vector.
             discount_factor: Gamma for computing discounted returns-to-go.
+            stride: Step between consecutive window starts. Default 1 (every position).
+                    Use context_length // 2 for overlapping windows matching the v2 recipe.
+            data: Optional polars DataFrame. If provided, data_path is ignored.
         """
         self.context_length = context_length
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.gamma = discount_factor
 
-        # Load only the columns needed for DT training to reduce RAM usage.
+        # Load data: either from DataFrame or parquet file
         needed_cols = ["episode_id", "step", "norm_observation", "action", "reward"]
-        try:
-            df = pl.read_parquet(data_path, columns=needed_cols)
-        except TypeError:
-            # Older polars versions may not support `columns=` for parquet.
-            df = pl.read_parquet(data_path).select(needed_cols)
+        if data is not None:
+            df = data.select(needed_cols) if hasattr(data, "select") else data
+        else:
+            try:
+                df = pl.read_parquet(data_path, columns=needed_cols)
+            except TypeError:
+                # Older polars versions may not support `columns=` for parquet.
+                df = pl.read_parquet(data_path).select(needed_cols)
 
         # Store all episode data and build sliding window indices
         self.episodes = []  # List of dicts, one per episode
@@ -316,7 +326,7 @@ class TrajectoryDataset(Dataset):
             self.episodes.append(ep_dict)
 
             # For each possible window in this episode, store (episode_idx, start_idx)
-            for start_idx in range(ep_len):
+            for start_idx in range(0, ep_len - context_length + 1, stride):
                 self.indices.append((len(self.episodes)-1, start_idx))
 
     def _compute_rtgs(self, rewards: np.ndarray) -> np.ndarray:
@@ -343,6 +353,7 @@ class TrajectoryDataset(Dataset):
         state_dim: int,
         act_dim: int,
         discount_factor: float = 0.99,
+        stride: int = 1,
     ) -> "TrajectoryDataset":
         """Internal classmethod: construct a TrajectoryDataset from pre-loaded episode dicts.
 
@@ -365,6 +376,7 @@ class TrajectoryDataset(Dataset):
             act_dim: Dimensionality of the action vector.
             discount_factor: Gamma (stored for reference; RTGs are already computed
                 and stored inside each episode dict).
+            stride: Step between consecutive window starts. Default 1.
         """
         obj = cls.__new__(cls)
         obj.context_length = context_length
@@ -374,7 +386,7 @@ class TrajectoryDataset(Dataset):
         obj.episodes = episodes
         obj.indices = []
         for ep_idx, ep in enumerate(episodes):
-            for start_idx in range(ep["length"]):
+            for start_idx in range(0, ep["length"] - context_length + 1, stride):
                 obj.indices.append((ep_idx, start_idx))
         return obj
 

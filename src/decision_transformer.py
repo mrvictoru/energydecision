@@ -420,6 +420,18 @@ class DecisionTransformer(nn.Module):
 
         # Default return_scale for inference (can be set during training)
         self.return_scale = 1.0
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, RMSNorm):
+            nn.init.ones_(module.scale)
     
     def forward(self, state, rtg, timestep, actions, attention_mask=None):
         B, T, _ = state.shape

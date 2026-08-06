@@ -49,6 +49,24 @@
     ],
     "scenarios": [
       {
+        "label": "sa1_jul_2024",
+        "region": "SA1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      },
+      {
+        "label": "sa1_aug_2024",
+        "region": "SA1",
+        "start_date": "2024-08-01",
+        "end_date": "2024-08-14"
+      },
+      {
+        "label": "sa1_sep_2024",
+        "region": "SA1",
+        "start_date": "2024-09-01",
+        "end_date": "2024-09-14"
+      },
+      {
         "label": "sa1_oct_2024",
         "region": "SA1",
         "start_date": "2024-10-01",
@@ -59,6 +77,12 @@
         "region": "SA1",
         "start_date": "2024-11-01",
         "end_date": "2024-11-14"
+      },
+      {
+        "label": "sa1_dec_2024",
+        "region": "SA1",
+        "start_date": "2024-12-01",
+        "end_date": "2024-12-14"
       }
     ]
   },
@@ -66,7 +90,7 @@
     {
       "name": "candidate_dt",
       "kind": "dt",
-      "rtg_value": 0.5
+      "rtg_value": 0.0
     },
     {
       "name": "dispatch_dalrymple_north",

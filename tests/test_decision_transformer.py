@@ -111,7 +111,17 @@ class TestGQA:
 
 
 # ---------------------------------------------------------------------------
-# Step 4: QK-Norm
+# Step 4: Initialization stability
+# ---------------------------------------------------------------------------
+
+def test_timestep_embedding_initialization_is_small_and_stable():
+    model = _make_dt(h_dim=32, max_timestep=128)
+    assert model.embed_timestep.weight.std().item() < 0.05
+    assert model.embed_timestep.weight.abs().mean().item() < 0.03
+
+
+# ---------------------------------------------------------------------------
+# Step 5: QK-Norm
 # ---------------------------------------------------------------------------
 
 class TestQKNorm:

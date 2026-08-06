@@ -15,6 +15,7 @@ from grpo_posttraining import stable_rtg_update
 from sdp_algorithm import SDPSolver
 from mrdp_algorithm import MRDPSolver
 from oracle_algorithm import OracleSolver
+from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES
 
 import concurrent.futures
 from tqdm.notebook import tqdm
@@ -609,6 +610,12 @@ class AEMOAgent:
                 dispatch_type=dispatch_type,
             )
 
+        # Oracle (perfect-foresight LP co-optimizer)
+        self._oracle_result: OracleResult | None = None
+        self._oracle_actions: np.ndarray | None = None
+        if self.algorithm == 'aemo_oracle':
+            self._init_oracle()
+
         # FCAS rule config
         self.fcas_raise_threshold = fcas_raise_threshold
         self.fcas_lower_threshold = fcas_lower_threshold
@@ -955,7 +962,92 @@ class AEMOAgent:
                 if self._fcas_thresholds[svc] == 0.0:
                     self._fcas_thresholds[svc] = 30.0 if svc.startswith('RAISE') else 25.0
 
+    def _init_oracle(self):
+        """Solve Oracle LP at agent init using the env's full market data."""
+        try:
+            aemo_data = self.env.aemo_data
+            if aemo_data is None:
+                return
+
+            # Map env action mode -> which FCAS services the Oracle price-vector covers.
+            # The solver always solves for all 8 services, but zero-bids services
+            # whose price columns are missing from the env's market frame.
+            fcas_cols_present = [f'FCAS_{s}' for s in FCAS_SERVICES
+                                 if f'FCAS_{s}' in aemo_data.columns]
+            if not fcas_cols_present:
+                print("  [Oracle] Error: no FCAS price columns in aemo_data")
+                self._oracle_actions = None
+                return
+            missing = [f'FCAS_{s}' for s in FCAS_SERVICES
+                       if f'FCAS_{s}' not in aemo_data.columns]
+            if missing:
+                print(f"  [Oracle] Warning: missing FCAS columns (zero bids): {missing}")
+
+            env = self.env
+            solver = AEMOOracleSolver(
+                battery_capacity=float(env.battery_capacity),
+                max_battery_flow=float(env.max_battery_flow),
+                step_duration=float(env.step_duration),
+                init_soc=float(env.init_battery_level),
+                min_soc=0.0,
+                max_soc=float(env.battery_capacity),
+            )
+            self._oracle_result = solver.solve(aemo_data, verbose=False)
+            T = self._oracle_result.n_intervals
+            max_flow = float(env.max_battery_flow)
+
+            # Pack per-interval actions NORMALISED to env's action space [-1,1] and [0,1].
+            # Env interprets: dispatch_mw = action[0] * max_flow (positive = charge, negative = discharge).
+            # Oracle's dispatch convention is the opposite: positive = discharge, negative = charge.
+            # So we negate when mapping to env's convention.
+            # FCAS bid order must match the env's self._fcas_services order:
+            #   ['RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
+            #    'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN']
+            env_fcas_order = self.env._fcas_services if hasattr(self.env, '_fcas_services') else None
+            actions = np.zeros((T, 1 + 8))
+            actions[:, 0] = np.clip(-self._oracle_result.optimal_dispatch / max_flow, -1.0, 1.0)
+            if env_fcas_order is not None:
+                # Map Oracle's RAISE bids (indexed 0-3: 6SEC, 60SEC, 5MIN, REG) and
+                # LOWER bids (0-3: 6SEC, 60SEC, 5MIN, REG) into env's order.
+                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
+                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
+                for i, svc in enumerate(env_fcas_order):
+                    if svc.startswith('RAISE'):
+                        acts = self._oracle_result.optimal_raise_bids
+                        oidx = ORAISE.get(svc, 0)
+                    else:  # LOWER
+                        acts = self._oracle_result.optimal_lower_bids
+                        oidx = OLOWER.get(svc, 0)
+                    actions[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+            else:
+                actions[:, 1:5] = np.clip(self._oracle_result.optimal_raise_bids / max_flow, 0.0, 1.0)
+                actions[:, 5:9] = np.clip(self._oracle_result.optimal_lower_bids / max_flow, 0.0, 1.0)
+            self._oracle_actions = actions
+            print(f"  [Oracle] Solved: ${self._oracle_result.total_profit:,.0f}/ep "
+                  f"(energy ${self._oracle_result.energy_revenue:,.0f} "
+                  f"+ FCAS ${self._oracle_result.fcas_revenue:,.0f}), "
+                  f"{T} intervals")
+        except Exception as e:
+            print(f"  [Oracle] Init failed: {e}")
+            import traceback; traceback.print_exc()
+            self._oracle_actions = None
+
+    def _oracle_action(self) -> list[float]:
+        """Return precomputed action for the current env step."""
+        if self._oracle_actions is None:
+            return [0.0] * (1 + 8)
+
+        # The env tracks the step count (0-indexed) via current_step.
+        # episode_start_idx is the row in aemo_data where this episode starts.
+        step = int(getattr(self.env, 'current_step', 0))
+        step = max(0, min(step, len(self._oracle_actions) - 1))
+
+        action = self._oracle_actions[step].tolist()
+        return action
+
     def choose_action(self, obs):
+        if self.algorithm == 'aemo_oracle':
+            return self._oracle_action()
         if self.algorithm in ('rule', 'fcas_rule'):
             return self.fcas_rule_based_action(obs) if self.algorithm == 'fcas_rule' else self.rule_based_action(obs)
         if self.algorithm == 'dispatch':

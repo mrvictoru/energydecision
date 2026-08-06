@@ -1,4 +1,4 @@
-FROM nvidia/cuda:13.0.2-runtime-ubuntu22.04
+FROM docker.io/nvidia/cuda:13.0.2-runtime-ubuntu22.04
 
 WORKDIR /code
 
@@ -10,7 +10,8 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-dev \
     libglib2.0-0 \
-    tini
+    tini \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY ./requirements.txt ./
 
