@@ -200,6 +200,20 @@ Standalone research direction that both complements the impact model and
 addresses the open §8.2.8 negative result on forecast DT. Decisions on whether
 to enter Phase 6 are deferred until Phase 2–3 produce base impact results.
 
+> **ON HOLD (2026-08-07):** Phase 6 and Phase 7 are **parked**. The
+> conditional-diffusion experiments (PR #34, branch
+> `feature/fcas-diffusion-v2`) reached a clear conclusion: fully-synthetic
+> RRP+FCAS episodes do not transfer to real-market DT evaluation, but the
+> synthetic **FCAS** channel from a broad-trained generator (full-year ×
+> SA1/NSW1/QLD1) does carry the signal — a DT trained on it recovers ~80% of
+> real-data FCAS revenue (+$256/ep with real RRP vs +$449 for the real-data
+> DT). Since a *completely synthetic* dataset was the goal, this is a dead end
+> for now. **Will circle back** if/when a separate per-region RRP generator
+> (the identified untried lever; FCAS is national, RRP is regional) is built —
+> the FCAS machinery (template-stamped burst schedule, schedule-gated tail,
+> broad-generator training) is the reusable core. Full write-up:
+> `docs/fcas_diffusion_v2_plan.md` on the branch.
+
 > **Phase 6 status (2026-08-06):** harness + v1 generator built and validated.
 > v1 reproduces the training FCAS distribution (same-fit eval passes all
 > metrics) and transfers co-occurrence + spike rates to held-out periods, but
@@ -303,6 +317,9 @@ instead of TTM point-forecast tokens. This is a genuine, principled revisit of
 same signal. **No code until v2 passes the gates.**
 
 ### Phase 7 — Combine impact model + synthetic FCAS (speculative)
+
+> **ON HOLD (2026-08-07):** contingent on Phase 6 v2 validating; now parked
+> with it. See the Phase 6 on-hold note.
 
 > **Not started; contingent on Phase 6 v2 validating.** Only pursue if the v2
 > generator passes the held-out gates and the synthetic-only DT training

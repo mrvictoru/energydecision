@@ -18,6 +18,17 @@ For current workflow and setup guidance, start with [README.md](README.md), [arc
 > orthogonal: this one improves the DT model; market\_impact\_plan.md adds
 > new realism to the environment.
 
+> **Synthetic-data note (2026-08-07):** the "unlimited synthetic training data"
+> thread (Phase 6 v2 conditional diffusion) is **on hold**. Experiments showed
+> fully-synthetic RRP+FCAS episodes do not transfer to real-market DT
+> evaluation, but synthetic **FCAS** from a broad-trained generator (full-year ×
+> SA1/NSW1/QLD1) does carry real signal — a DT trained on it recovers ~80% of
+> real-data FCAS revenue. The blocker is the synthetic **RRP** channel (the
+> joint cross-region model dilutes regional energy prices). We will circle back
+> if a per-region RRP generator is built; until then rely on real data
+> augmentation. See `docs/market_impact_plan.md` (Phase 6/7 on hold) and
+> closed PR #34.
+
 ## Executive summary
 
 This roadmap consolidates the DT and GRPO work for AEMO trading. The central question is whether offline Decision Transformer training can match or exceed online RL on energy-plus-FCAS bidding, and whether GRPO fine-tuning can improve the pretrained policy further without sacrificing safety or profitability.
