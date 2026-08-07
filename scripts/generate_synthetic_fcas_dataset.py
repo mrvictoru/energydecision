@@ -46,6 +46,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--region", default="NSW1")
     parser.add_argument("--train-start", default="2024-07-01")
     parser.add_argument("--train-end", default="2025-01-01")
+    parser.add_argument(
+        "--train-spec",
+        action="append",
+        default=[],
+        help="Repeatable REGION:YYYY-MM-DD:YYYY-MM-DD slice for the generator "
+             "train set. When provided, overrides --region/--train-start/--train-end "
+             "and concatenates all slices (e.g. a full-year multi-region set).",
+    )
     parser.add_argument("--generate-start", default="2024-07-01")
     parser.add_argument("--generate-end", default="2025-01-01")
     parser.add_argument("--policies", default="fcas_rule,ppo")
@@ -57,6 +65,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-steps", type=int, default=48)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--synthetic-frame-path",
+        type=Path,
+        default=None,
+        help="Path to a pre-generated synthetic price frame. When provided, the "
+             "generator fit/sample is skipped and this frame is used (with "
+             "--price-mode splicing applied). Reuses an expensive generator fit.",
+    )
     parser.add_argument(
         "--price-mode",
         choices=["both", "fcas_only", "rrp_only"],
@@ -190,20 +206,45 @@ def main() -> None:
     max_step = HORIZONS[horizon]
     eps_per_cell = 1 if args.smoke else args.episodes_per_cell
 
-    print(f"Loading {args.region} {args.train_start}..{args.train_end}")
-    train = load_slice(args.region, args.train_start, args.train_end)
-    print(f"  train rows: {train.height}")
+    if args.synthetic_frame_path:
+        if not args.synthetic_frame_path.is_file():
+            raise FileNotFoundError(f"synthetic frame not found: {args.synthetic_frame_path}")
+        print(f"Using pre-generated synthetic frame: {args.synthetic_frame_path}")
+        gen = None
+        train = None
+    elif args.train_spec:
+        from eval_fcas_generator import _parse_dataset_spec, load_interval
 
-    print(f"Fitting FCASDiffusionGenerator (epochs={args.generator_epochs})...")
-    gen = build_generator(train, args)
+        specs = [_parse_dataset_spec(s) for s in args.train_spec]
+        train = pl.concat([load_interval(r, s, e) for r, s, e in specs])
+        print(f"Training generator on {len(specs)} slices ({train.height:,} rows):")
+        for r, s, e in specs:
+            print(f"  {r}:{s}:{e}")
+    else:
+        print(f"Loading {args.region} {args.train_start}..{args.train_end}")
+        train = load_slice(args.region, args.train_start, args.train_end)
+        print(f"  train rows: {train.height}")
+
+    if train is not None:
+        print(f"Fitting FCASDiffusionGenerator (epochs={args.generator_epochs})...")
+        gen = build_generator(train, args)
 
     print(f"Loading {args.region} {args.generate_start}..{args.generate_end}")
     real = load_slice(args.region, args.generate_start, args.generate_end)
     print(f"  generate rows: {real.height}")
 
-    print("Generating synthetic prices over the generate period...")
-    synth = synthetic_frame(gen, real, real, args.price_mode)
-    print(f"  synthetic frame done (price_mode={args.price_mode})")
+    if args.synthetic_frame_path:
+        synth = pl.read_parquet(args.synthetic_frame_path)
+        if args.price_mode == "fcas_only":
+            synth = synth.with_columns(pl.Series("RRP", real["RRP"].to_numpy()))
+        elif args.price_mode == "rrp_only":
+            from fcas_generator_eval import FCAS_COLS
+            synth = synth.with_columns([pl.Series(col, real[col].to_numpy()) for col in FCAS_COLS])
+        print(f"  loaded synthetic frame + spliced price_mode={args.price_mode}")
+    else:
+        print("Generating synthetic prices over the generate period...")
+        synth = synthetic_frame(gen, real, real, args.price_mode)
+        print(f"  synthetic frame done (price_mode={args.price_mode})")
 
     synth_path = output_dir / f"synth_{args.region}_{args.generate_start}_{args.generate_end}.parquet"
     synth.write_parquet(synth_path)

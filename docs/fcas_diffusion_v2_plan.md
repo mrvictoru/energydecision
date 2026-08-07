@@ -404,6 +404,54 @@ fine** (costs ~$54 profit at most).
 The synthetic FCAS is not zero-signal (iso-FCAS DT earns +$117 and beats every
 negative baseline) but it is far below real-data FCAS learning.
 
+### Broad-generator downstream test (2026-08-07) — FCAS nearly solved, RRP breaks
+
+Retrained the generator on the **full calendar-2024 global set (SA1+NSW1+QLD1,
+184k rows)** instead of the narrow NSW1 H2 slice, then regenerated the synthetic
+episodes and retrained the DT. VRAM verified first: the largest generator fit
+peaks at ~1.1 GB of the 22 GB — hardware is not a constraint.
+
+| DT (all synth RRP + synth FCAS unless noted) | Profit/ep | FCAS/ep | Energy/ep |
+|---|---:|---:|---:|
+| Real RRP + real FCAS | +$449 | $752 | $1.66 |
+| **Broad gen (full-2024 × 3 regions)** | **−$93** | **$693** | **−$342** |
+| Narrow gen (bursts) | +$49 | $144 | $175 |
+
+The broad generator **nearly solved the FCAS gap** ($693 vs real $752 — the DT
+learns the FCAS-gap-closing policy almost as well as from real data) but the
+synthetic **RRP became a liability**: the cross-region model dilutes per-region
+energy-price dynamics (FCAS is national, RRP is regional), so the DT over-trades
+energy and loses −$342/ep on real prices. Net −$93.
+
+Strong implication: the promising configuration is **broad generator for FCAS +
+real (or separately modelled) RRP** — the broad FCAS already transfers, and the
+isolation earlier proved real RRP adds no FCAS drag. Test pending: regenerate
+`--price-mode fcas_only` episodes using the saved broad synthetic frame.
+
+### Combined configuration result (2026-08-07) — majority recovery
+
+Retrained the DT on episodes with **real RRP + broad-synthetic FCAS** (reusing
+the saved broad synthetic frame, no generator refit).
+
+| DT configuration | Profit/ep | FCAS/ep | Energy/ep |
+|---|---:|---:|---:|
+| Real RRP + real FCAS | +$449 | $752 | $1.66 |
+| Broad FCAS + real RRP | **+$256** | $601 | −$64 |
+| Broad FCAS + broad RRP | −$93 | $693 | −$342 |
+| Narrow FCAS + real RRP | +$117 | $233 | +$243 |
+
+Best synthetic result: **+$256/ep, 57% of the real-DT profit, with FCAS revenue
+at 80% of real ($601 vs $752).** The broad synthetic FCAS carries most of the
+FCAS-gap signal. Remaining gaps: (a) the synthetic RRP is regionally diluted by
+the joint cross-region model and (b) even with real RRP in training the DT's
+energy/capacity allocation is slightly suboptimal (−$64 energy), a secondary
+artifact of the synthetic FCAS teaching the DT to hold capacity for FCAS.
+
+Conclusion: the synthetic-FCAS direction is **not a dead end** — a broad-trained
+generator transfers the FCAS signal at 80% and recovers over half of real
+profit; the remaining work is a **separate per-region RRP generator** (or
+keeping real RRP for augmentation).
+
 ## Goal
 
 Learn `p(FCAS prices | exogenous market state)` and sample realistic FCAS price
