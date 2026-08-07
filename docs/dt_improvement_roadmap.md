@@ -33,15 +33,16 @@ For current workflow and setup guidance, start with [README.md](README.md), [arc
 
 This roadmap consolidates the DT and GRPO work for AEMO trading. The central question is whether offline Decision Transformer training can match or exceed online RL on energy-plus-FCAS bidding, and whether GRPO fine-tuning can improve the pretrained policy further without sacrificing safety or profitability.
 
-## Current state (July 2026)
+## Current state (August 2026)
 
 ### Dataset and training context
 
 - Training data v1: 2,425 episodes across 5 regions, 78.4M rows, 0.5C battery.
 - Training data v2: 2,401 episodes, 77M rows, 4 realistic battery configurations (1C, 0.7C, 0.5C, 3.75C).
 - Source policies: PPO, A2C, DDPG, SAC, TD3, and FCAS rule.
-- Best DT baseline: v2 HF model with roughly $1,714/ep profit and $2,743/ep FCAS revenue.
-- Best GRPO result: multi-region setup with $4,357/ep profit and strong FCAS revenue.
+- **Best DT (current SOTA): modern v2 pretrained (8×768 GQA)** — $4,630/ep on the standard surface, $10,138/ep dispatch-matched, no GRPO needed. See report.md §8 and §8.2.9.
+- **Retraining done (2026):** modern v2 (8×768) on the v2 dataset (`mrvictoru/energydecision-dt-v2`); forecast-conditioned DT (negative result, $4,564/ep); impact-aware DT (Phase 4, `mrvictoru/energydecision-dt-v2-impact`, wins 6/9 impact cells vs v2, beats PPO significantly). The Phase 4 MoLab retrain notebook lives at `notebooks/molab_notebook_dt_impact.py`.
+- **Best GRPO result:** Phase C (144h multi-region) $4,102/ep standard / $6,445/ep dispatch-matched — within 5–11% of the modern v2 pretrained but never exceeding it; GRPO does not improve the modern v2 model.
 
 ### Evaluation results
 
@@ -104,11 +105,19 @@ These changes target the current training pipeline and can run on the local RTX 
 
 ### Phase 2: Full retraining (requires MoLab or equivalent GPU)
 
+> **Status (2026-08):** the *specific* retraining items in this roadmap have
+> progressed. The **modern v2 (8×768) pretrained** model and the **impact-aware
+> DT** (Phase 4) are complete retrains that made most Phase 1 GRPO tuning moot
+> for the modern architecture. What remains open is the literal **multi-round
+> GRPO self-improvement** loop and the **reward restructuring** item below.
+
 1. Multi-round self-improvement
    - Use GRPO-improved rollouts as new training data, retrain the DT, and repeat until performance stabilizes.
+   - **Open.** Not run end-to-end. Report.md's conclusion is that GRPO does not improve the modern v2 pretrained model (which captures the benefits architecturally), so this loop is lower priority until a new base model or dataset is introduced.
 
 2. Reward restructuring
    - If degradation remains too high, update the pretraining reward at the environment level and regenerate the dataset before retraining.
+   - **Deferred.** Degradation is controlled for the modern v2 pretrained model (dispatch-matched ~$187/ep, below PPO's ~$310/ep); only the legacy/GRPO-tuned variants cycle aggressively.
 
 ## Implementation notes
 
@@ -186,7 +195,9 @@ and the npz normalized to [0,1] matching the observation space.
 - FCAS rule baseline implemented: done.
 - GRPO post-training pipeline implemented: done.
 - Forecast DT evaluator integration: done.
-- Forecast DT evaluated: done (3rd place at $4,564/ep with rtg=50).
+- Forecast DT evaluated: done (3rd place at $4,564/ep with rtg=50; negative result).
 - TTM npz normalized to [0,1] (was raw — fixed July 2026): done.
 - RTG calibration sweep (0.0-50.0) for all models: done.
-- Full retraining and dataset regeneration: deferred until Phase 1 is exhausted.
+- **Modern v2 (8×768) full retrain on the realistic-battery v2 dataset: done** (SOTA; `mrvictoru/energydecision-dt-v2`).
+- **Impact-aware DT retrain (Phase 4): done** (MoLab; `mrvictoru/energydecision-dt-v2-impact`).
+- **Multi-round GRPO self-improvement: open** (GRPO doesn't beat the modern v2 pretrained, so deferred until a new base/dataset).
