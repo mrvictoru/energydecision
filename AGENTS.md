@@ -226,7 +226,7 @@ The following results are from the legacy 8×384 model (PR#30, *copilot/online-r
 
 **Lesson**: The 24h proxy metric does NOT reliably predict 144h evaluation performance. Always validate on the target episode length.
 
-## Priorities for DT improvement (from `docs/dt_improvement_roadmap.md`)
+## Priorities for DT improvement (from `docs/aemo_research_plan.md`)
 
 1. Train DT on PPO-generated trajectories (addresses FCAS gap)
 2. RTG prompt calibration sweep

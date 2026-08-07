@@ -20,7 +20,7 @@ If you are new to the repository, read [../README.md](../README.md), [../archite
 Use these when you need time-specific experiment context rather than stable operating guidance.
 
 - [../grpo_experiments.md](../grpo_experiments.md)
-- [../dt_improvement_roadmap.md](../dt_improvement_roadmap.md)
+- [../aemo_research_plan.md](../aemo_research_plan.md)
 - [recommended_data_generation.md](recommended_data_generation.md)
 
 ## Recommended Reading Order
