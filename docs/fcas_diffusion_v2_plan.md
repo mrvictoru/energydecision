@@ -1,5 +1,37 @@
 # Phase 6 v2 — Conditional Diffusion for Synthetic FCAS Prices
 
+> **PR #34 outcome (2026-08-07): dead end for the original goal — do not extend.**
+>
+> The original intent was a **completely synthetic dataset** to augment the real
+> training data (more scenarios for DT training, or GRPO sim runs). The evidence
+> from this PR shows that goal is **not reachable with the current architecture,
+> so it is parked.**
+>
+> What was established:
+> - The acceptance harness's strict tail-KS gate is provably unreachable by any
+>   fit-window-trained generator (real-vs-real passes 24/24, but fit→holdout
+>   transfer fails even for a clairvoyant KNN-conditional sampler, min p
+>   ~1e-19…1e-21) — the tail magnitudes drift with factors the conditioning
+>   features do not capture.
+> - The two-stage hybrid (copula spike schedule + schedule-conditioned diffusion
+>   with burst template stamping + schedule-gated tail) produces FCAS with
+>   realistic marginals, spike rate, co-occurrence, and burst persistence, and
+>   passes every achievable harness diagnostic.
+> - **Downstream is the binding test.** A DT trained on fully synthetic episodes
+>   does not transfer: with a narrow generator it earns −$22/ep (real DT +$449);
+>   with a **broad generator** (full-year × SA1/NSW1/QLD1) synthetic **FCAS**
+>   recovers ~80% of real FCAS revenue ($693/$601 vs $752) — the FCAS channel
+>   works — but the synthetic **RRP** is regionally diluted by the joint
+>   cross-region model and drives −$342/ep energy losses. Best synthetic
+>   configuration (broad FCAS + real RRP): +$256/ep, 57% of real.
+>
+> **Blocking lever, not revisited:** a **separate per-region RRP generator** is
+> the specific untried fix (FCAS is national, RRP is regional; they should not
+> share one joint model). If that is ever built, this PR's FCAS machinery
+> (template-stamped burst schedule, schedule-gated tail, broad-generator
+> training) is the reusable core. Until then, treat fully-synthetic data as a
+> dead end and rely on real-data augmentation.
+
 Self-contained implementation plan for the Phase 6 **v2** generator (new PR, branched
 off main after PR #33). v1 (HMM/copula) and the evaluation harness already live on
 main: `src/synthetic_fcas.py`, `src/fcas_generator_eval.py`, `scripts/eval_fcas_generator.py`.
