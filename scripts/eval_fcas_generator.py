@@ -71,7 +71,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--tail-quantile", type=float, default=0.95)
     parser.add_argument("--tail-weight", type=float, default=4.0)
+    parser.add_argument("--spike-quantile", type=float, default=0.99)
     parser.add_argument("--sample-eta", type=float, default=0.05)
+    parser.add_argument("--schedule-seed", type=int, default=0)
+    parser.add_argument("--tail-mode", choices=["diffusion", "schedule"], default="schedule")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
@@ -163,7 +166,10 @@ def build_generator(args: argparse.Namespace):
         weight_decay=args.weight_decay,
         tail_quantile=args.tail_quantile,
         tail_weight=args.tail_weight,
+        spike_quantile=args.spike_quantile,
         sample_eta=args.sample_eta,
+        schedule_seed=args.schedule_seed,
+        tail_mode=args.tail_mode,
         seed=args.seed,
         device=args.device,
     )
@@ -212,7 +218,10 @@ def main(argv: list[str] | None = None) -> int:
             "weight_decay": args.weight_decay,
             "tail_quantile": args.tail_quantile,
             "tail_weight": args.tail_weight,
+            "spike_quantile": args.spike_quantile,
             "sample_eta": args.sample_eta,
+            "schedule_seed": args.schedule_seed,
+            "tail_mode": args.tail_mode,
             "seed": args.seed,
             "device": args.device,
             "same_period_fit_fraction": args.same_period_fit_fraction,

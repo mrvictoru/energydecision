@@ -206,15 +206,16 @@ def _group_count(channels: int, max_groups: int = 8) -> int:
 
 if torch is not None:
     class _WindowDataset(Dataset):
-        def __init__(self, targets: np.ndarray, conditions: np.ndarray):
+        def __init__(self, targets: np.ndarray, conditions: np.ndarray, spike_mask: np.ndarray):
             self.targets = torch.from_numpy(targets)
             self.conditions = torch.from_numpy(conditions)
+            self.spike_mask = torch.from_numpy(spike_mask)
 
         def __len__(self) -> int:
             return int(self.targets.shape[0])
 
-        def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-            return self.targets[idx], self.conditions[idx]
+        def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            return self.targets[idx], self.conditions[idx], self.spike_mask[idx]
 
 
     def _sinusoidal_timestep_embedding(timesteps: torch.Tensor, dim: int) -> torch.Tensor:
@@ -475,25 +476,30 @@ class FCASRegimeCopulaGenerator:
             }
         )
 
-    def sample(self, context: pl.DataFrame) -> pl.DataFrame:
+    def _simulate(
+        self, context: pl.DataFrame, seed: int = 0
+    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], np.ndarray]:
+        """Run the Markov-regime + copula latent machinery and return the family
+        state sequences, the copula uniforms, and the RRP-spike indicator."""
         n = context.height
         rrp = context["RRP"].to_numpy().astype(float)
         feats = self._build_features(context, float(np.quantile(rrp, 0.99)))
         Fm = feats.to_numpy()
         rrp_spike = Fm[:, 5].astype(bool)
-        rng = np.random.default_rng(0)
+        rng = np.random.default_rng(seed)
 
-        out = {}
+        states: dict[str, np.ndarray] = {}
+        us: dict[str, np.ndarray] = {}
         for family_name, family in (("RAISE", RAISE), ("LOWER", LOWER)):
             state = np.zeros(n, dtype=int)
             for t in range(n):
                 if t == 0:
-                    state[t] = rng.integers(self.n_states)
+                    state[t] = int(rng.integers(self.n_states))
                 else:
                     p = self._logit[family_name].predict_proba(
                         np.concatenate([Fm[t], np.eye(self.n_states)[state[t - 1]]])[None, :]
                     )[0]
-                    state[t] = rng.choice(self.n_states, p=p)
+                    state[t] = int(rng.choice(self.n_states, p=p))
 
             m = len(family)
             cov = self.rho[family_name].copy()
@@ -503,8 +509,31 @@ class FCASRegimeCopulaGenerator:
                 idx = np.where(state == k)[0]
                 if len(idx):
                     z[idx] = rng.multivariate_normal(np.zeros(m), cov, size=len(idx))
-            u = stats.norm.cdf(z)
+            us[family_name] = stats.norm.cdf(z)
+            states[family_name] = state
+        return states, us, rrp_spike
 
+    def spike_booleans(self, context: pl.DataFrame, seed: int = 0) -> dict[str, np.ndarray]:
+        """Per-service binary spike schedule over the context grid (timing only)."""
+        _, us, rrp_spike = self._simulate(context, seed)
+        spikes: dict[str, np.ndarray] = {}
+        for family_name, family in (("RAISE", RAISE), ("LOWER", LOWER)):
+            for i, s in enumerate(family):
+                p_i = self.spike_rate[s]
+                boost = 8.0 if family_name == "RAISE" and s in RAISE[:3] else 1.0
+                p = np.where(rrp_spike, min(1.0, p_i * boost), p_i)
+                spikes[f"FCAS_{s}"] = us[family_name][:, i] > (1.0 - p)
+        return spikes
+
+    def sample(self, context: pl.DataFrame) -> pl.DataFrame:
+        states, us, rrp_spike = self._simulate(context, seed=0)
+        n = context.height
+        rng = np.random.default_rng(0)
+
+        out = {}
+        for family_name, family in (("RAISE", RAISE), ("LOWER", LOWER)):
+            state = states[family_name]
+            u = us[family_name]
             for i, s in enumerate(family):
                 vals = np.empty(n)
                 p_i = self.spike_rate[s]
@@ -545,11 +574,16 @@ class FCASDiffusionGenerator:
         weight_decay: float = 1e-4,
         tail_quantile: float = 0.95,
         tail_weight: float = 4.0,
+        spike_quantile: float = 0.99,
         sample_eta: float = 0.05,
+        schedule_seed: int = 0,
+        tail_mode: str = "schedule",
         seed: int = 0,
         device: str | None = None,
     ):
         _require_torch()
+        if tail_mode not in ("diffusion", "schedule"):
+            raise ValueError(f"tail_mode must be 'diffusion' or 'schedule', got {tail_mode!r}")
         if overlap >= window_size:
             raise ValueError("overlap must be smaller than window_size")
         self.window_size = window_size
@@ -565,7 +599,10 @@ class FCASDiffusionGenerator:
         self.weight_decay = weight_decay
         self.tail_quantile = tail_quantile
         self.tail_weight = tail_weight
+        self.spike_quantile = spike_quantile
         self.sample_eta = sample_eta
+        self.schedule_seed = schedule_seed
+        self.tail_mode = tail_mode
         self.seed = seed
         self.device_name = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.device = torch.device(self.device_name)
@@ -579,10 +616,16 @@ class FCASDiffusionGenerator:
         self.target_max: np.ndarray | None = None
         self.tail_thresholds: np.ndarray | None = None
         self.train_loss_history: list[float] = []
+        self.stage_a: FCASRegimeCopulaGenerator | None = None
+        self._tail_knn_feats: np.ndarray | None = None
+        self._tail_knn_spike_idx: dict[str, np.ndarray] = {}
+        self._tail_knn_values: dict[str, np.ndarray] = {}
+        self._tail_feat_mean: np.ndarray | None = None
+        self._tail_feat_std: np.ndarray | None = None
 
         self.model = _TemporalUNet(
             target_channels=len(TARGET_COLS),
-            condition_channels=len(CONDITION_COLS),
+            condition_channels=len(CONDITION_COLS) + len(FCAS),
             base_channels=self.base_channels,
             channel_mults=self.channel_mults,
         ).to(self.device)
@@ -596,6 +639,15 @@ class FCASDiffusionGenerator:
         self.alpha_bars = alpha_bars
         self.alpha_bars_prev = alpha_bars_prev
 
+    def _observed_spike_schedule(self, frame: pl.DataFrame) -> np.ndarray:
+        """Per-service spike indicators on the training frame (observed truth)."""
+        cols = []
+        for s in FCAS:
+            x = frame[f"FCAS_{s}"].to_numpy().astype(np.float32)
+            thr = float(np.quantile(x, self.spike_quantile))
+            cols.append((x >= thr).astype(np.float32))
+        return np.column_stack(cols)
+
     def fit(self, df: pl.DataFrame) -> "FCASDiffusionGenerator":
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
@@ -603,11 +655,31 @@ class FCASDiffusionGenerator:
         frame = _clamp_fcas_columns(df)
         self.rrp_spike_threshold = float(np.quantile(frame["RRP"].to_numpy().astype(float), 0.99))
         condition_frame = _build_condition_frame(frame, rrp_spike_threshold=self.rrp_spike_threshold)
+        feature_matrix = condition_frame.select(CONDITION_COLS).to_numpy().astype(np.float32)
+
+        # Stage A: per-service spike scheduler (Markov regime + Gaussian copula).
+        self.stage_a = FCASRegimeCopulaGenerator(n_states=2).fit(frame)
+        schedule = self._observed_spike_schedule(frame)
+
+        # Conditional tail sampler: feature-conditioned empirical tail over the
+        # fit window's own spike bars (per service). Used when tail_mode=schedule
+        # to guarantee non-empty, feature-relevant tail magnitudes at spike bars.
+        self._tail_knn_feats = feature_matrix
+        self._tail_feat_mean = feature_matrix.mean(axis=0).astype(np.float32)
+        self._tail_feat_std = np.clip(feature_matrix.std(axis=0).astype(np.float32), 1e-6, None)
+        self._tail_knn_spike_idx = {}
+        self._tail_knn_values = {}
+        for i, s in enumerate(FCAS):
+            spike_idx = np.where(schedule[:, i] > 0)[0]
+            self._tail_knn_spike_idx[s] = spike_idx
+            self._tail_knn_values[s] = frame[f"FCAS_{s}"].to_numpy().astype(np.float32)[spike_idx]
+
+        condition_matrix = np.concatenate([feature_matrix, schedule], axis=1).astype(np.float32)
         target_matrix = _build_target_matrix(frame)
-        condition_matrix = condition_frame.select(CONDITION_COLS).to_numpy().astype(np.float32)
 
         target_windows = _build_windows(target_matrix, window_size=self.window_size, stride=self.stride)
         condition_windows = _build_windows(condition_matrix, window_size=self.window_size, stride=self.stride)
+        schedule_windows = _build_windows(schedule, window_size=self.window_size, stride=self.stride)
 
         self.cond_mean = condition_windows.mean(axis=(0, 2), keepdims=True).astype(np.float32)
         self.cond_std = np.clip(condition_windows.std(axis=(0, 2), keepdims=True).astype(np.float32), 1e-6, None)
@@ -621,7 +693,7 @@ class FCASDiffusionGenerator:
         self.target_max = target_windows.max(axis=(0, 2), keepdims=True).astype(np.float32)
         self.tail_thresholds = np.quantile(target_windows[:, 1:, :], self.tail_quantile, axis=(0, 2)).astype(np.float32)
 
-        dataset = _WindowDataset(target_windows, condition_windows)
+        dataset = _WindowDataset(target_windows, condition_windows, schedule_windows)
         loader = DataLoader(dataset, batch_size=min(self.batch_size, len(dataset)), shuffle=True, drop_last=False)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         tail_thresholds = torch.from_numpy(self.tail_thresholds).to(self.device).view(1, -1, 1)
@@ -631,9 +703,10 @@ class FCASDiffusionGenerator:
         for _ in range(self.epochs):
             epoch_loss = 0.0
             total = 0
-            for clean, cond in loader:
+            for clean, cond, spike in loader:
                 clean = clean.to(self.device)
                 cond = cond.to(self.device)
+                spike = spike.to(self.device)
                 timesteps = torch.randint(0, self.diffusion_steps, (clean.shape[0],), device=self.device)
                 noise = torch.randn_like(clean)
                 alpha_bar = self.alpha_bars[timesteps].view(-1, 1, 1)
@@ -641,7 +714,8 @@ class FCASDiffusionGenerator:
                 pred_noise = self.model(noisy, cond, timesteps)
 
                 weights = torch.ones_like(clean)
-                weights[:, 1:, :] = 1.0 + self.tail_weight * (clean[:, 1:, :] >= tail_thresholds).float()
+                weights[:, 1:, :] = 1.0 + self.tail_weight * spike.float()
+                weights[:, 1:, :] = weights[:, 1:, :] + self.tail_weight * (clean[:, 1:, :] >= tail_thresholds).float()
                 loss = ((pred_noise - noise) ** 2 * weights).mean()
 
                 optimizer.zero_grad(set_to_none=True)
@@ -658,7 +732,10 @@ class FCASDiffusionGenerator:
         self._ensure_fitted()
         frame = _clamp_fcas_columns(context)
         condition_frame = _build_condition_frame(frame, rrp_spike_threshold=float(self.rrp_spike_threshold))
-        condition_matrix = condition_frame.select(CONDITION_COLS).to_numpy().astype(np.float32)
+        feature_matrix = condition_frame.select(CONDITION_COLS).to_numpy().astype(np.float32)
+        spikes = self.stage_a.spike_booleans(frame, seed=self.schedule_seed)
+        schedule = np.column_stack([spikes[f"FCAS_{s}"].astype(np.float32) for s in FCAS])
+        condition_matrix = np.concatenate([feature_matrix, schedule], axis=1).astype(np.float32)
         normalized = (condition_matrix[None, :, :] - self.cond_mean.transpose(0, 2, 1)) / self.cond_std.transpose(0, 2, 1)
         normalized = normalized[0]
 
@@ -682,6 +759,8 @@ class FCASDiffusionGenerator:
             filled_until = max(filled_until, start + actual_len)
 
         restored = _inverse_target_matrix(out)
+        if self.tail_mode == "schedule":
+            restored = self._schedule_gated_tail(restored, feature_matrix, schedule)
         synth = frame.with_columns(
             [pl.Series("RRP", restored["RRP"].astype(float))]
             + [pl.Series(col, restored[col].astype(float)) for col in FCAS_COLS]
@@ -706,11 +785,20 @@ class FCASDiffusionGenerator:
                 "weight_decay": self.weight_decay,
                 "tail_quantile": self.tail_quantile,
                 "tail_weight": self.tail_weight,
+                "spike_quantile": self.spike_quantile,
                 "sample_eta": self.sample_eta,
+                "schedule_seed": self.schedule_seed,
+                "tail_mode": self.tail_mode,
                 "seed": self.seed,
                 "device": self.device_name,
             },
             "state_dict": self.model.state_dict(),
+            "stage_a": self.stage_a,
+            "tail_knn_feats": self._tail_knn_feats,
+            "tail_knn_spike_idx": self._tail_knn_spike_idx,
+            "tail_knn_values": self._tail_knn_values,
+            "tail_feat_mean": self._tail_feat_mean,
+            "tail_feat_std": self._tail_feat_std,
             "rrp_spike_threshold": self.rrp_spike_threshold,
             "cond_mean": self.cond_mean,
             "cond_std": self.cond_std,
@@ -739,6 +827,12 @@ class FCASDiffusionGenerator:
         gen.target_max = payload["target_max"]
         gen.tail_thresholds = payload["tail_thresholds"]
         gen.train_loss_history = list(payload.get("train_loss_history", []))
+        gen.stage_a = payload.get("stage_a")
+        gen._tail_knn_feats = payload.get("tail_knn_feats")
+        gen._tail_knn_spike_idx = payload.get("tail_knn_spike_idx", {})
+        gen._tail_knn_values = payload.get("tail_knn_values", {})
+        gen._tail_feat_mean = payload.get("tail_feat_mean")
+        gen._tail_feat_std = payload.get("tail_feat_std")
         gen.model.to(gen.device)
         gen.model.eval()
         return gen
@@ -772,6 +866,40 @@ class FCASDiffusionGenerator:
         x = x * self.target_std + self.target_mean
         return x
 
+    def _schedule_gated_tail(
+        self,
+        restored: dict[str, np.ndarray],
+        feature_matrix: np.ndarray,
+        schedule: np.ndarray,
+    ) -> dict[str, np.ndarray]:
+        """Replace FCAS magnitudes at schedule-spike bars with feature-conditional
+        samples from the fit window's own spike tail (per service).
+
+        The diffusion under-shoots the heavy tail (regression-to-mean in log1p
+        space), so spike bars otherwise contribute almost nothing above the
+        holdout threshold. Gating the magnitudes on Stage A's schedule guarantees
+        a non-empty, feature-relevant tail while keeping the diffusion's
+        well-calibrated bulk for non-spike bars.
+        """
+        rng = np.random.default_rng(self.schedule_seed)
+        feats = (feature_matrix - self._tail_feat_mean) / self._tail_feat_std
+        out = dict(restored)
+        k = 20
+        for i, s in enumerate(FCAS):
+            spike_idx = np.where(schedule[:, i] > 0)[0]
+            pool_idx = self._tail_knn_spike_idx.get(s)
+            if len(spike_idx) == 0 or pool_idx is None or len(pool_idx) == 0:
+                continue
+            pool_feats = (self._tail_knn_feats[pool_idx] - self._tail_feat_mean) / self._tail_feat_std
+            pool_vals = self._tail_knn_values[s]
+            d2 = ((feats[spike_idx][:, None, :] - pool_feats[None, :, :]) ** 2).sum(-1)
+            nn = np.argsort(d2, axis=1)[:, : min(k, len(pool_idx))]
+            pick = nn[np.arange(len(spike_idx)), rng.integers(0, nn.shape[1], size=len(spike_idx))]
+            values = out[f"FCAS_{s}"].astype(np.float64)
+            values[spike_idx] = pool_vals[pick].astype(np.float64)
+            out[f"FCAS_{s}"] = values
+        return out
+
     def _sampling_schedule(self) -> list[int]:
         raw = np.linspace(self.diffusion_steps - 1, 0, num=min(self.sample_steps, self.diffusion_steps))
         schedule = []
@@ -789,3 +917,7 @@ class FCASDiffusionGenerator:
             raise RuntimeError("generator must be fit before sampling")
         if self.cond_mean is None or self.target_mean is None:
             raise RuntimeError("generator normalization statistics are missing")
+        if self.stage_a is None:
+            raise RuntimeError("Stage A spike scheduler is missing; fit must run first")
+        if self.tail_mode == "schedule" and self._tail_knn_feats is None:
+            raise RuntimeError("tail sampler is missing; fit must run first")

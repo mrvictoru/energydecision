@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from synthetic_fcas import (  # noqa: E402
     FCASDiffusionGenerator,
+    FCASRegimeCopulaGenerator,
     FCAS_SERVICE_CAPS,
     TORCH_IMPORT_ERROR,
     _lagged_rrp_spike_indicator,
@@ -52,6 +53,20 @@ def test_lagged_rrp_spike_indicator_excludes_current_bar():
     assert lagged.tolist() == [0.0, 0.0, 0.0, 1.0, 1.0, 0.0]
 
 
+def test_v1_spike_booleans_shape_and_determinism():
+    df = _processed_frame()
+    gen = FCASRegimeCopulaGenerator(n_states=2).fit(df)
+    s0 = gen.spike_booleans(df, seed=0)
+    s0b = gen.spike_booleans(df, seed=0)
+    s1 = gen.spike_booleans(df, seed=1)
+    assert set(s0) == {f"FCAS_{s}" for s in ["RAISE6SEC", "RAISE60SEC", "RAISE5MIN", "RAISEREG", "LOWER6SEC", "LOWER60SEC", "LOWER5MIN", "LOWERREG"]}
+    for key, arr in s0.items():
+        assert arr.shape == (df.height,)
+        assert arr.dtype == bool
+        assert np.array_equal(arr, s0b[key])
+    assert any(not np.array_equal(s0[key], s1[key]) for key in s0)
+
+
 @pytest.mark.skipif(TORCH_IMPORT_ERROR is not None, reason="PyTorch runtime is unavailable in this environment")
 def test_diffusion_generator_samples_capped_series_on_cpu():
     df = _processed_frame()
@@ -74,6 +89,7 @@ def test_diffusion_generator_samples_capped_series_on_cpu():
 
     assert synth.height == df.height
     assert "RRP" in synth.columns
+    assert gen.stage_a is not None
     for col, cap in FCAS_SERVICE_CAPS.items():
         values = synth[col].to_numpy()
         assert np.isfinite(values).all()
