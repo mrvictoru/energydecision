@@ -290,9 +290,119 @@ $317-max holdout).
    adjacent-month split). Avoids the drift by construction but weakens the
    generalization claim.
 
-Open: the team should pick one before the generator is deemed "passing". Until
-then, the generator is evaluated on the achievable gates and the tail is
-reported-not-gated.
+**Decision (2026-08-07): downstream DT validation is the gate** (Option 3).
+The harness metrics remain reporting diagnostics; the pass/fail is whether a DT
+trained on synthetic-only FCAS episodes stays within a reasonable band of a DT
+trained on the same episodes with real prices.
+
+## Downstream DT validation (in progress, 2026-08-07)
+
+Pipeline (new script `scripts/generate_synthetic_fcas_dataset.py`):
+
+1. **Synthetic episode generation.** For each (policy, battery, horizon) cell,
+   episodes are rolled out twice: once on a synthetic processed frame (real
+   exogenous features, RRP + 8×FCAS replaced by `FCASDiffusionGenerator`
+   samples) and once on the real frame (control). Policies: `fcas_rule` + PPO;
+   batteries: medium_1c + small_05c; horizon: short (12-day, 3,456 steps).
+   Both are normalized into DT datasets with identical schema.
+2. **Control setup.** Generator fit on NSW1 2024 H2 (Jul–Dec), synthetic
+   episodes sampled from NSW1 H2 windows, real control episodes from the same
+   windows. Evaluated on the example evaluator (NSW1/QLD1/VIC1 Jan 2024 + SA1
+   Jul 2024 heldouts) — no period overlap between training and evaluation.
+3. **Dataset.** `data/aemo_dt_synth/aemo_fcas_dataset_{synth,real}.parquet`,
+   60 episodes / 207k rows each.
+4. **DT training.** Both DTs use the FCAS-rich recipe (8×384, ctx=180,
+   stride=90, epochs=2, batch=16, lr=3e-5, return_scale=2.0, action loss
+   0.999). `scripts/pretrain_decision_transformer.py` gained a `--stride` knob
+   (default 1, backward compatible) because `episode_train_val_split` was
+   rebuilding windows at stride=1.
+5. **Evaluation.** Both DTs run through the example evaluator.
+
+Success = synthetic-trained DT within a reasonable band of the real-trained DT
+(and, as context, not far below the $1,522/ep reference).
+
+Pending: the two evaluator runs (synthetic vs real) and the comparison table.
+
+## Fifth iteration (2026-08-07): burst-aware spike generation
+
+The downstream gate failure was traced to a **temporal** deficiency the marginal
+metrics miss. A temporal-fidelity audit (`scripts/audit_fcas_temporal_fidelity.py`,
+synthetic vs real NSW1 H2) showed:
+
+- Real FCAS spikes are sustained clustered events: mean burst 1.45–5.0 bars,
+  lag-1 persistence 0.31–0.80, 21–68% of spikes in a ≥2-bar burst. The synthetic
+  generator produced almost **only isolated single-bar blips** (burst≥2 0–10%,
+  lag-1 persistence 0.00–0.11).
+- Spike-onset magnitudes collapse immediately in the synthetic (80 → 3 → 1 → 1
+  for RAISE60SEC) vs real (26 → 11 → 14 → 22).
+- Bulk ACF lag-1 (log space): real +0.35…+0.86 vs synthetic +0.00…+0.13.
+
+The DT consequence: a policy that arbitrages sustained FCAS events cannot learn
+them from single-bar synthetic spikes — the synthetic-trained DT earned $203/ep
+FCAS vs $752/ep for the real-trained DT (and -$22 vs +$449 profit).
+
+Fix (in `FCASDiffusionGenerator`): **burst-aware schedule expansion**. `fit()`
+now extracts, per family (RAISE/LOWER), the real event templates (each event =
+a maximal run where any family service spikes, with its per-service activity
+mask) plus the real event rate. `sample()` thins Stage A's copula event onsets
+down to the real event rate and stamps each surviving onset with a random real
+event template. This reproduces the exact joint structure of real FCAS
+contingency events: per-service spike rate, burst length/persistence, and
+within-family co-occurrence (verified on NSW1 H2: within_raise 0.44 vs real
+0.46, within_lower 0.32 vs 0.38, mean burst 1.2-4.3 vs real 1.5-5.0). The
+schedule-gated tail magnitudes then apply to the whole stamped burst, giving
+sustained elevated prices for the DT to trade.
+
+Two intermediate formulations were tried and rejected: per-service geometric
+burst expansion (killed within-family co-occurrence by decoupling co-onsets)
+and a parametric family-event model with shared durations (under-counted
+non-onsetting services). Template stamping is both faithful and simple.
+
+### Downstream re-run after the burst fix (2026-08-07)
+
+Regenerated the synthetic NSW1 H2 episodes with the burst-aware schedule and
+retrained the synthetic DT (identical recipe). Temporal audit confirms the fix
+in the actual sampled frame: spike magnitudes now sustain (RAISE60SEC onset
+27→14→14→9 vs real 26→11→14→22, previously collapsing to ~1), ACF lag-1 up to
+0.15–0.59 (was 0.00–0.13), burst≥2 fraction 0.13–0.48 (was 0.00–0.10).
+
+Example-evaluator comparison (16 held-out episodes, real prices):
+
+| DT | Profit/ep | FCAS/ep | Energy/ep |
+|---|---:|---:|---:|
+| Real (control) | +$449 | $752 | $1.66 |
+| Synthetic (pre-burst) | −$22 | $203 | $55 |
+| **Synthetic (burst fix)** | **+$49** | **$144** | $175 |
+
+The burst fix roughly tripled the gap closed on total profit but the DT shifted
+toward energy arbitrage and the **FCAS-revenue gap widened** (now 5.2× below
+real, was 3.7×). The FCAS-specific bidding signal still does not transfer.
+Open hypothesis: the synthetic **RRP** (over-dispersed tails, weak ACF) is
+teaching the DT aggressive energy trading that doesn't pay on real prices, and
+the FCAS events, though now sustained, are still conditionally mis-calibrated.
+Decisive next experiment: isolate the two price channels (real RRP + synthetic
+FCAS vs synthetic RRP + real FCAS) to attribute the transfer failure.
+
+### Channel isolation result (2026-08-07) — FCAS is the blocker, not RRP
+
+Trained + evaluated DTs on the four price-source combinations (identical recipe,
+example evaluator):
+
+| Price source | Profit/ep | FCAS/ep | Energy/ep |
+|---|---:|---:|---:|
+| real RRP + real FCAS | +$449 | $752 | $1.66 |
+| **synth RRP + real FCAS** | **+$395** | **$714** | $25 |
+| real RRP + synth FCAS | +$117 | $233 | $243 |
+| synth RRP + synth FCAS (bursts) | +$49 | $144 | $175 |
+
+With **real FCAS** the DT learns the FCAS-gap-closing policy almost perfectly
+($714 FCAS vs the real-only $752). With **synthetic FCAS**, FCAS earnings drop
+to $144–233 regardless of the RRP source. Conclusion: **the synthetic FCAS
+generator is the dominant transfer blocker; the synthetic RRP is essentially
+fine** (costs ~$54 profit at most).
+
+The synthetic FCAS is not zero-signal (iso-FCAS DT earns +$117 and beats every
+negative baseline) but it is far below real-data FCAS learning.
 
 ## Goal
 

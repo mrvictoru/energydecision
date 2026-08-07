@@ -622,6 +622,8 @@ class FCASDiffusionGenerator:
         self._tail_knn_values: dict[str, np.ndarray] = {}
         self._tail_feat_mean: np.ndarray | None = None
         self._tail_feat_std: np.ndarray | None = None
+        self._burst_templates: dict[str, list[np.ndarray]] = {}
+        self._burst_event_rate: dict[str, float] = {}
 
         self.model = _TemporalUNet(
             target_channels=len(TARGET_COLS),
@@ -648,6 +650,46 @@ class FCASDiffusionGenerator:
             cols.append((x >= thr).astype(np.float32))
         return np.column_stack(cols)
 
+    def _burst_expand_schedule(self, spikes: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Stamp Stage A's copula onsets with real FCAS event templates.
+
+        Real FCAS spikes are clustered multi-bar contingency events in which the
+        services of a family co-spike with a specific rate/persistence profile.
+        Stage A's copula couples co-onsets well but fires isolated single bars.
+        This thins the copula event onsets down to the real event rate and stamps
+        each surviving onset with a random event template sampled from the real
+        training data, so the synthetic schedule reproduces the exact joint
+        spike-rate / persistence / within-family co-occurrence structure.
+        """
+        n = len(spikes[f"FCAS_{FCAS[0]}"])
+        rng = np.random.default_rng(self.schedule_seed)
+        out: dict[str, np.ndarray] = dict(spikes)
+        for family_name, family in (("RAISE", RAISE), ("LOWER", LOWER)):
+            cols = [f"FCAS_{s}" for s in family]
+            base = np.column_stack([spikes[c] for c in cols]).astype(bool)
+            shifted = np.zeros_like(base)
+            shifted[1:] = base[:-1]
+            onsets = base & ~shifted
+            event_onset = onsets.any(axis=1)
+            base_event_rate = float(event_onset.mean())
+            templates = self._burst_templates.get(family_name, [])
+            target_rate = self._burst_event_rate.get(family_name, 0.0)
+            if not templates or base_event_rate <= 0 or target_rate <= 0:
+                continue
+            keep_frac = min(1.0, target_rate / base_event_rate)
+            expanded = np.zeros_like(base)
+            n_templates = len(templates)
+            for t in np.where(event_onset)[0]:
+                if rng.random() > keep_frac:
+                    continue
+                template = templates[rng.integers(0, n_templates)]
+                length = template.shape[0]
+                end = min(t + length, n)
+                expanded[t:end, :] |= template[: end - t, :]
+            for k, s in enumerate(family):
+                out[f"FCAS_{s}"] = expanded[:, k]
+        return out
+
     def fit(self, df: pl.DataFrame) -> "FCASDiffusionGenerator":
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
@@ -660,6 +702,32 @@ class FCASDiffusionGenerator:
         # Stage A: per-service spike scheduler (Markov regime + Gaussian copula).
         self.stage_a = FCASRegimeCopulaGenerator(n_states=2).fit(frame)
         schedule = self._observed_spike_schedule(frame)
+
+        # Real burst structure (from the observed schedule): per-family event
+        # templates sampled from the real data, plus the real event rate. At
+        # sample time Stage A's copula onsets are thinned to the real event rate
+        # and each surviving onset is stamped with a random real event template,
+        # reproducing the exact joint rate / persistence / co-occurrence of real
+        # FCAS contingency events.
+        self._burst_templates = {}
+        self._burst_event_rate = {}
+        for family_name, family in (("RAISE", RAISE), ("LOWER", LOWER)):
+            family_cols = [FCAS.index(s) for s in family]
+            m = schedule[:, family_cols] > 0
+            any_s = m.any(axis=1)
+            templates: list[np.ndarray] = []
+            i = 0
+            while i < schedule.shape[0]:
+                if any_s[i]:
+                    j = i
+                    while j < schedule.shape[0] and any_s[j]:
+                        j += 1
+                    templates.append(m[i:j].copy())
+                    i = j
+                else:
+                    i += 1
+            self._burst_templates[family_name] = templates
+            self._burst_event_rate[family_name] = len(templates) / max(schedule.shape[0], 1)
 
         # Conditional tail sampler: feature-conditioned empirical tail over the
         # fit window's own spike bars (per service). Used when tail_mode=schedule
@@ -734,6 +802,7 @@ class FCASDiffusionGenerator:
         condition_frame = _build_condition_frame(frame, rrp_spike_threshold=float(self.rrp_spike_threshold))
         feature_matrix = condition_frame.select(CONDITION_COLS).to_numpy().astype(np.float32)
         spikes = self.stage_a.spike_booleans(frame, seed=self.schedule_seed)
+        spikes = self._burst_expand_schedule(spikes)
         schedule = np.column_stack([spikes[f"FCAS_{s}"].astype(np.float32) for s in FCAS])
         condition_matrix = np.concatenate([feature_matrix, schedule], axis=1).astype(np.float32)
         normalized = (condition_matrix[None, :, :] - self.cond_mean.transpose(0, 2, 1)) / self.cond_std.transpose(0, 2, 1)
@@ -799,6 +868,8 @@ class FCASDiffusionGenerator:
             "tail_knn_values": self._tail_knn_values,
             "tail_feat_mean": self._tail_feat_mean,
             "tail_feat_std": self._tail_feat_std,
+            "burst_templates": self._burst_templates,
+            "burst_event_rate": self._burst_event_rate,
             "rrp_spike_threshold": self.rrp_spike_threshold,
             "cond_mean": self.cond_mean,
             "cond_std": self.cond_std,
@@ -833,6 +904,8 @@ class FCASDiffusionGenerator:
         gen._tail_knn_values = payload.get("tail_knn_values", {})
         gen._tail_feat_mean = payload.get("tail_feat_mean")
         gen._tail_feat_std = payload.get("tail_feat_std")
+        gen._burst_templates = payload.get("burst_templates", {})
+        gen._burst_event_rate = payload.get("burst_event_rate", {})
         gen.model.to(gen.device)
         gen.model.eval()
         return gen
