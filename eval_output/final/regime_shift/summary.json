@@ -1,0 +1,40 @@
+{
+  "dt_rtg0_ep": 2463.1,
+  "dt_rtg10_ep": 2421.06,
+  "ppo_ep": 11344.43,
+  "fcas_rule_ep": -26185.96,
+  "rule_ep": -3562.1,
+  "note": "expanded 2024 surface, 5 regions x 6 periods, 288h episodes, medium (10MWh/5MW) battery, trained 2021-23",
+  "by_period": [
+    {
+      "period": "jan_2024",
+      "dt_k": 1.7,
+      "ppo_k": 3.8
+    },
+    {
+      "period": "mar_2024",
+      "dt_k": 1.8,
+      "ppo_k": 9.5
+    },
+    {
+      "period": "may_2024",
+      "dt_k": 4.4,
+      "ppo_k": 22.5
+    },
+    {
+      "period": "jul_2024",
+      "dt_k": 3.1,
+      "ppo_k": 8.3
+    },
+    {
+      "period": "sep_2024",
+      "dt_k": 1.2,
+      "ppo_k": 8.5
+    },
+    {
+      "period": "nov_2024",
+      "dt_k": 2.2,
+      "ppo_k": 15.0
+    }
+  ]
+}
