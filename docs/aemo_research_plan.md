@@ -271,6 +271,31 @@ FCAS during large spike events. Even on the DT's own training battery
 (medium_1c 10/10, 5-min, Sep–Nov) PPO edges it ($4,520 vs $3,453). The choice
 of evaluation surface materially changes who "wins".
 
+## Root cause of the DT's underperformance: FCAS under-capture
+
+The broad-surface gap is **not a prompting artifact** (RTG sweep 0–50 is flat)
+and **not a seasonal data bias** (training spans all seasons 2021–2023). The
+driving cause is **the DT under-bids FCAS during large spike events**: at 5-min
+on the expanded surface PPO earns $10.2k FCAS/ep vs the DT's $4.8k (2.1×).
+PPO wins every FCAS-spike month decisively (Nov $35.5k vs $3.5k; May $25k vs
+$8.6k; Sep $16k vs $2.8k) while the DT wins only mild months (Jan $3.8k vs
+$2.0k). This is the same learned **conservative FCAS moderation** documented in
+the market-impact work (the impact-DT trades 0.39–0.53× grid-scale FCAS) — the
+offline behaviour-cloning objective averages over the dataset's
+conservative+aggressive mixture and lands on under-bidding FCAS.
+
+**Direction (2026-08-07): PPO-informed DT training, not GRPO.** GRPO does not
+improve the modern v2. The hypothesis is that the DT should be trained to bid
+FCAS like PPO by:
+1. **Reward/return-weighted training** (upsample or weight high-return and
+   high-FCAS-revenue trajectories, e.g. PPO's best rollouts) — a
+   reward-weighted-regression treatment of the behaviour-cloning loss, and
+2. **Adding more aggressive FCAS behaviour to the offline mixture** (generate
+   additional PPO FCAS-heavy rollouts and retrain).
+Then re-measure on the 5-min expanded surface to confirm the FCAS gap closes.
+A dynamic evaluation dashboard (power/energy/revenue visualisation) is a
+deferred side-goal for making these surfaces more intuitive.
+
 # Open Items & README Roadmap Sync
 
 Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
