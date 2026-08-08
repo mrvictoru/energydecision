@@ -1,40 +1,40 @@
 {
-  "dt_rtg0_ep": 2463.1,
-  "dt_rtg10_ep": 2421.06,
-  "ppo_ep": 11344.43,
-  "fcas_rule_ep": -26185.96,
-  "rule_ep": -3562.1,
-  "note": "expanded 2024 surface, 5 regions x 6 periods, 288h episodes, medium (10MWh/5MW) battery, trained 2021-23",
+  "protocol": "5-min (correct)",
+  "dt_rtg10_ep": 4596.0,
+  "ppo_ep": 15017.0,
+  "fcas_rule_ep": -35359.0,
+  "rule_ep": -20103.0,
+  "note": "expanded 2024 surface, 5 regions x 6 periods, 288h, medium (10MWh/5MW); 30-min protocol halved the DT (2421) so the earlier 4.7x was inflated; at the correct 5-min the gap is 3.3x. Training 2021-23.",
   "by_period": [
     {
       "period": "jan_2024",
-      "dt_k": 1.7,
-      "ppo_k": 3.8
+      "dt_k": 3.8,
+      "ppo_k": 2.0
     },
     {
       "period": "mar_2024",
-      "dt_k": 1.8,
-      "ppo_k": 9.5
+      "dt_k": 2.7,
+      "ppo_k": 7.8
     },
     {
       "period": "may_2024",
-      "dt_k": 4.4,
-      "ppo_k": 22.5
+      "dt_k": 8.6,
+      "ppo_k": 25.0
     },
     {
       "period": "jul_2024",
-      "dt_k": 3.1,
-      "ppo_k": 8.3
+      "dt_k": 5.8,
+      "ppo_k": 6.3
     },
     {
       "period": "sep_2024",
-      "dt_k": 1.2,
-      "ppo_k": 8.5
+      "dt_k": 2.8,
+      "ppo_k": 16.0
     },
     {
       "period": "nov_2024",
-      "dt_k": 2.2,
-      "ppo_k": 15.0
+      "dt_k": 3.5,
+      "ppo_k": 35.5
     }
   ]
 }

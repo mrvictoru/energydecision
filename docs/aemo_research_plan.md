@@ -251,18 +251,25 @@ surface** (5 regions × Jan/Mar/May/Jul/Sep/Nov, 288h episodes, medium
 
 | Policy | Profit/ep | Note |
 |---|:---:|---|
-| PPO (online RL) | **$11,344** | Wins in **every** period; 2–6× the DT |
-| Modern v2 DT (rtg=0) | $2,463 | Flat across periods ($1.2–4.4k) |
-| Modern v2 DT (rtg=10) | $2,421 | RTG calibration does not change the picture |
-| FCAS rule / rule | −$26.2k / −$3.6k | Baselines |
+| PPO (online RL) | **$15,017** | Wins 5/6 periods; 2.9–10× the DT in FCAS-spike months |
+| Modern v2 DT (rtg=10) | $4,596 | Wins Jan, close in Jul; loses in Mar/May/Sep/Nov |
+| FCAS rule / rule | −$35.4k / −$20.1k | Baselines |
+
+> **Protocol correction (2026-08-07):** the earlier expanded run used **30-min
+> steps** (off-protocol for the 5-min-trained DT), which nearly halved the DT
+> ($2,421). All AEMO eval configs + the env default are now **5-min**
+> (`step_duration=0.083333`). At the correct protocol the DT more than doubles
+> ($4,596) but **PPO improves too** ($15,017), so the broad-surface gap is real:
+> **PPO wins ~3.3×**, driven by the DT under-capturing FCAS in spike months
+> (PPO FCAS $10.2k vs DT $4.8k). RTG sweep (0–50) is flat, so this is not a
+> prompting effect.
 
 **Critical finding:** the DT's SOTA status is **surface-specific**. It wins on
-the narrow example / dispatch-matched / Oct-standard surfaces, but on the
-broad full-year surface **PPO dominates by ~4.7×**, strongest in FCAS-spike
-months (May $22.5k vs $4.4k). The choice of evaluation surface materially
-changes who "wins" — the current headline surfaces are favorable to the DT.
-This qualifies the "offline DT beats online RL" claim and is now a first-class
-measurement.
+the narrow example / dispatch-matched / Oct-standard surfaces and mild months
+(Jan), but on the broad full-year surface PPO dominates — the DT under-bids
+FCAS during large spike events. Even on the DT's own training battery
+(medium_1c 10/10, 5-min, Sep–Nov) PPO edges it ($4,520 vs $3,453). The choice
+of evaluation surface materially changes who "wins".
 
 # Open Items & README Roadmap Sync
 
