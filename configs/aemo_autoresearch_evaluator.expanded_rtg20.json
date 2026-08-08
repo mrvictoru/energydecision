@@ -1,0 +1,224 @@
+{
+  "track": "aemo",
+  "target_return": 0.0,
+  "bootstrap_iterations": 1000,
+  "bootstrap_seed": 42,
+  "reference_policy": "fcas_rule",
+  "reference_cache_dir": "eval_output/autoresearch/reference_cache/expanded",
+  "condition_thresholds": {
+    "negative_price_threshold": 0.0,
+    "price_spike_threshold": 150.0,
+    "low_soc_ratio": 0.2,
+    "high_soc_ratio": 0.8
+  },
+  "heldout": {
+    "cache_dir": "data/aemo",
+    "step_duration": 0.5,
+    "episode_hours": 288.0,
+    "action_mode": "multi_market",
+    "degradation_mode": "real_world",
+    "degradation_chemistry": "LFP",
+    "degradation_temperature": 30.0,
+    "episodes_per_variant": 5,
+    "random_episode_start": true,
+    "fit_global_stats": false,
+    "parallel_workers": 8,
+    "parallelize_candidate_dt": true,
+    "battery_variants": [
+      {
+        "name": "medium",
+        "capacity_mwh": 10.0,
+        "max_power_mw": 5.0,
+        "init_soc_ratio": 0.5
+      }
+    ],
+    "scenarios": [
+      {
+        "label": "nsw1_jan_2024",
+        "region": "NSW1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "nsw1_mar_2024",
+        "region": "NSW1",
+        "start_date": "2024-03-01",
+        "end_date": "2024-03-14"
+      },
+      {
+        "label": "nsw1_may_2024",
+        "region": "NSW1",
+        "start_date": "2024-05-01",
+        "end_date": "2024-05-14"
+      },
+      {
+        "label": "nsw1_jul_2024",
+        "region": "NSW1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      },
+      {
+        "label": "nsw1_sep_2024",
+        "region": "NSW1",
+        "start_date": "2024-09-01",
+        "end_date": "2024-09-14"
+      },
+      {
+        "label": "nsw1_nov_2024",
+        "region": "NSW1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "qld1_jan_2024",
+        "region": "QLD1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "qld1_mar_2024",
+        "region": "QLD1",
+        "start_date": "2024-03-01",
+        "end_date": "2024-03-14"
+      },
+      {
+        "label": "qld1_may_2024",
+        "region": "QLD1",
+        "start_date": "2024-05-01",
+        "end_date": "2024-05-14"
+      },
+      {
+        "label": "qld1_jul_2024",
+        "region": "QLD1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      },
+      {
+        "label": "qld1_sep_2024",
+        "region": "QLD1",
+        "start_date": "2024-09-01",
+        "end_date": "2024-09-14"
+      },
+      {
+        "label": "qld1_nov_2024",
+        "region": "QLD1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "sa1_jan_2024",
+        "region": "SA1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "sa1_mar_2024",
+        "region": "SA1",
+        "start_date": "2024-03-01",
+        "end_date": "2024-03-14"
+      },
+      {
+        "label": "sa1_may_2024",
+        "region": "SA1",
+        "start_date": "2024-05-01",
+        "end_date": "2024-05-14"
+      },
+      {
+        "label": "sa1_jul_2024",
+        "region": "SA1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      },
+      {
+        "label": "sa1_sep_2024",
+        "region": "SA1",
+        "start_date": "2024-09-01",
+        "end_date": "2024-09-14"
+      },
+      {
+        "label": "sa1_nov_2024",
+        "region": "SA1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "vic1_jan_2024",
+        "region": "VIC1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "vic1_mar_2024",
+        "region": "VIC1",
+        "start_date": "2024-03-01",
+        "end_date": "2024-03-14"
+      },
+      {
+        "label": "vic1_may_2024",
+        "region": "VIC1",
+        "start_date": "2024-05-01",
+        "end_date": "2024-05-14"
+      },
+      {
+        "label": "vic1_jul_2024",
+        "region": "VIC1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      },
+      {
+        "label": "vic1_sep_2024",
+        "region": "VIC1",
+        "start_date": "2024-09-01",
+        "end_date": "2024-09-14"
+      },
+      {
+        "label": "vic1_nov_2024",
+        "region": "VIC1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "tas1_jan_2024",
+        "region": "TAS1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "tas1_mar_2024",
+        "region": "TAS1",
+        "start_date": "2024-03-01",
+        "end_date": "2024-03-14"
+      },
+      {
+        "label": "tas1_may_2024",
+        "region": "TAS1",
+        "start_date": "2024-05-01",
+        "end_date": "2024-05-14"
+      }
+    ]
+  },
+  "policies": [
+    {
+      "name": "candidate_dt",
+      "kind": "dt",
+      "rtg_value": 20.0
+    },
+    {
+      "name": "rule",
+      "kind": "rule"
+    },
+    {
+      "name": "fcas_rule",
+      "kind": "rule",
+      "algorithm": "fcas_rule"
+    },
+    {
+      "name": "ppo_reference",
+      "kind": "sb3",
+      "algorithm": "PPO",
+      "model_path": "models/aemo_sb3/ppo_aemo_model.zip",
+      "deterministic": true,
+      "device": "auto"
+    }
+  ]
+}
