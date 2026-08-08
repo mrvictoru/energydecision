@@ -226,11 +226,12 @@ Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
 
 | README item | Status |
 |---|:---:|
-| Offline dataset studies (DT sensitivity to policy mixtures / curation) | ⬜ Open |
+| Offline dataset studies (DT sensitivity to policy mixtures / curation) | ⬜ Open — highest priority, no hardware |
+| **Regime-shift / full-scale robustness evaluation** (train 2022–23 → eval 2024; expanded surface + paired significance on the SOTA headline) | ⬜ Open — conductable now (added 2026-08-07 after the "is this proof?" review) |
 | Long-context DT experiments (larger `context_len`, RoPE, seasonal/weekly) | ⬜ Open (ctx=2016 now feasible on the 22 GB GPU) |
 | Multi-agent extension (microgrid, multiple households) | ⬜ Open |
-| Sim-to-real readiness (safety wrappers, hardware-in-the-loop) | ⬜ Open |
 | Artifact provenance (checksums/config logging) | ⬜ Open |
+| Sim-to-real readiness (safety wrappers, hardware-in-the-loop) | ⬜ Open — **lowest priority, requires hardware** |
 | Multi-round GRPO self-improvement (GRPO rollouts → retrain → repeat) | ⬜ Open (deferred — GRPO doesn't beat pretrained) |
 | Phase 6/7 synthetic FCAS + impact combine | 🔴 On hold (per-region RRP generator is the circle-back lever) |
 

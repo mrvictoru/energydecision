@@ -56,11 +56,12 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [x] **Market-impact BESS evaluation:** Piecewise-linear merit-order impact model (`src/market_impact.py`) hooking into `AEMOBatteryTradingEnv` (backward-compatible `identity` default). Phase 3: v2 DT under impact retains 62/83/49% of identity profit at 8/150/250 MW vs PPO's 62/40/32%. Phase 4: impact-aware DT retrain (`mrvictoru/energydecision-dt-v2-impact`) beats PPO significantly (+$115K/cell, p=0.004) and edges the naive v2 6/9 cells (+$96K/cell). See report.md §8.2.9.
 *   [x] **AEMO Oracle upper bound:** Perfect-foresight LP co-optimizer (`src/aemo_oracle_algo.py`) as evaluator baseline; Oracle_MI (impact-aware LP) is the impact ceiling, but its fixed-point solve at 150 MW+ exceeds 100% of PT (unreliable at large scale). Invariant-validated as a *revenue* ceiling (dominates every policy on 9/9 Phase-3 cells and 6/6 dispatch-matched episodes); under real-world degradation its net profit is beaten by degradation-aware DTs on small batteries (LP is degradation-blind) — see report §8.2.9.3.
 *   [ ] **Offline dataset studies:** Evaluate DT sensitivity to behavior-policy mixtures (rule vs SDP vs SB3) and dataset curation.
+*   [ ] **Regime-shift / full-scale robustness evaluation:** Train on 2022–2023 and evaluate on 2024 (and the reverse), plus the expanded surface (5 regions × 6 months) with paired significance tests on the SOTA headline (modern v2 vs PPO vs forecast DT). Phase 6 showed FCAS tails are non-stationary across periods, so this tests whether the DT generalizes to genuinely unseen market regimes.
 *   [ ] **Long-context DT experiments:** Study larger `context_len` and RoPE for seasonal/weekly structure.
 *   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.
-*   [ ] **Sim-to-real readiness:** Add safety wrappers and evaluate policies with hardware-in-the-loop (where available).
 *   [x] **Statistical confidence on AEMO headlines:** Bootstrap confidence intervals and paired Wilcoxon signed-rank tests applied to the market-impact headline tables (n=9 cells, §8.2.9.1) and to the per-surface profit headlines — dispatch-matched ($10,138; n=6 episodes, Jul–Dec 2024) and standard ($4,630; n=15, Sep–Nov 2024) — via `scripts/phase3_bootstrap_over_scenarios.py`, `phase3_paired_wilcoxon.py`, and the evaluator's built-in bootstrap.
 *   [ ] **Artifact provenance:** Add lightweight checksums/config logging for datasets, models, and evaluation outputs.
+*   [ ] **Sim-to-real readiness:** Add safety wrappers and evaluate policies with hardware-in-the-loop (where available). **Lowest priority — requires hardware.**
 
 ## Quick Setup
 
