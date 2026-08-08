@@ -30,7 +30,7 @@ class AEMODataPreprocessor:
     """
     
     def __init__(self, 
-                 step_duration_hours: float = 0.5,
+                 step_duration_hours: float = 0.083333,
                  missing_data_method: str = 'interpolate',
                  add_normalized_features: bool = True,
                  update_stats_from_data: bool = True,
@@ -406,7 +406,7 @@ class AEMOBatteryTradingEnv(gym.Env):
                  max_battery_flow: float = 5.0,   # MW
                  init_battery_level: float = 5.0,  # MWh
                  max_step: int = 1000,
-                 step_duration: float = 0.5,  # hours
+                 step_duration: float = 0.083333,  # hours (5 min)
                  battery_life_cost: float = 1_000_000.0,  # USD for grid-scale
                  render_mode: Optional[str] = None,
                  action_mode: str = 'simple',  # 'simple' or 'multi_market'

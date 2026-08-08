@@ -13,7 +13,7 @@
   },
   "heldout": {
     "cache_dir": "data/aemo",
-    "step_duration": 0.5,
+    "step_duration": 0.083333,
     "episode_hours": 288.0,
     "action_mode": "multi_market",
     "degradation_mode": "real_world",

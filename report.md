@@ -178,7 +178,7 @@ For the AEMO/NEM environment, the repository includes `src/aemo_data.py`, which 
 - optional FCAS prices (service columns mapped from `DISPATCHPRICE`),
 - optional generation mix by fuel type (requires generator static information).
 
-`AEMODataPreprocessor` (`src/AEMOBatteryEnv.py`) aligns these series to the environment step duration (default 30 minutes), interpolates missing numeric values, adds cyclical time features, and writes normalized columns.
+`AEMODataPreprocessor` (`src/AEMOBatteryEnv.py`) aligns these series to the environment step duration (default 5 minutes, matching the DT training/evaluation protocol), interpolates missing numeric values, adds cyclical time features, and writes normalized columns.
 
 For historical replay, the repository also queries unit metadata and `DISPATCHLOAD` records so that a notebook can discover which battery stations were active in a date window, resolve historical DUID changes for a named station, and reconstruct observed dispatch actions as episode logs.
 
