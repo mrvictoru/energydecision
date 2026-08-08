@@ -133,12 +133,26 @@ if __name__ == "__main__":
                         help="Policy label for the DT being evaluated.")
     parser.add_argument("--rtg", type=float, nargs="*", default=None,
                         help="RTG values to sweep (overrides RTG_VALUES).")
+    parser.add_argument("--impact-config", type=str, default=None,
+                        help="Path to a benchmark config JSON with {scenarios, batteries, rtg_values}. "
+                             "Makes the impact evaluation a repeatable, canonical benchmark.")
     parser.add_argument("--with-dispatch", action="store_true",
                         help="Add Dalrymple North dispatch replay baseline (SA1 scenarios only).")
     args = parser.parse_args()
 
     if args.rtg:
         RTG_VALUES = args.rtg
+    if args.impact_config:
+        import json as _json
+        _cfg = _json.loads(Path(args.impact_config).read_text())
+        if "scenarios" in _cfg:
+            SCENARIOS = [tuple(s) for s in _cfg["scenarios"]]
+        if "batteries" in _cfg:
+            BATTERIES = [dict(b) for b in _cfg["batteries"]]
+        if "rtg_values" in _cfg:
+            RTG_VALUES = [float(v) for v in _cfg["rtg_values"]]
+        print(f"Loaded impact benchmark config: {len(SCENARIOS)} scenarios, "
+              f"{len(BATTERIES)} batteries, RTG sweep {RTG_VALUES}")
     print(f"Phase 3 — Market Impact Evaluation")
     print(f"  Device: {DEVICE}")
     print(f"  GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none'}")
