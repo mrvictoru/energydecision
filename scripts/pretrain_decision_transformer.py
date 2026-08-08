@@ -506,6 +506,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=0.99,
         help="Discount factor passed to TrajectoryDataset.",
     )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="Window stride for TrajectoryDataset. Use context_length // 2 for the v2 recipe.",
+    )
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--epochs", type=int, default=2)
@@ -939,6 +945,7 @@ def load_trajectory_datasets(
     state_dim: int,
     act_dim: int,
     discount: float,
+    stride: int = 1,
 ) -> list[TrajectoryDataset]:
     datasets: list[TrajectoryDataset] = []
     for parquet_path in parquet_files:
@@ -949,6 +956,7 @@ def load_trajectory_datasets(
             state_dim=state_dim,
             act_dim=act_dim,
             discount_factor=discount,
+            stride=stride,
         )
         datasets.append(ds)
         print(f"  -> collected {len(ds)} sliding windows")
@@ -1161,6 +1169,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         state_dim=state_dim,
         act_dim=act_dim,
         discount=surface.training_kwargs["discount"],
+        stride=args.stride,
     )
     validate_dataset_dimensions(
         datasets=datasets,
@@ -1195,6 +1204,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             state_dim=state_dim,
             act_dim=act_dim,
             discount=surface.training_kwargs["discount"],
+            stride=args.stride,
         )
         validate_dataset_dimensions(
             datasets=val_datasets,
@@ -1211,6 +1221,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             datasets,
             val_split=surface.training_kwargs["val_split"],
             seed=surface.training_kwargs["seed"],
+            stride=args.stride,
         )
     validate_preset_dataset_policy(
         surface=surface,

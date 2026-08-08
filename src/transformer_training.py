@@ -1497,6 +1497,7 @@ def episode_train_val_split(
     datasets: list[TrajectoryDataset],
     val_split: float,
     seed: int = 42,
+    stride: int = 1,
 ) -> tuple[TrajectoryDataset, TrajectoryDataset]:
     """Split a list of TrajectoryDataset objects into train and validation datasets
     at the **episode level**, so all sliding windows from the same episode stay
@@ -1561,6 +1562,7 @@ def episode_train_val_split(
         first.state_dim,
         first.act_dim,
         first.gamma,
+        stride=stride,
     )
     val_ds = TrajectoryDataset._from_episodes(
         val_episodes,
@@ -1568,5 +1570,6 @@ def episode_train_val_split(
         first.state_dim,
         first.act_dim,
         first.gamma,
+        stride=stride,
     )
     return train_ds, val_ds

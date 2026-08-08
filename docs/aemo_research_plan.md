@@ -296,6 +296,32 @@ Then re-measure on the 5-min expanded surface to confirm the FCAS gap closes.
 A dynamic evaluation dashboard (power/energy/revenue visualisation) is a
 deferred side-goal for making these surfaces more intuitive.
 
+## RTG-distribution finding (prompting study, 2026-08-07)
+
+The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is
+inherently dynamic — it decays over an episode as rewards accrue. Measured the
+actual RTG distribution in the FCAS-rich training data (γ=0.95, sampled
+episodes per policy):
+
+- **Per-step RTG overall: p50 = −0.1, p90 = 0.3, max = 539** — overwhelmingly
+  small (≈0); the DT mostly trains on near-zero RTG tokens.
+- **Initial RTG (episode total discounted return): p50 ≈ 0.0–0.3, p90 ≈
+  1.2–1.8, max ≈ 9–13** across all source policies (PPO similar to others).
+
+Two consequences:
+1. **Train/inference RTG mismatch.** At training the RTG token is the *decaying*
+   realized return-to-go; at inference the evaluator feeds the *same constant*
+   (config `rtg_value` = 0/10/20/50) at every step. The high eval RTGs
+   (5–500× the training p50) act as a **strategy selector** (more aggressive
+   bidding), which is why higher RTG sometimes beats lower — but they are far
+   out of the training RTG distribution, so the DT is extrapolating.
+2. **Dynamic-prompting hypothesis.** Prompting with a *decaying* RTG (start at
+   the desired return and discount per step to match training semantics) may
+   both stay in-distribution and preserve the strategy-selection effect.
+
+Test to run: compare fixed vs decaying RTG prompts on the 5-min expanded
+surface for the modern v2 DT (and check `return_scale` interaction).
+
 # Open Items & README Roadmap Sync
 
 Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
