@@ -220,6 +220,50 @@ implemented SDP/MRDP solvers.
 
 ---
 
+# Progress-measurement benchmarks (2026-08-07)
+
+Two repeatable benchmark surfaces now measure progress and relevance. Both
+answer "which model is best, and does the answer hold up?" — the key gap the
+earlier "is this proof?" review identified.
+
+## Impact-standard benchmark (market-impact env)
+
+Config-driven (`--impact-config configs/impact_benchmark.json` on
+`scripts/phase3_impact_eval.py`), grid-scale batteries, {identity,
+piecewise_merit_order}. Canonical leaderboard:
+`eval_output/final/impact_benchmark/impact_benchmark_leaderboard.csv`
+(aggregated from the validated 255-cell Phase 3/4 results):
+
+| Comparison (piecewise merit order, 9 cells, best RTG) | Result |
+|---|:---:|
+| impact-DT vs naive v2 | 6/9 wins, +$96K/cell (p=0.164, not significant) |
+| impact-DT vs PPO | 9/9 wins, **+$115K/cell (p=0.004, significant)** |
+| naive v2 vs PPO | 8/9 wins, +$19K/cell |
+
+Under the realistic market-impact assumption, the impact-trained DT is the
+leading model at grid scale. Oracle_MI is the impact-aware ceiling.
+
+## Regime-shift / expanded-surface benchmark
+
+The modern v2 DT (trained on 2021–2023) evaluated on the **full 2024 expanded
+surface** (5 regions × Jan/Mar/May/Jul/Sep/Nov, 288h episodes, medium
+10MWh/5MW battery): `eval_output/final/regime_shift/summary.json`.
+
+| Policy | Profit/ep | Note |
+|---|:---:|---|
+| PPO (online RL) | **$11,344** | Wins in **every** period; 2–6× the DT |
+| Modern v2 DT (rtg=0) | $2,463 | Flat across periods ($1.2–4.4k) |
+| Modern v2 DT (rtg=10) | $2,421 | RTG calibration does not change the picture |
+| FCAS rule / rule | −$26.2k / −$3.6k | Baselines |
+
+**Critical finding:** the DT's SOTA status is **surface-specific**. It wins on
+the narrow example / dispatch-matched / Oct-standard surfaces, but on the
+broad full-year surface **PPO dominates by ~4.7×**, strongest in FCAS-spike
+months (May $22.5k vs $4.4k). The choice of evaluation surface materially
+changes who "wins" — the current headline surfaces are favorable to the DT.
+This qualifies the "offline DT beats online RL" claim and is now a first-class
+measurement.
+
 # Open Items & README Roadmap Sync
 
 Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
@@ -227,7 +271,7 @@ Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
 | README item | Status |
 |---|:---:|
 | Offline dataset studies (DT sensitivity to policy mixtures / curation) | ⬜ Open — highest priority, no hardware |
-| **Regime-shift / full-scale robustness evaluation** (train 2022–23 → eval 2024; expanded surface + paired significance on the SOTA headline) | ⬜ Open — conductable now (added 2026-08-07 after the "is this proof?" review) |
+| **Regime-shift / full-scale robustness evaluation** (train 2022–23 → eval 2024; expanded surface + paired significance on the SOTA headline) | 🟡 **Measured (2026-08-07)** — expanded sweep ran: DT $2.4k/ep vs PPO $11.3k/ep (~4.7×); RTG-insensitive. Paired significance on the headline still open |
 | Long-context DT experiments (larger `context_len`, RoPE, seasonal/weekly) | ⬜ Open (ctx=2016 now feasible on the 22 GB GPU) |
 | Multi-agent extension (microgrid, multiple households) | ⬜ Open |
 | Artifact provenance (checksums/config logging) | ⬜ Open |
