@@ -296,6 +296,28 @@ Then re-measure on the 5-min expanded surface to confirm the FCAS gap closes.
 A dynamic evaluation dashboard (power/energy/revenue visualisation) is a
 deferred side-goal for making these surfaces more intuitive.
 
+### PPO-only DT experiment (2026-08-07) — energy-heavy, does NOT close FCAS
+
+Retrained the 8×384 FCAS-rich DT on the **PPO-only subset** of the v2 dataset
+(900 eps, 28.3M rows) and evaluated on the 5-min expanded surface:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (8×384) | **$17,606** | $2,140 | **$17,099** |
+| PPO (reference) | $15,017 | $10,204 | $8,766 |
+| Modern v2 (mixed data, 8×768) | $4,596 | $4,774 | $281 |
+
+**Reading:** the PPO-only DT *beats PPO on total profit* ($17.6k vs $15k) and
+triples the mixed-DT profit — but it is **energy-arbitrage-driven** (17k
+energy, only $2.1k FCAS). The "train on PPO to bid FCAS like PPO" hypothesis
+is **not validated**: PPO-only data with this recipe teaches aggressive energy
+trading, and FCAS capture is *lower* than the mixed model. Caveats: 8×384 vs
+8×768 architecture and return_scale/RTG semantics differ, so not
+apples-to-apples. The FCAS under-bidding likely needs a targeted treatment
+(e.g. FCAS-weighted action loss, or upsampling the *mixed* set rather than
+PPO-only, or the return-weighted loss — next on the list) rather than
+PPO-only data alone.
+
 ## RTG-distribution finding (prompting study, 2026-08-07)
 
 The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is
