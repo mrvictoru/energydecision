@@ -2,7 +2,7 @@ import polars as pl
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from typing import Optional, Any
+from typing import Optional, Any, Sequence
 import importlib
 import json
 import os
@@ -606,6 +606,7 @@ def train_decision_transformer(
     progress_snapshot_path: Optional[str] = None,
     return_history: bool = False,
     max_val_batches: int = 1000,
+    action_dim_weights: Optional[Sequence[float]] = None,
 ) -> tuple:
     
     # set best_model_path to be save_path with _best.pt suffix if not provided
@@ -700,9 +701,13 @@ def train_decision_transformer(
             loss_s = (
                 F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
             )
-            loss_a = (
-                F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
-            )
+            if dim_w is not None:
+                se = ((act_pred - actions) ** 2) * m
+                loss_a = (se * dim_w).sum() / valid_count
+            else:
+                loss_a = (
+                    F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+                )
             loss = (
                 action_loss_weight * loss_a
                 + state_loss_weight * loss_s
@@ -765,7 +770,11 @@ def train_decision_transformer(
                 ret_pred, state_pred, act_pred = model(states, rtgs, timesteps, actions, attention_mask=mask_bool)
                 loss_r = F.mse_loss(ret_pred * m, rtgs * m, reduction="sum") / valid_count
                 loss_s = F.mse_loss(state_pred * m, states * m, reduction="sum") / valid_count
-                loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
+                if dim_w is not None:
+                    se = ((act_pred - actions) ** 2) * m
+                    loss_a = (se * dim_w).sum() / valid_count
+                else:
+                    loss_a = F.mse_loss(act_pred * m, actions * m, reduction="sum") / valid_count
                 loss = action_loss_weight * loss_a + state_loss_weight * loss_s + return_loss_weight * loss_r
                 vc = float(valid_count.detach().cpu().item())
                 val_total_loss_sum += float(loss.item()) * vc
@@ -1044,6 +1053,10 @@ def train_decision_transformer(
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+
+    dim_w: Optional[torch.Tensor] = None
+    if action_dim_weights is not None:
+        dim_w = torch.tensor(list(action_dim_weights), dtype=torch.float32, device=device).view(1, 1, -1)
     # log the start time
     start_time = datetime.datetime.now()
     print(f"Training started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")

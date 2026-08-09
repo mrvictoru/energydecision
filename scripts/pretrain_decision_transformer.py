@@ -567,6 +567,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--action-loss-weight", type=float, default=1.0)
     parser.add_argument("--state-loss-weight", type=float, default=0.002)
     parser.add_argument("--return-loss-weight", type=float, default=0.002)
+    parser.add_argument(
+        "--action-dim-weights",
+        type=str,
+        default=None,
+        help="Comma-separated per-action-dimension loss weights (e.g. 1,3,3,3,3,3,3,3,3 "
+             "to weight the 8 FCAS dims 3x over energy). Default: equal weights.",
+    )
     parser.add_argument("--weight-decay", type=float, default=1e-4)
 
     parser.add_argument(
@@ -818,6 +825,11 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "action_loss_weight": args.action_loss_weight,
         "state_loss_weight": args.state_loss_weight,
         "return_loss_weight": args.return_loss_weight,
+        "action_dim_weights": (
+            [float(x) for x in args.action_dim_weights.split(",")]
+            if args.action_dim_weights
+            else None
+        ),
         "weight_decay": args.weight_decay,
         "max_val_batches": args.max_val_batches,
         "num_workers": args.num_workers,
@@ -1280,6 +1292,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         persistent_workers=surface.training_kwargs["persistent_workers"],
         prefetch_factor=surface.training_kwargs["prefetch_factor"],
         progress_snapshot_path=str(progress_snapshot_path),
+        action_dim_weights=surface.training_kwargs.get("action_dim_weights"),
         return_history=True,
     )
 
