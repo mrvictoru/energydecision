@@ -1,0 +1,23 @@
+{
+  "ppo_only_dt_pre_grpo": {
+    "profit": 17606,
+    "fcas": 2140,
+    "energy": 17099
+  },
+  "ppo_only_dt_grpo": {
+    "profit": 17212,
+    "fcas": 1845,
+    "energy": 16860
+  },
+  "modern_v2_mixed": {
+    "profit": 4596,
+    "fcas": 4774,
+    "energy": 281
+  },
+  "ppo_reference": {
+    "profit": 15017,
+    "fcas": 10204,
+    "energy": 8766
+  },
+  "note": "GRPO (online-RL) fine-tune of the PPO-only DT slightly REDUCED performance on the 5-min expanded surface (profit -394, FCAS -295) \u2014 online fine-tuning does not improve this DT, consistent with the modern v2 finding."
+}

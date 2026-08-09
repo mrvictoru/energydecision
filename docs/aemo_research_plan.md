@@ -382,6 +382,28 @@ weighting) cannot exceed what the data contains.
   nor the loss-weighting we tried can exceed the data, and GRPO (online
   fine-tuning) does not improve the modern v2.
 
+### Online-RL (GRPO) fine-tune of the PPO-only DT (2026-08-07) — also flat
+
+Fine-tuned the PPO-only DT (8×384, legacy-style arch, from-scratch) with the
+repo's GRPO post-training (NSW1 Jan 2024, 144h, medium battery, 5 iters) and
+evaluated on the 5-min expanded surface:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (pre-GRPO) | $17,606 | $2,140 | $17,099 |
+| PPO-only DT + GRPO | $17,212 | $1,845 | $16,860 |
+| Modern v2 (mixed) | $4,596 | $4,774 | $281 |
+| PPO reference | $15,017 | $10,204 | $8,766 |
+
+**Online-RL fine-tuning did not help** — GRPO slightly *reduced* profit
+(−$394), FCAS (−$295) and energy (−$239), matching the modern-v2 finding.
+Note the PPO-only DT is the **legacy-style architecture** (8×384, no
+GQA/qk_norm/tie_weights), so this does not test the modern architecture with
+PPO-only data. Combined with the flat RTG sweep and the FCAS-weighted loss
+no-op, the evidence is that neither data-side nor online-fine-tuning levers
+move the DT's broad-surface performance; the remaining lever is better offline
+data, or a full PPO (value-critic) fine-tune distinct from GRPO.
+
 ## RTG-distribution finding (prompting study, 2026-08-07)
 
 The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is
