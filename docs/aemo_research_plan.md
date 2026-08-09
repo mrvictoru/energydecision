@@ -351,6 +351,37 @@ apples-to-apples. The FCAS under-bidding likely needs a targeted treatment
 PPO-only, or the return-weighted loss — next on the list) rather than
 PPO-only data alone.
 
+### FCAS-weighted loss result (2026-08-07) — no effect; data is the ceiling
+
+Retrained the 8×384 DT on the PPO-only v2 subset **with the FCAS-weighted
+action loss** (`--action-dim-weights 1,3,3,3,3,3,3,3,3`):
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (baseline) | $17,606 | $2,140 | $17,099 |
+| PPO-only DT + FCAS-weighted | $17,671 | $2,145 | $17,170 |
+
+**FCAS capture did not move.** Root cause found by measuring the v2 dataset's
+episode composition: **the v2 PPO episodes are energy-dominant, not
+FCAS-dominant** (mean FCAS/energy ≈ 1.0, the *lowest* ratio of any source
+policy; A2C is 49×, DDPG 16×, SAC 3.5×). So there is no higher-FCAS behavior
+in the PPO-only data to amplify — behaviour cloning (with or without loss
+weighting) cannot exceed what the data contains.
+
+**General conclusion:** the DT-vs-PPO gap on the broad surface is a
+**behaviour-cloning ceiling**, not a mixture or objective-tuning artifact:
+- The v2 PPO episodes captured PPO's behaviour on *energy-dominant* training
+  periods/batteries and do not reflect PPO's online-optimised FCAS skill at
+  eval time (PPO adapts online).
+- The mixed-data modern v2 under-earns absolute FCAS ($4.8k vs PPO $10.2k)
+  *and* does essentially no energy arbitrage ($281 vs $8.8k) — it cloned the
+  moderate-FCAS policies.
+- To make the DT bid FCAS like PPO, the lever is **better offline data**
+  (higher-FCAS trajectories, e.g. FCAS-focused reward shaping during
+  generation, or capturing FCAS-spike periods), since neither data re-weighting
+  nor the loss-weighting we tried can exceed the data, and GRPO (online
+  fine-tuning) does not improve the modern v2.
+
 ## RTG-distribution finding (prompting study, 2026-08-07)
 
 The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is
