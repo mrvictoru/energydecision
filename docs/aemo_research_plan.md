@@ -220,9 +220,42 @@ implemented SDP/MRDP solvers.
 
 ---
 
-# Progress-measurement benchmarks (2026-08-07)
+# Re-examining assumptions + progress-measurement (2026-08-07)
 
-Two repeatable benchmark surfaces now measure progress and relevance. Both
+This workstream is a **critical re-examination of what we assumed true**, not
+just a benchmark revision. The earlier narrative ("the offline DT is making
+progress and is the best") turned out to be **multi-dimensional**, not
+unidirectional. What we re-examined and found:
+
+| Assumption we held | Re-examined finding |
+|---|---|
+| "The modern v2 DT is SOTA / beats PPO" | **Surface-specific.** It wins on narrow/mild surfaces (Oct 2024, dispatch-matched, example) but loses broadly to PPO on the full-2024 5-min surface (DT $4.6k vs PPO $15k/ep), driven by **FCAS under-bidding** in spike months (PPO $10.2k FCAS vs DT $4.8k). Under market impact the *impact-trained* DT wins. "Best" is multi-dimensional. |
+| "Eval configs are protocol-consistent" | **False.** Several configs used 30-min steps vs the 5-min training data, nearly halving the DT. Fixed all AEMO eval configs + the env default to 5-min. |
+| "RTG prompting is calibrated" | **Out-of-distribution + constant.** Training RTGs are tiny (p50≈0, p90≈1.5, max ~9–13) and *decaying* over episodes; eval uses fixed rtg 0–50 (a strategy selector far above training) fed as a *constant* each step. |
+| "Train the DT on PPO data → it bids FCAS like PPO" | **Not validated.** A PPO-only DT (8×384) beats PPO on total profit ($17.6k vs $15k) but is energy-driven ($17k energy, $2.1k FCAS) — it does not learn PPO's FCAS bidding. |
+
+Two benchmark surfaces (below) make this measurable going forward.
+
+## Next stage: actually building the best DT in the AEMO sim
+
+Before moving to the unchecked README items, the target is a DT that wins
+*broadly*, not just on favourable narrow surfaces. Candidate levers, in
+priority order:
+
+1. **FCAS-weighted action loss** — weight the FCAS action dims in the
+   behaviour-cloning loss (all 9 dims currently equal) so the DT is pushed to
+   bid FCAS like PPO during spike events. The most direct fix for the measured
+   gap.
+2. **Return/advantage-weighted training** — clone only high-return (high-FCAS)
+   trajectories rather than averaging the whole mixture.
+3. **Dynamic / decaying RTG prompting** — feed a decaying RTG at inference to
+   match the training distribution (from the RTG study).
+4. **Always-on correct protocol** — evaluate every candidate on the 5-min
+   broad surface (regime-shift benchmark) so "best" is measured, not assumed.
+
+## Progress-measurement benchmarks
+
+Two repeatable benchmark surfaces measure progress and relevance. Both
 answer "which model is best, and does the answer hold up?" — the key gap the
 earlier "is this proof?" review identified.
 
