@@ -50,6 +50,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--hf-repo", default=MODERN_V2_HF_REPO, help="HuggingFace repo")
     parser.add_argument("--hf-filename", default=MODERN_V2_HF_FILENAME, help="Checkpoint filename")
     parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=None,
+        help="Local checkpoint path (overrides HF download).",
+    )
+    parser.add_argument(
         "--model-config",
         type=Path,
         default=modern_v2_model_config_path(),
@@ -195,10 +201,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     run_tag = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    # --- 1. Download HF pretrained model ---
-    print(f"[GRPO] Downloading pretrained DT from {args.hf_repo}/{args.hf_filename} ...")
-    checkpoint_path = hf_hub_download(repo_id=args.hf_repo, filename=args.hf_filename)
-    print(f"[GRPO] Checkpoint: {checkpoint_path}")
+    # --- 1. Load pretrained model ---
+    if args.checkpoint is not None:
+        checkpoint_path = str(args.checkpoint.resolve())
+        print(f"[GRPO] Using local checkpoint: {checkpoint_path}")
+    else:
+        print(f"[GRPO] Downloading pretrained DT from {args.hf_repo}/{args.hf_filename} ...")
+        checkpoint_path = hf_hub_download(repo_id=args.hf_repo, filename=args.hf_filename)
+        print(f"[GRPO] Checkpoint: {checkpoint_path}")
     print(f"[GRPO] Model config: {args.model_config.resolve()}")
 
     # Model kwargs matching the full_fcas checkpoint
