@@ -238,20 +238,37 @@ Two benchmark surfaces (below) make this measurable going forward.
 
 ## Next stage: actually building the best DT in the AEMO sim
 
-Before moving to the unchecked README items, the target is a DT that wins
-*broadly*, not just on favourable narrow surfaces. Candidate levers, in
-priority order:
+> **Profit-comparability correction (2026-08-10):** revenue-decomposition
+> tables (profit / FCAS / energy) are not directly "who wins" — a model with
+> lower FCAS can still win on total profit. On the 5-min expanded surface the
+> **PPO-only DTs beat SB3 PPO on total profit** ($17.6–17.8k vs $15.0k),
+> compensating for lower FCAS ($2.1k vs $10.2k) with much higher energy
+> arbitrage ($17k vs $8.8k). So "the DT under-bids FCAS" describes one revenue
+> dimension, not overall underperformance — total profit is the headline.
 
-1. **FCAS-weighted action loss** — weight the FCAS action dims in the
-   behaviour-cloning loss (all 9 dims currently equal) so the DT is pushed to
-   bid FCAS like PPO during spike events. The most direct fix for the measured
-   gap.
-2. **Return/advantage-weighted training** — clone only high-return (high-FCAS)
-   trajectories rather than averaging the whole mixture.
-3. **Dynamic / decaying RTG prompting** — feed a decaying RTG at inference to
-   match the training distribution (from the RTG study).
-4. **Always-on correct protocol** — evaluate every candidate on the 5-min
-   broad surface (regime-shift benchmark) so "best" is measured, not assumed.
+The session's experiments (RTG sweep, FCAS-weighted loss, PPO-only data,
+GRPO fine-tune, architecture change) all landed on the same conclusion: the
+DT's behaviour is **bounded by its offline data**, and none of the
+data-side/objective/online levers tried moved the broad-surface profile. Three
+options remain, documented as a decision point + handoff:
+
+- **Option A — FCAS-focused offline data generation.** Generate higher-FCAS
+  trajectories (SB3 reward shaping weighted toward FCAS, or generate during
+  known FCAS-spike periods), append to the v2 corpus, retrain the modern v2.
+  The only lever that can actually raise the data's FCAS ceiling (behaviour
+  cloning cannot exceed the data).
+- **Option B — full PPO (value-critic) online fine-tune.** Distinct from GRPO
+  (group-relative, no critic); use the DT's return-prediction head as the
+  critic with the clipped PPO objective. Uncertain (GRPO was flat) but the
+  only online lever not yet tried.
+- **Option C — accept PPO as the broad-surface leader.** Stop chasing the
+  DT-vs-PPO gap with the current data; keep the re-examination narrative and
+  treat PPO as the broad-surface baseline while focusing the DT on surfaces
+  where it wins (impact, dispatch-matched, mild months).
+
+Cross-cutting: **always-on correct protocol** — evaluate every candidate on
+the 5-min broad surface (regime-shift benchmark) so "best" is measured, not
+assumed.
 
 ## Progress-measurement benchmarks
 
@@ -485,6 +502,11 @@ forecast DT, market-impact, Oracle, statistical confidence).
 ---
 
 # Session diary (condensed)
+
+> **Session 2026-08-07→08-10 (DT re-examination + progress benchmarks):**
+> full diary + handoff in
+> [`session_2026-08_aemo_dt_reexamination.md`](session_2026-08_aemo_dt_reexamination.md)
+> (branch `feature/eval-progress-benchmarks`, PR #35).
 
 Detailed per-day records live in the git history (commit messages on
 `feature/market-impact-modeling`, `main`, and the research branches). Key
