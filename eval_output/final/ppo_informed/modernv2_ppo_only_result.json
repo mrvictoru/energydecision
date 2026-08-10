@@ -1,0 +1,23 @@
+{
+  "ppo_only_legacy_8x384": {
+    "profit": 17606,
+    "fcas": 2140,
+    "energy": 17099
+  },
+  "ppo_only_modern_8x768": {
+    "profit": 17775,
+    "fcas": 2133,
+    "energy": 17375
+  },
+  "mixed_modern_8x768": {
+    "profit": 4596,
+    "fcas": 4774,
+    "energy": 281
+  },
+  "ppo_reference": {
+    "profit": 15017,
+    "fcas": 10204,
+    "energy": 8766
+  },
+  "note": "Modern 8x768 vs legacy 8x384 on the SAME PPO-only data: nearly identical energy-heavy profile (FCAS ~2.1k, energy ~17k). Architecture does NOT determine the outcome \u2014 the data does (PPO's v2 episodes are energy-dominant)."
+}

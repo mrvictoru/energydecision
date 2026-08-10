@@ -404,6 +404,27 @@ no-op, the evidence is that neither data-side nor online-fine-tuning levers
 move the DT's broad-surface performance; the remaining lever is better offline
 data, or a full PPO (value-critic) fine-tune distinct from GRPO.
 
+### Modern v2 (8×768) on PPO-only data (2026-08-10) — architecture does not matter
+
+Retrained the **modern v2 architecture** (8×768 GQA, ctx=210) from scratch on
+the same 900 PPO-only v2 episodes, evaluated on the 5-min expanded surface:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (legacy 8×384) | $17,606 | $2,140 | $17,099 |
+| **Modern v2 on PPO-only (8×768)** | $17,775 | $2,133 | $17,375 |
+| Modern v2 (mixed data) | $4,596 | $4,774 | $281 |
+| PPO reference | $15,017 | $10,204 | $8,766 |
+
+**The architecture makes essentially no difference on PPO-only data.** Both
+the legacy 8×384 and modern 8×768 clone the same energy-heavy profile
+(FCAS ≈ $2.1k, energy ≈ $17k). **The data is the determinant, not the
+architecture**: PPO's v2 episodes are energy-dominant, so no architecture can
+produce FCAS bidding that the data does not contain. The modern arch only pays
+off on the *mixed* data (where it extracts $4.8k FCAS vs the legacy's lower
+capture). This closes the architecture-isolation question: to make the DT bid
+FCAS like PPO, the offline data must contain higher-FCAS trajectories.
+
 ## RTG-distribution finding (prompting study, 2026-08-07)
 
 The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is
