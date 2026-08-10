@@ -39,7 +39,7 @@ This table tells you which config to use and what it tests:
 | **Step duration** | 0.08333h (5 min) | Matches pretrained data resolution |
 | **Reference policy** | `dispatch_dalrymple_north` | Real operator baseline |
 | **PPO model** | `ppo_aemo_fcas_model.zip` | FCAS-capable PPO |
-| **DT RTG** | `0.5` (default, calibrate per model) | See RTG section below |
+| **DT RTG** | Calibrate per model **and per surface** | RTG is a strategy selector; see RTG section below |
 | **Degradation** | `real_world` (LFP, 30°C) | Standard chemistry |
 
 ---
@@ -245,10 +245,19 @@ done
 
 Use the best RTG for the Standard and Comprehensive tiers.
 
-**Known optimal values** (starting point):
+**Known optimal values** (starting points — calibrate per surface):
 - Legacy HF model: `rtg_value=0.0`
 - Phase 1 GRPO on legacy: `rtg_value=0.5`
-- Modern model: calibrate (start with 0.5)
+- Modern v2: **surface-dependent** — peaks at `10` on the Oct-standard surface,
+  `0` on dispatch-matched, and is **flat** (0–50) on the broad expanded 2024
+  surface. Always sweep on the exact surface you will report.
+
+> **RTG-distribution note (2026-08-07):** training returns-to-go are tiny
+> (p50 ≈ 0, p90 ≈ 1.5, max ~9–13) and *decay over an episode*, but the
+> evaluator feeds a *constant* rtg (0–50) at every step — far outside the
+> training distribution. High RTG acts as an aggressive strategy selector, not
+> a faithful return estimate. A dynamic/decaying RTG prompt is an open
+> experiment.
 
 ---
 
@@ -299,6 +308,7 @@ evaluate on at least two surfaces:
 | Surface | Battery | Regions | What it tests |
 |---------|---------|---------|---------------|
 | **Standard** (recommended) | 1C fixed (10/10) | 5 regions | Cross-region generalisation |
+| **Expanded / regime-shift** | 10/5 medium | 5 regions × 6 periods of 2024 | Broad-year stability (see below) |
 | **Dispatch-matched** (supplement) | Station-specific | SA1 only | Head-to-head vs real operators |
 
 From actual results:
@@ -307,8 +317,18 @@ From actual results:
 - v2 pretrained on Standard: **$3,098/ep** (better than GRPO)
 - v2 pretrained on Dispatch-matched: **$7,392/ep** (close to GRPO)
 
+**Regime-shift / broad-surface finding (2026-08-07):** on the **expanded 2024
+surface** (5 regions × 6 periods, 5-min, `expanded_rtg10.json`) the modern v2
+DT earns **$4.6k/ep vs PPO's $15.0k** — the DT's "SOTA" is **surface-specific**
+(it wins Oct-standard, dispatch-matched, and mild months like Jan, but loses
+broadly to PPO in FCAS-spike months due to FCAS under-bidding). PPO's FCAS
+capture is ~2× the DT's on the broad year. Report the Standard tier as the
+primary benchmark, but also run the expanded surface before claiming a model
+is "best."
+
 **Conclusion**: Report the Standard tier as the primary benchmark. Use
-Dispatch-matched as a secondary comparison.
+Dispatch-matched as a secondary comparison, and the expanded surface as the
+broad-stability check.
 
 ### RTG calibration is half the improvement
 
@@ -322,7 +342,10 @@ Always calibrate RTG before reporting final results.
 
 The modern v2 pretrained model ($7,392/ep on dispatch-matched) nearly matches
 the legacy Phase 1 GRPO ($8,242/ep). The modern architecture (GQA, RoPE) may
-capture much of the benefit that GRPO provides for legacy models.
+capture much of the benefit that GRPO provides for legacy models. **Caveat
+(2026-08-07):** this strength is surface-specific — on the broad expanded 2024
+surface PPO dominates (see "Eval surface matters" above), because the DT's
+offline data under-represents FCAS-spike behaviour.
 
 ---
 
