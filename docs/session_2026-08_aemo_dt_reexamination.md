@@ -96,6 +96,13 @@ moving to unchecked README items.
   the PPO-only subset is `data/aemo_dt_fcas_ppo_only/` (28M rows); the SB3
   models are `models/aemo_sb3/*_fcas_model.zip`; data generation entrypoint is
   `scripts/generate_fcas_dataset.py` (uses 5-min `step_duration=5/60`).
+- **Option A status (2026-08-10):** (1) modern v2 training on the
+  FCAS-heavy-policy subset (A2C/TD3/SAC/DDPG, 1200 eps) is running — this is
+  the cheap de-risk test of "more high-FCAS trajectories → higher DT FCAS".
+  (2) `scripts/find_fcas_spike_periods.py` built to rank generation targets:
+  training-era **SA1 Nov 2022** ($15,500 caps, no eval leakage) and 2024
+  QLD1 May / SA1 Feb / NSW1 Aug. If the subset test validates the direction,
+  generate episodes on these windows and append to the corpus.
 - If pursuing Option B: GRPO infra is `src/grpo_posttraining.py` +
   `scripts/run_grpo_posttraining.py`; the DT's return head is the natural
   critic; `--checkpoint` accepts a local model.
