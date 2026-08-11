@@ -101,8 +101,14 @@ moving to unchecked README items.
   the cheap de-risk test of "more high-FCAS trajectories → higher DT FCAS".
   (2) `scripts/find_fcas_spike_periods.py` built to rank generation targets:
   training-era **SA1 Nov 2022** ($15,500 caps, no eval leakage) and 2024
-  QLD1 May / SA1 Feb / NSW1 Aug. If the subset test validates the direction,
-  generate episodes on these windows and append to the corpus.
+  QLD1 May / SA1 Feb / NSW1 Aug.
+- **Generation sub-step CANCELLED (2026-08-10, per research direction):** do
+  NOT generate more synthetic FCAS episodes for training. The previous PR
+  (#34, fcas-diffusion-v2) established the synthetic FCAS generator does not
+  accurately reflect real FCAS data (tail/magnitude structure not
+  transferable), so synthetic-FCAS-augmented training would be garbage-in.
+  The FCAS-heavy-policy subset test above uses **real existing episodes**
+  (A2C/TD3/SAC/DDPG already in the v2 corpus), which is valid.
 - If pursuing Option B: GRPO infra is `src/grpo_posttraining.py` +
   `scripts/run_grpo_posttraining.py`; the DT's return head is the natural
   critic; `--checkpoint` accepts a local model.
