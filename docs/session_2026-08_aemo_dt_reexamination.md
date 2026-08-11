@@ -100,6 +100,11 @@ moving to unchecked README items.
 - **Option B — full PPO (value-critic) online fine-tune.** Use the DT's
   return-prediction head as the critic with the clipped PPO objective, distinct
   from GRPO (group-relative, no critic). Uncertain (GRPO was flat) but untried.
+  **Status (2026-08-11): implemented** (`--use-critic` in the GRPO trainer —
+  advantage = discounted returns-to-go minus the DT's return-head value) and
+  ran a full-2024 fine-tune of the modern v2 (NSW1, 144h, 5 iters). On the
+  fine-tune surface the reward regressed (−14.5 → −17.5, like GRPO). **2025
+  out-of-distribution eval pending** (fetching 2025 data).
 - **Option C — accept PPO as the broad-surface leader.** Stop chasing the gap
   with current data; focus the DT on surfaces where it wins (impact,
   dispatch-matched, mild months).
