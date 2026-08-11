@@ -442,6 +442,30 @@ off on the *mixed* data (where it extracts $4.8k FCAS vs the legacy's lower
 capture). This closes the architecture-isolation question: to make the DT bid
 FCAS like PPO, the offline data must contain higher-FCAS trajectories.
 
+### FCAS-heavy-policy subset (2026-08-11) — partial validation, limited headroom
+
+Retrained the modern v2 on the **real** FCAS-heavy policies already in the v2
+corpus (A2C/TD3/SAC/DDPG, 1,200 eps — the policies with 3–49× the FCAS/energy
+ratio of PPO):
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| Modern v2 on FCAS-heavy subset | $13,387 | **$5,860** | $12,578 |
+| Modern v2 (mixed data) | $4,596 | $4,774 | $281 |
+| Modern v2 on PPO-only | $17,775 | $2,133 | $17,375 |
+| PPO reference | $15,017 | $10,204 | $8,766 |
+
+**Reading:** the real-data composition lever works but has **limited headroom**.
+Training on the FCAS-heavy policies raised the DT's FCAS capture **+23%**
+($4.8k → $5.9k) over the mixed model — validating "more high-FCAS real
+trajectories → higher DT FCAS" — but the DT still under-bids FCAS **1.7× vs
+PPO** ($5.9k vs $10.2k). The FCAS-heavy subset also produced substantial energy
+arbitrage ($12.6k), since those policies' episodes are not purely FCAS.
+**Synthetic-FCAS data generation is cancelled** (PR #34 showed the synthetic
+generator does not accurately reflect real FCAS), so the remaining gap is a
+fundamental offline-data ceiling: the real corpus's FCAS bidding is below PPO's
+online-optimised skill.
+
 ## RTG-distribution finding (prompting study, 2026-08-07)
 
 The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is

@@ -1,0 +1,23 @@
+{
+  "modernv2_fcasheavy_subset": {
+    "profit": 13387,
+    "fcas": 5860,
+    "energy": 12578
+  },
+  "modernv2_mixed": {
+    "profit": 4596,
+    "fcas": 4774,
+    "energy": 281
+  },
+  "modernv2_ppo_only": {
+    "profit": 17775,
+    "fcas": 2133,
+    "energy": 17375
+  },
+  "ppo_reference": {
+    "profit": 15017,
+    "fcas": 10204,
+    "energy": 8766
+  },
+  "note": "FCAS-heavy-policy subset (real A2C/TD3/SAC/DDPG eps) raised the modern v2 DT's FCAS capture +23% (4.8k -> 5.9k) vs the mixed model, but still 1.7x below PPO (10.2k). Data composition has limited headroom; the gap is a fundamental offline-data ceiling. Synthetic-FCAS generation cancelled per PR #34."
+}
