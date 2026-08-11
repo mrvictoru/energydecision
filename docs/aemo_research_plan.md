@@ -274,7 +274,11 @@ assumed.
 
 Two repeatable benchmark surfaces measure progress and relevance. Both
 answer "which model is best, and does the answer hold up?" — the key gap the
-earlier "is this proof?" review identified.
+earlier "is this proof?" review identified. **Runtime note:** the evaluator now
+batches the DT candidate rollout (one transformer forward per step across
+episodes) and defaults to thread-parallel (`parallelize_candidate_dt`), so a
+full expanded eval (135 DT episodes, 5-min) runs in ~30–40 min on the 22 GB
+GPU instead of many hours.
 
 ## Impact-standard benchmark (market-impact env)
 

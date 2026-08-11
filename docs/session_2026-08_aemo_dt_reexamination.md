@@ -45,6 +45,20 @@ moving to unchecked README items.
 9. **Eval optimization** — batched the DT candidate rollout (one transformer
    forward per step across episodes, previously batch-1) + `parallelize_candidate_dt`
    now defaults True (8 workers). The 22 GB GPU now runs near-saturated.
+10. **FCAS-heavy-policy subset (2026-08-11)** — modern v2 retrained on the real
+    A2C/TD3/SAC/DDPG episodes (1,200 eps; the policies with 3–49× the
+    FCAS/energy ratio of PPO). Result on the 5-min expanded surface: **FCAS
+    capture +23%** ($4,774 → $5,860), profit $13,387, energy $12,578 — but
+    still **1.7× below PPO's FCAS** ($10,204). The real-data composition lever
+    works but has limited headroom. (Training hit a transient CUDA teardown
+    error after the successful save — the checkpoint is valid.)
+11. **FCAS-spike-period detector** — `scripts/find_fcas_spike_periods.py`
+    ranks 12-day windows by FCAS intensity: training-era **SA1 Nov 2022**
+    ($15,500 caps, no eval leakage), 2024 QLD1 May ($15,718) / SA1 Feb
+    ($16,600 cap) / NSW1 Aug.
+12. **Synthetic-FCAS generation cancelled** — per PR #34 the synthetic FCAS
+    generator does not accurately reflect real FCAS, so synthetic-augmented
+    training would be garbage-in.
 
 ## Key findings (durable)
 
@@ -61,6 +75,10 @@ moving to unchecked README items.
   or architecture (no change) moved the broad-surface profile. The DT is
   bounded by its offline data; PPO's v2 episodes do not contain PPO's
   online-optimised FCAS skill (PPO adapts online during eval).
+- **Real-data composition has limited headroom.** The FCAS-heavy-policy subset
+  raised the DT's FCAS capture +23% ($4.8k → $5.9k) but still trails PPO 1.7×.
+  Combined with the above, the DT-vs-PPO FCAS gap is a **fundamental
+  offline-data ceiling** (and synthetic generation is off the table).
 - **Eval protocol matters enormously.** 30-min steps nearly halved the DT. All
   AEMO DT evaluation must use 5-min steps.
 
@@ -96,12 +114,11 @@ moving to unchecked README items.
   the PPO-only subset is `data/aemo_dt_fcas_ppo_only/` (28M rows); the SB3
   models are `models/aemo_sb3/*_fcas_model.zip`; data generation entrypoint is
   `scripts/generate_fcas_dataset.py` (uses 5-min `step_duration=5/60`).
-- **Option A status (2026-08-10):** (1) modern v2 training on the
-  FCAS-heavy-policy subset (A2C/TD3/SAC/DDPG, 1200 eps) is running — this is
-  the cheap de-risk test of "more high-FCAS trajectories → higher DT FCAS".
-  (2) `scripts/find_fcas_spike_periods.py` built to rank generation targets:
-  training-era **SA1 Nov 2022** ($15,500 caps, no eval leakage) and 2024
-  QLD1 May / SA1 Feb / NSW1 Aug.
+- **Option A status (2026-08-11):** the FCAS-heavy-policy subset test
+  COMPLETED: modern v2 on real A2C/TD3/SAC/DDPG eps → FCAS capture +23%
+  ($4.8k → $5.9k), profit $13.4k, but still 1.7× below PPO. **Limited
+  headroom** — the real-data composition lever works but does not close the
+  gap, and synthetic generation is cancelled (below).
 - **Generation sub-step CANCELLED (2026-08-10, per research direction):** do
   NOT generate more synthetic FCAS episodes for training. The previous PR
   (#34, fcas-diffusion-v2) established the synthetic FCAS generator does not
