@@ -1,0 +1,17 @@
+{
+  "modern_v2_mixed": {
+    "avg_energy_revenue_per_episode": 281.1453096808826,
+    "avg_fcas_revenue_per_episode": 4773.835271661264,
+    "avg_profit_per_episode": 4596.177228185891
+  },
+  "ppo_only_dt_8x384": {
+    "avg_energy_revenue_per_episode": 17098.705652801083,
+    "avg_fcas_revenue_per_episode": 2140.322105000744,
+    "avg_profit_per_episode": 17606.016243975886
+  },
+  "ppo_reference": {
+    "avg_energy_revenue_per_episode": 8766.345940801308,
+    "avg_fcas_revenue_per_episode": 10204.331129226584,
+    "avg_profit_per_episode": 15017.222424397596
+  }
+}

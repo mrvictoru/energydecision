@@ -32,7 +32,7 @@ from aemo_notebook_utils import (
     should_run_dispatch_for_scenario,
 )
 from decision import AEMOAgent
-from decision_transformer import DecisionTransformer
+from decision_transformer import DecisionTransformer, LegacyDecisionTransformer
 from dispatch_utils import run_dispatch_replay
 from helper import (
     bootstrap_confidence_intervals,
@@ -474,10 +474,49 @@ def run_dt_episodes(
     rtg_value: float,
     base_seed: int,
     forecast_npz_path: str | None = None,
+    dt_gamma: float = 0.99,
 ) -> list[pl.DataFrame]:
-    episodes: list[pl.DataFrame] = []
-    for episode_idx in range(num_episodes):
-        env = create_aemo_env(
+    """Roll out the DT candidate across ``num_episodes`` episodes in lockstep,
+    batching the transformer forward pass per step over all active episodes.
+
+    This fills the GPU much better than the previous batch-1-per-step loop
+    (which left the 22 GB GPU at ~1.7 GB util), speeding up the candidate-DT
+    leg of an evaluation by several times.
+    """
+    from decision import _build_dt_inference_context, stable_rtg_update
+
+    # Forecast models keep the serial agent path (forecast window construction
+    # is per-episode stateful).
+    is_forecast = hasattr(model, "forecast_len") and int(getattr(model, "forecast_len", 0) or 0) > 0
+    if is_forecast:
+        episodes: list[pl.DataFrame] = []
+        for episode_idx in range(num_episodes):
+            env = create_aemo_env(
+                processed_data=processed_data,
+                battery_variant=battery_variant,
+                max_step=max_step,
+                step_duration=step_duration,
+                action_mode=action_mode,
+                degradation_mode=degradation_mode,
+                degradation_chemistry=degradation_chemistry,
+                degradation_temperature=degradation_temperature,
+                random_episode_start=random_episode_start,
+            )
+            agent = AEMOAgent(
+                env,
+                algorithm="dt",
+                model=model,
+                rtg_value=rtg_value,
+                dt_gamma=dt_gamma,
+                reset_seed=base_seed + episode_idx if random_episode_start else None,
+                forecast_npz_path=forecast_npz_path,
+            )
+            episode_df, _ = agent.run_episode()
+            episodes.append(episode_df)
+        return episodes
+
+    envs = [
+        create_aemo_env(
             processed_data=processed_data,
             battery_variant=battery_variant,
             max_step=max_step,
@@ -488,17 +527,89 @@ def run_dt_episodes(
             degradation_temperature=degradation_temperature,
             random_episode_start=random_episode_start,
         )
-        agent = AEMOAgent(
-            env,
-            algorithm="dt",
-            model=model,
-            rtg_value=rtg_value,
-            reset_seed=base_seed + episode_idx if random_episode_start else None,
-            forecast_npz_path=forecast_npz_path,
+        for _ in range(num_episodes)
+    ]
+
+    buffers: list[dict[str, Any]] = []
+    for i, env in enumerate(envs):
+        seed = base_seed + i if random_episode_start else None
+        obs, _ = env.reset(seed=seed, options={"random_episode_start": random_episode_start})
+        buffers.append(
+            {
+                "states": [np.asarray(obs, dtype=np.float32).copy()],
+                "actions": [np.zeros(model.act_dim, dtype=np.float32)],
+                "rtgs": [float(rtg_value)],
+                "timesteps": [int(env.current_step)],
+                "done": False,
+                "logs": [],
+            }
         )
-        episode_df, _ = agent.run_episode()
-        episodes.append(episode_df)
-    return episodes
+
+    model.eval()
+    device = next(model.parameters()).device
+    context_len = model.context_len
+    step = 0
+    while step < max_step and any(not b["done"] for b in buffers):
+        active = [i for i, b in enumerate(buffers) if not b["done"]]
+        ctx = [
+            _build_dt_inference_context(
+                model,
+                buffers[i]["states"],
+                buffers[i]["actions"],
+                buffers[i]["rtgs"],
+                buffers[i]["timesteps"],
+            )
+            for i in active
+        ]
+        states = torch.stack([torch.tensor(c[0], dtype=torch.float32, device=device) for c in ctx], dim=0)
+        actions = torch.stack([torch.tensor(c[1], dtype=torch.float32, device=device) for c in ctx], dim=0)
+        rtgs = torch.stack([torch.tensor(c[2], dtype=torch.float32, device=device).unsqueeze(-1) for c in ctx], dim=0)
+        timesteps = torch.stack([torch.tensor(c[3], dtype=torch.long, device=device) for c in ctx], dim=0)
+        attn = torch.stack([torch.tensor(c[4], dtype=torch.bool, device=device) for c in ctx], dim=0)
+
+        with torch.no_grad():
+            if isinstance(model, LegacyDecisionTransformer):
+                _, _, act_pred = model.forward(states, actions, rtgs, timesteps, attention_mask=attn)
+            else:
+                _, _, act_pred = model.forward(states, rtgs, timesteps, actions, attention_mask=attn)
+            act = act_pred[:, -1]
+        act = torch.nan_to_num(act, nan=0.0, posinf=0.0, neginf=0.0).cpu().numpy()
+        if act.ndim == 3 and act.shape[1] == 1:
+            act = act[:, 0, :]
+
+        for j, i in enumerate(active):
+            b = buffers[i]
+            env = envs[i]
+            action_vec = np.asarray(act[j], dtype=np.float32)
+            obs, reward, terminated, truncated, info = env.step(action_vec.tolist())
+            b["logs"].append(
+                {
+                    "step": step,
+                    "norm_observation": b["states"][-1].tolist(),
+                    "action": action_vec.tolist(),
+                    "reward": float(reward),
+                    "info": info,
+                }
+            )
+            b["actions"][-1] = action_vec
+            next_rtg = stable_rtg_update(
+                b["rtgs"][-1], float(reward),
+                dt_gamma=dt_gamma, initial_rtg=float(rtg_value),
+            )
+            b["states"].append(np.asarray(obs, dtype=np.float32).copy())
+            b["actions"].append(np.zeros(model.act_dim, dtype=np.float32))
+            b["rtgs"].append(next_rtg)
+            b["timesteps"].append(int(env.current_step))
+            if len(b["states"]) > context_len:
+                b["states"] = b["states"][-context_len:]
+                b["actions"] = b["actions"][-context_len:]
+                b["rtgs"] = b["rtgs"][-context_len:]
+                b["timesteps"] = b["timesteps"][-context_len:]
+            if terminated or truncated:
+                b["done"] = True
+        step += 1
+
+    return [pl.DataFrame(b["logs"]) for b in buffers]
 
 
 def run_policy_episodes(
@@ -969,8 +1080,8 @@ def evaluate_aemo_heldout(
         reference_cache_dir.mkdir(parents=True, exist_ok=True)
     reference_cache_hits: list[dict[str, Any]] = []
     reference_cache_misses: list[dict[str, Any]] = []
-    parallel_workers = max(1, int(heldout_cfg.get("parallel_workers", 1)))
-    parallelize_candidate_dt = bool(heldout_cfg.get("parallelize_candidate_dt", False))
+    parallel_workers = max(1, int(heldout_cfg.get("parallel_workers", 8)))
+    parallelize_candidate_dt = bool(heldout_cfg.get("parallelize_candidate_dt", True))
     battery_variants_seen: dict[str, dict[str, Any]] = {}
 
     work_items: list[dict[str, Any]] = []

@@ -495,6 +495,7 @@ def build_launch_plan(
         "recommended_evaluation_configs": {
             "pilot_screening": str((repo_root() / "configs" / "aemo_autoresearch_evaluator.mini.json").resolve()),
             "full_heldout": str((repo_root() / "configs" / "aemo_autoresearch_evaluator.example.json").resolve()),
+            "broad_surface": str((repo_root() / "configs" / "aemo_autoresearch_evaluator.expanded_rtg10.json").resolve()),
         },
         "monitor_attach_command": [
             sys.executable,

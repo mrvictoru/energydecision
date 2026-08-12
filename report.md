@@ -4,7 +4,7 @@
 
 Optimal operation of grid-scale battery energy storage (BESS) in wholesale electricity markets requires simultaneous energy arbitrage and co-optimized bidding across multiple ancillary-service markets, under non-linear degradation and strict physical constraints. This report asks whether a **decision transformer (DT)** trained purely offline from logged trajectories can match or exceed online reinforcement learning (RL) and real-world dispatch for this problem. We answer this on a unified, degradation-aware benchmark built around Australia's NEM market (AEMO), supporting both a household solar–battery environment and a utility-scale BESS trading environment with full 9-dimensional FCAS bidding.
 
-Our central result is that a modernized offline DT — 8-block transformer with grouped-query attention, QK-Norm, and weight-tying, trained on a 2,401-episode FCAS-rich corpus — is the **state of the art** on the fairest same-asset comparison: **$10,138/ep on the dispatch-matched surface (RTG=0.0) and $4,630/ep on the broad cross-region standard surface**, beating online PPO ($7,757/ep), the best GRPO-tuned variant ($6,445/ep), and real dispatch replay ($3,663/ep). Two findings stand out. First, **GRPO online fine-tuning does not improve the modern model** — the architecture already internalizes what RL once added, and the legacy GRPO champion is shown to be a narrow overfit ($8,242 dispatch-matched collapses to $1,533 on the standard surface). Second, the DT's return-to-go prompt yields **zero-shot, inference-time control** of the profit/degradation trade-off, with the optimal prompt being architecture-dependent (modern: 0.0; legacy: 0.5). These results position offline sequence modeling with strong architecture and curated data as a credible, deployable prior for utility-scale battery control, and motivate the current research direction of injecting explicit forecast/planning awareness into the model.
+Our central result is that a modernized offline DT — 8-block transformer with grouped-query attention, QK-Norm, and weight-tying, trained on a 2,401-episode FCAS-rich corpus — is the **state of the art on the narrow/favourable surfaces**: **$10,138/ep on the dispatch-matched surface (RTG=0.0) and $4,630/ep on the broad cross-region standard surface**, beating online PPO ($7,757/ep), the best GRPO-tuned variant ($6,445/ep), and real dispatch replay ($3,663/ep). **However, this leadership is surface-specific** (§8.2.1a): on the full 2024 expanded surface and an out-of-distribution 2025 surface, **PPO is the clear leader** ($15.0k and $14.3k vs the DT's $4.6k and −$0.7k), because the DT under-bids FCAS in spike months. Two findings stand out. First, **GRPO online fine-tuning does not improve the modern model** — the architecture already internalizes what RL once added, and the legacy GRPO champion is shown to be a narrow overfit ($8,242 dispatch-matched collapses to $1,533 on the standard surface). Second, the DT's return-to-go prompt yields **zero-shot, inference-time control** of the profit/degradation trade-off, with the optimal prompt being architecture-dependent (modern: 0.0; legacy: 0.5). A systematic attempt to close the DT-vs-PPO gap (RTG sweeps, data re-composition, loss weighting, GRPO and a full-PPO fine-tune, architecture change) found it is an **offline-data ceiling**. These results position offline sequence modeling with strong architecture and curated data as a credible, deployable prior for utility-scale battery control on specific surfaces (market-impact, dispatch-matched, mild markets), while online RL (PPO) remains the broad-year and out-of-distribution leader.
 
 ## 1. Introduction
 
@@ -178,7 +178,7 @@ For the AEMO/NEM environment, the repository includes `src/aemo_data.py`, which 
 - optional FCAS prices (service columns mapped from `DISPATCHPRICE`),
 - optional generation mix by fuel type (requires generator static information).
 
-`AEMODataPreprocessor` (`src/AEMOBatteryEnv.py`) aligns these series to the environment step duration (default 30 minutes), interpolates missing numeric values, adds cyclical time features, and writes normalized columns.
+`AEMODataPreprocessor` (`src/AEMOBatteryEnv.py`) aligns these series to the environment step duration (default 5 minutes, matching the DT training/evaluation protocol), interpolates missing numeric values, adds cyclical time features, and writes normalized columns.
 
 For historical replay, the repository also queries unit metadata and `DISPATCHLOAD` records so that a notebook can discover which battery stations were active in a date window, resolve historical DUID changes for a named station, and reconstruct observed dispatch actions as episode logs.
 
@@ -295,7 +295,7 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 
 **Key observations:**
 
-1. **Modern v2 pretrained leads all compared methods.** The architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that GRPO once provided the legacy model. It beats every variant on the broad standard surface ($4,630/ep) and achieves the highest dispatch-matched profit ($10,138/ep at RTG=0.0).
+1. **Modern v2 pretrained leads all compared methods on these surfaces.** The architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that GRPO once provided the legacy model. It beats every variant on the broad standard surface ($4,630/ep) and achieves the highest dispatch-matched profit ($10,138/ep at RTG=0.0). **Surface caveat:** on the broad 2024 expanded surface and out-of-distribution 2025, PPO is the leader (§8.2.1a).
 
 2. **Legacy Phase 1 GRPO was overfit.** Its dispatch-matched peak ($8,242/ep) collapses to $1,533/ep on the standard surface — the worst cross-region generalization of any DT model. The modern v2 pretrained model ($4,630 standard) generalizes properly. Overfitting was to dispatch-matched SA1 Q4 2024, not to the broader AEMO market.
 
@@ -316,6 +316,53 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 ![Net grid energy balance — standard surface](eval_output/final/baseline_v2_standard/plots/grid_energy.svg)
 
 ---
+
+#### 8.2.1a Surface-Dependence and Out-of-Distribution Robustness (Aug 2026)
+
+The dispatch-matched / standard headline surfaces above are narrow and
+favourable to the DT. Evaluated on the **broad expanded 2024 surface**
+(5 regions × 6 periods, 5-min, `expanded_rtg10.json`) and a **genuinely
+out-of-distribution 2025 surface** (NSW1/SA1/QLD1 × Jan/Feb), the picture is
+different:
+
+| Surface | Modern v2 DT | PPO | Verdict |
+|---|:---:|:---:|---|
+| Standard (Oct 2024, 5 regions) | $4,630 | $2,353 | DT wins |
+| Dispatch-matched (SA1 Q4) | $10,138 | $7,757 | DT wins |
+| Market-impact (grid scale) | impact-DT wins 9/9 vs PPO (+$115K/cell, p=0.004) | — | DT wins |
+| **Expanded 2024 (5 regions × 6 periods)** | **$4,596** | **$15,017** | **PPO wins (~3.3×)** |
+| **2025 (out-of-distribution, Jan/Feb)** | **−$694** | **$14,320** | **PPO wins** |
+
+The broad-year and 2025 results show the DT's "SOTA" is **surface-specific**:
+it wins the narrow/mild surfaces (Oct-standard, dispatch-matched, market
+impact, mild months like Jan) but loses broadly to PPO on the full year and on
+out-of-distribution periods. The driver is **FCAS under-bidding**: PPO earns
+$10.2k FCAS/ep vs the DT's $4.8k on the broad 2024 surface (and $10.6k vs
+$6.8k on 2025), with the DT missing large FCAS-spike events (2024
+May/Sep/Nov). A **profit-comparability note**: revenue decomposition is not
+"who wins" — PPO-only DTs actually beat SB3 PPO on *total profit*
+($17.6–17.8k vs $15.0k) on the broad surface via energy arbitrage, despite
+lower FCAS.
+
+**Experiments attempting to close the gap** (all on the 5-min broad surface):
+
+| Experiment | Result |
+|---|---|
+| RTG sweep (0–50) | Flat — not a prompting artifact |
+| PPO-only training data (legacy 8×384 and modern 8×768) | Energy-heavy ($17.6–17.8k profit, ~$2.1k FCAS) — architecture does not matter, data is the determinant |
+| FCAS-weighted action loss (`--action-dim-weights`) | No effect — data contains no higher-FCAS behaviour to amplify |
+| Online fine-tuning (GRPO; plus a new full-PPO value-critic variant) | Flat-to-negative on the fine-tune surface and on 2025 (full-PPO DT −$0.7k) |
+| FCAS-heavy-policy subset (real A2C/TD3/SAC/DDPG eps) | FCAS capture +23% ($4.8k → $5.9k) but still 1.7× below PPO |
+
+**Conclusion.** The DT-vs-PPO gap is a **behaviour-cloning / offline-data
+ceiling**: none of RTG, loss-weighting, data re-composition, architecture, or
+online fine-tuning exceeds the offline data's FCAS bidding, which is below
+PPO's online-optimised skill. (Synthetic-FCAS data generation was ruled out in
+PR #34 — the generator does not accurately reflect real FCAS.) **PPO is the
+broad-surface and out-of-distribution leader.** The DT's genuine value is on
+specific deployment surfaces — market-impact (grid scale), dispatch-matched
+assets, mild-market months, and FCAS/degradation efficiency. Claims that the
+DT "beats PPO" must be qualified to these surfaces.
 
 #### 8.2.2 RTG Calibration — The Transformer as a Tunable Controller
 
@@ -712,7 +759,7 @@ These close the "point-estimate-only" gap flagged in Appendix C.
 
 ### 8.3 Key Takeaways
 
-1. **The modern v2 Decision Transformer is the best-performing method for utility-scale battery control in this benchmark.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep across both evaluation surfaces ($10,138 dispatch-matched, $4,630 standard), beating PPO, dispatch replay, and all GRPO-tuned variants. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL once provided.
+1. **The modern v2 Decision Transformer is the best-performing method on the narrow/favourable surfaces — but that status is surface-specific.** On the fairest same-asset benchmark with RTG calibration, the 8×768 GQA pretrained model achieves the highest profit/ep on the dispatch-matched and standard-Oct surfaces ($10,138 and $4,630), beating PPO, dispatch replay, and all GRPO-tuned variants. However, on the **broad expanded 2024 surface** and **out-of-distribution 2025**, **PPO is the clear leader** (see §8.2.1a): the DT under-bids FCAS in spike months and its "SOTA" does not generalize across the year. The DT's genuine value is on market-impact (grid-scale), dispatch-matched, and mild-market surfaces, plus FCAS/degradation efficiency.
 
 2. **The full pipeline matters — but architecture matters most.** Offline data quality (2,401-episode FCAS-rich corpus), realistic battery configurations, and modern architecture each contribute. But the jump from stage 4 to stage 5 ($1,533→$4,630 standard) came from architecture alone — GRPO does not help the modern model.
 
@@ -760,13 +807,22 @@ DT-centric near-term extensions (repo-aligned):
 Beyond DT-centric work, the AEMO results also highlight:
 - ✅ **FCAS-aware offline data collection:** Completed. The 2,425-episode FCAS dataset (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) includes PPO, TD3, A2C, DDPG, SAC, and `fcas_rule` trajectories across 3 horizons, 5 regions, and 3 battery sizes.
 - **Multi-objective training:** The DT's return-conditioning naturally supports multiple operating points (conservative vs aggressive). Adding an FCAS-specific auxiliary loss or reward component could further improve AEMO performance, especially on the expanded evaluator.
-- **FCAS-weighted loss:** The current loss treats all action dimensions equally. Weighting FCAS action dimensions higher (`action_loss_weight` for FCAS dims) could accelerate FCAS learning.
+- **FCAS-weighted loss:** The current loss treats all action dimensions equally. Weighting FCAS action dimensions higher (`action_loss_weight` for FCAS dims) could accelerate FCAS learning. **Tested (2026-08): `--action-dim-weights` added; no effect** — the offline data contains no higher-FCAS behaviour to amplify (the gap is a data ceiling, §8.2.1a).
 
 > **NOTE (literature alignment):** Because studies often vary in objective definitions (financial vs energy-efficiency) and in constraint/user-impact handling, robustness studies should explicitly document which objective family and constraint set is being targeted [6].
 
 ### Phase 3: Forecast- and Planning-Aware Sequence Modeling (Current Direction)
 
-The modern v2 DT is the current best-performing model, yet it conditions only on a 210-step history window and has **no explicit forward-looking signal** — and its energy-arbitrage contribution is small (~$70/ep of the $10,138 dispatch-matched profit; the rest is FCAS). The next phase injects planning/forecast awareness, building directly on Abdulla et al. [1] and the implemented SDP/MRDP solvers. This experiment was built and evaluated (PR #32) — see the forecast/future-step integration section of `docs/aemo_research_plan.md`; the result was negative ($4,564/ep vs modern v2 $4,991/ep), so this line is currently closed.
+The modern v2 DT is the current best-performing model **on the narrow/favourable
+surfaces** (dispatch-matched, standard-Oct, market-impact) — but its "SOTA" is
+**surface-specific** (§8.2.1a): PPO is the broad-year and out-of-distribution
+leader. The 2026 re-examination concluded the DT-vs-PPO gap is an
+**offline-data ceiling** (RTG, data re-composition, loss weighting, GRPO and
+full-PPO fine-tuning, and architecture all failed to close it). The forecast/
+planning direction below was built and evaluated (PR #32) and was a **negative
+result** ($4,564/ep vs modern v2 $4,991/ep), so this line is closed; the DT
+direction is re-scoped to the surfaces where it genuinely wins (impact,
+dispatch-matched, mild markets, FCAS/degradation efficiency).
 
 **Status (July 2026)**:
 
@@ -807,7 +863,8 @@ This repository introduces a unified framework for learning and planning in batt
 **Key empirical findings:**
 
 - **Household environment:** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation.
-- **AEMO utility-scale environment (same-asset dispatch-matched benchmark):** On the fairest comparison where all policies share the identical battery (Dalrymple North 8 MWh / 30 MW) with RTG calibration, the **modern v2 pretrained Decision Transformer achieves the highest profit per episode across both evaluation surfaces: $10,138/ep on dispatch-matched (rtg=0.0) and $4,630/ep on the standard surface**. This beats PPO ($7,757/ep), all GRPO-tuned variants ($6,445 best), and dispatch replay ($3,663/ep) on the same asset. Architecture improvements (GQA, RMSNorm, weight tying) captured the benefits that online RL fine-tuning once provided the legacy model.
+- **AEMO utility-scale environment (same-asset dispatch-matched benchmark):** On the fairest comparison where all policies share the identical battery (Dalrymple North 8 MWh / 30 MW) with RTG calibration, the **modern v2 pretrained Decision Transformer achieves the highest profit per episode across the narrow surfaces: $10,138/ep on dispatch-matched (rtg=0.0) and $4,630/ep on the standard surface**. This beats PPO ($7,757/ep), all GRPO-tuned variants ($6,445 best), and dispatch replay ($3,663/ep) on the same asset. **However, this leadership is surface-specific** (§8.2.1a): on the broad 2024 expanded surface and out-of-distribution 2025, **PPO is the clear leader** ($15.0k and $14.3k vs the DT's $4.6k and −$0.7k) because the DT under-bids FCAS in spike months. The DT's genuine value is on market-impact (grid-scale), dispatch-matched, and mild-market surfaces, plus FCAS/degradation efficiency; "beats PPO" claims must be qualified to those surfaces.
+- **AEMO utility-scale (gap is an offline-data ceiling):** A systematic attempt to close the DT-vs-PPO gap — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, and an architecture change — all failed to exceed the offline data's FCAS bidding. The gap is a behaviour-cloning ceiling: PPO's online-optimised FCAS skill is not present in the offline corpus.
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. However, the optimal RTG depends on the architecture: modern peaks at 0.0, legacy at 0.5. Always calibrate per model.
 - **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep). FCAS revenue rose 18× (from $77/ep to $1,383/ep), closing most of the prior gap to PPO's $1,616/ep FCAS revenue (the DT reached ~86% of PPO's FCAS revenue, versus ~5% before), while degradation fell 2.9× vs PPO ($212/ep vs $609/ep). This establishes that **offline RL on well-curated data can match online RL**.

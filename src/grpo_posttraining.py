@@ -354,6 +354,7 @@ class GRPOTrainer:
         degradation_penalty_weight: float = 1.0,
         mixed_precision: bool = False,
         cpu_rollout_buffer: bool = True,
+        use_critic: bool = False,
     ) -> None:
         self.model = model.to(device)
         self.device = torch.device(device)
@@ -383,6 +384,7 @@ class GRPOTrainer:
         self._adaptive_rtg_ewma: float | None = None
         self.mixed_precision = bool(mixed_precision)
         self.cpu_rollout_buffer = bool(cpu_rollout_buffer)
+        self.use_critic = bool(use_critic)
         self._amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
     def _sync_reference_model(self) -> None:
@@ -432,19 +434,21 @@ class GRPOTrainer:
 
         Modern:  forward(state, rtg, timestep, actions, mask) -> (return_preds, state_preds, act_preds)
         Legacy:  forward(states, actions, returns_to_go, timesteps, mask) -> (act_preds, state_preds, return_preds)
+
+        Returns (act_preds, return_preds).
         """
         if amp_context is not None:
             with amp_context:
                 if _is_legacy_dt(model):
-                    act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+                    act_preds, _, return_preds = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
                 else:
-                    _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+                    return_preds, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
         else:
             if _is_legacy_dt(model):
-                act_preds, _, _ = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
+                act_preds, _, return_preds = model(states, actions, rtgs, timesteps, attention_mask=attention_mask)
             else:
-                _, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
-        return act_preds
+                return_preds, _, act_preds = model(states, rtgs, timesteps, actions, attention_mask=attention_mask)
+        return act_preds, return_preds
 
     @staticmethod
     def _sanitize_action_preds(action_preds: torch.Tensor) -> torch.Tensor:
@@ -461,23 +465,25 @@ class GRPOTrainer:
         attention_mask: torch.Tensor,
         *,
         compute_ref: bool = True,
-    ) -> tuple[TransformedDistribution, TransformedDistribution]:
+        need_value: bool = False,
+    ) -> tuple[TransformedDistribution, TransformedDistribution, torch.Tensor | None]:
         amp_ctx = torch.cuda.amp.autocast(dtype=self._amp_dtype) if self.mixed_precision and 'cuda' in str(self.device) else None
-        action_preds = self._forward_dt(
+        action_preds, return_preds = self._forward_dt(
             self.model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
         )
         action_mean = self._sanitize_action_preds(action_preds[:, -1:, :])
         current_dist = _mixed_action_distribution(action_mean, self.log_std, self._act_dim)
+        value = return_preds[:, -1, :] if need_value and return_preds is not None else None
 
         if compute_ref:
-            ref_preds = self._forward_dt(
+            ref_preds, _ = self._forward_dt(
                 self.reference_model, states, rtgs, timesteps, actions, attention_mask, amp_context=amp_ctx
             )
             ref_mean = self._sanitize_action_preds(ref_preds[:, -1:, :])
             ref_dist = _mixed_action_distribution(ref_mean, self.log_std.detach(), self._act_dim)
         else:
             ref_dist = current_dist
-        return current_dist, ref_dist
+        return current_dist, ref_dist, value
 
     def collect_rollouts(
         self,
@@ -516,6 +522,7 @@ class GRPOTrainer:
         prompt_index_records: list[int] = []
         returns: list[float] = []
         episode_steps: list[int] = []
+        value_records: list[float] = []
 
         num_rtgs = len(prompts)
 
@@ -550,12 +557,15 @@ class GRPOTrainer:
                     )
                     states_t, actions_t, rtgs_t, timesteps_t, mask_t = context
                     with torch.no_grad():
-                        current_dist, ref_dist = self._action_distributions(
-                            states_t, actions_t, rtgs_t, timesteps_t, mask_t
+                        current_dist, ref_dist, value = self._action_distributions(
+                            states_t, actions_t, rtgs_t, timesteps_t, mask_t,
+                            need_value=self.use_critic,
                         )
                         sampled_action = current_dist.rsample()
                         old_log_prob = float(current_dist.log_prob(sampled_action).item())
                         ref_log_prob = float(ref_dist.log_prob(sampled_action).item())
+                        if value is not None:
+                            value_records.append(float(value.squeeze(-1).item()))
 
                     action_np = sampled_action.squeeze(0).squeeze(0).detach().cpu().numpy().astype(np.float32)
                     # Clamp FCAS bids (dims 1+) to [0, 1] for full_fcas mode
@@ -602,11 +612,26 @@ class GRPOTrainer:
 
                 returns.append(float(episode_return))
                 episode_steps.append(step_count)
-        # Compute advantages across RTG prompts within each group
-        advantages_per_episode = compute_group_relative_advantages(returns, num_rtgs)
+        # Compute advantages: critic-based (full PPO: returns-to-go minus the
+        # DT's return-head value estimate) or group-relative (GRPO).
         step_advantages: list[float] = []
-        for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
-            step_advantages.extend([advantage] * step_count)
+        if self.use_critic:
+            idx = 0
+            gamma = float(dt_gamma)
+            for step_count in episode_steps:
+                ep_rew = reward_records[idx : idx + step_count]
+                rtg = [0.0] * step_count
+                acc = 0.0
+                for t in range(step_count - 1, -1, -1):
+                    acc = ep_rew[t] + gamma * acc
+                    rtg[t] = acc
+                for t in range(step_count):
+                    step_advantages.append(rtg[t] - value_records[idx + t])
+                idx += step_count
+        else:
+            advantages_per_episode = compute_group_relative_advantages(returns, num_rtgs)
+            for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
+                step_advantages.extend([advantage] * step_count)
 
         batch_device = "cpu" if self.cpu_rollout_buffer else self.device
         batch = GRPORolloutBatch(
@@ -678,7 +703,7 @@ class GRPOTrainer:
 
                 # Skip dead reference forward during training — ref_log_probs are
                 # pre-computed from rollout.
-                current_dist, _ = self._action_distributions(
+                current_dist, _, _ = self._action_distributions(
                     states, actions, rtgs, timesteps, attention_mask,
                     compute_ref=False,
                 )

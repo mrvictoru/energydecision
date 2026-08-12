@@ -1,0 +1,23 @@
+{
+  "ppo_only_dt_baseline": {
+    "profit": 17606,
+    "fcas": 2140,
+    "energy": 17099
+  },
+  "ppo_only_dt_fcas_weighted": {
+    "profit": 17671,
+    "fcas": 2145,
+    "energy": 17170
+  },
+  "modern_v2_mixed": {
+    "profit": 4596,
+    "fcas": 4774,
+    "energy": 281
+  },
+  "ppo_reference": {
+    "profit": 15017,
+    "fcas": 10204,
+    "energy": 8766
+  },
+  "note": "v2 PPO episodes are ENERGY-dominant (FCAS/E~1.0), so PPO-only training + FCAS-weighted loss cannot exceed the data; behaviour-cloning ceiling."
+}

@@ -75,9 +75,15 @@ Three evaluator configs balance speed vs. breadth:
 | Config | Use | Step | Hours | Regions | Batteries | Baselines | Workers | 24h wall clock |
 |--------|-----|------|-------|---------|-----------|-----------|---------|----------------|
 | `mini` | Smoke / quick screening | 5 min | 24h | NSW1, SA1 | medium | DT, FCAS rule | 4 | ~2 min |
-| `example` | Promotion check | 30 min | 144h | NSW1, SA1, QLD1, VIC1 | medium, small | DT, rule, FCAS rule, 2×dispatch, PPO | 8 | ~15 min |
-| `expanded` | Full season sweep | 30 min | 288h | All 5 regions × 6 months | medium | DT, rule, PPO | 8 | ~60 min |
-| `dispatch_matched` | GRPO vs dispatch replay | 30 min | 144h | SA1 (4 seasons) | dispatch-asset-sized | DT, dispatch, FCAS rule | 8 | ~15 min |
+| `example` | Promotion check | 5 min | 144h | NSW1, SA1, QLD1, VIC1 | medium, small | DT, rule, FCAS rule, 2×dispatch, PPO | 8 | ~15 min |
+| `expanded` | Full season sweep | 5 min | 288h | All 5 regions × 6 months | medium | DT, rule, PPO | 8 | ~60 min |
+| `dispatch_matched` | GRPO vs dispatch replay | 5 min | 144h | SA1 (4 seasons) | dispatch-asset-sized | DT, dispatch, FCAS rule | 8 | ~15 min |
+
+> **Step protocol (2026-08-07):** all AEMO DT evaluation configs now use
+> **5-min steps** (`step_duration=0.083333`) to match the DT training data.
+> Several configs previously defaulted to 30-min steps, which is
+> off-protocol for the 5-min-trained DT and materially penalizes it relative
+> to the step-agnostic Markov PPO baseline.
 
 **Usage by tiner:**
 - `proxy-baseline` → `mini` (after training, wrapped by `launch_aemo_training.py`)

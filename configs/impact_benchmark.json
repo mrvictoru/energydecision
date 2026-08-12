@@ -1,0 +1,14 @@
+{
+  "_comment": "Canonical market-impact benchmark (progress-measurement surface). Runs each policy under {identity, piecewise_merit_order} across grid-scale batteries. Usage: python3 scripts/phase3_impact_eval.py --impact-config configs/impact_benchmark.json --checkpoint <dt.pt> --label <name>. Baselines (oracle, oracle_mi, fcas_rule, ppo) are included automatically.",
+  "scenarios": [
+    ["sa1_oct_2024", "SA1", "2024-10-01", "2024-10-14"],
+    ["sa1_nov_2024", "SA1", "2024-11-01", "2024-11-14"],
+    ["vic1_oct_2024", "VIC1", "2024-10-01", "2024-10-14"]
+  ],
+  "batteries": [
+    {"name": "small", "capacity": 8.0, "max_flow": 30.0, "step_h": 0.08333, "init_soc": 4.0},
+    {"name": "hornsdale", "capacity": 194.0, "max_flow": 150.0, "step_h": 0.08333, "init_soc": 97.0},
+    {"name": "torrens", "capacity": 250.0, "max_flow": 250.0, "step_h": 0.08333, "init_soc": 125.0}
+  ],
+  "rtg_values": [0.0, 5.0, 10.0, 20.0, 50.0]
+}

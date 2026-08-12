@@ -220,6 +220,291 @@ implemented SDP/MRDP solvers.
 
 ---
 
+# Re-examining assumptions + progress-measurement (2026-08-07)
+
+This workstream is a **critical re-examination of what we assumed true**, not
+just a benchmark revision. The earlier narrative ("the offline DT is making
+progress and is the best") turned out to be **multi-dimensional**, not
+unidirectional. What we re-examined and found:
+
+| Assumption we held | Re-examined finding |
+|---|---|
+| "The modern v2 DT is SOTA / beats PPO" | **Surface-specific.** It wins on narrow/mild surfaces (Oct 2024, dispatch-matched, example) but loses broadly to PPO on the full-2024 5-min surface (DT $4.6k vs PPO $15k/ep), driven by **FCAS under-bidding** in spike months (PPO $10.2k FCAS vs DT $4.8k). Under market impact the *impact-trained* DT wins. "Best" is multi-dimensional. |
+| "Eval configs are protocol-consistent" | **False.** Several configs used 30-min steps vs the 5-min training data, nearly halving the DT. Fixed all AEMO eval configs + the env default to 5-min. |
+| "RTG prompting is calibrated" | **Out-of-distribution + constant.** Training RTGs are tiny (p50≈0, p90≈1.5, max ~9–13) and *decaying* over episodes; eval uses fixed rtg 0–50 (a strategy selector far above training) fed as a *constant* each step. |
+| "Train the DT on PPO data → it bids FCAS like PPO" | **Not validated.** A PPO-only DT (8×384) beats PPO on total profit ($17.6k vs $15k) but is energy-driven ($17k energy, $2.1k FCAS) — it does not learn PPO's FCAS bidding. |
+
+Two benchmark surfaces (below) make this measurable going forward.
+
+## Next stage: actually building the best DT in the AEMO sim
+
+> **Profit-comparability correction (2026-08-10):** revenue-decomposition
+> tables (profit / FCAS / energy) are not directly "who wins" — a model with
+> lower FCAS can still win on total profit. On the 5-min expanded surface the
+> **PPO-only DTs beat SB3 PPO on total profit** ($17.6–17.8k vs $15.0k),
+> compensating for lower FCAS ($2.1k vs $10.2k) with much higher energy
+> arbitrage ($17k vs $8.8k). So "the DT under-bids FCAS" describes one revenue
+> dimension, not overall underperformance — total profit is the headline.
+
+The session's experiments (RTG sweep, FCAS-weighted loss, PPO-only data,
+GRPO fine-tune, architecture change) all landed on the same conclusion: the
+DT's behaviour is **bounded by its offline data**, and none of the
+data-side/objective/online levers tried moved the broad-surface profile. Three
+options were documented; **Option C is the decision (2026-08-11)**:
+
+- **Option A — FCAS-focused data (tested, limited headroom).** The
+  FCAS-heavy-policy subset (real A2C/TD3/SAC/DDPG eps) raised FCAS capture
+  +23% ($4.8k → $5.9k) but still trails PPO 1.7×; synthetic-FCAS generation
+  cancelled (PR #34).
+- **Option B — full-PPO (value-critic) fine-tune (tested, no improvement).**
+  Implemented `--use-critic`; a full-2024 fine-tune evaluated on
+  out-of-distribution 2025 earns $6.8k FCAS but **−$0.7k total profit** (far
+  below PPO's $14.3k). Consistent with GRPO being flat.
+- **✅ Option C — accept PPO as the broad-year/out-of-distribution leader.**
+  The DT is positioned for the surfaces where it genuinely wins.
+
+### The DT's home surfaces (under Option C)
+
+The DT should be presented/developed for these surfaces, not as a broad-year
+leader:
+
+1. **Market-impact (grid-scale)** — impact-DT beats PPO 9/9 cells (+$115K/cell, p=0.004).
+2. **Dispatch-matched** — modern v2 $10,138/ep vs PPO $7,757.
+3. **Standard (Oct 2024)** — modern v2 $4,630 vs PPO $2,353.
+4. **Mild-market months / FCAS capture** — the DT wins mild months (e.g. Jan)
+   and earns strong FCAS revenue with low degradation.
+
+Cross-cutting: **always-on correct protocol** — evaluate every candidate on
+the 5-min broad surface (regime-shift benchmark) and the 2025
+out-of-distribution surface before any "best" claim, so "best" is measured,
+not assumed.
+
+## Progress-measurement benchmarks
+
+Two repeatable benchmark surfaces measure progress and relevance. Both
+answer "which model is best, and does the answer hold up?" — the key gap the
+earlier "is this proof?" review identified. **Runtime note:** the evaluator now
+batches the DT candidate rollout (one transformer forward per step across
+episodes) and defaults to thread-parallel (`parallelize_candidate_dt`), so a
+full expanded eval (135 DT episodes, 5-min) runs in ~30–40 min on the 22 GB
+GPU instead of many hours.
+
+## Impact-standard benchmark (market-impact env)
+
+Config-driven (`--impact-config configs/impact_benchmark.json` on
+`scripts/phase3_impact_eval.py`), grid-scale batteries, {identity,
+piecewise_merit_order}. Canonical leaderboard:
+`eval_output/final/impact_benchmark/impact_benchmark_leaderboard.csv`
+(aggregated from the validated 255-cell Phase 3/4 results):
+
+| Comparison (piecewise merit order, 9 cells, best RTG) | Result |
+|---|:---:|
+| impact-DT vs naive v2 | 6/9 wins, +$96K/cell (p=0.164, not significant) |
+| impact-DT vs PPO | 9/9 wins, **+$115K/cell (p=0.004, significant)** |
+| naive v2 vs PPO | 8/9 wins, +$19K/cell |
+
+Under the realistic market-impact assumption, the impact-trained DT is the
+leading model at grid scale. Oracle_MI is the impact-aware ceiling.
+
+## Regime-shift / expanded-surface benchmark
+
+The modern v2 DT (trained on 2021–2023) evaluated on the **full 2024 expanded
+surface** (5 regions × Jan/Mar/May/Jul/Sep/Nov, 288h episodes, medium
+10MWh/5MW battery): `eval_output/final/regime_shift/summary.json`.
+
+| Policy | Profit/ep | Note |
+|---|:---:|---|
+| PPO (online RL) | **$15,017** | Wins 5/6 periods; 2.9–10× the DT in FCAS-spike months |
+| Modern v2 DT (rtg=10) | $4,596 | Wins Jan, close in Jul; loses in Mar/May/Sep/Nov |
+| FCAS rule / rule | −$35.4k / −$20.1k | Baselines |
+
+> **Protocol correction (2026-08-07):** the earlier expanded run used **30-min
+> steps** (off-protocol for the 5-min-trained DT), which nearly halved the DT
+> ($2,421). All AEMO eval configs + the env default are now **5-min**
+> (`step_duration=0.083333`). At the correct protocol the DT more than doubles
+> ($4,596) but **PPO improves too** ($15,017), so the broad-surface gap is real:
+> **PPO wins ~3.3×**, driven by the DT under-capturing FCAS in spike months
+> (PPO FCAS $10.2k vs DT $4.8k). RTG sweep (0–50) is flat, so this is not a
+> prompting effect.
+
+**Critical finding:** the DT's SOTA status is **surface-specific**. It wins on
+the narrow example / dispatch-matched / Oct-standard surfaces and mild months
+(Jan), but on the broad full-year surface PPO dominates — the DT under-bids
+FCAS during large spike events. Even on the DT's own training battery
+(medium_1c 10/10, 5-min, Sep–Nov) PPO edges it ($4,520 vs $3,453). The choice
+of evaluation surface materially changes who "wins".
+
+## Root cause of the DT's underperformance: FCAS under-capture
+
+The broad-surface gap is **not a prompting artifact** (RTG sweep 0–50 is flat)
+and **not a seasonal data bias** (training spans all seasons 2021–2023). The
+driving cause is **the DT under-bids FCAS during large spike events**: at 5-min
+on the expanded surface PPO earns $10.2k FCAS/ep vs the DT's $4.8k (2.1×).
+PPO wins every FCAS-spike month decisively (Nov $35.5k vs $3.5k; May $25k vs
+$8.6k; Sep $16k vs $2.8k) while the DT wins only mild months (Jan $3.8k vs
+$2.0k). This is the same learned **conservative FCAS moderation** documented in
+the market-impact work (the impact-DT trades 0.39–0.53× grid-scale FCAS) — the
+offline behaviour-cloning objective averages over the dataset's
+conservative+aggressive mixture and lands on under-bidding FCAS.
+
+**Direction (2026-08-07): PPO-informed DT training, not GRPO.** GRPO does not
+improve the modern v2. The hypothesis is that the DT should be trained to bid
+FCAS like PPO by:
+1. **Reward/return-weighted training** (upsample or weight high-return and
+   high-FCAS-revenue trajectories, e.g. PPO's best rollouts) — a
+   reward-weighted-regression treatment of the behaviour-cloning loss, and
+2. **Adding more aggressive FCAS behaviour to the offline mixture** (generate
+   additional PPO FCAS-heavy rollouts and retrain).
+Then re-measure on the 5-min expanded surface to confirm the FCAS gap closes.
+A dynamic evaluation dashboard (power/energy/revenue visualisation) is a
+deferred side-goal for making these surfaces more intuitive.
+
+### PPO-only DT experiment (2026-08-07) — energy-heavy, does NOT close FCAS
+
+Retrained the 8×384 FCAS-rich DT on the **PPO-only subset** of the v2 dataset
+(900 eps, 28.3M rows) and evaluated on the 5-min expanded surface:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (8×384) | **$17,606** | $2,140 | **$17,099** |
+| PPO (reference) | $15,017 | $10,204 | $8,766 |
+| Modern v2 (mixed data, 8×768) | $4,596 | $4,774 | $281 |
+
+**Reading:** the PPO-only DT *beats PPO on total profit* ($17.6k vs $15k) and
+triples the mixed-DT profit — but it is **energy-arbitrage-driven** (17k
+energy, only $2.1k FCAS). The "train on PPO to bid FCAS like PPO" hypothesis
+is **not validated**: PPO-only data with this recipe teaches aggressive energy
+trading, and FCAS capture is *lower* than the mixed model. Caveats: 8×384 vs
+8×768 architecture and return_scale/RTG semantics differ, so not
+apples-to-apples. The FCAS under-bidding likely needs a targeted treatment
+(e.g. FCAS-weighted action loss, or upsampling the *mixed* set rather than
+PPO-only, or the return-weighted loss — next on the list) rather than
+PPO-only data alone.
+
+### FCAS-weighted loss result (2026-08-07) — no effect; data is the ceiling
+
+Retrained the 8×384 DT on the PPO-only v2 subset **with the FCAS-weighted
+action loss** (`--action-dim-weights 1,3,3,3,3,3,3,3,3`):
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (baseline) | $17,606 | $2,140 | $17,099 |
+| PPO-only DT + FCAS-weighted | $17,671 | $2,145 | $17,170 |
+
+**FCAS capture did not move.** Root cause found by measuring the v2 dataset's
+episode composition: **the v2 PPO episodes are energy-dominant, not
+FCAS-dominant** (mean FCAS/energy ≈ 1.0, the *lowest* ratio of any source
+policy; A2C is 49×, DDPG 16×, SAC 3.5×). So there is no higher-FCAS behavior
+in the PPO-only data to amplify — behaviour cloning (with or without loss
+weighting) cannot exceed what the data contains.
+
+**General conclusion:** the DT-vs-PPO gap on the broad surface is a
+**behaviour-cloning ceiling**, not a mixture or objective-tuning artifact:
+- The v2 PPO episodes captured PPO's behaviour on *energy-dominant* training
+  periods/batteries and do not reflect PPO's online-optimised FCAS skill at
+  eval time (PPO adapts online).
+- The mixed-data modern v2 under-earns absolute FCAS ($4.8k vs PPO $10.2k)
+  *and* does essentially no energy arbitrage ($281 vs $8.8k) — it cloned the
+  moderate-FCAS policies.
+- To make the DT bid FCAS like PPO, the lever is **better offline data**
+  (higher-FCAS trajectories, e.g. FCAS-focused reward shaping during
+  generation, or capturing FCAS-spike periods), since neither data re-weighting
+  nor the loss-weighting we tried can exceed the data, and GRPO (online
+  fine-tuning) does not improve the modern v2.
+
+### Online-RL (GRPO) fine-tune of the PPO-only DT (2026-08-07) — also flat
+
+Fine-tuned the PPO-only DT (8×384, legacy-style arch, from-scratch) with the
+repo's GRPO post-training (NSW1 Jan 2024, 144h, medium battery, 5 iters) and
+evaluated on the 5-min expanded surface:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (pre-GRPO) | $17,606 | $2,140 | $17,099 |
+| PPO-only DT + GRPO | $17,212 | $1,845 | $16,860 |
+| Modern v2 (mixed) | $4,596 | $4,774 | $281 |
+| PPO reference | $15,017 | $10,204 | $8,766 |
+
+**Online-RL fine-tuning did not help** — GRPO slightly *reduced* profit
+(−$394), FCAS (−$295) and energy (−$239), matching the modern-v2 finding.
+Note the PPO-only DT is the **legacy-style architecture** (8×384, no
+GQA/qk_norm/tie_weights), so this does not test the modern architecture with
+PPO-only data. Combined with the flat RTG sweep and the FCAS-weighted loss
+no-op, the evidence is that neither data-side nor online-fine-tuning levers
+move the DT's broad-surface performance; the remaining lever is better offline
+data, or a full PPO (value-critic) fine-tune distinct from GRPO.
+
+### Modern v2 (8×768) on PPO-only data (2026-08-10) — architecture does not matter
+
+Retrained the **modern v2 architecture** (8×768 GQA, ctx=210) from scratch on
+the same 900 PPO-only v2 episodes, evaluated on the 5-min expanded surface:
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| PPO-only DT (legacy 8×384) | $17,606 | $2,140 | $17,099 |
+| **Modern v2 on PPO-only (8×768)** | $17,775 | $2,133 | $17,375 |
+| Modern v2 (mixed data) | $4,596 | $4,774 | $281 |
+| PPO reference | $15,017 | $10,204 | $8,766 |
+
+**The architecture makes essentially no difference on PPO-only data.** Both
+the legacy 8×384 and modern 8×768 clone the same energy-heavy profile
+(FCAS ≈ $2.1k, energy ≈ $17k). **The data is the determinant, not the
+architecture**: PPO's v2 episodes are energy-dominant, so no architecture can
+produce FCAS bidding that the data does not contain. The modern arch only pays
+off on the *mixed* data (where it extracts $4.8k FCAS vs the legacy's lower
+capture). This closes the architecture-isolation question: to make the DT bid
+FCAS like PPO, the offline data must contain higher-FCAS trajectories.
+
+### FCAS-heavy-policy subset (2026-08-11) — partial validation, limited headroom
+
+Retrained the modern v2 on the **real** FCAS-heavy policies already in the v2
+corpus (A2C/TD3/SAC/DDPG, 1,200 eps — the policies with 3–49× the FCAS/energy
+ratio of PPO):
+
+| Model | Profit/ep | FCAS/ep | Energy/ep |
+|---|:---:|:---:|:---:|
+| Modern v2 on FCAS-heavy subset | $13,387 | **$5,860** | $12,578 |
+| Modern v2 (mixed data) | $4,596 | $4,774 | $281 |
+| Modern v2 on PPO-only | $17,775 | $2,133 | $17,375 |
+| PPO reference | $15,017 | $10,204 | $8,766 |
+
+**Reading:** the real-data composition lever works but has **limited headroom**.
+Training on the FCAS-heavy policies raised the DT's FCAS capture **+23%**
+($4.8k → $5.9k) over the mixed model — validating "more high-FCAS real
+trajectories → higher DT FCAS" — but the DT still under-bids FCAS **1.7× vs
+PPO** ($5.9k vs $10.2k). The FCAS-heavy subset also produced substantial energy
+arbitrage ($12.6k), since those policies' episodes are not purely FCAS.
+**Synthetic-FCAS data generation is cancelled** (PR #34 showed the synthetic
+generator does not accurately reflect real FCAS), so the remaining gap is a
+fundamental offline-data ceiling: the real corpus's FCAS bidding is below PPO's
+online-optimised skill.
+
+## RTG-distribution finding (prompting study, 2026-08-07)
+
+The DT is prompted with a **fixed** RTG per eval, but RTG (returns-to-go) is
+inherently dynamic — it decays over an episode as rewards accrue. Measured the
+actual RTG distribution in the FCAS-rich training data (γ=0.95, sampled
+episodes per policy):
+
+- **Per-step RTG overall: p50 = −0.1, p90 = 0.3, max = 539** — overwhelmingly
+  small (≈0); the DT mostly trains on near-zero RTG tokens.
+- **Initial RTG (episode total discounted return): p50 ≈ 0.0–0.3, p90 ≈
+  1.2–1.8, max ≈ 9–13** across all source policies (PPO similar to others).
+
+Two consequences:
+1. **Train/inference RTG mismatch.** At training the RTG token is the *decaying*
+   realized return-to-go; at inference the evaluator feeds the *same constant*
+   (config `rtg_value` = 0/10/20/50) at every step. The high eval RTGs
+   (5–500× the training p50) act as a **strategy selector** (more aggressive
+   bidding), which is why higher RTG sometimes beats lower — but they are far
+   out of the training RTG distribution, so the DT is extrapolating.
+2. **Dynamic-prompting hypothesis.** Prompting with a *decaying* RTG (start at
+   the desired return and discount per step to match training semantics) may
+   both stay in-distribution and preserve the strategy-selection effect.
+
+Test to run: compare fixed vs decaying RTG prompts on the 5-min expanded
+surface for the modern v2 DT (and check `return_scale` interaction).
+
 # Open Items & README Roadmap Sync
 
 Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
@@ -227,7 +512,7 @@ Status synced with the root `README.md` "Roadmap" checklist (2026-08-07):
 | README item | Status |
 |---|:---:|
 | Offline dataset studies (DT sensitivity to policy mixtures / curation) | ⬜ Open — highest priority, no hardware |
-| **Regime-shift / full-scale robustness evaluation** (train 2022–23 → eval 2024; expanded surface + paired significance on the SOTA headline) | ⬜ Open — conductable now (added 2026-08-07 after the "is this proof?" review) |
+| **Regime-shift / full-scale robustness evaluation** (train 2022–23 → eval 2024; expanded surface + paired significance on the SOTA headline) | 🟡 **Measured (2026-08-07)** — expanded sweep ran: DT $2.4k/ep vs PPO $11.3k/ep (~4.7×); RTG-insensitive. Paired significance on the headline still open |
 | Long-context DT experiments (larger `context_len`, RoPE, seasonal/weekly) | ⬜ Open (ctx=2016 now feasible on the 22 GB GPU) |
 | Multi-agent extension (microgrid, multiple households) | ⬜ Open |
 | Artifact provenance (checksums/config logging) | ⬜ Open |
@@ -254,6 +539,11 @@ forecast DT, market-impact, Oracle, statistical confidence).
 ---
 
 # Session diary (condensed)
+
+> **Session 2026-08-07→08-10 (DT re-examination + progress benchmarks):**
+> full diary + handoff in
+> [`session_2026-08_aemo_dt_reexamination.md`](session_2026-08_aemo_dt_reexamination.md)
+> (branch `feature/eval-progress-benchmarks`, PR #35).
 
 Detailed per-day records live in the git history (commit messages on
 `feature/market-impact-modeling`, `main`, and the research branches). Key

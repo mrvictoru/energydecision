@@ -168,7 +168,7 @@ The environment integrates with NEMOSIS to fetch actual AEMO market data:
 - **Generation mix**: Solar, wind, and other fuel types
 - **Regional demand**: Total electricity demand
 
-Data is automatically resampled to match environment step duration (default 30 minutes).
+Data is automatically resampled to match environment step duration (default 5 minutes, matching the DT training/evaluation protocol).
 
 If you have manually populated `data/aemo/` and want to stop NEMOSIS from attempting any
 network download, set `AEMO_CACHE_ONLY=1` before running the pipeline. In that mode the repo
@@ -198,7 +198,7 @@ validates each zip before replacing any existing cache file.
 ### Data Preprocessing
 
 The `AEMODataPreprocessor` class handles:
-- Time alignment (5-min to 30-min)
+- Time alignment (5-min source data to the environment step duration, default 5-min)
 - Missing data interpolation
 - Feature normalization
 - Cyclical time encoding
@@ -295,7 +295,7 @@ AEMOBatteryTradingEnv(
     max_battery_flow=5.0,           # MW
     init_battery_level=5.0,         # MWh (starting SOC)
     max_step=1000,                  # Steps per episode
-    step_duration=0.5,              # Hours (30 min)
+    step_duration=0.083333,      # Hours (5 min)
     battery_life_cost=1_000_000.0,  # USD
     action_mode='simple',           # or 'multi_market', 'full_fcas'
     degradation_mode='real_world',  # 'real_world', 'rainflow', or 'simple'
@@ -335,7 +335,7 @@ create_aemo_env_from_data(
 ## API Reference
 
 ### `AEMODataPreprocessor`
-- `__init__(step_duration_hours=0.5, missing_data_method='interpolate', add_normalized_features=True, update_stats_from_data=True)`
+- `__init__(step_duration_hours=0.083333, missing_data_method='interpolate', add_normalized_features=True, update_stats_from_data=True)`
     - **Args**: controls how raw AEMO data is resampled (`step_duration_hours`), how gaps are filled (`missing_data_method`), whether normalized columns are appended (`add_normalized_features`), and whether the stats dictionary is updated from the incoming data (`update_stats_from_data`).
     - **Returns**: preprocessor ready to convert fetched price/fcas/generation tables into environment-ready Polars DataFrames.
 - `preprocess_aemo_data(prices, fcas, generation)`
@@ -343,7 +343,7 @@ create_aemo_env_from_data(
     - **Returns**: unified DataFrame containing resampled market features, cyclical time encodings, normalized columns, and generation mix percentages, aligned to the env step scale. Internally uses `_resample_data`, `_resample_fcas`, `_resample_generation`, `_merge_datasets`, `_handle_missing_data`, `_add_time_features`, and `_normalize_features` to produce the final table.
 
 ### `AEMOBatteryTradingEnv`
-- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.5, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False, degradation_mode='rainflow', degradation_temperature=25.0, degradation_chemistry='NMC')`
+- `__init__(aemo_data, battery_capacity=10.0, max_battery_flow=5.0, init_battery_level=5.0, max_step=1000, step_duration=0.083333, battery_life_cost=1_000_000.0, render_mode=None, action_mode='simple', normalize_obs=True, return_raw_obs=False, degradation_mode='rainflow', degradation_temperature=25.0, degradation_chemistry='NMC')`
     - **Args**: `aemo_data` is the processed Polars DataFrame; the others configure capacity/flow, episode length, FCAS action mode, normalization toggles, and whether `get_raw_obs()` results should be returned from `reset()`/`step()`. `degradation_mode` selects the physics model: `'real_world'` for combined calendar + cycle aging (Kampker et al. 2025, recommended for grid-scale), `'rainflow'` for Muenzel et al. (2015) cycle-only aging, or `'simple'` for the legacy linear model. `degradation_temperature` sets the ambient temperature for Arrhenius-based models. `degradation_chemistry` (`'NMC'` or `'LFP'`) selects chemistry presets for the `'real_world'` mode.
     - **Returns**: `AEMOBatteryTradingEnv` instance with observation/action spaces, SOC bookkeeping, revenue tracking, and degradation accounting initialized.
 - `reset(seed=None, options=None)`
