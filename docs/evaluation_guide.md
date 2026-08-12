@@ -33,8 +33,11 @@ This table tells you which config to use and what it tests:
 
 > **Required for any "best"/SOTA claim:** in addition to the tiers above, run
 > the **expanded broad surface** (`configs/aemo_autoresearch_evaluator.expanded_rtg10.json`,
-> 5-min, 5 regions × 6 periods of 2024). A model that wins the narrow tiers but
-> loses on the broad year is not the leader (see "Critical Insights").
+> 5-min, 5 regions × 6 periods of 2024) **and the 2025 out-of-distribution
+> surface** (`configs/aemo_autoresearch_evaluator.2025.json`, 5-min,
+> NSW1/SA1/QLD1 × Jan/Feb 2025). A model that wins the narrow tiers but loses
+> on the broad year or on a genuinely unseen year is not the leader (see
+> "Critical Insights").
 
 ### Common properties across all tiers
 
@@ -330,12 +333,13 @@ broadly to PPO in FCAS-spike months due to FCAS under-bidding). PPO's FCAS
 capture is ~2× the DT's on the broad year.
 
 **Conclusion**: **any claim that a model is "best" / SOTA now requires BOTH the
-Standard tier AND the expanded broad surface** (`expanded_rtg10.json`, the
-regime-shift / broad-stability check). Standard alone is not sufficient — a
-model that wins Standard but loses on the broad year is not the leader.
-Dispatch-matched remains a secondary comparison for head-to-head vs real
-operators. The canonical launch plan (`launch_aemo_training.py`) lists the
-broad surface in `recommended_evaluation_configs`.
+Standard tier, the expanded broad surface (`expanded_rtg10.json`), AND the
+2025 out-of-distribution surface (`aemo_autoresearch_evaluator.2025.json`)**.
+A model that wins Standard or even the expanded year but loses on a genuinely
+unseen year (2025) is not the leader. Dispatch-matched remains a secondary
+comparison for head-to-head vs real operators. The canonical launch plan
+(`launch_aemo_training.py`) lists the broad surface in
+`recommended_evaluation_configs`.
 
 ### RTG calibration is half the improvement
 

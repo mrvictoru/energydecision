@@ -250,25 +250,34 @@ The session's experiments (RTG sweep, FCAS-weighted loss, PPO-only data,
 GRPO fine-tune, architecture change) all landed on the same conclusion: the
 DT's behaviour is **bounded by its offline data**, and none of the
 data-side/objective/online levers tried moved the broad-surface profile. Three
-options remain, documented as a decision point + handoff:
+options were documented; **Option C is the decision (2026-08-11)**:
 
-- **Option A — FCAS-focused offline data generation.** Generate higher-FCAS
-  trajectories (SB3 reward shaping weighted toward FCAS, or generate during
-  known FCAS-spike periods), append to the v2 corpus, retrain the modern v2.
-  The only lever that can actually raise the data's FCAS ceiling (behaviour
-  cloning cannot exceed the data).
-- **Option B — full PPO (value-critic) online fine-tune.** Distinct from GRPO
-  (group-relative, no critic); use the DT's return-prediction head as the
-  critic with the clipped PPO objective. Uncertain (GRPO was flat) but the
-  only online lever not yet tried.
-- **Option C — accept PPO as the broad-surface leader.** Stop chasing the
-  DT-vs-PPO gap with the current data; keep the re-examination narrative and
-  treat PPO as the broad-surface baseline while focusing the DT on surfaces
-  where it wins (impact, dispatch-matched, mild months).
+- **Option A — FCAS-focused data (tested, limited headroom).** The
+  FCAS-heavy-policy subset (real A2C/TD3/SAC/DDPG eps) raised FCAS capture
+  +23% ($4.8k → $5.9k) but still trails PPO 1.7×; synthetic-FCAS generation
+  cancelled (PR #34).
+- **Option B — full-PPO (value-critic) fine-tune (tested, no improvement).**
+  Implemented `--use-critic`; a full-2024 fine-tune evaluated on
+  out-of-distribution 2025 earns $6.8k FCAS but **−$0.7k total profit** (far
+  below PPO's $14.3k). Consistent with GRPO being flat.
+- **✅ Option C — accept PPO as the broad-year/out-of-distribution leader.**
+  The DT is positioned for the surfaces where it genuinely wins.
+
+### The DT's home surfaces (under Option C)
+
+The DT should be presented/developed for these surfaces, not as a broad-year
+leader:
+
+1. **Market-impact (grid-scale)** — impact-DT beats PPO 9/9 cells (+$115K/cell, p=0.004).
+2. **Dispatch-matched** — modern v2 $10,138/ep vs PPO $7,757.
+3. **Standard (Oct 2024)** — modern v2 $4,630 vs PPO $2,353.
+4. **Mild-market months / FCAS capture** — the DT wins mild months (e.g. Jan)
+   and earns strong FCAS revenue with low degradation.
 
 Cross-cutting: **always-on correct protocol** — evaluate every candidate on
-the 5-min broad surface (regime-shift benchmark) so "best" is measured, not
-assumed.
+the 5-min broad surface (regime-shift benchmark) and the 2025
+out-of-distribution surface before any "best" claim, so "best" is measured,
+not assumed.
 
 ## Progress-measurement benchmarks
 
