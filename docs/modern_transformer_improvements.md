@@ -1,5 +1,11 @@
 # Modern DecisionTransformer Improvements
 
+> **OBSOLETE (2026-08-11):** the modern architecture improvements described
+> here are **complete and landed** — the modern v2 (8×768 GQA) is the deployed
+> SOTA. Architecture is no longer the lever: the DT-vs-PPO gap is an
+> offline-data ceiling (report.md §8.2.1a). Historical design note — superseded
+> by `aemo_research_plan.md`.
+
 This document is a research/design note for transformer architecture changes.
 
 It is useful when reviewing model-evolution ideas and implementation tradeoffs, but it is not the source of truth for the currently recommended training workflow. For that, use [aemo/README.md](aemo/README.md), [aemo/workflow.md](aemo/workflow.md), and [development.md](development.md).

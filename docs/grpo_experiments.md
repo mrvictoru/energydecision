@@ -1,5 +1,11 @@
 # GRPO Post-Training Experiments
 
+> **OBSOLETE (2026-08-11):** this experiment log is complete. GRPO online
+> fine-tuning does **not** improve the modern v2 DT, and a full-PPO
+> (value-critic) variant is likewise flat (2025 OOD: −$0.7k vs PPO $14.3k).
+> The DT-vs-PPO gap is an offline-data ceiling. Historical reference only —
+> superseded by `aemo_research_plan.md` and report.md §8.2.1a.
+
 This document is an experiment log and interpretation note for GRPO work on the AEMO track.
 
 Use it when you need:

@@ -1,5 +1,9 @@
 # Session diary: AEMO DT re-examination + progress benchmarks (2026-08-07 → 08-10)
 
+> **ARCHIVED (2026-08-11):** this session is complete and PR #35 is merged.
+> The durable findings now live in `aemo_research_plan.md` and report.md
+> §8.2.1a. Keep this file as the historical handoff for the session.
+
 Research diary and handoff for the work on `feature/eval-progress-benchmarks`
 (PR #35). This is a companion to `docs/aemo_research_plan.md` (the consolidated
 plan) — read that for the durable findings; this file records what was done,

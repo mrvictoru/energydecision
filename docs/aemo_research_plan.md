@@ -1,5 +1,13 @@
 # AEMO Research Plan (Consolidated)
 
+> **STATUS (2026-08-11):** all threads are resolved or on hold, and PR #35 is
+> merged. Thread 1 (market-impact + Oracle) Phases 0–5 complete, 6/7 on hold;
+> Thread 2 (DT improvement) resolved to Option C — **PPO is the broad-year /
+> out-of-distribution leader, the DT is scoped to its winning surfaces**
+> (impact, dispatch-matched, mild markets). This file is a historical
+> reference; the durable findings live in report.md §8.2.1a and the README
+> roadmap.
+
 One plan covering the AEMO/NEM grid-scale track: market-impact modeling + the
 perfect-foresight Oracle, and Decision-Transformer model improvement (GRPO,
 retraining, forecast conditioning). Consolidates the former
