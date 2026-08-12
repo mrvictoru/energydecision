@@ -1,0 +1,18 @@
+{
+  "ppo_finetuned_modernv2_2025": {
+    "profit": -694,
+    "fcas": 6793,
+    "energy": -1220
+  },
+  "ppo_reference_2025": {
+    "profit": 14320,
+    "fcas": 10637,
+    "energy": 9539
+  },
+  "fcas_rule_2025": {
+    "profit": -12156,
+    "fcas": 4019,
+    "energy": 14993
+  },
+  "note": "Full-PPO (value-critic) fine-tune of modern v2 on full 2024, evaluated out-of-distribution on 2025: FCAS is decent ($6.8k) but total profit is negative (-$694) due to energy losses (-$1.2k); far below PPO ($14.3k). Full PPO does not close the gap, consistent with GRPO being flat."
+}

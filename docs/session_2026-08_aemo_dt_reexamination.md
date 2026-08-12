@@ -104,7 +104,10 @@ moving to unchecked README items.
   advantage = discounted returns-to-go minus the DT's return-head value) and
   ran a full-2024 fine-tune of the modern v2 (NSW1, 144h, 5 iters). On the
   fine-tune surface the reward regressed (−14.5 → −17.5, like GRPO). **2025
-  out-of-distribution eval pending** (fetching 2025 data).
+  out-of-distribution eval DONE (2026-08-11):** the fine-tuned DT earns $6.8k
+  FCAS but **total profit is −$694** (energy −$1.2k) on 2025, far below PPO
+  ($14.3k). Full PPO does not close the DT-vs-PPO gap either — consistent
+  with every other lever tried.
 - **Option C — accept PPO as the broad-surface leader.** Stop chasing the gap
   with current data; focus the DT on surfaces where it wins (impact,
   dispatch-matched, mild months).
