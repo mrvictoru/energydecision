@@ -414,3 +414,36 @@ line. Defer unless Exps 0–3 plateau.
 - All 7 rows logged in `results.tsv`.
 - **Next**: commit Exp 0, update PR #36, then decide Exp 1 (data-mixture grid)
   vs Exp 2/3 (structural).
+
+### 2026-08-13 — Exp 2 started (mixed action head)
+- **Decision**: go straight to structural fixes (Exp 2/3) per Exp 0 verdict —
+  the OOD collapse is a data-ceiling symptom, so mixture re-composition (Exp 1)
+  is deprioritized.
+- **Code changes (Exp 2, all backward-compatible):**
+  1. `src/decision_transformer.py` — added `action_head_mode` ctor arg
+     (`'tanh'` default / `'mixed'`): dim 0 → Tanh [-1,1] (energy), dims 1..8 →
+     Sigmoid [0,1] (FCAS). New `_apply_action_transform()` used in forward for
+     both tied and untied heads. Invalid modes rejected.
+  2. `scripts/pretrain_decision_transformer.py` — added `action_head_mode` to
+     `SUPPORTED_MODEL_CONFIG_KEYS` (flows through `DecisionTransformer(**model_kwargs)`).
+  3. `src/decision.py` — added `_action_is_full_fcas()` + `_clip_fcas_dims()`
+     helpers; `choose_action` now clips FCAS dims to [0,1] for full_fcas models
+     (no-op for mixed head, corrects Tanh-head negatives).
+  4. `scripts/autoresearch_evaluator.py` — batched `run_dt_episodes` now clips
+     FCAS dims to [0,1] in full_fcas mode.
+- **Validation**: mixed-head bounds tested (energy [-1,1], FCAS [0,1]); invalid
+  mode rejected; `pytest` = 68 passed / 1 pre-existing failure
+  (`test_build_dt_dataset_from_logs_tracks_sources_and_episode_ids` — act_dims
+  [9] vs [3], confirmed failing on clean tree, unrelated).
+- **Training launched**: modern v2 8×768 `action_head_mode='mixed'` on the
+  FCAS-heavy subset (1,080 eps, 2 GB). Control = existing `modernv2_fcasheavy_dt_best.pt`
+  (tanh head, same data). Config:
+  `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas_mixed_head.json`.
+  **Gotcha found**: the FCAS-heavy dataset has 37.6M rows (some 26-week = 74k-step
+  episodes); `--stride 1` gives ~33M windows (~460h ETA!). The prior fcasheavy
+  model used `--stride 105` (= context//2, exactly reproduces its 356,469
+  windows). Relaunched with `--stride 105` → 19,773 batches/epoch, ~4.3h/epoch,
+  ~8.6h total. GPU 99%, loss declining.
+- **Next**: monitor training; meanwhile design Exp 3 (hierarchical DT + Oracle-LP).
+  After training: eval mixed-head on 2025 OOD + dispatch-matched + standard +
+  expanded, compare vs tanh-head control.

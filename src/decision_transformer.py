@@ -354,6 +354,7 @@ class DecisionTransformer(nn.Module):
         n_kv_heads=None,
         qk_norm=False,
         tie_weights=False,
+        action_head_mode="tanh",
     ):
         super().__init__()
         self.state_dim = state_dim
@@ -365,6 +366,13 @@ class DecisionTransformer(nn.Module):
         self.drop_p = drop_p
         self.max_timestep = max_timestep
         self.rope_enabled = rope_enabled
+        # Action head geometry:
+        #   'tanh'  — all dims squashed to (-1, 1) via Tanh (legacy/default)
+        #   'mixed' — dim 0 (energy dispatch) via Tanh to [-1, 1]; dims 1..
+        #             act_dim-1 (FCAS bids) via Sigmoid to [0, 1]
+        if action_head_mode not in ("tanh", "mixed"):
+            raise ValueError(f"Unsupported action_head_mode={action_head_mode!r}; use 'tanh' or 'mixed'.")
+        self.action_head_mode = action_head_mode
 
         # transformer blocks
         input_seq_len = 3 * context_len
@@ -487,11 +495,12 @@ class DecisionTransformer(nn.Module):
             # Tied mode: weight shape is (h_dim, out_dim); use F.linear(h, W.t()) = h @ W
             return_preds = F.linear(h[:,2], self.pred_rtg.weight.t())    # (B,T,1)
             state_preds = F.linear(h[:,2], self.pred_state.weight.t())   # (B,T,state_dim)
-            act_preds = torch.tanh(F.linear(h[:,1], self.pred_act[0].weight.t()))  # (B,T,act_dim)
+            act_linear = F.linear(h[:,1], self.pred_act[0].weight.t())   # (B,T,act_dim)
         else:
             return_preds = self.pred_rtg(h[:,2])    # predict next rtg given r, s, a
             state_preds = self.pred_state(h[:,2])   # predict next state given r, s, a
-            act_preds = self.pred_act(h[:,1])       # predict action given r, s
+            act_linear = self.pred_act[0](h[:,1])   # pre-activation logits (B,T,act_dim)
+        act_preds = self._apply_action_transform(act_linear)
 
         return_preds = torch.nan_to_num(return_preds, nan=0.0, posinf=0.0, neginf=0.0)
         state_preds = torch.nan_to_num(state_preds, nan=0.0, posinf=0.0, neginf=0.0)
@@ -499,6 +508,18 @@ class DecisionTransformer(nn.Module):
 
         return return_preds, state_preds, act_preds
     
+    def _apply_action_transform(self, act_linear: torch.Tensor) -> torch.Tensor:
+        """Squash pre-activation action logits per action_head_mode.
+
+        - 'tanh':  tanh on every dim  → (-1, 1)
+        - 'mixed': dim 0 tanh → [-1, 1]; dims 1..act_dim-1 sigmoid → [0, 1]
+        """
+        if self.action_head_mode == "mixed" and self.act_dim >= 2:
+            act_energy = torch.tanh(act_linear[..., :1])
+            act_fcas = torch.sigmoid(act_linear[..., 1:])
+            return torch.cat([act_energy, act_fcas], dim=-1)
+        return torch.tanh(act_linear)
+
     def load_from_checkpoint(self, checkpoint_or_state, map_location=None, strict: bool = True):
         """
         Robust loading of a checkpoint (path or state-dict). If the checkpoint contains

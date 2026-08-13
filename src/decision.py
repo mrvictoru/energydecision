@@ -1111,9 +1111,30 @@ class AEMOAgent:
                 action = action[0]
             if action.ndim == 0:
                 action = np.array([float(action)], dtype=np.float32)
+            if self._action_is_full_fcas():
+                action = self._clip_fcas_dims(action)
             return action.tolist()
 
         raise ValueError(f"Unsupported algorithm: {self.algorithm}")
+
+    def _action_is_full_fcas(self) -> bool:
+        action_mode = getattr(self.env, 'action_mode', 'multi_market')
+        return action_mode == 'full_fcas' and getattr(self.model, 'act_dim', 0) >= 2
+
+    def _clip_fcas_dims(self, action: np.ndarray) -> np.ndarray:
+        """Clip the 8 FCAS bid dims (indices 1..8) of a 9-dim full_fcas action to [0, 1].
+
+        Energy dim 0 stays in [-1, 1]. This is a no-op for the 'mixed' head (which
+        already emits FCAS in [0, 1] via Sigmoid) but corrects Tanh-head models whose
+        FCAS predictions can be negative (the env would otherwise treat them as 0 via
+        max(0, ...) but leaving them negative wastes headroom signal in buffers).
+        """
+        action = np.asarray(action, dtype=np.float32)
+        if action.ndim == 1 and action.shape[0] >= 2:
+            out = action.copy()
+            out[1:] = np.clip(out[1:], 0.0, 1.0)
+            return out
+        return action
 
     def rule_based_action(self, obs):
         # AEMO raw obs layout: [time(5), RRP, TOTALDEMAND, FCAS(8), GEN(2), SOC]

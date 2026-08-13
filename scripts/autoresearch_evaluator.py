@@ -581,6 +581,9 @@ def run_dt_episodes(
             b = buffers[i]
             env = envs[i]
             action_vec = np.asarray(act[j], dtype=np.float32)
+            if str(action_mode).lower() == "full_fcas" and action_vec.shape[0] >= 2:
+                action_vec = action_vec.copy()
+                action_vec[1:] = np.clip(action_vec[1:], 0.0, 1.0)
             obs, reward, terminated, truncated, info = env.step(action_vec.tolist())
             b["logs"].append(
                 {

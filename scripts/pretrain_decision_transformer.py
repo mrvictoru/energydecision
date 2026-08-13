@@ -44,6 +44,7 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
         "n_kv_heads",
         "qk_norm",
         "tie_weights",
+        "action_head_mode",
     }
 )
 APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
