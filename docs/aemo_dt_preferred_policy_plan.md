@@ -476,3 +476,26 @@ line. Defer unless Exps 0–3 plateau.
   the DT with `act_dim=K` (waypoints) under existing loss machinery; (c) agent
   adapter in `decision.py`: DT → waypoints → LP → per-step actions; (d) eval on
   all surfaces + impact gate.
+
+### 2026-08-13 — Exp 3 agent adapter built + tested (`dt_soc_oracle`)
+- Added `AEMOAgent` support for `algorithm='dt_soc_oracle'` (hierarchical):
+  - `_init_soc_oracle()`: at agent init, runs the DT's `get_action()` on the
+    initial context to predict K normalized target-SOC waypoints (K = model
+    act_dim), denormalizes to MWh, maps waypoints to interval indices
+    (waypoint 0 = episode start, last = terminal SOC at t=T), solves the
+    SOC-waypoint-pinned Oracle LP once, caches per-step 9-dim actions.
+  - `_soc_oracle_action()`: replays the cached action by `env.current_step`
+    (mirrors `_oracle_action`).
+  - Dispatched in `choose_action` before the rule/RL/DT branches.
+  - Device resolution made robust to parameter-free models (fallback CPU).
+- **Smoke test PASSED** (real DecisionTransformer subclass emitting constant
+  waypoints [0.5, 0.8, 0.5] → [5, 8, 5] MWh on a 10 MWh battery): waypoints
+  cached, actions shape (288, 9), first action dispatched, loop runs. Also
+  exercised the `get_action` `[B,T,dim]` shape squeeze (fix applied).
+- **Remaining for Exp 3** (queued behind Exp 2 on the GPU): (1) Oracle-SOC
+  waypoint target generation over the training corpus — needs region/date
+  mapping (the v2 raw_logs embed `scenario__policy__horizon__battery__epNNN`,
+  and `data/aemo_dt_fcas_v2/raw_logs/{region}_{range}/` has the files; the
+  generation manifest records scenario+region+battery per episode); (2) retrain
+  DT with `act_dim=K`; (3) eval. The `episode_start` column maps episodes to
+  price rows.

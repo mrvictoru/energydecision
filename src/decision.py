@@ -616,6 +616,14 @@ class AEMOAgent:
         if self.algorithm == 'aemo_oracle':
             self._init_oracle()
 
+        # Hierarchical DT+LP executor: a DT predicts a coarse target-SOC
+        # waypoint trajectory; the SOC-waypoint-pinned Oracle LP co-optimizes
+        # energy + FCAS within each segment while tracking it.
+        self._soc_oracle_actions: np.ndarray | None = None
+        self._soc_oracle_waypoints: list[float] = []
+        if self.algorithm == 'dt_soc_oracle':
+            self._init_soc_oracle()
+
         # FCAS rule config
         self.fcas_raise_threshold = fcas_raise_threshold
         self.fcas_lower_threshold = fcas_lower_threshold
@@ -1045,9 +1053,115 @@ class AEMOAgent:
         action = self._oracle_actions[step].tolist()
         return action
 
+    def _init_soc_oracle(self):
+        """Hierarchical DT+LP: predict target-SOC waypoints, then solve the
+        SOC-waypoint-pinned Oracle LP once and cache per-step actions.
+
+        The DT is expected to be a SOC-waypoint model: its action output is a
+        K-dim vector of normalized target SOC at K evenly-spaced checkpoints
+        (K = model.act_dim). The executor denormalizes to MWh, pins the SOC at
+        those intervals in the Oracle LP (which co-optimizes energy + all 8
+        FCAS within each segment), and replays the LP's per-step actions.
+        """
+        try:
+            if self.model is None:
+                raise ValueError("dt_soc_oracle requires a DT model.")
+            aemo_data = self.env.aemo_data
+            if aemo_data is None:
+                return
+            T = max(1, len(aemo_data))
+            K = int(getattr(self.model, 'act_dim', 0))
+            if K < 2:
+                raise ValueError(f"dt_soc_oracle requires act_dim>=2 (got {K}).")
+
+            # Predict the K normalized waypoints from the initial context.
+            self.model.eval()
+            params = list(self.model.parameters())
+            device = params[0].device if params else torch.device('cpu')
+            states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
+                self.model, self.dt_states_buffer, self.dt_actions_buffer,
+                self.dt_rtgs_buffer, self.dt_timesteps_buffer,
+            )
+            states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)
+            actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)
+            rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)
+            timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
+            attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
+            with torch.no_grad():
+                wp = self.model.get_action(
+                    states, actions, rtgs, timesteps, attention_mask=attention_mask,
+                )
+            waypoints_norm = torch.nan_to_num(wp, nan=0.0, posinf=0.0, neginf=0.0)
+            waypoints_norm = waypoints_norm.detach().cpu().numpy().astype(float)
+            # get_action returns [B, T=1, act_dim] for batched input; squeeze.
+            if waypoints_norm.ndim == 3:
+                waypoints_norm = waypoints_norm[0, -1]
+            if waypoints_norm.ndim == 0:
+                waypoints_norm = np.array([float(waypoints_norm)])
+
+            # Denormalize to MWh. DT was trained with normalized SOC targets in
+            # [0,1] (index 17 of the obs = soc/capacity).
+            capacity = float(self.env.battery_capacity)
+            waypoints_mwh = np.clip(waypoints_norm, 0.0, 1.0) * capacity
+            self._soc_oracle_waypoints = waypoints_mwh.tolist()
+
+            # Map K waypoints to interval indices spread across the episode
+            # (waypoint 0 == episode start, last == terminal SOC at t=T).
+            # K=2 -> [0, T]; K>2 -> include interior points.
+            idxs = [int(round(i * T / max(1, K - 1))) for i in range(K)]
+            idxs = [max(0, min(T, i)) for i in idxs]
+            soc_waypoints = {t: float(waypoints_mwh[i]) for i, t in enumerate(idxs)}
+
+            env = self.env
+            solver = AEMOOracleSolver(
+                battery_capacity=capacity,
+                max_battery_flow=float(env.max_battery_flow),
+                step_duration=float(env.step_duration),
+                init_soc=float(env.init_battery_level),
+                min_soc=0.0,
+                max_soc=capacity,
+            )
+            result = solver.solve(aemo_data, verbose=False, soc_waypoints=soc_waypoints)
+            max_flow = float(env.max_battery_flow)
+            env_fcas_order = getattr(self.env, '_fcas_services', None)
+            n = max(1, result.n_intervals)
+            actions_out = np.zeros((n, 1 + 8))
+            actions_out[:, 0] = np.clip(-result.optimal_dispatch / max_flow, -1.0, 1.0)
+            if env_fcas_order is not None:
+                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
+                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
+                for i, svc in enumerate(env_fcas_order):
+                    if svc.startswith('RAISE'):
+                        acts = result.optimal_raise_bids
+                        oidx = ORAISE.get(svc, 0)
+                    else:
+                        acts = result.optimal_lower_bids
+                        oidx = OLOWER.get(svc, 0)
+                    actions_out[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+            else:
+                actions_out[:, 1:5] = np.clip(result.optimal_raise_bids / max_flow, 0.0, 1.0)
+                actions_out[:, 5:9] = np.clip(result.optimal_lower_bids / max_flow, 0.0, 1.0)
+            self._soc_oracle_actions = actions_out
+            print(f"  [dt_soc_oracle] waypoints={[round(w,1) for w in waypoints_mwh]} "
+                  f"-> ${result.total_profit:,.0f}/ep (E ${result.energy_revenue:,.0f} "
+                  f"+ F ${result.fcas_revenue:,.0f})")
+        except Exception as e:
+            print(f"  [dt_soc_oracle] Init failed: {e}")
+            import traceback; traceback.print_exc()
+            self._soc_oracle_actions = None
+
+    def _soc_oracle_action(self) -> list[float]:
+        if self._soc_oracle_actions is None:
+            return [0.0] * (1 + 8)
+        step = int(getattr(self.env, 'current_step', 0))
+        step = max(0, min(step, len(self._soc_oracle_actions) - 1))
+        return self._soc_oracle_actions[step].tolist()
+
     def choose_action(self, obs):
         if self.algorithm == 'aemo_oracle':
             return self._oracle_action()
+        if self.algorithm == 'dt_soc_oracle':
+            return self._soc_oracle_action()
         if self.algorithm in ('rule', 'fcas_rule'):
             return self.fcas_rule_based_action(obs) if self.algorithm == 'fcas_rule' else self.rule_based_action(obs)
         if self.algorithm == 'dispatch':
