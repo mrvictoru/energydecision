@@ -278,5 +278,139 @@ line. Defer unless Exps 0–3 plateau.
   PPO-only DT was never evaluated on 2025; the mixed-distribution action head
   exists in GRPO but not in pretraining; no offline-Q (IQL/CQL) has ever been
   tried in this repo.
-- Next action for the agent: **Exp 0** (zero-training-cost 2025 + dispatch-
-  matched + standard eval of the existing PPO-only DTs).
+
+### 2026-08-12 — Exp 0 setup / protocol findings
+- **Runtime confirmed**: `energydecision-gpu` distrobox is up (RTX 2080 Ti,
+  torch 2.9.0+cu130). Host-shell python has broken CUDA libs — always run
+  inside the distrobox.
+- **Protocol asymmetry found (IMPORTANT)**: the broad surfaces (2025 +
+  expanded) use `action_mode=multi_market` (3-dim) in their eval configs, and
+  the PPO reference is itself a 3-dim `multi_market` model
+  (`models/aemo_sb3/ppo_aemo_model.zip`, `Box(3,)`). The DT candidates are
+  9-dim `full_fcas`; the env's `step()` silently reads only dims 0–2 in
+  `multi_market` mode, **dropping the DT's 6 contingency-FCAS dims** on the
+  broad surfaces. The narrow surfaces (dispatch-matched, standard) use
+  `full_fcas` where the 9-dim DT competes against the 3-dim PPO (whose
+  contingency dims are implicitly zero).
+  - Consequence for Exp 0: 2025/expanded comparisons must be read as
+    "3-dim-effective DT vs 3-dim PPO"; a `full_fcas` 2025 variant is worth
+    adding later so the DT can use its full action space.
+- **Cache is warm**: reference caches for rule/fcas_rule/ppo_reference on all
+  2025 scenarios exist under `eval_output/autoresearch/reference_cache/expanded/`,
+  so 2025 eval only rolls out the DT candidate (24 work items).
+- **Commands confirmed**:
+  `python3 scripts/autoresearch_evaluator.py --surface-manifest-path
+  models/aemo/dt/modernv2_ppo_only_dt_loss_surface_manifest.json
+  --evaluation-config configs/aemo_autoresearch_evaluator.2025.json
+  --output-dir eval_output/exp0_modernv2_ppo_only_2025 --device auto`
+- **Next**: run Exp 0 — 2025 eval of modern 8×768 PPO-only DT (rtg=10), then
+  8×384, then dispatch-matched + standard surfaces, then RTG sweep on winners.
+
+### 2026-08-12 — Exp 0 result (modern 8×768 PPO-only DT, 2025 OOD)
+- **RESULT: profit $4,200/ep vs PPO $14,320 → PPO wins ~3.4×.** The PPO-only
+  DT does NOT hold on 2025.
+- Decomposition: FCAS $1,854 vs PPO $10,637; energy $4,468 vs PPO $9,539. The
+  energy-arbitrage edge that produced $17,099 on broad-2024 collapses to
+  $4,468 on 2025 — the energy-heavy skill is regime-specific, not portable.
+- Compare with the full-PPO fine-tune (−$694): the offline PPO-only DT is
+  better than the online fine-tune but still far below PPO.
+- This validates the plan's risk: data-composition (Exp 1) alone may not
+  produce a broad/OOD winner; the 2025 collapse of the energy edge points to
+  the need for structural fixes (Exp 3 hierarchical DT+Oracle, Exp 2 mixed
+  head, Exp 5 IQL) rather than more mixtures.
+- Logged in `results.tsv`. Artifacts: `eval_output/exp0_modernv2_ppo_only_2025/`.
+- Next: legacy 8×384 2025 run (in progress), then dispatch-matched + standard.
+
+### 2026-08-12 — Exp 0 result (legacy 8×384 PPO-only DT, 2025 OOD)
+- **RESULT: profit $4,327/ep vs PPO $14,320 → PPO wins ~3.3×.** Same profile as
+  the modern 8×768 ($4,200) — **architecture-independent**: both PPO-only DTs
+  collapse on 2025 with near-identical numbers (FCAS ~$1.8k, energy ~$4.5k).
+  This closes the architecture question for 2025 too: the data (energy-heavy
+  PPO episodes) is the determinant, and that behaviour does not transfer OOD.
+- Logged in `results.tsv`. Artifacts: `eval_output/exp0_legacy_ppo_only_2025/`.
+- **Interpretation so far (Exp 0, 2025 leg):** neither PPO-only DT is the broad
+  OOD winner. The $17.6k broad-2024 result was a 2024-regime-specific energy
+  arbitrage skill. This strengthens the case for structural fixes (Exp 2/3/5)
+  over data re-composition (Exp 1) for the OOD goal.
+- Next: dispatch-matched + standard surfaces for both PPO-only DTs (in progress).
+
+### 2026-08-12 — Exp 0 result (modern 8×768 PPO-only DT, dispatch-matched)
+- **RESULT (rtg=0.5, SA1 Oct+Nov 2024): profit $7,590/ep vs PPO $7,757 → near-tie
+  (2% below), FCAS $5,884 vs $5,523 (DT higher).** Much stronger than 2025 —
+  on the FCAS-heavy full_fcas surface the PPO-only DT is competitive with PPO.
+- Note: this uses the 9-dim `ppo_aemo_fcas_model.zip` PPO reference. The
+  mixed modern v2 scored $10,138 at rtg=0 on the wider Jul–Dec surface; the
+  rtg=0 run (6 scenarios, in progress) will give the comparable number.
+- Logged in `results.tsv`. Artifacts: `eval_output/exp0_modernv2_ppo_only_dispatch_matched/`.
+- Next: rtg0 dispatch-matched (running), then standard Oct surface.
+
+### 2026-08-12 — Exp 0 result (modern 8×768 PPO-only DT, dispatch-matched rtg=0)
+- **RESULT (rtg=0, SA1 Jul–Dec 2024, 6 scenarios, asset-sized battery):
+  profit $23,174/ep vs PPO $22,622 → DT wins ~2.4%**, FCAS $12,238 vs $12,244
+  (near-identical). On the broad dispatch-matched surface the PPO-only DT
+  edges PPO — a genuine DT win on a FCAS-heavy narrow surface.
+- Combined dispatch-matched picture: rtg=0.5 (Oct+Nov) near-tie ($7.6k vs
+  $7.8k, 2% below); rtg=0 (Jul–Dec) DT wins. RTG=0 is the better prompt for
+  this model, consistent with the modern v2's RTG response.
+- Logged in `results.tsv`. Artifacts: `eval_output/exp0_modernv2_ppo_only_dispatch_matched_rtg0/`.
+- Next: standard Oct surface (running).
+
+### 2026-08-12 — Exp 0 result (modern 8×768 PPO-only DT, standard Oct)
+- **RESULT (rtg=0.5, 5 regions, full_fcas, medium_1c): profit $2,668/ep vs PPO
+  $2,353 → DT wins ~13%**, FCAS $2,435 vs $2,192. Below the mixed modern v2's
+  $4,630 but a clear DT win over PPO on this narrow surface.
+- Logged in `results.tsv`. Artifacts: `eval_output/exp0_modernv2_ppo_only_standard/`.
+- **Exp 0 picture so far (modern 8×768 PPO-only DT):**
+  | Surface | DT | PPO | Verdict |
+  |---|---|---|---|
+  | 2025 OOD | $4,200 | $14,320 | PPO 3.4× |
+  | Dispatch-matched rtg=0.5 (Oct+Nov) | $7,590 | $7,757 | near-tie |
+  | Dispatch-matched rtg=0 (Jul–Dec, 6 scen) | $23,174 | $22,622 | DT +2.4% |
+  | Standard Oct | $2,668 | $2,353 | DT +13% |
+  The PPO-only DT wins/ties the narrow surfaces but loses the OOD surface.
+- Next: legacy standard (running), then compile Exp 0 verdict + update PR.
+
+### 2026-08-12 — Exp 0 result (legacy 8×384 PPO-only DT, standard Oct)
+- **RESULT (rtg=0.5, 5 regions, full_fcas): profit $2,426/ep vs PPO $2,353 →
+  DT wins ~3%**, FCAS $2,268 vs $2,192. Consistent with modern 8×768 ($2,668).
+  Both architectures beat PPO on the standard surface.
+- Logged in `results.tsv`. Artifacts: `eval_output/exp0_legacy_ppo_only_standard/`.
+- Next: legacy dispatch-matched rtg=0 (running), then compile the Exp 0 verdict,
+  commit, and update PR #36.
+
+### 2026-08-12 — Exp 0 COMPLETE (all surfaces, both PPO-only DTs)
+- Legacy dispatch-matched rtg=0: **$23,802 vs PPO $22,622 → DT wins ~5%**,
+  consistent with modern 8×768 ($23,174). Logged + artifacts
+  `eval_output/exp0_legacy_ppo_only_dispatch_matched_rtg0/`.
+
+**FULL EXP 0 TABLE (PPO-only DT vs PPO; profit/ep):**
+
+| Surface | Modern 8×768 | Legacy 8×384 | PPO | Verdict |
+|---|---|---|---:|---:|
+| 2025 OOD | $4,200 | $4,327 | $14,320 | PPO ~3.3× |
+| Dispatch-matched rtg=0.5 (Oct+Nov) | $7,590 | — | $7,757 | near-tie |
+| Dispatch-matched rtg=0 (Jul–Dec, 6 scen) | $23,174 | $23,802 | $22,622 | DT +2.4–5% |
+| Standard Oct (5 regions) | $2,668 | $2,426 | $2,353 | DT +3–13% |
+
+**Exp 0 verdict:**
+1. **The PPO-only DT is NOT the broad/OOD winner.** Both architectures collapse
+   on 2025 (~$4.2–4.3k vs PPO $14.3k). The $17.6k broad-2024 result was a
+   2024-regime-specific energy-arbitrage skill that does not transfer OOD.
+   This closes the "PPO-only pretrain → overall DT advantage" hypothesis at
+   the headline (OOD) level, even though profit is net of degradation.
+2. **It IS a genuine narrow-surface winner:** on dispatch-matched (Jul–Dec) and
+   standard Oct the PPO-only DT beats PPO, and it's architecture-independent
+   (both 8×384 and 8×768 agree everywhere).
+3. **Combined with the protocol finding** (broad surfaces use 3-dim
+   `multi_market`, dropping the DT's 6 contingency-FCAS dims), the 2025 gap is
+   partly protocol (only RAISE/LOWERREG scored) and partly regime (energy edge
+   didn't transfer). A `full_fcas` 2025 variant is worth testing (Exp 0 follow-up).
+4. **Net implication for the plan:** data re-composition alone (Exp 1) is
+   unlikely to fix the OOD gap; the structural fixes (Exp 3 hierarchical
+   DT+Oracle, Exp 2 mixed action head, Exp 5 IQL/CQL) are the higher-value
+   next steps for making the DT the broad winner. Exp 1 is still worth a small
+   grid to squeeze the narrow surfaces further, but OOD is the binding
+   constraint.
+- All 7 rows logged in `results.tsv`.
+- **Next**: commit Exp 0, update PR #36, then decide Exp 1 (data-mixture grid)
+  vs Exp 2/3 (structural).
