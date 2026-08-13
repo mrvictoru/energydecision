@@ -499,3 +499,25 @@ line. Defer unless Exps 0–3 plateau.
   generation manifest records scenario+region+battery per episode); (2) retrain
   DT with `act_dim=K`; (3) eval. The `episode_start` column maps episodes to
   price rows.
+
+### 2026-08-13 — Exp 3 waypoint target generator built + full run launched
+- **New script** `scripts/generate_soc_waypoint_targets.py`: for each training
+  episode, reconstructs the per-step price frame from `raw_observation`
+  (RRP=idx5, 8 FCAS=idx7:15), runs the free Oracle LP for the optimal SOC
+  trajectory, downsamples to K waypoints (normalized [0,1]), writes a parquet
+  whose `action` = K-dim waypoint vector (the DT's regression target).
+  - **Long-episode fix**: 26-week episodes (74,880 rows) make the full 5-min LP
+    infeasible. Episodes >12k rows are solved on an hourly-downsampled price
+    grid (factor 12) with `step_h` adjusted, then the optimal SOC is
+    linear-interpolated back to the 5-min grid before waypoint sampling. This
+    is sound because SOC is a smooth slow signal — the coarse LP captures the
+    energy/FCAS structure for training targets.
+  - Emits `oracle_profit`, `waypoint_soc_mwh`, `coarse_factor` metadata.
+- **Smoke test passed**: 2 episodes (a long fast_375c), K=8, wrote 149,760-row
+  parquet; waypoints verified. The fast_375c waypoints are binary-ish
+  (0/8/0/8...) reflecting hard cycling on an 8 MWh/30 MW battery.
+- **Full run launched** (PID 2907701, CPU, alongside Exp 2 GPU training):
+  1,200 episodes (a2c/td3/sac/ddpg × short/medium/long × 4 batteries), K=8 →
+  `data/aemo_dt_soc_oracle/aemo_soc_waypoints.parquet`.
+- **Status check (Exp 2)**: 9% through epoch 1, loss 0.067 and falling;
+  on track for ~8.7h total.
