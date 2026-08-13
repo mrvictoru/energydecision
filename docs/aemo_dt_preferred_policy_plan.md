@@ -447,3 +447,32 @@ line. Defer unless Exps 0–3 plateau.
 - **Next**: monitor training; meanwhile design Exp 3 (hierarchical DT + Oracle-LP).
   After training: eval mixed-head on 2025 OOD + dispatch-matched + standard +
   expanded, compare vs tanh-head control.
+
+### 2026-08-13 — Exp 3 executor built + validated (SOC-waypoint Oracle LP)
+- **Design**: hierarchical DT + LP executor.
+  - **DT predicts a coarse target-SOC trajectory** (K checkpoints over the
+    episode) instead of the 9-dim per-step action. RTG conditioning now targets
+    "desired total profit" → SOC trajectory aggressiveness directly.
+  - **Executor = SOC-waypoint-pinned Oracle LP** (`src/aemo_oracle_algo.py`):
+    given the DT's waypoints + prices, co-optimizes energy + all 8 FCAS within
+    each segment while tracking the pinned SOC. One LP solve per episode.
+  - This is the only design that structurally wins BOTH broad (energy timing via
+    SOC schedule) AND narrow (FCAS capture via LP) surfaces.
+- **Executor implemented**: `AEMOOracleSolver.solve(..., soc_waypoints={t: soc})`
+  adds equality constraints `soc[t] = target` (t∈[0,T], T pins terminal SOC);
+  out-of-bounds waypoints rejected.
+- **Validation (synthetic 24h, diurnal RRP + FCAS spike):**
+  | Variant | Profit | Note |
+  |---|---|---|
+  | Free Oracle | $2,045 | ceiling |
+  | Pinned to free trajectory's own SOC | $2,045 | **100% preserved** — LP correct |
+  | Pinned to imperfect linear path (5→7→4→5) | $1,719 | 16% loss — executor robust to imperfect DT SOC |
+  - Waypoints exactly honored (asserted). This is the key feasibility result for
+    Exp 3: **the LP executor retains most of the Oracle's profit even with
+    imperfect predicted SOC** — the decomposition is sound.
+- **Next steps for Exp 3** (after Exp 2 GPU slot): (a) generate training data —
+  run the free Oracle on the FCAS-heavy corpus episodes to get optimal SOC
+  trajectories, downsample to K waypoints as DT regression targets; (b) retrain
+  the DT with `act_dim=K` (waypoints) under existing loss machinery; (c) agent
+  adapter in `decision.py`: DT → waypoints → LP → per-step actions; (d) eval on
+  all surfaces + impact gate.

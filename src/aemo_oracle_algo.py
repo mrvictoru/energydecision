@@ -87,7 +87,8 @@ class AEMOOracleSolver:
         self.max_soc = max_soc
 
     def solve(self, prices: pl.DataFrame, region: str = "",
-              verbose: bool = False) -> OracleResult:
+              verbose: bool = False,
+              soc_waypoints: dict[int, float] | None = None) -> OracleResult:
         """
         Solve the Oracle LP for a single episode.
 
@@ -98,6 +99,10 @@ class AEMOOracleSolver:
                  'FCAS_LOWER6SEC', 'FCAS_LOWER60SEC', 'FCAS_LOWER5MIN', 'FCAS_LOWERREG']
             region: Optional region name for logging.
             verbose: Print solver progress.
+            soc_waypoints: Optional mapping {interval_index: target_soc_mwh} pinning
+                the SOC at the START of the given intervals. Used by the hierarchical
+                executor: a learned DT predicts a coarse target-SOC trajectory and the
+                LP co-optimizes energy + FCAS within each segment while tracking it.
 
         Returns:
             OracleResult with optimal trajectory and total profit.
@@ -203,6 +208,26 @@ class AEMOOracleSolver:
             A_eq_rows.append(csr_matrix(r))
             b_eq.append(0.0)
             row += 1
+
+        # SOC waypoints: pin soc[t] = target for the hierarchical executor.
+        # Waypoint t is the SOC at the START of interval t. t == T pins the
+        # terminal SOC (the soc_T_idx variable).
+        if soc_waypoints:
+            for wpt_t, wpt_soc in sorted(soc_waypoints.items()):
+                wpt_t = int(wpt_t)
+                if wpt_t < 0 or wpt_t > T:
+                    raise ValueError(f"Invalid soc waypoint interval {wpt_t}; must be in [0, {T}]")
+                wpt_soc = float(wpt_soc)
+                if wpt_soc < self.min_soc - 1e-6 or wpt_soc > self.max_soc + 1e-6:
+                    raise ValueError(
+                        f"soc waypoint at t={wpt_t} is {wpt_soc} MWh, outside "
+                        f"[{self.min_soc}, {self.max_soc}]"
+                    )
+                r = np.zeros(total_vars)
+                r[soc_T_idx if wpt_t == T else idx(wpt_t, I_S)] = 1.0
+                A_eq_rows.append(csr_matrix(r))
+                b_eq.append(wpt_soc)
+                row += 1
 
         A_eq = vstack(A_eq_rows) if A_eq_rows else csr_matrix((0, total_vars))
         b_eq = np.array(b_eq)
