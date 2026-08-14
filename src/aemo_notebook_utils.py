@@ -772,6 +772,68 @@ def run_dt_episodes(
     return episodes
 
 
+def run_dt_soc_oracle_episodes(
+    *,
+    processed_data: pl.DataFrame,
+    battery_variant: dict[str, Any],
+    model: Any | None = None,
+    model_path: str | Path | None = None,
+    model_config_path: str | Path | None = None,
+    num_episodes: int,
+    max_step: int,
+    step_duration: float,
+    action_mode: str = "full_fcas",
+    degradation_mode: str = "real_world",
+    degradation_chemistry: str = "LFP",
+    degradation_temperature: float = 30.0,
+    random_episode_start: bool = True,
+    rtg_value: float = 0.0,
+    dt_gamma: float = 1.0,
+    base_seed: int = 8964,
+    device: str = "auto",
+) -> list[pl.DataFrame]:
+    """Roll out the hierarchical DT+LP policy (dt_soc_oracle).
+
+    The waypoint DT predicts a coarse target-SOC trajectory; the
+    SOC-waypoint-pinned Oracle LP co-optimizes energy + FCAS within each
+    segment; per-step actions are replayed. Serial per episode (the LP is
+    solved once per episode at agent init).
+    """
+    resolved_variant = resolve_battery_variants([battery_variant])[0]
+    if model is None:
+        if model_path is None or model_config_path is None:
+            raise ValueError("run_dt_soc_oracle_episodes needs model= or (model_path, model_config_path).")
+        model = load_dt_model(
+            model_path=model_path,
+            model_config_path=model_config_path,
+            device=device,
+        )
+    episodes: list[pl.DataFrame] = []
+    for episode_idx in range(num_episodes):
+        env = create_aemo_env(
+            processed_data=processed_data,
+            battery_variant=resolved_variant,
+            max_step=max_step,
+            step_duration=step_duration,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+        )
+        agent = AEMOAgent(
+            env,
+            algorithm="dt_soc_oracle",
+            model=model,
+            rtg_value=rtg_value,
+            dt_gamma=dt_gamma,
+            reset_seed=base_seed + episode_idx if random_episode_start else None,
+        )
+        episode_df, _ = agent.run_episode()
+        episodes.append(episode_df)
+    return episodes
+
+
 def _discounted_returns_from_rewards(
     rewards: Sequence[float],
     *,

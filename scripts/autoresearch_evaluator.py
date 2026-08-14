@@ -27,6 +27,7 @@ from aemo_notebook_utils import (
     preflight_processed_cache_paths,
     resolve_battery_variants,
     resolve_dispatch_battery_life_cost,
+    run_dt_soc_oracle_episodes,
     run_rule_episodes,
     run_sb3_episodes,
     should_run_dispatch_for_scenario,
@@ -661,6 +662,27 @@ def run_policy_episodes(
             rtg_value=_dt_rtg_value(policy_cfg, training_summary),
             base_seed=base_seed,
             forecast_npz_path=forecast_npz_path,
+        )
+
+    if policy_kind == "dt_soc_oracle":
+        # Hierarchical DT+LP: the waypoint DT predicts target-SOC waypoints and
+        # the SOC-waypoint-pinned Oracle LP executes per-step actions.
+        if dt_model is None:
+            raise ValueError("DT policy requested but no model was loaded.")
+        return run_dt_soc_oracle_episodes(
+            processed_data=processed_data,
+            battery_variant=battery_variant,
+            model=dt_model,
+            num_episodes=episodes_per_variant,
+            max_step=max_step,
+            step_duration=step_duration,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+            rtg_value=_dt_rtg_value(policy_cfg, training_summary),
+            base_seed=base_seed,
         )
 
     if policy_kind == "rule":
