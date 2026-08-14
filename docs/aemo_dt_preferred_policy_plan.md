@@ -521,3 +521,20 @@ line. Defer unless Exps 0–3 plateau.
   `data/aemo_dt_soc_oracle/aemo_soc_waypoints.parquet`.
 - **Status check (Exp 2)**: 9% through epoch 1, loss 0.067 and falling;
   on track for ~8.7h total.
+
+### 2026-08-14 — Exp 2 training DONE + first evals
+- **Training complete**: mixed-head 8×768 on FCAS-heavy subset finished (loss
+  0.0044, best_val_action_loss 0.00576 vs tanh control 0.00615 — mixed head
+  predicts actions better in-sample). Checkpoint verified: loads as
+  `action_head_mode=mixed`, FCAS dims in [0,1].
+- **Expanded broad-2024 (multi_market, rtg=10):** mixed $10,779 vs tanh control
+  $13,387 (worse). BUT this surface uses `multi_market` (3-dim), which drops
+  6 of the 8 FCAS dims — **neutralizing the mixed head's core benefit**. The
+  proper test is on `full_fcas` surfaces.
+- **Dispatch-matched rtg=0 (full_fcas 9-dim, SA1 Jul–Dec):** mixed-head profit
+  **$15,160** (vs PPO $22,622) with **FCAS $18,320 vs PPO $12,244** — the DT
+  captures **+50% more FCAS than PPO**, the strongest FCAS of any DT variant.
+  Energy $15,896. Tanh control on the same surface (in progress) will isolate
+  the head effect.
+- **Next**: tanh control dispatch-matched (running), then standard Oct for both,
+  then 2025 OOD for mixed-head, then compile Exp 2 verdict.
