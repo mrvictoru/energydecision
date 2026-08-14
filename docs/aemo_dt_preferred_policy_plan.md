@@ -538,3 +538,65 @@ line. Defer unless Exps 0–3 plateau.
   the head effect.
 - **Next**: tanh control dispatch-matched (running), then standard Oct for both,
   then 2025 OOD for mixed-head, then compile Exp 2 verdict.
+
+### 2026-08-14 — Exp 2 eval COMPLETE (head-to-head: mixed vs tanh)
+- Full_fcas surfaces now measured for both heads on the same FCAS-heavy data:
+
+  | Surface | Tanh control | Mixed head | PPO | Verdict |
+  |---|---|---|---|---|
+  | Standard Oct (full_fcas) | $6,100 | $6,111 | $2,353 | both beat PPO 2.6× |
+  | Dispatch-matched rtg=0 (full_fcas) | $19,083 | $15,160 | $22,622 | tanh better than mixed |
+  | Expanded broad-2024 (multi_market) | $13,387 | $10,779 | $15,017 | tanh better than mixed |
+  | **2025 OOD (in progress)** | ? | ? | $14,320 | — |
+
+- **Exp 2 verdict: the mixed action head does NOT help.** It ties the tanh head
+  on standard and is ~20% worse on dispatch-matched and expanded. The FCAS
+  output geometry (Sigmoid vs Tanh) was not the binding constraint. This
+  confirms the plan's data-ceiling hypothesis — the head change was worth
+  testing (it was the one clean, untried mechanism) but is a dead end.
+- **Strong positive from the FCAS-heavy data (Exp 0's composition lever):** both
+  FCAS-heavy models are genuine narrow-surface winners — $6.1k standard (2.6×
+  PPO, 31% over dispatch) and $19.1k dispatch-matched, with FCAS $5.9-6.0k
+  (standard) and $20k (dispatch-matched, +63% over PPO). The mixed data was the
+  problem, not the head.
+- **Implication:** Exp 1 (data-mixture grid) is now more relevant again — the
+  FCAS-heavy composition is the winning lever on narrow surfaces. Combined with
+  the Exp 0 finding (PPO-only = broad winner, FCAS-heavy = narrow winner), a
+  profit-maximizing mixture that retains both is the next data-side step.
+  **Exp 3 (hierarchical DT+LP) remains the structural path** for OOD/broad.
+- Logged in `results.tsv`.
+
+### 2026-08-14 — Exp 2 2025 OOD (tanh control) + Exp 3 training prep
+- **2025 OOD (tanh FCAS-heavy): profit $10,256 vs PPO $14,320 (PPO 1.4×)** —
+  the strongest OOD result of any DT variant (PPO-only: $4.2k; full-PPO
+  fine-tune: −$694). The FCAS-heavy composition generalizes much better to
+  2025 than the energy-heavy PPO-only composition.
+- Mixed-head 2025 run in progress (completes the head comparison on the OOD
+  surface).
+- **Exp 3 data ready**: `data/aemo_dt_soc_oracle/aemo_soc_waypoints.parquet`
+  (1,200 episodes, K=8 waypoint targets, 37.6M rows). Next: retrain DT with
+  `act_dim=8` on these targets → hierarchical `dt_soc_oracle` agent → eval.
+  The waypoint DT trains on the GPU after the Exp 2 eval queue drains.
+
+### 2026-08-14 — Exp 2 COMPLETE (full head comparison incl. 2025 OOD)
+- **2025 OOD (mixed head): profit $12,488 vs tanh $10,256 (+22%) vs PPO
+  $14,320 (15% gap)** — the BEST OOD result of any DT variant. The mixed head
+  helps substantially out-of-distribution but hurts in-distribution full_fcas.
+- **Final Exp 2 head comparison (FCAS-heavy data, both 8×768):**
+
+  | Surface | Tanh | Mixed | Verdict |
+  |---|---|---|---|
+  | Standard Oct (full_fcas) | $6,100 | $6,111 | tie |
+  | Dispatch-matched rtg=0 (full_fcas) | $19,083 | $15,160 | tanh better |
+  | Expanded broad-2024 (multi_market) | $13,387 | $10,779 | tanh better |
+  | **2025 OOD (multi_market)** | $10,256 | **$12,488** | mixed better |
+- **Exp 2 verdict: the mixed head is not a clean win.** It ties on standard,
+  hurts on in-distribution full_fcas surfaces, and helps on OOD. Net effect is
+  ambiguous for deployment. The more robust finding: **the FCAS-heavy data
+  composition (not the head) is the real lever** — the tanh FCAS-heavy model
+  is a strong narrow-surface winner ($6.1k standard = 2.6× PPO; $19.1k
+  dispatch-matched) AND the best OOD DT so far ($10.3k / $12.5k mixed). The
+  head change alone does not close the PPO gap.
+- **Path forward:** Exp 3 (hierarchical DT+LP) is the remaining structural
+  lever for broad/OOD. Data-mixture (Exp 1) could combine the PPO-only broad
+  winner with the FCAS-heavy narrow winner. Logged in `results.tsv`.

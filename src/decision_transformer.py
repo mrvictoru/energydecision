@@ -367,11 +367,16 @@ class DecisionTransformer(nn.Module):
         self.max_timestep = max_timestep
         self.rope_enabled = rope_enabled
         # Action head geometry:
-        #   'tanh'  — all dims squashed to (-1, 1) via Tanh (legacy/default)
-        #   'mixed' — dim 0 (energy dispatch) via Tanh to [-1, 1]; dims 1..
-        #             act_dim-1 (FCAS bids) via Sigmoid to [0, 1]
-        if action_head_mode not in ("tanh", "mixed"):
-            raise ValueError(f"Unsupported action_head_mode={action_head_mode!r}; use 'tanh' or 'mixed'.")
+        #   'tanh'    — all dims squashed to (-1, 1) via Tanh (legacy/default)
+        #   'mixed'   — dim 0 (energy dispatch) via Tanh to [-1, 1]; dims 1..
+        #               act_dim-1 (FCAS bids) via Sigmoid to [0, 1]
+        #   'sigmoid' — all dims via Sigmoid to [0, 1] (e.g. normalized SOC
+        #               waypoint targets in the hierarchical dt_soc_oracle DT)
+        if action_head_mode not in ("tanh", "mixed", "sigmoid"):
+            raise ValueError(
+                f"Unsupported action_head_mode={action_head_mode!r}; "
+                f"use 'tanh', 'mixed', or 'sigmoid'."
+            )
         self.action_head_mode = action_head_mode
 
         # transformer blocks
@@ -511,13 +516,16 @@ class DecisionTransformer(nn.Module):
     def _apply_action_transform(self, act_linear: torch.Tensor) -> torch.Tensor:
         """Squash pre-activation action logits per action_head_mode.
 
-        - 'tanh':  tanh on every dim  → (-1, 1)
-        - 'mixed': dim 0 tanh → [-1, 1]; dims 1..act_dim-1 sigmoid → [0, 1]
+        - 'tanh':    tanh on every dim  → (-1, 1)
+        - 'mixed':   dim 0 tanh → [-1, 1]; dims 1..act_dim-1 sigmoid → [0, 1]
+        - 'sigmoid': sigmoid on every dim → (0, 1)
         """
         if self.action_head_mode == "mixed" and self.act_dim >= 2:
             act_energy = torch.tanh(act_linear[..., :1])
             act_fcas = torch.sigmoid(act_linear[..., 1:])
             return torch.cat([act_energy, act_fcas], dim=-1)
+        if self.action_head_mode == "sigmoid":
+            return torch.sigmoid(act_linear)
         return torch.tanh(act_linear)
 
     def load_from_checkpoint(self, checkpoint_or_state, map_location=None, strict: bool = True):

@@ -49,7 +49,14 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
 )
 APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
 APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none", "custom")
-ACTION_MODE_TO_ACT_DIM = {"simple": 1, "multi_market": 3, "full_fcas": 9}
+ACTION_MODE_TO_ACT_DIM = {
+    "simple": 1,
+    "multi_market": 3,
+    "full_fcas": 9,
+    # Hierarchical DT: the 'action' is a K-dim normalized target-SOC waypoint
+    # vector consumed by the dt_soc_oracle LP executor, not a direct env action.
+    "soc_waypoint": 8,
+}
 VALID_AEMO_ACT_DIMS = frozenset(ACTION_MODE_TO_ACT_DIM.values())
 AEMO_STATE_DIM = 18
 SEARCHABLE_KNOBS = (
