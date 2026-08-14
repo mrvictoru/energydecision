@@ -1103,6 +1103,12 @@ class AEMOAgent:
             # [0,1] (index 17 of the obs = soc/capacity).
             capacity = float(self.env.battery_capacity)
             waypoints_mwh = np.clip(waypoints_norm, 0.0, 1.0) * capacity
+            # Waypoint 0 is the SOC at the START of interval 0, which the env
+            # fixes to init_battery_level. Force it (and clamp to capacity) so
+            # the LP is always feasible at the boundary.
+            init_soc = float(getattr(self.env, 'init_battery_level', capacity * 0.5))
+            waypoints_mwh[0] = float(np.clip(init_soc, 0.0, capacity))
+            waypoints_mwh = np.clip(waypoints_mwh, 0.0, capacity)
             self._soc_oracle_waypoints = waypoints_mwh.tolist()
 
             # Map K waypoints to interval indices spread across the episode
@@ -1122,6 +1128,14 @@ class AEMOAgent:
                 max_soc=capacity,
             )
             result = solver.solve(aemo_data, verbose=False, soc_waypoints=soc_waypoints)
+            if result.total_profit < -1e11:
+                # Full-episode pinned LP infeasible (DT trajectory not
+                # physically trackable). Fall back to per-segment solves: pin
+                # only the terminal SOC of each segment so each sub-LP is
+                # feasible (a single segment only needs to reach one SOC).
+                print(f"  [dt_soc_oracle] full-episode LP infeasible "
+                      f"({result.solver_message}); falling back to per-segment solves")
+                result = self._solve_soc_segments(aemo_data, solver, idxs, waypoints_mwh)
             max_flow = float(env.max_battery_flow)
             env_fcas_order = getattr(self.env, '_fcas_services', None)
             n = max(1, result.n_intervals)
@@ -1156,6 +1170,128 @@ class AEMOAgent:
         step = int(getattr(self.env, 'current_step', 0))
         step = max(0, min(step, len(self._soc_oracle_actions) - 1))
         return self._soc_oracle_actions[step].tolist()
+
+    def _solve_soc_segments(
+        self,
+        aemo_data: pl.DataFrame,
+        solver: AEMOOracleSolver,
+        idxs: list[int],
+        waypoints_mwh: np.ndarray,
+    ) -> OracleResult:
+        """Fallback executor: solve one SOC-pinned LP per segment.
+
+        Each segment [t_i, t_{i+1}] is solved independently with its terminal
+        SOC pinned, so every segment is feasible by construction (a single
+        segment only needs to reach one SOC within ramp limits). Concatenates
+        the per-segment actions into a full-episode action plan. Returns the
+        best-effort OracleResult (revenue summed, dispatch concatenated).
+        """
+        env = self.env
+        max_flow = float(env.max_battery_flow)
+        env_fcas_order = getattr(self.env, '_fcas_services', None)
+        T = max(1, len(aemo_data))
+        n = max(1, T)
+        actions_out = np.zeros((n, 1 + 8))
+        ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
+        OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
+
+        total_profit = 0.0
+        energy_rev = 0.0
+        fcas_rev = 0.0
+        dispatch_all: list[np.ndarray] = []
+        raise_all: list[np.ndarray] = []
+        lower_all: list[np.ndarray] = []
+        soc_all: list[np.ndarray] = []
+        last_soc = float(env.init_battery_level)
+        last_idx = 0
+
+        for seg in range(len(idxs) - 1):
+            t0, t1 = idxs[seg], idxs[seg + 1]
+            if t1 <= t0:
+                continue
+            seg_data = aemo_data.slice(t0, t1 - t0)
+            seg_solver = AEMOOracleSolver(
+                battery_capacity=float(env.battery_capacity),
+                max_battery_flow=max_flow,
+                step_duration=float(env.step_duration),
+                init_soc=last_soc,
+                min_soc=0.0,
+                max_soc=float(env.battery_capacity),
+            )
+            seg_wp = {t1 - t0: float(waypoints_mwh[seg + 1])}
+            res = seg_solver.solve(seg_data, verbose=False, soc_waypoints=seg_wp)
+            if res.total_profit < -1e11:
+                # Segment itself infeasible: pin the terminal SOC to the last
+                # achievable value (clamp within ramp reach from current SOC).
+                max_delta = max_flow * float(env.step_duration) * (t1 - t0)
+                target = float(np.clip(waypoints_mwh[seg + 1],
+                                       last_soc - max_delta, last_soc + max_delta))
+                res = seg_solver.solve(seg_data, verbose=False,
+                                       soc_waypoints={t1 - t0: target})
+                if res.total_profit < -1e11:
+                    # Last resort: flat SOC segment (no net dispatch).
+                    flat = AEMOOracleSolver(
+                        battery_capacity=float(env.battery_capacity),
+                        max_battery_flow=max_flow,
+                        step_duration=float(env.step_duration),
+                        init_soc=last_soc,
+                        min_soc=0.0,
+                        max_soc=float(env.battery_capacity),
+                    )
+                    res = flat.solve(seg_data, verbose=False,
+                                     soc_waypoints={t1 - t0: last_soc})
+                    if res.total_profit < -1e11:
+                        continue
+
+            seg_len = res.n_intervals
+            actions_out[last_idx:last_idx + seg_len, 0] = np.clip(
+                -res.optimal_dispatch / max_flow, -1.0, 1.0)
+            if env_fcas_order is not None:
+                for i, svc in enumerate(env_fcas_order):
+                    if svc.startswith('RAISE'):
+                        acts = res.optimal_raise_bids
+                        oidx = ORAISE.get(svc, 0)
+                    else:
+                        acts = res.optimal_lower_bids
+                        oidx = OLOWER.get(svc, 0)
+                    actions_out[last_idx:last_idx + seg_len, 1 + i] = np.clip(
+                        acts[:, oidx] / max_flow, 0.0, 1.0)
+            else:
+                actions_out[last_idx:last_idx + seg_len, 1:5] = np.clip(
+                    res.optimal_raise_bids / max_flow, 0.0, 1.0)
+                actions_out[last_idx:last_idx + seg_len, 5:9] = np.clip(
+                    res.optimal_lower_bids / max_flow, 0.0, 1.0)
+
+            total_profit += res.total_profit
+            energy_rev += res.energy_revenue
+            fcas_rev += res.fcas_revenue
+            dispatch_all.append(res.optimal_dispatch)
+            raise_all.append(res.optimal_raise_bids)
+            lower_all.append(res.optimal_lower_bids)
+            soc_all.append(res.optimal_soc[:-1])
+            last_soc = float(res.optimal_soc[-1])
+            last_idx += seg_len
+
+        dispatch = np.concatenate(dispatch_all) if dispatch_all else np.zeros(n)
+        raise_bid = np.concatenate(raise_all) if raise_all else np.zeros((n, 4))
+        lower_bid = np.concatenate(lower_all) if lower_all else np.zeros((n, 4))
+        soc = np.concatenate(soc_all + [np.array([last_soc])]) if soc_all else np.full(n + 1, last_soc)
+        return OracleResult(
+            total_profit=float(total_profit),
+            energy_revenue=float(energy_rev),
+            fcas_revenue=float(fcas_rev),
+            total_dispatch_mwh=float(np.clip(dispatch, 0, None).sum() * float(env.step_duration)),
+            total_charge_mwh=float(np.clip(-dispatch, 0, None).sum() * float(env.step_duration)),
+            n_intervals=int(dispatch.shape[0]),
+            optimal_dispatch=dispatch,
+            optimal_raise_bids=raise_bid,
+            optimal_lower_bids=lower_bid,
+            optimal_soc=soc,
+            per_step_fcas_revenue=np.zeros(dispatch.shape[0]),
+            per_step_energy_revenue=np.zeros(dispatch.shape[0]),
+            solver_status=0,
+            solver_message="segmented fallback",
+        )
 
     def choose_action(self, obs):
         if self.algorithm == 'aemo_oracle':

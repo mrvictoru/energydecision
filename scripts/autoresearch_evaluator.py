@@ -393,7 +393,7 @@ def _resolve_reference_cache_dir(evaluation_config: dict[str, Any]) -> Path | No
 def _cacheable_policy(policy_cfg: dict[str, Any], reference_cache_dir: Path | None) -> bool:
     if reference_cache_dir is None:
         return False
-    return str(policy_cfg.get("kind", "")).lower() != "dt" and bool(policy_cfg.get("cache_rollouts", True))
+    return str(policy_cfg.get("kind", "")).lower() not in ("dt", "dt_soc_oracle") and bool(policy_cfg.get("cache_rollouts", True))
 
 
 def _cache_slug(value: str) -> str:
@@ -1403,7 +1403,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     dt_model = None
     model_path = None
     model_device = None
-    if any(str(policy.get("kind", "")).lower() == "dt" for policy in policies):
+    if any(str(policy.get("kind", "")).lower() in ("dt", "dt_soc_oracle") for policy in policies):
         dt_model, model_path, model_device = load_dt_model(
             surface_manifest,
             model_path=args.model_path.resolve() if args.model_path is not None else None,

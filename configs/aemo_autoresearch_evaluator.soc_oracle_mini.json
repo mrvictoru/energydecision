@@ -15,7 +15,7 @@
     "cache_dir": "data/aemo",
     "step_duration": 0.083333,
     "episode_hours": 24.0,
-    "action_mode": "multi_market",
+    "action_mode": "full_fcas",
     "degradation_mode": "real_world",
     "degradation_chemistry": "LFP",
     "degradation_temperature": 30.0,
