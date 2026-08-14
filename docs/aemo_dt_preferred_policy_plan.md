@@ -600,3 +600,22 @@ line. Defer unless Exps 0–3 plateau.
 - **Path forward:** Exp 3 (hierarchical DT+LP) is the remaining structural
   lever for broad/OOD. Data-mixture (Exp 1) could combine the PPO-only broad
   winner with the FCAS-heavy narrow winner. Logged in `results.tsv`.
+
+### 2026-08-14 — Exp 3 waypoint-DT training + evaluator integration
+- **Waypoint-DT training launched** (~3.9h): modern v2 8×768, new
+  `action_head_mode='sigmoid'` (all dims → [0,1] — correct geometry for
+  normalized SOC waypoints), `act_dim=8`, K=8 waypoints, stride 210 (~178k
+  windows → ~11k batches/epoch). Data: `data/aemo_dt_soc_oracle/
+  aemo_soc_waypoints.parquet` (1,200 eps). Loss 0.027 and falling.
+- **Trainer guard fix**: added `action_mode='soc_waypoint'` (act_dim=8) to
+  `ACTION_MODE_TO_ACT_DIM` so the waypoint DT can train — its 'action' is a
+  K-dim target-SOC vector consumed by the LP executor, not a direct env action
+  (which is why it's not a valid AEMO action dim).
+- **Evaluator integration**: added `policy kind='dt_soc_oracle'` to the
+  autoresearch evaluator + `run_dt_soc_oracle_episodes` in aemo_notebook_utils
+  (serial per episode: waypoint DT → SOC-waypoint-pinned Oracle LP → per-step
+  action replay). Import-checked. Configs:
+  `aemo_autoresearch_evaluator.soc_oracle_{standard,mini}.json`.
+- **Next**: smoke-test the dt_soc_oracle evaluator path once the GPU frees
+  (deferred — training is at 96% util), then eval the trained waypoint DT on
+  standard / expanded / dispatch-matched / 2025 + impact gate.
