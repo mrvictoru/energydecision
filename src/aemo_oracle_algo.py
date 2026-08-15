@@ -88,7 +88,8 @@ class AEMOOracleSolver:
 
     def solve(self, prices: pl.DataFrame, region: str = "",
               verbose: bool = False,
-              soc_waypoints: dict[int, float] | None = None) -> OracleResult:
+              soc_waypoints: dict[int, float] | None = None,
+              deg_cost_per_mwh: float = 0.0) -> OracleResult:
         """
         Solve the Oracle LP for a single episode.
 
@@ -103,6 +104,10 @@ class AEMOOracleSolver:
                 the SOC at the START of the given intervals. Used by the hierarchical
                 executor: a learned DT predicts a coarse target-SOC trajectory and the
                 LP co-optimizes energy + FCAS within each segment while tracking it.
+            deg_cost_per_mwh: Optional linear throughput degradation surrogate
+                ($/MWh charged or discharged, added to the objective). Makes the
+                executor degradation-aware; the degradation-blind Oracle is
+                deg_cost_per_mwh=0.0 (default).
 
         Returns:
             OracleResult with optimal trajectory and total profit.
@@ -163,13 +168,20 @@ class AEMOOracleSolver:
         lb[soc_T_idx] = self.min_soc
 
         # ---- objective (maximize profit → minimize -profit) ----
+        # Optional linear throughput degradation surrogate: each MWh of charge
+        # or discharge is charged degradation_cost_per_mwh. Cycle aging scales
+        # roughly with throughput, so this linear penalty is a first-order
+        # proxy for the env's rainflow/real-world degradation (which the LP
+        # cannot model exactly). Pass 0.0 (default) to keep the degradation-
+        # blind Oracle behaviour.
+        deg_per_mwh = float(deg_cost_per_mwh or 0.0)
         c = np.zeros(total_vars)
         for t in range(T):
             step_mwh = self.step_h
             # Energy revenue: discharge * RRP * step_h - charge * RRP * step_h
             # (sell at RRP when discharging, pay RRP when charging)
-            c[idx(t, I_D)] = -rrp[t] * step_mwh   # negative → minimize -profit
-            c[idx(t, I_C)] = rrp[t] * step_mwh
+            c[idx(t, I_D)] = -rrp[t] * step_mwh + deg_per_mwh * step_mwh
+            c[idx(t, I_C)] = rrp[t] * step_mwh + deg_per_mwh * step_mwh
 
             # FCAS revenue
             for r in range(N_FCAS_RAISE):

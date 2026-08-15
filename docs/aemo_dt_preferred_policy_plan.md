@@ -619,3 +619,26 @@ line. Defer unless Exps 0–3 plateau.
 - **Next**: smoke-test the dt_soc_oracle evaluator path once the GPU frees
   (deferred — training is at 96% util), then eval the trained waypoint DT on
   standard / expanded / dispatch-matched / 2025 + impact gate.
+
+### 2026-08-15 — Exp 3 eval + degradation-aware LP fix
+- **Waypoint-DT training complete** (modern v2 8×768 sigmoid head, act_dim=8,
+  K=8 SOC waypoints, 1,200 eps, stride 210, ~4.4h; best_val_action_loss 0.0063).
+- **Evaluator + agent hardening**: dt_soc_oracle evaluator kind added; pin
+  waypoint 0 to env init_soc (LP infeasibility); per-segment solve fallback
+  when the full-episode pinned LP is infeasible.
+- **Standard Oct (full_fcas) — hierarchical DT+LP (deg-blind):** profit
+  **$9,200** (3.9× PPO $2,353; 1.5× best prior DT tanh-fcasheavy $6,100);
+  FCAS $11,889 (5.4× PPO) + energy $19,194. **Design goal achieved** — the
+  hierarchical policy wins BOTH energy and FCAS surfaces simultaneously.
+- **2025 OOD (full_fcas) — deg-blind LP COLLAPSED:** −$22,087 vs PPO $6,498.
+  Root cause: the LP executor is **degradation-blind** — it cycles aggressively
+  (deg $2,859/MWh vs PPO $211/MWh, 13.5×) and degradation destroys profit OOD.
+- **FIX — degradation-aware LP:** added `deg_cost_per_mwh` (linear throughput
+  surrogate, $/MWh charged/discharged) to `AEMOOracleSolver.solve()`, wired
+  through `dt_soc_oracle` (default $50/MWh). Calibrated: $0→55 MWh dispatch,
+  $50→5 MWh (curbs energy arbitrage, preserves FCAS), $200→0 MWh.
+- **2025 OOD with deg-aware LP: profit $6,809 vs PPO $6,498 → DT WINS** (+$29k
+  vs the deg-blind run), FCAS $12,061 (6.6× PPO), deg $420/MWh. Strongest DT
+  OOD result of the project. Residual: energy −$1,056 (penalty over-curbs).
+- **Next**: confirm standard still wins with deg-aware LP (running); then
+  expanded + dispatch-matched + impact gate; then compile the Exp 3 verdict.

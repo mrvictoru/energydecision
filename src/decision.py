@@ -583,13 +583,19 @@ class AEMOAgent:
                  fcas_raise_threshold: float | None = None,
                  fcas_lower_threshold: float | None = None,
                  fcas_pctile: float = 0.80,
-                 forecast_npz_path: str | None = None):
+                 forecast_npz_path: str | None = None,
+                 deg_cost_per_mwh: float = 50.0):
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
         self.rule_presistence = False
         self.reset_seed = reset_seed
         self.reset_options = reset_options
+
+        # Linear throughput degradation surrogate for the dt_soc_oracle LP
+        # executor ($/MWh charged or discharged). Makes the executor
+        # degradation-aware; tune to match the env's real degradation cost.
+        self.deg_cost_per_mwh = float(deg_cost_per_mwh)
 
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
@@ -1127,7 +1133,8 @@ class AEMOAgent:
                 min_soc=0.0,
                 max_soc=capacity,
             )
-            result = solver.solve(aemo_data, verbose=False, soc_waypoints=soc_waypoints)
+            result = solver.solve(aemo_data, verbose=False, soc_waypoints=soc_waypoints,
+                                  deg_cost_per_mwh=self.deg_cost_per_mwh)
             if result.total_profit < -1e11:
                 # Full-episode pinned LP infeasible (DT trajectory not
                 # physically trackable). Fall back to per-segment solves: pin
