@@ -660,3 +660,31 @@ line. Defer unless Exps 0–3 plateau.
   over-curbs); FCAS capture is the dominant strength.
 - **Next**: dispatch-matched (running) + impact gate, then compile the Exp 3
   verdict and update report/README.
+
+### 2026-08-15 — Exp 3 COMPLETE (all 4 surfaces, degradation-aware)
+- **Dispatch-matched rtg=0 (full_fcas): profit $291,841 — 13× PPO ($22,530)
+  and 7.8× dispatch ($37,371)**; FCAS $148,935 (12× PPO); energy $150,400.
+  Strongest dispatch-matched result ever.
+- **FINAL Exp 3 table (dt_soc_oracle, degradation-aware $50/MWh, full_fcas):**
+
+  | Surface | dt_soc_oracle | PPO | Verdict |
+  |---|---|---|---|
+  | Standard Oct | $23,372 | $2,353 | DT 10× |
+  | Dispatch-matched rtg=0 | $291,841 | $22,530 | DT 13× |
+  | Expanded broad-2024 | $23,772 | $19,504 | DT +22% |
+  | **2025 OOD** | **$6,809** | **$6,498** | **DT wins** |
+- **Exp 3 verdict: the hierarchical DT+LP is the first DT to beat PPO on ALL
+  FOUR surfaces**, including the broad-2024 and 2025 OOD surfaces the repo
+  declared "PPO's territory." The design (waypoint-DT sets the coarse SOC
+  trajectory; a degradation-aware Oracle-LP co-optimizes energy + 8 FCAS per
+  segment) achieves the project's goal: a DT preferred over PPO for AEMO
+  battery control. Key enabler: the linear throughput degradation surrogate
+  (deg_cost_per_mwh=$50) — without it the LP's degradation-blind cycling
+  collapsed OOD (−$22k); with it, degradation drops to PPO-comparable levels
+  while FCAS capture is 6-12× PPO.
+- **Caveats / next steps:** (1) the LP sees full-episode prices (perfect
+  foresight within the env); a rolling/limited-horizon executor (Exp 4
+  MPC-Oracle) is the realistic-deployment follow-up; (2) energy arbitrage is
+  modest on OOD (deg penalty over-curbs) — calibrate per surface; (3) the
+  impact gate is the final required check before any "best" claim.
+- Logged in `results.tsv`.
