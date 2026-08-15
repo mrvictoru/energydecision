@@ -642,3 +642,21 @@ line. Defer unless Exps 0–3 plateau.
   OOD result of the project. Residual: energy −$1,056 (penalty over-curbs).
 - **Next**: confirm standard still wins with deg-aware LP (running); then
   expanded + dispatch-matched + impact gate; then compile the Exp 3 verdict.
+
+### 2026-08-15 — Exp 3 deg-aware eval results (all full_fcas)
+- **Standard Oct (deg-aware $50/MWh): profit $23,372 (10× PPO $2,353)**,
+  FCAS $14,387 (6.6× PPO), energy $10,749, deg $176/MWh (down from $2,859
+  deg-blind). The degradation-aware LP improved BOTH profit AND degradation.
+- **Expanded broad-2024 (deg-aware): profit $23,772 vs PPO $19,504 (DT +22%)**
+  — the **first model to beat PPO on the broad surface** the repo declared
+  "PPO's territory"; FCAS $24,880 (6.3× PPO), energy $3,389.
+- **2025 OOD (deg-aware): profit $6,809 vs PPO $6,498 (DT wins)**, FCAS
+  $12,061 (6.6× PPO), deg $420/MWh. Strongest DT OOD result.
+- **Summary so far (dt_soc_oracle, deg-aware, full_fcas):** DT beats PPO on
+  standard (10×), expanded broad-2024 (+22%), and 2025 OOD (DT wins). The
+  hierarchical design — waypoint-DT sets the SOC trajectory, degradation-aware
+  LP co-optimizes energy+FCAS per segment — achieves the project's goal of a
+  DT preferred over PPO. Residual: energy arbitrage is modest (deg penalty
+  over-curbs); FCAS capture is the dominant strength.
+- **Next**: dispatch-matched (running) + impact gate, then compile the Exp 3
+  verdict and update report/README.
