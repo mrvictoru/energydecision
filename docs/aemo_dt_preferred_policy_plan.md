@@ -688,3 +688,21 @@ line. Defer unless Exps 0–3 plateau.
   modest on OOD (deg penalty over-curbs) — calibrate per surface; (3) the
   impact gate is the final required check before any "best" claim.
 - Logged in `results.tsv`.
+
+### 2026-08-15 — Impact gate status (documented limitation)
+- **Impact gate NOT run for dt_soc_oracle.** Reason: the impact benchmark
+  (`phase3_impact_eval.py`) needs precomputed supply-curve/FCAS-depth caches
+  (from the slow DISPATCHLOAD aggregation; not present on disk) AND the
+  dt_soc_oracle LP executor is **price-taking** — it solves with base prices,
+  so under `piecewise_merit_order` it would over-dispatch and self-suppress
+  prices. An impact-aware executor needs the Oracle_MI fixed-point solve
+  (re-solve LP against realized prices, iterating ~5×).
+- **Impact-aware follow-up (documented, not built):** wire Oracle_MI's
+  fixed-point loop into the dt_soc_oracle executor (or use the MPC-Oracle from
+  Exp 4) so the SOC-waypoint LP respects realized prices. This is the last
+  piece before a full "best" claim.
+- **Session status:** Exp 0 (PPO-only DTs), Exp 2 (mixed head), and Exp 3
+  (hierarchical DT+LP) are complete. Exp 3 delivered the project's goal — a
+  DT that beats PPO on all four identity surfaces (standard 10×, dispatch-
+  matched 13×, expanded broad-2024 +22%, 2025 OOD DT wins). The impact gate
+  and an MPC (limited-lookahead) executor remain for future work.
