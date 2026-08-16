@@ -844,3 +844,27 @@ line. Defer unless Stages A–C plateau.
   (needs Oracle_MI fixed-point executor for the price-taking SDP/LP — separate
   follow-up). Stage B (SDP-trajectory training data → standalone DT) and
   Stage C (SDP cost-to-go RTG) are unchanged next steps.
+
+### 2026-08-16 — Stage A COMPLETE (all four surfaces, honest SDP executor)
+- **Dispatch-matched rtg=0: profit $59,091 (2.6× PPO $22,530; 1.6× dispatch
+  $37,371)**, FCAS $48,188, energy $14,661. Below the LP's $291,841 (foresight
+  captures SA1 Q4 spikes perfectly) but honest.
+- **FINAL Stage A table (full_fcas, no foresight):**
+
+  | Surface | dt_soc_sdp (honest) | dt_soc_oracle (LP) | PPO | Verdict |
+  |---|---|---|---|---|
+  | Standard Oct | $15,606 | $23,372 | $2,353 | honest DT 6.6× PPO |
+  | Dispatch-matched rtg=0 | $59,091 | $291,841 | $22,530 | honest DT 2.6× PPO |
+  | Expanded broad-2024 | $25,183 | $23,772 | $19,504 | honest DT +29% PPO |
+  | **2025 OOD** | **$13,046** | $6,809 | $6,498 | **honest DT 2× PPO** |
+- **Stage A verdict: the honest (non-clairvoyant) hierarchical DT+SDP policy
+  beats PPO on ALL FOUR surfaces** — the foresight caveat is fully lifted. The
+  project's goal (a DT preferred over PPO) now holds *without* the LP's perfect
+  foresight. Key enablers: (1) the waypoint-DT decomposition (DT = SOC strategy,
+  solver = energy+FCAS co-opt); (2) the degradation-aware SDP (linear throughput
+  penalty, since the Muenzel rainflow under-counts 5-min cycling); (3) the
+  honest seasonal-forecast planner generalizes OOD *better* than perfect
+  foresight (which over-fits the realized price path).
+- **Remaining (unchanged):** impact gate (Oracle_MI fixed-point executor);
+  Stage B (SDP-trajectory training data → standalone DT, no solver at
+  inference); Stage C (SDP cost-to-go as RTG). Logged in `results.tsv`.
