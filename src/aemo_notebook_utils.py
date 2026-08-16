@@ -792,13 +792,15 @@ def run_dt_soc_oracle_episodes(
     base_seed: int = 8964,
     device: str = "auto",
     deg_cost_per_mwh: float = 50.0,
+    executor: str = "lp",
 ) -> list[pl.DataFrame]:
     """Roll out the hierarchical DT+LP policy (dt_soc_oracle).
 
-    The waypoint DT predicts a coarse target-SOC trajectory; the
-    SOC-waypoint-pinned Oracle LP co-optimizes energy + FCAS within each
-    segment; per-step actions are replayed. Serial per episode (the LP is
-    solved once per episode at agent init).
+    The waypoint DT predicts a coarse target-SOC trajectory; the executor
+    co-optimizes energy + FCAS within each segment; per-step actions are
+    replayed. Serial per episode (the planner is solved once per episode at
+    agent init). ``executor`` selects the planner: 'lp' (perfect-foresight
+    Oracle LP) or 'sdp' (honest SDP energy dispatch + greedy FCAS).
     """
     resolved_variant = resolve_battery_variants([battery_variant])[0]
     if model is None:
@@ -830,6 +832,7 @@ def run_dt_soc_oracle_episodes(
             dt_gamma=dt_gamma,
             reset_seed=base_seed + episode_idx if random_episode_start else None,
             deg_cost_per_mwh=deg_cost_per_mwh,
+            executor=executor,
         )
         episode_df, _ = agent.run_episode()
         episodes.append(episode_df)

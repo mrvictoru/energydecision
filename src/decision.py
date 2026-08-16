@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import polars as pl
 import warnings
+from pathlib import Path
 from typing import Optional, Any, Dict, List, Tuple
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
@@ -584,7 +585,8 @@ class AEMOAgent:
                  fcas_lower_threshold: float | None = None,
                  fcas_pctile: float = 0.80,
                  forecast_npz_path: str | None = None,
-                 deg_cost_per_mwh: float = 50.0):
+                 deg_cost_per_mwh: float = 50.0,
+                 executor: str = "lp"):
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
@@ -592,9 +594,19 @@ class AEMOAgent:
         self.reset_seed = reset_seed
         self.reset_options = reset_options
 
+        # dt_soc_oracle executor selection:
+        #   'lp'  — SOC-waypoint-pinned Oracle LP (perfect foresight)
+        #   'sdp' — SDP energy dispatch on a seasonal forecast + greedy
+        #           current-price FCAS bidder (honest, no foresight).
+        if executor not in ("lp", "sdp"):
+            raise ValueError(f"Unsupported dt_soc_oracle executor={executor!r}; use 'lp' or 'sdp'.")
+        self.executor = executor
+
         # Linear throughput degradation surrogate for the dt_soc_oracle LP
         # executor ($/MWh charged or discharged). Makes the executor
         # degradation-aware; tune to match the env's real degradation cost.
+        # (Only used by the 'lp' executor; the 'sdp' executor uses the repo's
+        # rainflow DegradationCalculator directly.)
         self.deg_cost_per_mwh = float(deg_cost_per_mwh)
 
         self.rtg_value = rtg_value
@@ -1125,6 +1137,14 @@ class AEMOAgent:
             soc_waypoints = {t: float(waypoints_mwh[i]) for i, t in enumerate(idxs)}
 
             env = self.env
+            if self.executor == "sdp":
+                self._soc_oracle_actions = self._execute_sdp(
+                    aemo_data, idxs, waypoints_mwh, capacity)
+                print(f"  [dt_soc_sdp] waypoints={[round(w,1) for w in waypoints_mwh]} "
+                      f"-> {self._soc_oracle_actions.shape[0]} steps planned "
+                      f"(honest SDP energy + greedy FCAS)")
+                return
+
             solver = AEMOOracleSolver(
                 battery_capacity=capacity,
                 max_battery_flow=float(env.max_battery_flow),
@@ -1299,6 +1319,88 @@ class AEMOAgent:
             solver_status=0,
             solver_message="segmented fallback",
         )
+
+    def _execute_sdp(
+        self,
+        aemo_data: pl.DataFrame,
+        idxs: list[int],
+        waypoints_mwh: np.ndarray,
+        capacity: float,
+    ) -> np.ndarray:
+        """Honest executor (Stage A): SDP energy dispatch + greedy FCAS.
+
+        For each waypoint segment, run SDP backward induction over a *seasonal
+        forecast* of RRP (built only from training-era data) pinned to reach
+        the segment's target SOC. Then, at each step, bid FCAS greedily on the
+        residual headroom (after the energy action) using *current* FCAS
+        prices. Returns a (T, 9) action plan: energy in [-1,1], FCAS in [0,1].
+
+        No future prices are used — this lifts the perfect-foresight caveat of
+        the 'lp' executor.
+        """
+        from aemo_sdp_executor import (
+            build_seasonal_rrp_profile, build_rrp_forecast,
+            sdp_energy_dispatch, greedy_fcas_bids, FCAS_ORDER,
+        )
+
+        env = self.env
+        max_flow = float(env.max_battery_flow)
+        step_h = float(env.step_duration)
+        env_fcas_order = getattr(env, '_fcas_services', None) or FCAS_ORDER
+        T = max(1, len(aemo_data))
+
+        # Honest forecast: seasonal time-of-day RRP profile from training data.
+        region = None
+        if "REGIONID" in aemo_data.columns and aemo_data.height > 0:
+            region = str(aemo_data["REGIONID"][0])
+        cache_dir = Path(__file__).resolve().parent.parent / "data" / "aemo"
+        profile = None
+        if region is not None:
+            try:
+                profile = build_seasonal_rrp_profile(cache_dir, region, step_h)
+            except Exception as e:
+                print(f"  [dt_soc_sdp] seasonal profile unavailable ({e}); "
+                      f"falling back to persistence forecast")
+        if profile is None:
+            # Persistence fallback: future RRP = current RRP (still honest).
+            first_rrp = float(aemo_data["RRP"][0]) if "RRP" in aemo_data.columns else 50.0
+            profile = lambda m, h: first_rrp  # noqa: E731
+        forecast = build_rrp_forecast(aemo_data, profile)
+
+        fcas_price_cols = {f"FCAS_{s}": f"FCAS_{s}" for s in FCAS_ORDER}
+        fcas_present = [c for c in fcas_price_cols if c in aemo_data.columns]
+
+        actions_out = np.zeros((T, 9), dtype=float)
+        start_soc = float(getattr(env, 'init_battery_level', capacity * 0.5))
+        for seg in range(len(idxs) - 1):
+            t0, t1 = idxs[seg], idxs[seg + 1]
+            if t1 <= t0:
+                continue
+            seg_len = t1 - t0
+            target = float(np.clip(waypoints_mwh[seg + 1], 0.0, capacity))
+            try:
+                energy, soc = sdp_energy_dispatch(
+                    env, forecast[t0:t1], start_soc, target,
+                    deg_cost_per_mwh=self.deg_cost_per_mwh,
+                )
+            except Exception as e:
+                print(f"  [dt_soc_sdp] SDP failed on segment {seg} ({e}); flat SOC")
+                energy = np.zeros(seg_len)
+                soc = np.full(seg_len + 1, start_soc)
+
+            for k in range(seg_len):
+                gidx = t0 + k
+                dispatch_mw = float(energy[k]) / step_h if step_h > 0 else 0.0
+                soc_before = float(np.clip(soc[k], 0.0, capacity))
+                actions_out[gidx, 0] = float(np.clip(dispatch_mw / max_flow, -1.0, 1.0))
+                if fcas_present:
+                    prices = {c: float(aemo_data[c][gidx]) for c in fcas_present}
+                    bids = greedy_fcas_bids(env, dispatch_mw, soc_before, prices)
+                    for j, svc in enumerate(env_fcas_order):
+                        if svc in bids:
+                            actions_out[gidx, 1 + j] = float(np.clip(bids[svc], 0.0, 1.0))
+            start_soc = float(np.clip(soc[-1], 0.0, capacity))
+        return actions_out
 
     def choose_action(self, obs):
         if self.algorithm == 'aemo_oracle':

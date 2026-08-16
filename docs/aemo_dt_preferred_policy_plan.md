@@ -792,3 +792,34 @@ line. Defer unless Stages A–C plateau.
   Exp 5 (IQL/CQL — Stages A–C sidestep the FCAS-cloning ceiling by
   construction), Exp 6 (spike-risk conditioning — defer).
 - Plan §5 and §8 updated to reflect Option 3.
+
+### 2026-08-16 — Stage A implemented + first eval (honest SDP executor)
+- **Built `src/aemo_sdp_executor.py`** — the honest (non-clairvoyant) executor:
+  1. `build_seasonal_rrp_profile` / `build_rrp_forecast` — a seasonal time-of-day
+     RRP profile (diurnal+monthly mean) computed ONLY from pre-2024 training
+     data, cached to `data/aemo_sdp/seasonal_rrp_{region}.json`. This is the
+     "predictable component" of prices; spikes are deliberately averaged away.
+  2. `sdp_energy_dispatch` — SDP backward induction over the seasonal forecast,
+     pinned (soft quadratic terminal cost) to the waypoint target SOC. Reuses
+     `AEMOSDPSolver` (energy-only, 1-D action).
+  3. `greedy_fcas_bids` — per-step allocation of residual headroom (after the
+     energy action) to the single highest-priced raise / lower service, using
+     only *current* FCAS prices.
+- **Wired `executor='sdp'` into `AEMOAgent`** (vs the default `'lp'` perfect-
+  foresight path) + through `run_dt_soc_oracle_episodes` + the evaluator
+  (`policy_cfg['executor']`).
+- **Critical bug found + fixed**: the SDP's `DegradationCalculator` (Muenzel
+  rainflow) returns ~0 for sub-3% DoD 5-min transitions, so the SDP saw
+  cycling as ~free and over-cycled OOD (realized deg $2,914/MWh, −$17k).
+  Fixed by adding the SAME linear throughput penalty (`deg_cost_per_mwh`,
+  |energy|·$/MWh) that fixed the LP — added to the SDP stage cost on top of
+  the rainflow term.
+- **2025 OOD result (honest executor, deg-aware): profit $13,046 vs PPO
+  $6,498 (2×) AND beats the perfect-foresight LP $6,809.** FCAS $11,183
+  (6.2× PPO), energy $3,488, deg $163/MWh (below PPO's $211). **The foresight
+  caveat is lifted — and perfect foresight actually HURT OOD** (the LP
+  over-cycled on the realized 2025 price path). The honest seasonal-forecast
+  planner is more conservative and generalizes better.
+- Standard-surface eval running. Next: expanded + dispatch-matched, then the
+  impact gate (Stage A honest executor is price-taking too, so impact needs
+  Oracle_MI fixed-point — separate follow-up).
