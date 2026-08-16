@@ -918,3 +918,21 @@ line. Defer unless Stages A–C plateau.
 - **Next**: standard (running), then expanded + dispatch-matched + impact gate
   for the standalone DT; then full-corpus (1,200 eps) retrain + DAgger if BC
   shows drift; then Stage C (SDP cost-to-go RTG).
+
+### 2026-08-17 — Stage B pilot evals (standalone DT, mixed head)
+- **Standard Oct: profit $7,914 vs PPO $2,353 (3.4×)**, FCAS $8,275 (3.8×
+  PPO), deg $88/MWh. Retains 51% of Stage A's $15,606 with no solver.
+- **Expanded broad-2024: profit $11,943 vs PPO $19,504 (PPO wins)** — the
+  standalone DT's energy arbitrage is weak ($3,237 vs PPO $17,381) though FCAS
+  is 2.6× PPO ($10,143). **Pilot limitation:** only 160 eps (short+medium
+  horizons); the SDP teacher's conservative seasonal-forecast energy dispatch
+  is under-learned. The full-corpus retrain (adds long horizons + more
+  diversity) is expected to improve energy arbitrage.
+- **2025 OOD: profit $11,925 vs PPO $6,498 (1.83×)**, FCAS $10,482 (5.8×
+  PPO), deg $145/MWh — retains 91% of Stage A's $13,046 with no solver.
+- **Summary so far:** the standalone DT (no solver) beats PPO on standard
+  (3.4×) and 2025 (1.83×); loses energy arbitrage on expanded (pilot
+  limitation). Dispatch-matched + impact gate running.
+- **Pilot verdict:** the FCAS-cloning ceiling is broken (FCAS 2.6–5.8× PPO
+  everywhere with no solver), but energy arbitrage needs the full corpus.
+  Next: finish dispatch-matched + impact gate, then decide full-corpus retrain.
