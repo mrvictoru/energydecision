@@ -868,3 +868,34 @@ line. Defer unless Stages A–C plateau.
 - **Remaining (unchanged):** impact gate (Oracle_MI fixed-point executor);
   Stage B (SDP-trajectory training data → standalone DT, no solver at
   inference); Stage C (SDP cost-to-go as RTG). Logged in `results.tsv`.
+
+### 2026-08-16 — Impact gate COMPLETE (honest SDP executor passes)
+- **Built the impact-aware LP executor**: `AEMOOracleSolver.solve_mi` extended
+  with `soc_waypoints` + `deg_cost_per_mwh`; `AEMOBatteryTradingEnv` now
+  retains `supply_curves`/`fcas_depth`; the `dt_soc_oracle` 'lp' executor
+  auto-switches to `solve_mi` (impact-aware fixed-point) when the env carries a
+  merit-order impact model. New `scripts/impact_gate.py` runs the hierarchical
+  policies + PPO under {identity, piecewise_merit_order} × 3 grid-scale
+  batteries × 3 scenarios.
+- **IMPACT GATE RESULT (piecewise_merit_order, mean profit/ep):**
+
+  | Battery | dt_soc_lp (impact-aware) | dt_soc_sdp (honest) | PPO | honest vs PPO |
+  |---|---|---|---|---|
+  | small (8 MWh) | $64,038 | $40,912 | $11,031 | 3.7× |
+  | hornsdale (194 MWh) | $352,155 | $486,585 | $56,540 | 8.6× |
+  | torrens (250 MWh) | −$632,258 | $491,991 | $69,507 | 7.1× |
+- **The honest SDP executor PASSES the impact gate** — it beats PPO under
+  market impact by 3.7–8.6× on every grid-scale battery, with no regression.
+  Notably it generalizes to impact WITHOUT impact-specific training (the
+  impact-DT needed a dedicated impact dataset).
+- **LP executor caveat (known, documented):** the impact-aware LP (Oracle_MI
+  fixed-point) collapses at torrens 250 MW (−$632k) — the repo's documented
+  "Oracle_MI at 150 MW+ exceeds 100% of PT, unreliable at large scale" failure.
+  It is reliable at small/hornsdale. The honest SDP executor is the robust
+  grid-scale choice.
+- **Final project verdict: ALL GATES PASS.** The hierarchical DT+SDP policy
+  (waypoint-DT → honest SDP energy + greedy FCAS) beats PPO on all four
+  identity surfaces (standard 6.6×, dispatch-matched 2.6×, expanded +29%,
+  2025 OOD 2×) AND passes the impact gate (3.7–8.6× under merit-order impact)
+  — all without perfect foresight. Stage B (standalone DT) and Stage C
+  (SDP cost-to-go RTG) remain the deployability/refinement follow-ups.
