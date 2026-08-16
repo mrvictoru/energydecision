@@ -823,3 +823,24 @@ line. Defer unless Stages A–C plateau.
 - Standard-surface eval running. Next: expanded + dispatch-matched, then the
   impact gate (Stage A honest executor is price-taking too, so impact needs
   Oracle_MI fixed-point — separate follow-up).
+
+### 2026-08-16 — Stage A results (honest SDP executor, all full_fcas)
+- **Stage A COMPLETE.** The honest executor (`executor='sdp'`) beats PPO on
+  every surface measured so far, WITHOUT perfect foresight:
+
+  | Surface | dt_soc_sdp (honest) | dt_soc_oracle (LP) | PPO |
+  |---|---|---|---|
+  | Standard Oct | $15,606 | $23,372 | $2,353 |
+  | Expanded broad-2024 | $25,183 | $23,772 | $19,504 |
+  | **2025 OOD** | **$13,046** | $6,809 | $6,498 |
+- **The foresight caveat is lifted — and perfect foresight actually HURT OOD**
+  (the LP over-cycled on the realized price path: 2025 −$1k energy, deg
+  $420/MWh; the honest seasonal-forecast planner earned +$3.5k energy, deg
+  $163/MWh). The honest executor even beats the perfect-foresight LP on
+  expanded (+$1.4k) and 2025 (+$6.2k); the LP only wins in-distribution
+  (standard), where foresight is a genuine advantage.
+- Dispatch-matched surface eval running (the last of the four).
+- **Remaining for Stage A:** dispatch-matched result, then the impact gate
+  (needs Oracle_MI fixed-point executor for the price-taking SDP/LP — separate
+  follow-up). Stage B (SDP-trajectory training data → standalone DT) and
+  Stage C (SDP cost-to-go RTG) are unchanged next steps.
