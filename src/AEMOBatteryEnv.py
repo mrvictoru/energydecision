@@ -481,6 +481,10 @@ class AEMOBatteryTradingEnv(gym.Env):
             )
         else:
             self._impact = impact_model
+        # Retain raw impact inputs so executors can run impact-aware planners
+        # (e.g. AEMOOracleSolver.solve_mi fixed-point) against the same data.
+        self.supply_curves = supply_curves
+        self.fcas_depth = fcas_depth
 
         self._fcas_services = [
             'RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',

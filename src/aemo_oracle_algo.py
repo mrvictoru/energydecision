@@ -393,6 +393,8 @@ class AEMOOracleSolver:
         max_iter: int = 5,
         tol: float = 1e-3,
         verbose: bool = False,
+        soc_waypoints: dict[int, float] | None = None,
+        deg_cost_per_mwh: float = 0.0,
     ) -> OracleResult:
         """
         Oracle_MI: impact-aware LP via iterative price convergence.
@@ -411,6 +413,8 @@ class AEMOOracleSolver:
             max_iter: maximum fixed-point iterations.
             tol: convergence tolerance on profit change.
             verbose: print iteration progress.
+            soc_waypoints: optional SOC waypoint pins (hierarchical executor).
+            deg_cost_per_mwh: optional linear throughput degradation surrogate.
         """
         # Pre-index supply curves for O(1) lookup
         supply_map: dict[int, tuple[np.ndarray, np.ndarray]] = {}
@@ -445,7 +449,9 @@ class AEMOOracleSolver:
         result = None
 
         for iteration in range(max_iter):
-            result = self.solve(current_prices, verbose=False)
+            result = self.solve(current_prices, verbose=False,
+                                soc_waypoints=soc_waypoints,
+                                deg_cost_per_mwh=deg_cost_per_mwh)
 
             if verbose:
                 tag = "identity" if iteration == 0 else f"iter {iteration}"

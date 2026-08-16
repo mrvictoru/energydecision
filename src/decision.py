@@ -1163,6 +1163,32 @@ class AEMOAgent:
                 print(f"  [dt_soc_oracle] full-episode LP infeasible "
                       f"({result.solver_message}); falling back to per-segment solves")
                 result = self._solve_soc_segments(aemo_data, solver, idxs, waypoints_mwh)
+            # Impact-aware planning: if the env carries a merit-order impact
+            # model (supply curves + FCAS depth), re-solve with the fixed-point
+            # so the LP sees the realized (self-impacted) prices its own actions
+            # create, instead of the base price-taking prices.
+            impact_curves = getattr(env, 'supply_curves', None)
+            impact_depth = getattr(env, 'fcas_depth', None)
+            impact_kind = getattr(env, '_impact', None)
+            if (impact_curves is not None and impact_depth is not None
+                    and impact_kind is not None
+                    and getattr(impact_kind, '__class__', None) is not None
+                    and impact_kind.__class__.__name__ != 'IdentityImpact'):
+                try:
+                    pt_profit = result.total_profit
+                    mi_result = solver.solve_mi(
+                        aemo_data, impact_curves, impact_depth,
+                        impact_intensity=1.0, max_iter=5, verbose=False,
+                        soc_waypoints=soc_waypoints,
+                        deg_cost_per_mwh=self.deg_cost_per_mwh,
+                    )
+                    if mi_result is not None and mi_result.total_profit > -1e11:
+                        result = mi_result
+                        print(f"  [dt_soc_oracle] impact-aware solve_mi: "
+                              f"${result.total_profit:,.0f}/ep "
+                              f"(vs price-taking ${pt_profit:,.0f})")
+                except Exception as e:
+                    print(f"  [dt_soc_oracle] solve_mi failed ({e}); keeping price-taking LP")
             max_flow = float(env.max_battery_flow)
             env_fcas_order = getattr(self.env, '_fcas_services', None)
             n = max(1, result.n_intervals)
