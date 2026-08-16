@@ -899,3 +899,22 @@ line. Defer unless Stages A–C plateau.
   2025 OOD 2×) AND passes the impact gate (3.7–8.6× under merit-order impact)
   — all without perfect foresight. Stage B (standalone DT) and Stage C
   (SDP cost-to-go RTG) remain the deployability/refinement follow-ups.
+
+### 2026-08-16 — Stage B pilot (standalone DT via SDP-teacher trajectories)
+- **Built `scripts/generate_sdp_dt_trajectories.py`**: replays the honest SDP
+  executor (`executor='sdp'`) on **cached 2021-2023 processed parquets** (not
+  raw_log reconstruction — verified the env obs match the baked-in normalized
+  columns to ~5e-8, guaranteeing train/eval obs consistency). Slices each
+  region's training window into episode-length chunks with random starts,
+  capturing self-consistent `(norm_observation, action[9], reward)` triples.
+- **Pilot dataset**: 160 eps (5 regions × short+medium × medium_1c+fast_375c
+  × 8), 1.57M rows, `data/aemo_dt_sdp/dt_trajectories.parquet`.
+- **Retrained modern-v2 (8×768, `action_head_mode='mixed'`, act_dim=9)** on the
+  teacher trajectories (3 epochs, stride 105, ~30 min).
+- **2025 OOD eval (standalone DT, no solver at inference): profit $11,925 vs
+  PPO $6,498 (1.83×)**, FCAS $10,482 (5.8× PPO), energy $2,897, deg $145/MWh.
+  Retains **91% of Stage A's $13,046** without any solver at inference — the
+  **FCAS-cloning ceiling is broken**. Standard-surface eval running.
+- **Next**: standard (running), then expanded + dispatch-matched + impact gate
+  for the standalone DT; then full-corpus (1,200 eps) retrain + DAgger if BC
+  shows drift; then Stage C (SDP cost-to-go RTG).
