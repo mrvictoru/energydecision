@@ -173,18 +173,59 @@ The strongest structural proposal. Decompose along the env's own coupling:
 - Reference: roadmap already names hierarchical SDP+DT inference
   (`report.md:839`) but never built it.
 
-### Experiment 4 — Imitate the Oracle, but with limited lookahead (research PR)
+### Experiment 4 — REPLACED by Stages A–C below (Option 3, 2026-08-16)
 
-PPO is a mediocre teacher; the Oracle LP is the provably-optimal one
-(0.02s/288 steps). Generate Oracle episodes (perfect-foresight LP) across
-regions/years and train the DT on them. **Trap:** cloning perfect-foresight
-actions teaches anticipation the DT can't support (obs has no future prices,
-idx 5–14 are current-step only). Fix: **MPC-Oracle with horizon H** — re-solve
-the LP every H steps with a rolling point forecast (TTM forecasts are weak for
-FCAS but fine for energy, which drives SOC timing). Then the DT clones
-*realistically-informed* optimal behavior within its 210-step context.
-- Needs: new data-generation script + adapter for the MPC-Oracle policy.
-- Success: broad-2024 profit and FCAS both above the current mixed model.
+The original "imitate the Oracle with limited lookahead" (MPC-Oracle teacher)
+is superseded by the SDP/MRDP-based direction decided 2026-08-16. The repo
+already has stochastic planning machinery (`AEMOSDPSolver`, `MRDPSolver`,
+`QuantileScenarioGenerator`) that is the *honest* (non-clairvoyant) version of
+what the perfect-foresight Oracle LP does — and the perfect-foresight LP is
+**not** a valid teacher (cloning it teaches anticipation the DT can't
+support; the forecast-DT and PPO-only results both showed this failure mode).
+
+### Stage A — Honest executor: swap the perfect-foresight LP for SDP/MRDP
+
+Replace the LP inside `dt_soc_oracle` with the repo's stochastic planners:
+- **SDP/MRDP** (`src/aemo_sdp_solver.py`, `src/mrdp_algorithm.py`) plan energy
+  within segments against MC scenarios (`QuantileScenarioGenerator`) — no
+  future prices, degradation-aware, exactly the "honest executor" the current
+  result is missing.
+- **Two-step split (recommended): SDP/MRDP for energy/SOC timing, LP only for
+  instantaneous FCAS bids given the SDP-chosen SOC position.** SDP stays 1-D
+  action (tractable); the 9-D energy+FCAS coupling stays in the already-
+  validated LP. Full-FCAS-in-SDP is infeasible (9-D action → DP state explosion).
+- **Compute mitigation** (SDP is heavy: `O(horizon × soc_res × action_res ×
+  MC_samples)`): (a) MRDP exists specifically to beat the curse of
+  dimensionality (coarse far-term, fine near-term); (b) MC_samples=0 collapses
+  to a deterministic forecast-only plan (the honest middle ground between
+  Oracle and full SDP); (c) parallelize over episodes/regions.
+- Success: dt_soc_oracle with SDP/MRDP executor retains most of the identity-
+  surface wins WITHOUT perfect foresight → the foresight caveat is lifted.
+
+### Stage B — Honest planner's output as DT training data (standalone DT goal)
+
+Use Stage A's SDP/MRDP-optimal **per-step actions** as DT training targets
+(this is the right version of "use the proven method as training data"):
+- The teacher is optimal AND degradation-aware AND non-clairvoyant — it
+  *plans*, it doesn't clone.
+- **Never clone the perfect-foresight LP** (the trap: anticipatory actions
+  fire at the wrong time OOD).
+- Goal: a **standalone DT** (no solver at inference) — the deployable
+  "preferred algorithm" matching the original offline-RL vision, with the
+  FCAS-cloning ceiling broken by training on honest-optimal trajectories
+  instead of raw offline data.
+- Needs: SDP/MRDP trajectory generation across the corpus + modern-v2 DT
+  retrain + eval matrix.
+- Success: standalone DT retains ≥ most of Stage A's profit with no solver
+  at inference.
+
+### Stage C — SDP-guided RTG (dynamic value conditioning)
+
+Feed the SDP cost-to-go `J_t(soc)` as the return-to-go token instead of a
+hand-tuned constant — a principled, state-dependent prompt ("how much future
+value is left from here"). Also addresses the OOD energy-arbitrage weakness
+(the deg penalty currently over-curbs energy). Cheap once `J_t(soc)` exists
+from Stage A. (Roadmap item "SDP-guided RTG at inference" in report §9.)
 
 ### Experiment 5 — Offline value-based RL (IQL/CQL) for FCAS spikes (research PR)
 
@@ -196,6 +237,9 @@ offline-Q method (only BC-DT and online-RL fine-tuning).
 - Needs: new `src/` implementation (outside the autoresearch surface → a
   separate research PR, not folded into the constrained loop).
 - Success: FCAS capture on spike months at or above PPO, total profit ≥ PPO.
+- **De-prioritized** — Stages A–C already sidestep the FCAS-cloning ceiling by
+  construction (solver handles FCAS), so IQL/CQL is only needed if the
+  standalone-DT goal (Stage B) fails.
 
 ### Experiment 6 — Distributional spike-risk conditioning (revisit forecast DT)
 
@@ -203,7 +247,7 @@ The forecast DT failed because TTM *point* forecasts have ~0 corr with FCAS
 spikes. Don't use a point forecast — add a **spike-risk scalar** derivable from
 history alone (recent price volatility, time-of-day, regime flag, headroom) as
 an extra obs dim or conditioning token. Cheap to build, sidesteps the dead TTM
-line. Defer unless Exps 0–3 plateau.
+line. Defer unless Stages A–C plateau.
 
 ## 6. Evaluation protocol (non-negotiable)
 
@@ -237,23 +281,32 @@ line. Defer unless Exps 0–3 plateau.
 
 ## 8. Checklist (agent session)
 
-- [ ] **Exp 0** — Evaluate existing PPO-only DT checkpoints on 2025 OOD,
-      dispatch-matched, standard Oct. Record in `results.tsv`.
+- [x] **Exp 0** — Evaluate existing PPO-only DT checkpoints on 2025 OOD,
+      dispatch-matched, standard Oct. **DONE (2026-08-12):** PPO-only DTs are
+      not the OOD winner ($4.2k on 2025); they win narrow surfaces only.
 - [ ] **Exp 1** — Data-mixture grid (60/20/20, 40/40/20, 50/50/0) on modern
-      v2 8×768 → broad-2024 + 2025 check. Record in `results.tsv`.
-- [ ] **Exp 2** — Port GRPO mixed distribution (Tanh-energy / Sigmoid-FCAS)
-      into the supervised loss + inference FCAS clip; compare vs
-      `--action-dim-weights` result.
-- [ ] **Exp 3** — Hierarchical DT (SOC trajectory) + Oracle-LP executor
-      prototype; eval on all surfaces.
-- [ ] **Exp 4** — MPC-Oracle (limited lookahead) data generation + DT retrain.
-- [ ] **Exp 5** — IQL/CQL baseline on the FCAS-rich corpus (separate research
-      PR).
-- [ ] **Exp 6** — Spike-risk conditioning token (only if 0–3 plateau).
+      v2 8×768 → broad-2024 + 2025 check. **DE-PRIORITIZED** — Exp 3
+      supersedes it (the composition lever was not the binding constraint).
+- [x] **Exp 2** — Port GRPO mixed distribution (Tanh-energy / Sigmoid-FCAS)
+      into the supervised loss + inference FCAS clip. **DONE (2026-08-14):**
+      ambiguous/worse ID, better OOD — head geometry not the binding
+      constraint; FCAS-heavy data composition is the real lever.
+- [x] **Exp 3** — Hierarchical DT (SOC trajectory) + Oracle-LP executor.
+      **DONE (2026-08-15):** beats PPO on all 4 identity surfaces with the
+      degradation-aware LP — but the LP has perfect foresight (not deployable).
+- [ ] **Stage A** — Swap LP for SDP/MRDP executor in `dt_soc_oracle`
+      (two-step split: SDP for energy/SOC, LP for FCAS). Lift the foresight
+      caveat. **NEXT.**
+- [ ] **Stage B** — Generate SDP/MRDP-optimal per-step actions → retrain
+      modern-v2 DT → standalone deployable DT (no solver at inference).
+- [ ] **Stage C** — SDP cost-to-go `J_t(soc)` as the RTG token; re-check OOD
+      energy arbitrage.
 - [ ] **Impact gate** — Run `phase3_impact_eval.py` on the final candidate;
-      confirm no regression.
+      confirm no regression. (Currently documented as a limitation: the LP is
+      price-taking; the Oracle_MI fixed-point is the impact-aware executor.)
 - [ ] **Docs** — Update `report.md` §8.2.1a/§8.3 and the README roadmap with
-      final verdict; close or keep Option C accordingly.
+      the final verdict; supersede Option C (PPO-as-broad-leader) with the
+      hierarchical DT+LP result + foresight caveat until Stage A lands.
 - [ ] `python -m pytest tests/ -v` green before merge.
 - [ ] Open/refresh PR description with the headline table + verdict.
 
@@ -706,3 +759,36 @@ line. Defer unless Exps 0–3 plateau.
   DT that beats PPO on all four identity surfaces (standard 10×, dispatch-
   matched 13×, expanded broad-2024 +22%, 2025 OOD DT wins). The impact gate
   and an MPC (limited-lookahead) executor remain for future work.
+
+### 2026-08-16 — Decision: Option 3 (SDP/MRDP honest executor → standalone DT)
+- **Context from discussion:** the Exp 3 result is real but has a fatal-for-
+  deployment flaw — the LP executor cheats with perfect foresight. The user's
+  original motivation for offline RL was to avoid SDP's heavy compute, and
+  FCAS proved fundamentally hard for a DT to clone from offline data (that's
+  why Exp 0/2 failed).
+- **Why SDP/MRDP is the right fix:** MPC and SDP are conceptually the same
+  (finite-horizon Bellman planning), but SDP is the *better* "honest" version —
+  it plans against MC scenarios, not actual future prices. The repo already
+  has the machinery: `AEMOSDPSolver` (energy-only, degradation-aware),
+  `MRDPSolver` (multi-resolution to beat the curse of dimensionality),
+  `QuantileScenarioGenerator` (uncertainty). `AEMOSDPSolver`'s docstring even
+  states its purpose is to "generate provably optimal energy-dispatch
+  trajectories that can be added to the FCAS-rich offline dataset for DT
+  training" — the repo was already pointed at Stage B and never executed it.
+- **Option 3 chosen (Stage A → B → C):**
+  - **A — Honest executor:** swap the perfect-foresight LP for SDP/MRDP in
+    `dt_soc_oracle`, via the **two-step split** (SDP/MRDP plans energy/SOC
+    timing; the LP handles instantaneous FCAS bids given the SOC position).
+    Full-FCAS-in-SDP is infeasible (9-D action → DP state explosion). Compute
+    mitigated by MRDP + MC_samples=0 (forecast-only) + parallelism. Lifts the
+    foresight caveat.
+  - **B — Standalone DT:** generate SDP/MRDP-optimal per-step actions →
+    retrain modern-v2 DT → deployable DT with no solver at inference. This is
+    the right version of "use the proven method as training data" (never
+    clone the perfect-foresight LP). Achieves the original offline-RL vision.
+  - **C — SDP-guided RTG:** feed `J_t(soc)` as the RTG token; fixes the OOD
+    energy-arbitrage weakness (deg penalty over-curbs). Cheap once A is done.
+- **De-prioritized:** Exp 1 (data mixture — not the binding constraint),
+  Exp 5 (IQL/CQL — Stages A–C sidestep the FCAS-cloning ceiling by
+  construction), Exp 6 (spike-risk conditioning — defer).
+- Plan §5 and §8 updated to reflect Option 3.
