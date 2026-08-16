@@ -36,6 +36,7 @@ def load_waypoint_dt(manifest_path: Path, model_path: Path, device: str) -> Deci
     manifest = json.loads(manifest_path.read_text())
     model = DecisionTransformer(**manifest["model_kwargs"])
     model.load_from_checkpoint(str(model_path), map_location=device)
+    model.to(device)
     model.eval()
     return model
 
@@ -63,6 +64,9 @@ def main() -> int:
                     default=Path("eval_output/exp3a_impact_gate.json"))
     ap.add_argument("--device", default="auto")
     ap.add_argument("--executors", default="lp,sdp")
+    ap.add_argument("--standalone-dt", action="store_true",
+                    help="Also evaluate the waypoint model as a plain 9-dim 'dt' "
+                         "(for the Stage B standalone-DT impact gate).")
     args = ap.parse_args()
 
     device = args.device if args.device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
@@ -119,6 +123,30 @@ def main() -> int:
                     agent = AEMOAgent(env, algorithm="dt_soc_oracle", model=model,
                                       rtg_value=0.0, executor=ex, deg_cost_per_mwh=50.0)
                     r = run_policy(env, agent, f"{impact}_dtsoc_{ex}_{bname}_{label}")
+                    results.append(r)
+                    print(f"  {r['label']}: profit=${r['profit']:>12,.0f} "
+                          f"(E=${r['energy']:>9,.0f} F=${r['fcas']:>9,.0f} D=${r['deg']:>9,.0f})")
+
+                if args.standalone_dt:
+                    # Stage B standalone DT: the waypoint model is used as a
+                    # plain 9-dim DT (its waypoint output is a 9-dim action).
+                    env = AEMOBatteryTradingEnv(
+                        aemo_data=processed,
+                        battery_capacity=battery["capacity"],
+                        max_battery_flow=battery["max_flow"],
+                        step_duration=battery["step_h"],
+                        init_battery_level=battery["init_soc"],
+                        max_step=processed.shape[0],
+                        action_mode="full_fcas",
+                        degradation_mode="real_world",
+                        degradation_chemistry="LFP",
+                        degradation_temperature=30.0,
+                        random_episode_start=False,
+                        impact_model=impact, impact_intensity=1.0,
+                        supply_curves=curves, fcas_depth=depth,
+                    )
+                    agent = AEMOAgent(env, algorithm="dt", model=model, rtg_value=0.0)
+                    r = run_policy(env, agent, f"{impact}_dt_{bname}_{label}")
                     results.append(r)
                     print(f"  {r['label']}: profit=${r['profit']:>12,.0f} "
                           f"(E=${r['energy']:>9,.0f} F=${r['fcas']:>9,.0f} D=${r['deg']:>9,.0f})")

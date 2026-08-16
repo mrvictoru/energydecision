@@ -936,3 +936,30 @@ line. Defer unless Stages A–C plateau.
 - **Pilot verdict:** the FCAS-cloning ceiling is broken (FCAS 2.6–5.8× PPO
   everywhere with no solver), but energy arbitrage needs the full corpus.
   Next: finish dispatch-matched + impact gate, then decide full-corpus retrain.
+
+### 2026-08-17 — Stage B pilot COMPLETE (all surfaces + impact gate)
+- **Dispatch-matched rtg=0: profit $47,942 (2.1× PPO $22,530; 1.28× dispatch
+  $37,371)**, FCAS $34,554 (2.8× PPO).
+- **Impact gate (piecewise_merit_order mean profit/ep):**
+  | Battery | Standalone DT | PPO | DT vs PPO |
+  |---|---|---|---|
+  | small (8 MWh) | $33,141 | $11,031 | 3.0× |
+  | hornsdale (194 MWh) | $105,491 | $56,540 | 1.9× |
+  | torrens (250 MWh) | $148,802 | $69,507 | 2.1× |
+  The standalone DT **passes the impact gate** (1.9–3.0× PPO) and notably does
+  NOT collapse at torrens (unlike the Stage A LP executor's −$632k) — the
+  SDP-cloned conservative behavior is impact-robust.
+- **Full Stage B pilot table (standalone DT, no solver at inference):**
+  | Surface | Standalone DT | PPO | Verdict |
+  |---|---|---|---|
+  | Standard Oct | $7,914 | $2,353 | DT 3.4× |
+  | Dispatch-matched | $47,942 | $22,530 | DT 2.1× |
+  | Expanded broad-2024 | $11,943 | $19,504 | PPO wins (pilot energy gap) |
+  | 2025 OOD | $11,925 | $6,498 | DT 1.83× |
+  | Impact (small/horn/torr) | 3.0×/1.9×/2.1× | — | DT wins |
+- **Pilot verdict:** the standalone DT (a pure transformer, no solver) beats
+  PPO on standard, dispatch-matched, 2025 OOD, and the impact gate — the
+  deployable goal is achieved. The one miss is expanded broad-2024, where the
+  pilot's 160 eps (short+medium only) under-learn energy arbitrage ($3.2k vs
+  PPO $17.4k). **The full-corpus retrain (adds long horizons + more episodes)
+  is the clear next step** to close the energy gap, before DAgger.
