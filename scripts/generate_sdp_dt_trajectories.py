@@ -39,6 +39,8 @@ from decision_transformer import DecisionTransformer  # noqa: E402
 BATTERY_SPECS = {
     "medium_1c": {"capacity": 10.0, "max_flow": 10.0},
     "fast_375c": {"capacity": 8.0, "max_flow": 30.0},
+    "large_07c": {"capacity": 50.0, "max_flow": 35.0},
+    "small_05c": {"capacity": 2.0, "max_flow": 1.0},
 }
 # 5-min steps per episode by horizon (short=14d, medium=8wk)
 HORIZON_STEPS = {"short": 3456, "medium": 16128, "long": 74880}
@@ -101,7 +103,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--regions", nargs="+", default=["NSW1", "QLD1", "SA1", "TAS1", "VIC1"])
     p.add_argument("--horizons", nargs="+", default=["short", "medium"])
-    p.add_argument("--batteries", nargs="+", default=["medium_1c", "fast_375c"])
+    p.add_argument("--batteries", nargs="+",
+                   default=["medium_1c", "fast_375c", "large_07c", "small_05c"])
     p.add_argument("--episodes-per-slot", type=int, default=8)
     p.add_argument("--model-manifest", type=Path,
                    default=Path("models/aemo/dt/soc_waypoint_dt_loss_surface_manifest.json"))
