@@ -10,7 +10,7 @@ def _():
     from pathlib import Path
 
     REPO_DIR = Path("/workspace/energydecision")
-    BRANCH = "feature/market-impact-modeling"
+    BRANCH = "feature/dt-preferred-aemo-policy"
 
     # Full clean removal
     if REPO_DIR.exists():
@@ -76,7 +76,7 @@ def _(Path, torch):
             ckpt_info = f"Resume ready: epoch={_c.get('epoch','?')}, best_val={_c.get('best_val_loss',float('inf')):.6f}"
         except Exception:
             ckpt_info = "Checkpoint exists but unreadable"
-    return BEST_MODEL_PATH, CHECKPOINT_DIR, CHECKPOINT_PATH, ckpt_info
+    return BEST_MODEL_PATH, CHECKPOINT_DIR, CHECKPOINT_PATH
 
 
 @app.cell
@@ -84,7 +84,19 @@ def _(mo):
     use_pilot = mo.ui.checkbox(label="Pilot mode (12 eps, fast)", value=True)
     fresh_start = mo.ui.checkbox(label="Fresh start (delete checkpoint)", value=False)
     hf_data_repo = mo.ui.text(value="mrvictoru/AEMO_simulated_trade_impact", label="Data repo (impact-aware dataset)", full_width=True)
-    return fresh_start, hf_data_repo, use_pilot
+    parquet_file = mo.ui.dropdown(
+        options=["dt_trajectories_full.parquet", "dt_trajectories_aggressive.parquet"],
+        value="dt_trajectories_full.parquet",
+        label="Parquet file to load",
+        full_width=True,
+    )
+    load_all = mo.ui.checkbox(label="Load ALL parquet files (concat)", value=False)
+    return fresh_start, hf_data_repo, load_all, parquet_file, use_pilot
+
+
+@app.cell
+def _():
+    return
 
 
 @app.cell
@@ -223,13 +235,13 @@ def _(
 
 @app.cell
 def _(
-    ckpt_info,
-    context_len,
     fresh_start,
     hf_data_repo,
     hf_repo_id,
     hf_token_input,
+    load_all,
     mo,
+    parquet_file,
     train_btn,
     upload_btn,
     use_pilot,
@@ -237,7 +249,7 @@ def _(
     mo.vstack([
         mo.md("### Dataset"),
         mo.hstack([use_pilot, fresh_start, hf_data_repo], widths=["auto", "auto", 1], gap=1),
-        mo.md(f"## Impact-Aware DT — AEMO Training\n*ctx={context_len.value}, ckpt: {ckpt_info}*"),
+        mo.hstack([parquet_file, load_all], widths=[1, "auto"], gap=1),
         mo.md("### Action"),
         mo.hstack([train_btn, upload_btn], justify="start", gap=1),
         mo.hstack([hf_repo_id, hf_token_input], widths=[1, 1], gap=1),
@@ -246,18 +258,41 @@ def _(
 
 
 @app.cell
-def _(Path, hf_data_repo, hf_hub_download, mo, pl, use_pilot):
-    DATA_REPO = hf_data_repo.value.strip() or "mrvictoru/AEMO_simulated_trade_impact"
+def _(
+    Path,
+    hf_data_repo,
+    hf_hub_download,
+    load_all,
+    mo,
+    parquet_file,
+    pl,
+    use_pilot,
+):
+    DATA_REPO = hf_data_repo.value.strip()
     CACHE = Path("/workspace")
     CACHE.mkdir(exist_ok=True)
 
-    fn = "aemo_impact_dataset.parquet"
-    fp = CACHE / fn
-    if not fp.exists():
-        hf_hub_download(repo_id=DATA_REPO, filename=fn, local_dir=str(CACHE),
-                       local_dir_use_symlinks=False, repo_type="dataset")
-    df_full = pl.read_parquet(fp)
-    print(f"Loaded: {len(df_full):,} rows across {df_full['episode_id'].n_unique()} episodes")
+    def _load_parquet(repo, filename, cache_dir):
+        fp = cache_dir / filename
+        if not fp.exists():
+            hf_hub_download(repo_id=repo, filename=filename, local_dir=str(cache_dir),
+                            local_dir_use_symlinks=False, repo_type="dataset")
+        return pl.read_parquet(fp)
+
+    if load_all.value:
+        # List all .parquet files and concat them
+        from huggingface_hub import list_repo_files
+        all_files = [f for f in list_repo_files(repo_id=DATA_REPO, repo_type="dataset") if f.endswith(".parquet")]
+        dfs = [_load_parquet(DATA_REPO, f, CACHE) for f in all_files]
+        df_full = pl.concat(dfs)
+        print(f"Loaded and concatenated {len(all_files)} files: {all_files}")
+    else:
+        fn = parquet_file.value
+        fp = CACHE / fn
+        df_full = _load_parquet(DATA_REPO, fn, CACHE)
+        print(f"Loaded: {fn}")
+
+    print(f"Total: {len(df_full):,} rows across {df_full['episode_id'].n_unique()} episodes")
 
     if use_pilot.value:
         _n_eps = df_full["episode_id"].n_unique()
@@ -277,7 +312,7 @@ def _(Path, hf_data_repo, hf_hub_download, mo, pl, use_pilot):
 
     mo.stop(df is None, mo.md("❌ No data"))
     print(f"✅ Loaded {len(df):,} rows, {df['episode_id'].n_unique()} episodes")
-    return CACHE, df
+    return (df,)
 
 
 @app.cell
@@ -606,6 +641,11 @@ def _(mo):
     print("mo.ui.button sig:", _inspect.signature(mo.ui.button))
     print("mo.ui.run_button sig:", _inspect.signature(mo.ui.run_button))
     print("has mo.ui.dictionary:", hasattr(mo.ui, "dictionary"))
+    return
+
+
+@app.cell
+def _():
     return
 
 
