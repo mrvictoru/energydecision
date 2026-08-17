@@ -963,3 +963,26 @@ line. Defer unless Stages A–C plateau.
   pilot's 160 eps (short+medium only) under-learn energy arbitrage ($3.2k vs
   PPO $17.4k). **The full-corpus retrain (adds long horizons + more episodes)
   is the clear next step** to close the energy gap, before DAgger.
+
+### 2026-08-17 — Full-corpus + aggressive-teacher SDP corpora
+- **Full corpus generated**: `data/aemo_dt_sdp/dt_trajectories_full.parquet`
+  (320 eps, 3.13M rows, all 4 batteries × short+medium × 5 regions × 8 eps/slot,
+  balanced). Generator extended to all 4 batteries (added large_07c 50 MWh +
+  small_05c 2 MWh).
+- **Aggressive-teacher corpus generated (point 3)**: `data/aemo_dt_sdp/
+  dt_trajectories_aggressive.parquet` (320 eps, same structure) with
+  `deg_cost_per_mwh=20` instead of 50. Measured effect: **|energy| +57%**
+  (0.072 → 0.112), FCAS bids −6%, mean reward 0.053 vs 0.059. This is the
+  energy-heavy end of the honest-teacher family — RTG conditioning on a
+  concatenated corpus lets the DT interpolate between "conservative FCAS-heavy"
+  and "aggressive energy-heavy" at inference.
+- **Deliberately NOT adding PPO** to the corpus (recommendation): PPO is the
+  mediocre baseline we're beating; injecting its suboptimal actions would dilute
+  the SDP-teacher's optimal signal and drag FCAS cloning toward PPO's inferior
+  level. The honest-teacher knob (deg_cost_per_mwh) is the principled diversity
+  lever instead.
+- **Next (Molab)**: sync repo + both parquets → train two models (conservative
+  corpus, concatenated corpus) with the mixed head (batch=64, epochs=3) → eval
+  all surfaces + impact gate → DAgger if BC drift. Files to upload:
+  `data/aemo_dt_sdp/dt_trajectories_full.parquet` (368 MB) +
+  `dt_trajectories_aggressive.parquet` (368 MB).
