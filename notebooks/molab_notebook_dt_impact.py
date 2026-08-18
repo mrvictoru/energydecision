@@ -109,7 +109,14 @@ def _(mo):
     n_kv_heads = mo.ui.number(value=6, label="KV heads", full_width=True)
     qk_norm = mo.ui.checkbox(label="QK-Norm", value=True)
     tie_weights = mo.ui.checkbox(label="Tie weights", value=True)
+    action_head_mode = mo.ui.dropdown(
+        options=["tanh", "mixed", "sigmoid"],
+        value="mixed",
+        label="Action head",
+        full_width=True,
+    )
     return (
+        action_head_mode,
         context_len,
         drop_p,
         h_dim,
@@ -123,6 +130,7 @@ def _(mo):
 
 @app.cell
 def _(
+    action_head_mode,
     context_len,
     drop_p,
     h_dim,
@@ -155,6 +163,7 @@ def _(
             "action_loss_weight": action_loss_weight.value,
             "state_loss_weight": state_loss_weight.value,
             "return_loss_weight": return_loss_weight.value,
+            "action_head_mode": action_head_mode.value,
             "use_json_config": use_json_config.value,
             "json_config": json_config.value,
         }
@@ -188,6 +197,7 @@ def _(mo, os):
 
 @app.cell
 def _(
+    action_head_mode,
     action_loss_weight,
     batch_size,
     commit_btn,
@@ -221,6 +231,7 @@ def _(
         mo.md("### Architecture"),
         mo.hstack([n_block, h_dim, n_heads, context_len], justify="start", widths="equal", gap=1),
         mo.hstack([drop_p, n_kv_heads, qk_norm, tie_weights], justify="start", widths="equal", gap=1),
+        mo.hstack([action_head_mode], justify="start", widths="equal", gap=1),
         mo.md("### Optimization"),
         mo.hstack([batch_size, epochs_per_session, lr], justify="start", widths="equal", gap=1),
         mo.hstack([action_loss_weight, state_loss_weight, return_loss_weight], justify="start", widths="equal", gap=1),
@@ -322,6 +333,7 @@ def _(commit_btn, json):
         "discount_factor": 0.95, "val_split": 0.1, "return_scale": 1.0,
         "weight_decay": 1e-4, "grad_clip_norm": 1.0,
         "checkpoint_every_n_batches": 500, "max_training_seconds": 11 * 3600,
+        "action_head_mode": "mixed",
     }
 
     # Only update from the snapshot after user clicks "Apply config"
@@ -337,13 +349,14 @@ def _(commit_btn, json):
                 n_block=_snapshot["n_block"], h_dim=_snapshot["h_dim"],
                 n_heads=_snapshot["n_heads"], context_len=_snapshot["context_len"],
                 drop_p=_snapshot["drop_p"],
-                batch_size=_snapshot["batch_size"], lr=_snapshot["lr"],
                 n_kv_heads=int(_snapshot["n_kv_heads"]) if _snapshot["n_kv_heads"] else None,
                 qk_norm=_snapshot["qk_norm"], tie_weights=_snapshot["tie_weights"],
+                batch_size=_snapshot["batch_size"], lr=_snapshot["lr"],
                 epochs_per_session=_snapshot["epochs_per_session"],
                 action_loss_weight=_snapshot["action_loss_weight"],
                 state_loss_weight=_snapshot["state_loss_weight"],
                 return_loss_weight=_snapshot["return_loss_weight"],
+                action_head_mode=_snapshot.get("action_head_mode", "tanh"),
             ))
         print(f"📋 [committed] {CFG['n_block']} blk, {CFG['h_dim']} dim, ctx={CFG['context_len']}")
     else:
@@ -388,6 +401,7 @@ def _(CFG, CHECKPOINT_DIR, CHECKPOINT_PATH, DecisionTransformer, time, torch):
             n_kv_heads=cfg.get("n_kv_heads"),
             qk_norm=cfg.get("qk_norm", False),
             tie_weights=cfg.get("tie_weights", False),
+            action_head_mode=cfg.get("action_head_mode", "tanh"),
         ).to(device)
         opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
         sch = torch.optim.lr_scheduler.StepLR(opt, step_size=1, gamma=0.9)
@@ -591,6 +605,7 @@ def _(
         max_timestep=CFG["max_timestep"],
         n_kv_heads=CFG.get("n_kv_heads"), qk_norm=CFG.get("qk_norm", False),
         tie_weights=CFG.get("tie_weights", False),
+        action_head_mode=CFG.get("action_head_mode", "tanh"),
     )
     ck = torch.load(src, map_location="cpu")
     upload_model.load_state_dict(ck.get("model_state_dict", ck))
