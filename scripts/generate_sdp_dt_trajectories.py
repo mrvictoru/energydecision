@@ -55,6 +55,71 @@ REGION_FILES = {
 }
 
 
+def _dummy_env(cap: float, max_flow: float, n_steps: int):
+    """Standalone env shim exposing only what the SDP cost-to-go needs."""
+    from types import SimpleNamespace
+    return SimpleNamespace(
+        battery_capacity=cap, max_battery_flow=max_flow,
+        step_duration=5.0 / 60.0, max_grid_energy=float("inf"), df=None,
+        battery_life_cost=1312500.0,
+        degradation_temperature=25.0,
+    )
+
+
+def _attach_jt_rtg(
+    episode_df: pl.DataFrame,
+    ctg: np.ndarray,
+    soc_levels: np.ndarray,
+    cap: float,
+) -> pl.DataFrame:
+    """Add an ``rtg_value`` column = -J_t(soc) for each step's SOC.
+
+    SOC is recovered from the norm_observation index 17 (soc/capacity), the
+    same indirection the DT rollout uses.
+    """
+    soc_list = []
+    for obs in episode_df["norm_observation"].to_list():
+        arr = np.asarray(obs, dtype=float)
+        soc_kwh = float(arr[17]) * cap if arr.size > 17 else float(cap * 0.5)
+        soc_list.append(soc_kwh)
+    soc_arr = np.asarray(soc_list, dtype=float)
+    s_idx = np.argmin(np.abs(soc_levels[:, None] - soc_arr[None, :]), axis=0)
+    t_idx = np.arange(len(soc_arr), dtype=int)
+    rtg = -ctg[t_idx, s_idx]
+    return episode_df.with_columns(pl.Series("rtg_value", rtg.astype(np.float64)))
+
+
+def _build_slot_ctg(sliced: pl.DataFrame, region: str, cap: float, max_flow: float,
+                    n_steps: int, deg_cost_per_mwh: float):
+    """Build the J_t(soc) table for THIS episode's actual time window.
+
+    The SDP RRP forecast is a function of (month, hour), so the value table
+    depends on the specific dates in ``sliced``. Building it from the episode's
+    own window (rather than a slot-level first-window) keeps the stored RTG
+    consistent with both the SDP executor's realised actions and the inference-
+    time table, which is also built from the episode's aemo_data.
+    """
+    from aemo_sdp_executor import (
+        build_rrp_forecast, build_seasonal_rrp_profile, compute_cost_to_go_table,
+    )
+    cache_dir = Path("data/aemo")
+    try:
+        profile = build_seasonal_rrp_profile(cache_dir, region, 5.0 / 60.0)
+    except Exception as e:
+        print(f"  [j_t_soc] profile failed {region}: {e}")
+        profile = None
+    if profile is None:
+        print(f"  [j_t_soc] NO profile for {region}; returning None ctg")
+        return None, None
+    try:
+        fc = build_rrp_forecast(sliced, profile)
+        denv = _dummy_env(cap, max_flow, n_steps)
+        return compute_cost_to_go_table(denv, fc, deg_cost_per_mwh=deg_cost_per_mwh)
+    except Exception as e:
+        print(f"  [j_t_soc] ctg failed {region} cap={cap} n={n_steps}: {e}")
+        return None, None
+
+
 def generate_slot(
     processed: pl.DataFrame,
     region: str,
@@ -66,10 +131,12 @@ def generate_slot(
     deg_cost_per_mwh: float,
     rtg_value: float,
     seed_base: int,
+    rtg_mode: str = "constant",
 ) -> list[pl.DataFrame]:
     cap = BATTERY_SPECS[battery_name]["capacity"]
     max_flow = BATTERY_SPECS[battery_name]["max_flow"]
     n_steps = HORIZON_STEPS[horizon]
+
     max_start = processed.height - n_steps
     frames = []
     for ep in range(n_eps):
@@ -95,6 +162,17 @@ def generate_slot(
             pl.lit(region).alias("region"),
             pl.lit(battery_name).alias("battery"),
         )
+        if rtg_mode == "j_t_soc":
+            ctg, soc_levels = _build_slot_ctg(sliced, region, cap, max_flow,
+                                              n_steps, deg_cost_per_mwh)
+            if ctg is not None and soc_levels is not None:
+                episode_df = _attach_jt_rtg(episode_df, ctg, soc_levels, cap)
+            else:
+                # Table unavailable (e.g. seasonal profile failure): fall back to a
+                # constant RTG so the output schema stays consistent (all episodes
+                # carry an rtg_value column).
+                episode_df = episode_df.with_columns(
+                    pl.lit(float(rtg_value)).alias("rtg_value"))
         frames.append(episode_df)
     return frames
 
@@ -112,6 +190,11 @@ def main(argv: list[str] | None = None) -> int:
                    default=Path("models/aemo/dt/soc_waypoint_dt_best.pt"))
     p.add_argument("--deg-cost-per-mwh", type=float, default=50.0)
     p.add_argument("--rtg-value", type=float, default=0.0)
+    p.add_argument("--rtg-mode", type=str, default="constant",
+                   choices=["constant", "j_t_soc"],
+                   help="RTG source: 'constant' (scalar, Stage B) or 'j_t_soc' "
+                        "(SDP cost-to-go, Stage C). j_t_soc stores a per-step "
+                        "rtg_value column = -J_t(soc).")
     p.add_argument("--out", type=Path, default=Path("data/aemo_dt_sdp/dt_trajectories.parquet"))
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args(argv)
@@ -136,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
                 frames = generate_slot(
                     processed, region, horizon, battery, args.episodes_per_slot,
                     rng, model, args.deg_cost_per_mwh, args.rtg_value, args.seed,
+                    rtg_mode=args.rtg_mode,
                 )
                 n_rows = sum(f.height for f in frames)
                 print(f"  {horizon}/{battery}: {len(frames)} eps, {n_rows} rows", flush=True)

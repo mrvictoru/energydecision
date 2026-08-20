@@ -294,14 +294,28 @@ class TrajectoryDataset(Dataset):
 
         # Load data: either from DataFrame or parquet file
         needed_cols = ["episode_id", "step", "norm_observation", "action", "reward"]
+        # Stage C: an optional precomputed per-step J_t(soc) RTG column.
+        # When present, it is used as the RTG (instead of computing discounted
+        # reward-to-go), giving the DT a state-dependent value prompt.
+        if data is not None:
+            if hasattr(data, "columns"):
+                all_cols = list(data.columns)
+            else:
+                all_cols = []
+        else:
+            _probe = pl.scan_parquet(data_path).collect_schema().names()
+            all_cols = list(_probe)
+        use_rtg_col = "rtg_value" in all_cols
+        if use_rtg_col:
+            needed_cols.append("rtg_value")
         if data is not None:
             df = data.select(needed_cols) if hasattr(data, "select") else data
         else:
             try:
                 df = pl.read_parquet(data_path, columns=needed_cols)
             except TypeError:
-                # Older polars versions may not support `columns=` for parquet.
                 df = pl.read_parquet(data_path).select(needed_cols)
+        self.use_rtg_col = use_rtg_col
 
         # Store all episode data and build sliding window indices
         self.episodes = []  # List of dicts, one per episode
@@ -313,7 +327,12 @@ class TrajectoryDataset(Dataset):
             actions = np.stack(grp["action"].to_list())           # [L, act_dim]
             rewards = np.array(grp["reward"].to_list(), dtype=np.float32)  # [L]
             timesteps = np.array(grp["step"].to_list(), dtype=np.int64)    # [L]
-            rtgs = self._compute_rtgs(rewards)
+            if use_rtg_col:
+                # State-dependent J_t(soc) value (Stage C). Store 1-D [L] to
+                # match _compute_rtgs()'s layout; __getitem__ reshapes to [T,1].
+                rtgs = grp["rtg_value"].to_numpy().astype(np.float32).reshape(-1)
+            else:
+                rtgs = self._compute_rtgs(rewards)
 
             ep_len = states.shape[0]
             ep_dict = {
@@ -354,6 +373,7 @@ class TrajectoryDataset(Dataset):
         act_dim: int,
         discount_factor: float = 0.99,
         stride: int = 1,
+        use_rtg_col: bool = False,
     ) -> "TrajectoryDataset":
         """Internal classmethod: construct a TrajectoryDataset from pre-loaded episode dicts.
 
@@ -377,6 +397,9 @@ class TrajectoryDataset(Dataset):
             discount_factor: Gamma (stored for reference; RTGs are already computed
                 and stored inside each episode dict).
             stride: Step between consecutive window starts. Default 1.
+            use_rtg_col: Whether the episode rtgs came from an explicit ``rtg_value``
+                column (Stage C J_t(soc)) rather than discounted reward-to-go. Must
+                be propagated so ``--rtg-source auto`` detection survives the merge.
         """
         obj = cls.__new__(cls)
         obj.context_length = context_length
@@ -384,6 +407,7 @@ class TrajectoryDataset(Dataset):
         obj.act_dim = act_dim
         obj.gamma = discount_factor
         obj.episodes = episodes
+        obj.use_rtg_col = use_rtg_col
         obj.indices = []
         for ep_idx, ep in enumerate(episodes):
             for start_idx in range(0, ep["length"] - context_length + 1, stride):
@@ -1576,6 +1600,7 @@ def episode_train_val_split(
         first.act_dim,
         first.gamma,
         stride=stride,
+        use_rtg_col=getattr(first, "use_rtg_col", False),
     )
     val_ds = TrajectoryDataset._from_episodes(
         val_episodes,
@@ -1584,5 +1609,6 @@ def episode_train_val_split(
         first.act_dim,
         first.gamma,
         stride=stride,
+        use_rtg_col=getattr(first, "use_rtg_col", False),
     )
     return train_ds, val_ds

@@ -250,3 +250,143 @@ def greedy_fcas_bids(
     if lower_headroom > 0 and lower_prices[best_lower] > 0:
         bids[best_lower] = 1.0
     return bids
+
+
+# ---------------------------------------------------------------------------
+# SDP cost-to-go value table (Stage C): J_t(soc) as the RTG token
+# ---------------------------------------------------------------------------
+
+def compute_cost_to_go_table(
+    env,
+    forecast: Sequence[dict],
+    soc_resolution: int = 40,
+    action_resolution: int = 41,
+    deg_cost_per_mwh: float = 200.0,
+    terminal_soc: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Unconstrained (free-terminal) SDP value table for the RTG token.
+
+    Returns ``(cost_to_go, soc_levels_kwh)`` where::
+
+        cost_to_go[t, s] = optimal expected future *cost* from time `t`
+                            at SOC level `s`, under the seasonal-RRP forecast.
+
+    The terminal is **free** (``cost_to_go[horizon, :] = 0``) unless
+    ``terminal_soc`` is provided, so the value encodes the market's intrinsic
+    value from each SOC level — NOT the value conditional on being pinned to a
+    waypoint. This is the whole point of using ``J_t(soc)`` as the DT's RTG:
+    it tells the model "how much future value is left from here", calibrating
+    energy arbitrage per SOC level (Stage C).
+
+    RTG at inference = ``-cost_to_go[t, s]``  (cost -> return).
+
+    Same honest forecast source as :func:`sdp_energy_dispatch` (seasonal
+    RRP, no realized future prices) and the same ``deg_cost_per_mwh`` linear
+    throughput degradation surrogate.
+    """
+    capacity = float(env.battery_capacity)
+    horizon = len(forecast)
+    if horizon == 0:
+        return np.zeros((1, soc_resolution)), np.linspace(0, capacity, soc_resolution)
+
+    solver = AEMOSDPSolver(
+        env=env,
+        horizon=horizon,
+        soc_resolution=soc_resolution,
+        action_resolution=action_resolution,
+        use_monte_carlo=False,
+    )
+    soc_levels = solver.soc_levels_kwh
+    action_energies = solver.battery_flow_energies
+    n_soc = len(soc_levels)
+
+    # Linear throughput degradation surrogate (per action, broadcast over SOC).
+    linear_deg = np.abs(action_energies)[None, :] * deg_cost_per_mwh
+
+    # Terminal cost: FREE by default (Stage C); optional soft pin for A/B.
+    cost_to_go = np.full((horizon + 1, n_soc), np.inf)
+    if terminal_soc is None:
+        cost_to_go[horizon, :] = 0.0
+    else:
+        cost_to_go[horizon, :] = 1e6 * ((soc_levels - terminal_soc) / max(capacity, 1e-9)) ** 2
+    policy = np.full((horizon, n_soc), -1, dtype=int)
+
+    for t in range(horizon - 1, -1, -1):
+        stage = solver._compute_stage_costs(forecast[t], 0, None)
+        stage = stage + linear_deg  # add linear throughput degradation
+        future = solver._compute_future_costs(cost_to_go[t + 1, :])
+        total = np.where(np.isfinite(stage) & np.isfinite(future), stage + future, np.inf)
+        best = np.argmin(total, axis=1)
+        row_min = np.min(total, axis=1)
+        finite = np.isfinite(row_min)
+        policy[t, :] = -1
+        policy[t, finite] = best[finite]
+        cost_to_go[t, :] = row_min
+
+    return cost_to_go, soc_levels
+
+
+_COST_TO_GO_CACHE: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def get_cost_to_go_table(
+    aemo_data: pl.DataFrame,
+    env,
+    deg_cost_per_mwh: float = 200.0,
+    soc_resolution: int = 40,
+    forecast: Sequence[dict] | None = None,
+    profile: Callable[[int, int], float] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Memoized ``J_t(soc)`` table keyed by (region, step_count, capacity, deg).
+
+    Args:
+        aemo_data: The episode's processed frame (used for REGIONID + step count).
+        env: The AEMOBatteryTradingEnv instance.
+        deg_cost_per_mwh: Throughput degradation surrogate ($/MWh).
+        soc_resolution: Number of discrete SOC levels in the value table.
+        forecast: Optional pre-built RRP forecast. If None, built from
+            ``aemo_data`` times + (optional ``profile``; else seasonal cache).
+        profile: Optional seasonal RRP profile callable. If None, built from
+            the training-era cache for the region.
+
+    Returns ``(cost_to_go, soc_levels_kwh)`` matching :func:`compute_cost_to_go_table`.
+    """
+    region = str(aemo_data["REGIONID"][0]) if "REGIONID" in aemo_data.columns else "?"
+    cap = float(env.battery_capacity)
+    step_h = float(env.step_duration)
+
+    if forecast is None:
+        if profile is None:
+            cache_dir = getattr(env, '_aemo_data_dir', None)
+            if cache_dir is None:
+                from pathlib import Path as _Path
+                cache_dir = _Path(__file__).resolve().parent.parent / "data" / "aemo"
+            key_p = (region, step_h)
+            if key_p not in _COST_TO_GO_CACHE:
+                profile = build_seasonal_rrp_profile(cache_dir, region, step_h)
+            else:
+                profile = _COST_TO_GO_CACHE[key_p]
+        forecast = build_rrp_forecast(aemo_data, profile)
+
+    key = (region, len(forecast), cap, deg_cost_per_mwh, soc_resolution)
+    if key not in _COST_TO_GO_CACHE:
+        _COST_TO_GO_CACHE[key] = compute_cost_to_go_table(
+            env, forecast, soc_resolution=soc_resolution,
+            deg_cost_per_mwh=deg_cost_per_mwh,
+        )
+    return _COST_TO_GO_CACHE[key]
+
+
+def lookup_j_t_soc(
+    cost_to_go: np.ndarray,
+    soc_levels: np.ndarray,
+    t: int,
+    soc_kwh: float,
+) -> float:
+    """Return ``-J_t(soc)`` (RTG) from a value table at step ``t`` and SOC (MWh).
+
+    Converts the SDP *cost*-to-go into a *return*-to-go (higher = better).
+    """
+    s_idx = int(np.argmin(np.abs(soc_levels - soc_kwh)))
+    t_idx = min(max(int(t), 0), cost_to_go.shape[0] - 1)
+    return -float(cost_to_go[t_idx, s_idx])

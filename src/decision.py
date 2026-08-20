@@ -579,6 +579,7 @@ class AEMOAgent:
                  dispatch_action_mode: Optional[str] = None,
                  rtg_value: float = 0.0,
                  dt_gamma: float = 0.99,
+                 rtg_mode: str = "constant",
                  reset_seed: Optional[int] = None,
                  reset_options: Optional[Dict[str, Any]] = None,
                  fcas_raise_threshold: float | None = None,
@@ -590,7 +591,7 @@ class AEMOAgent:
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
-        self.rule_presistence = False
+        self.rule_persistence = False
         self.reset_seed = reset_seed
         self.reset_options = reset_options
 
@@ -611,10 +612,21 @@ class AEMOAgent:
 
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
+        # Stage C: RTG conditioning mode. 'constant' uses a fixed scalar prompt;
+        # 'j_t_soc' uses the SDP cost-to-go J_t(soc) as a state-dependent prompt.
+        if rtg_mode not in ("constant", "j_t_soc"):
+            raise ValueError(f"Unsupported rtg_mode={rtg_mode!r}; use 'constant' or 'j_t_soc'.")
+        self.rtg_mode = rtg_mode
+        self._jtsoc_ctg: np.ndarray | None = None
+        self._jtsoc_soc_levels: np.ndarray | None = None
         self.dt_states_buffer = []
         self.dt_actions_buffer = []
         self.dt_rtgs_buffer = []
         self.dt_timesteps_buffer = []
+
+        # Lazy-build the J_t(soc) table for rtg_mode='j_t_soc' when DT buffers
+        # are first initialized (needs env + forecast, both available at run time).
+        self._jtsoc_initialized = False
 
         self.dispatch_action_mode = dispatch_action_mode or getattr(env, 'action_mode', 'simple')
         self.dispatch_actions = None
@@ -1621,15 +1633,77 @@ class AEMOAgent:
         fcas_lower = 1.0 if fcas_lower_raw >= self._fcas_lower_thresh and soc_norm < 0.85 else 0.0
         return np.array([np.float32(action_val), np.float32(fcas_raise), np.float32(fcas_lower)], dtype=np.float32)
 
+    # ---- Stage C: SDP cost-to-go J_t(soc) as the DT's RTG prompt -------------
+
+    def _obs_soc_kwh(self, obs) -> float:
+        """Normalized obs index 17 holds soc/capacity (matches the DT training)."""
+        arr = np.asarray(obs, dtype=float)
+        cap = float(self.env.battery_capacity)
+        if arr.size > 17:
+            return float(arr[17]) * cap
+        return cap * 0.5
+
+    def _init_jtsoc_table(self) -> None:
+        """Build (and cache) the free-terminal J_t(soc) value table for this episode.
+
+        Uses the same honest seasonal RRP forecast as the 'sdp' executor, with the
+        same linear degradation surrogate. The table is keyed on the env so a
+        single episode reuses the table across its own steps.
+        """
+        if self.model is None:
+            raise ValueError("j_t_soc rtg_mode requires a DT model.")
+        if self._jtsoc_ctg is not None:
+            return
+        from aemo_sdp_executor import (
+            build_rrp_forecast, build_seasonal_rrp_profile, compute_cost_to_go_table,
+        )
+        env = self.env
+        aemo_data = getattr(env, 'aemo_data', None)
+        if aemo_data is None:
+            raise ValueError("j_t_soc rtg_mode requires env.aemo_data.")
+        step_h = float(env.step_duration)
+        region = None
+        if "REGIONID" in aemo_data.columns and aemo_data.height > 0:
+            region = str(aemo_data["REGIONID"][0])
+        cache_dir = Path(__file__).resolve().parent.parent / "data" / "aemo"
+        profile = None
+        if region is not None:
+            try:
+                profile = build_seasonal_rrp_profile(cache_dir, region, step_h)
+            except Exception:
+                profile = None
+        if profile is None:
+            first_rrp = float(aemo_data["RRP"][0]) if "RRP" in aemo_data.columns else 50.0
+            profile = lambda m, h: first_rrp  # noqa: E731
+        forecast = build_rrp_forecast(aemo_data, profile)
+        self._jtsoc_ctg, self._jtsoc_soc_levels = compute_cost_to_go_table(
+            env, forecast, deg_cost_per_mwh=self.deg_cost_per_mwh,
+        )
+
+    def _lookup_jtsoc_rtg(self, step_idx: int, soc_kwh: float) -> float:
+        """Return -J_t(soc) (the return-to-go) at step `step_idx` and SOC `soc_kwh`."""
+        if self._jtsoc_ctg is None:
+            self._init_jtsoc_table()
+        ctg = self._jtsoc_ctg
+        soc_levels = self._jtsoc_soc_levels
+        s_idx = int(np.argmin(np.abs(soc_levels - soc_kwh)))
+        t_idx = min(max(int(step_idx), 0), ctg.shape[0] - 1)
+        return -float(ctg[t_idx, s_idx])
+
     def run_episode(self, render: bool = False, display_progress: bool = False):
         obs, info = _reset_env(self.env, seed=self.reset_seed, options=self.reset_options)
         raw_obs = self.env.get_raw_obs()
         max_possible_steps = len(self.env.aemo_data) if hasattr(self.env, 'aemo_data') else 0
 
         if self.algorithm == 'dt':
+            if self.rtg_mode == 'j_t_soc':
+                self._init_jtsoc_table()
+                init_soc = self._obs_soc_kwh(obs)
+                self.dt_rtgs_buffer = [self._lookup_jtsoc_rtg(self.env.current_step, init_soc)]
+            else:
+                self.dt_rtgs_buffer = [self.rtg_value]
             self.dt_states_buffer = [obs.copy()]
             self.dt_actions_buffer = [np.zeros(self.model.act_dim)]
-            self.dt_rtgs_buffer = [self.rtg_value]
             self.dt_timesteps_buffer = [self.env.current_step]
 
         logs = []
@@ -1663,10 +1737,15 @@ class AEMOAgent:
                         action_array = np.array([action], dtype=np.float32) if np.isscalar(action) else action
                     self.dt_actions_buffer[-1] = action_array
 
-                    next_rtg = stable_rtg_update(
-                        self.dt_rtgs_buffer[-1], reward,
-                        dt_gamma=self.dt_gamma, initial_rtg=self.rtg_value,
-                    )
+                    if self.rtg_mode == 'j_t_soc':
+                        next_soc = self._obs_soc_kwh(next_obs)
+                        next_rtg = self._lookup_jtsoc_rtg(
+                            self.env.current_step, next_soc)
+                    else:
+                        next_rtg = stable_rtg_update(
+                            self.dt_rtgs_buffer[-1], reward,
+                            dt_gamma=self.dt_gamma, initial_rtg=self.rtg_value,
+                        )
 
                     self.dt_states_buffer.append(next_obs.copy())
                     self.dt_actions_buffer.append(np.zeros(self.model.act_dim))

@@ -459,6 +459,10 @@ def _dt_rtg_value(policy_cfg: dict[str, Any], training_summary: dict[str, Any]) 
     return 0.0 if best_val is None else float(best_val)
 
 
+def _dt_rtg_mode(policy_cfg: dict[str, Any]) -> str:
+    return str(policy_cfg.get("rtg_mode", "constant")).lower()
+
+
 def run_dt_episodes(
     *,
     processed_data: pl.DataFrame,
@@ -476,6 +480,7 @@ def run_dt_episodes(
     base_seed: int,
     forecast_npz_path: str | None = None,
     dt_gamma: float = 0.99,
+    rtg_mode: str = "constant",
 ) -> list[pl.DataFrame]:
     """Roll out the DT candidate across ``num_episodes`` episodes in lockstep,
     batching the transformer forward pass per step over all active episodes.
@@ -485,6 +490,36 @@ def run_dt_episodes(
     leg of an evaluation by several times.
     """
     from decision import _build_dt_inference_context, stable_rtg_update
+
+    # j_t_soc RTG is per-episode stateful (SDP value table keyed on SOC + step),
+    # so the batched path is bypassed in favor of the serial AEMOAgent path.
+    if rtg_mode == "j_t_soc":
+        episodes: list[pl.DataFrame] = []
+        for episode_idx in range(num_episodes):
+            env = create_aemo_env(
+                processed_data=processed_data,
+                battery_variant=battery_variant,
+                max_step=max_step,
+                step_duration=step_duration,
+                action_mode=action_mode,
+                degradation_mode=degradation_mode,
+                degradation_chemistry=degradation_chemistry,
+                degradation_temperature=degradation_temperature,
+                random_episode_start=random_episode_start,
+            )
+            agent = AEMOAgent(
+                env,
+                algorithm="dt",
+                model=model,
+                rtg_value=rtg_value,
+                dt_gamma=dt_gamma,
+                rtg_mode="j_t_soc",
+                reset_seed=base_seed + episode_idx if random_episode_start else None,
+                forecast_npz_path=forecast_npz_path,
+            )
+            episode_df, _ = agent.run_episode()
+            episodes.append(episode_df)
+        return episodes
 
     # Forecast models keep the serial agent path (forecast window construction
     # is per-episode stateful).
@@ -662,6 +697,7 @@ def run_policy_episodes(
             rtg_value=_dt_rtg_value(policy_cfg, training_summary),
             base_seed=base_seed,
             forecast_npz_path=forecast_npz_path,
+            rtg_mode=_dt_rtg_mode(policy_cfg),
         )
 
     if policy_kind == "dt_soc_oracle":

@@ -737,6 +737,7 @@ def run_dt_episodes(
     random_episode_start: bool = True,
     rtg_value: float = 0.0,
     dt_gamma: float = 1.0,
+    rtg_mode: str = "constant",
     base_seed: int = 8964,
     device: str = "auto",
 ) -> list[pl.DataFrame]:
@@ -765,6 +766,7 @@ def run_dt_episodes(
             model=model,
             rtg_value=rtg_value,
             dt_gamma=dt_gamma,
+            rtg_mode=rtg_mode,
             reset_seed=base_seed + episode_idx if random_episode_start else None,
         )
         episode_df, _ = agent.run_episode()
