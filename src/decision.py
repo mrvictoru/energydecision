@@ -613,10 +613,15 @@ class AEMOAgent:
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
         # Stage C: RTG conditioning mode. 'constant' uses a fixed scalar prompt;
-        # 'j_t_soc' uses the SDP cost-to-go J_t(soc) as a state-dependent prompt.
-        if rtg_mode not in ("constant", "j_t_soc"):
-            raise ValueError(f"Unsupported rtg_mode={rtg_mode!r}; use 'constant' or 'j_t_soc'.")
-        self.rtg_mode = rtg_mode
+        # 'j_t_soc' uses the SDP cost-to-go J_t(soc) as a state-dependent prompt;
+        # 'auto' defaults to j_t_soc on identity surfaces and constant RTG under
+        # merit-order impact unless the caller explicitly overrides to j_t_soc.
+        if rtg_mode not in ("constant", "j_t_soc", "auto"):
+            raise ValueError(
+                f"Unsupported rtg_mode={rtg_mode!r}; use 'constant', 'j_t_soc', or 'auto'."
+            )
+        self.requested_rtg_mode = rtg_mode
+        self.rtg_mode = self._resolve_rtg_mode(rtg_mode)
         self._jtsoc_ctg: np.ndarray | None = None
         self._jtsoc_soc_levels: np.ndarray | None = None
         self.dt_states_buffer = []
@@ -664,6 +669,15 @@ class AEMOAgent:
         # Forecast DT config
         self.forecast_npz_path = forecast_npz_path
         self._forecast_map: np.ndarray | None = None
+
+    def _env_has_non_identity_impact(self) -> bool:
+        impact = getattr(self.env, "_impact", None)
+        return impact is not None and impact.__class__.__name__ != "IdentityImpact"
+
+    def _resolve_rtg_mode(self, rtg_mode: str) -> str:
+        if rtg_mode != "auto":
+            return rtg_mode
+        return "constant" if self._env_has_non_identity_impact() else "j_t_soc"
 
     def set_dispatch_data(self,
                           dispatch_data: pl.DataFrame,
@@ -1676,8 +1690,23 @@ class AEMOAgent:
             first_rrp = float(aemo_data["RRP"][0]) if "RRP" in aemo_data.columns else 50.0
             profile = lambda m, h: first_rrp  # noqa: E731
         forecast = build_rrp_forecast(aemo_data, profile)
+        if "SETTLEMENTDATE" in aemo_data.columns:
+            timestamps = aemo_data["SETTLEMENTDATE"].to_list()
+            if "TOTALDEMAND" in aemo_data.columns:
+                total_demand = aemo_data["TOTALDEMAND"].to_list()
+            else:
+                total_demand = [0.0] * len(timestamps)
+            for idx, step in enumerate(forecast):
+                if idx >= len(timestamps):
+                    break
+                step["SETTLEMENTDATE"] = timestamps[idx]
+                step["TOTALDEMAND"] = float(total_demand[idx] or 0.0)
+        impact_model = getattr(env, "_impact", None)
         self._jtsoc_ctg, self._jtsoc_soc_levels = compute_cost_to_go_table(
-            env, forecast, deg_cost_per_mwh=self.deg_cost_per_mwh,
+            env,
+            forecast,
+            deg_cost_per_mwh=self.deg_cost_per_mwh,
+            impact_model=impact_model,
         )
 
     def _lookup_jtsoc_rtg(self, step_idx: int, soc_kwh: float) -> float:

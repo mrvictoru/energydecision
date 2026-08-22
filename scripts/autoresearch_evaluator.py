@@ -492,8 +492,9 @@ def run_dt_episodes(
     from decision import _build_dt_inference_context, stable_rtg_update
 
     # j_t_soc RTG is per-episode stateful (SDP value table keyed on SOC + step),
-    # so the batched path is bypassed in favor of the serial AEMOAgent path.
-    if rtg_mode == "j_t_soc":
+    # and 'auto' may resolve to j_t_soc at runtime, so the batched path is
+    # bypassed in favor of the serial AEMOAgent path for both.
+    if rtg_mode in {"j_t_soc", "auto"}:
         episodes: list[pl.DataFrame] = []
         for episode_idx in range(num_episodes):
             env = create_aemo_env(
@@ -513,7 +514,7 @@ def run_dt_episodes(
                 model=model,
                 rtg_value=rtg_value,
                 dt_gamma=dt_gamma,
-                rtg_mode="j_t_soc",
+                rtg_mode=rtg_mode,
                 reset_seed=base_seed + episode_idx if random_episode_start else None,
                 forecast_npz_path=forecast_npz_path,
             )

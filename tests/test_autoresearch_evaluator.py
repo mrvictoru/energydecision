@@ -241,6 +241,41 @@ def test_evaluate_aemo_heldout_reuses_cached_reference_rollouts(tmp_path: Path, 
     assert second['reference_rollout_cache']['hits']
 
 
+def test_run_dt_episodes_auto_mode_uses_serial_agent_path(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {"kwargs": []}
+
+    class FakeAgent:
+        def __init__(self, env, **kwargs):
+            captured["kwargs"].append(kwargs)
+
+        def run_episode(self):
+            return _episode([0.0], [{}]), pl.DataFrame()
+
+    monkeypatch.setattr(evaluator, "create_aemo_env", lambda **kwargs: {"env_kwargs": kwargs})
+    monkeypatch.setattr(evaluator, "AEMOAgent", FakeAgent)
+
+    episodes = evaluator.run_dt_episodes(
+        processed_data=pl.DataFrame({"RRP": [10.0]}),
+        battery_variant={"label": "medium", "battery_capacity": 10.0, "max_battery_flow": 5.0, "init_soc": 5.0},
+        model=object(),
+        num_episodes=2,
+        max_step=1,
+        step_duration=0.5,
+        action_mode="full_fcas",
+        degradation_mode="real_world",
+        degradation_chemistry="LFP",
+        degradation_temperature=30.0,
+        random_episode_start=True,
+        rtg_value=0.0,
+        base_seed=7,
+        rtg_mode="auto",
+    )
+
+    assert len(episodes) == 2
+    assert [kwargs["rtg_mode"] for kwargs in captured["kwargs"]] == ["auto", "auto"]
+    assert [kwargs["reset_seed"] for kwargs in captured["kwargs"]] == [7, 8]
+
+
 def test_evaluate_aemo_heldout_parallel_rollouts_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     scenario_manifest = [
         {

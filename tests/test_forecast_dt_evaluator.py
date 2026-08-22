@@ -1,5 +1,6 @@
 """Smoke tests for ForecastDecisionTransformer agent integration."""
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -98,3 +99,52 @@ def test_forecast_dt_agent_run_episode(tiny_model, mock_env):
     episode_df, _ = agent.run_episode(display_progress=False)
     assert isinstance(episode_df, pl.DataFrame)
     assert episode_df.height > 0
+
+
+def test_aemo_agent_auto_rtg_mode_resolves_by_impact(tiny_model, mock_env):
+    identity_agent = AEMOAgent(mock_env, algorithm="dt", model=tiny_model, rtg_mode="auto")
+    assert identity_agent.rtg_mode == "j_t_soc"
+
+    impact_env = _MockEnv()
+    impact_env._impact = type("PiecewiseMeritOrderImpact", (), {})()
+    impact_agent = AEMOAgent(impact_env, algorithm="dt", model=tiny_model, rtg_mode="auto")
+    assert impact_agent.rtg_mode == "constant"
+
+
+def test_jtsoc_init_passes_impact_model_and_market_metadata(monkeypatch: pytest.MonkeyPatch, tiny_model):
+    env = _MockEnv()
+    env.aemo_data = pl.DataFrame(
+        {
+            "REGIONID": ["NSW1", "NSW1"],
+            "RRP": [100.0, 120.0],
+            "TOTALDEMAND": [900.0, 950.0],
+            "SETTLEMENTDATE": [datetime(2024, 1, 1, 0, 0), datetime(2024, 1, 1, 0, 5)],
+        }
+    )
+    env._impact = type("PiecewiseMeritOrderImpact", (), {"intensity": 1.0})()
+
+    captured: dict[str, object] = {}
+
+    def fake_profile(cache_dir, region, step_h):
+        return lambda month, hour: 77.0
+
+    def fake_forecast(aemo_data, profile):
+        return [{"RRP": profile(1, 0)}, {"RRP": profile(1, 0)}]
+
+    def fake_compute(env_arg, forecast_arg, **kwargs):
+        captured["env"] = env_arg
+        captured["forecast"] = forecast_arg
+        captured["kwargs"] = kwargs
+        return np.zeros((3, 2), dtype=float), np.array([0.0, env_arg.battery_capacity], dtype=float)
+
+    monkeypatch.setattr("aemo_sdp_executor.build_seasonal_rrp_profile", fake_profile)
+    monkeypatch.setattr("aemo_sdp_executor.build_rrp_forecast", fake_forecast)
+    monkeypatch.setattr("aemo_sdp_executor.compute_cost_to_go_table", fake_compute)
+
+    agent = AEMOAgent(env, algorithm="dt", model=tiny_model, rtg_mode="j_t_soc")
+    agent._init_jtsoc_table()
+
+    assert captured["env"] is env
+    assert captured["kwargs"]["impact_model"] is env._impact
+    assert captured["forecast"][0]["TOTALDEMAND"] == pytest.approx(900.0)
+    assert "SETTLEMENTDATE" in captured["forecast"][0]

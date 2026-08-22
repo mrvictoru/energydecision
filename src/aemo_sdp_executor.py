@@ -263,6 +263,7 @@ def compute_cost_to_go_table(
     action_resolution: int = 41,
     deg_cost_per_mwh: float = 200.0,
     terminal_soc: float | None = None,
+    impact_model=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Unconstrained (free-terminal) SDP value table for the RTG token.
 
@@ -283,6 +284,11 @@ def compute_cost_to_go_table(
     Same honest forecast source as :func:`sdp_energy_dispatch` (seasonal
     RRP, no realized future prices) and the same ``deg_cost_per_mwh`` linear
     throughput degradation surrogate.
+
+    When ``impact_model`` is provided and is non-identity, the per-step energy
+    stage cost is re-priced through the market-impact model using the candidate
+    battery dispatch for that action. This keeps ``J_t(soc)`` conservative on
+    large batteries whose own dispatch moves the realized energy price.
     """
     capacity = float(env.battery_capacity)
     horizon = len(forecast)
@@ -312,7 +318,56 @@ def compute_cost_to_go_table(
     policy = np.full((horizon, n_soc), -1, dtype=int)
 
     for t in range(horizon - 1, -1, -1):
-        stage = solver._compute_stage_costs(forecast[t], 0, None)
+        forecast_step = forecast[t]
+        if (
+            impact_model is None
+            or impact_model.__class__.__name__ == "IdentityImpact"
+            or "TOTALDEMAND" not in forecast_step
+            or "SETTLEMENTDATE" not in forecast_step
+        ):
+            stage = solver._compute_stage_costs(forecast_step, 0, None)
+        else:
+            socs = solver.soc_levels_kwh
+            battery_energies = solver.battery_flow_energies
+            socs_reshaped = socs[:, np.newaxis]
+            battery_energies_reshaped = battery_energies[np.newaxis, :]
+            clipped_battery_energies = np.clip(
+                battery_energies_reshaped,
+                -socs_reshaped,
+                capacity - socs_reshaped,
+            )
+            potential_next_socs = socs_reshaped + battery_energies_reshaped
+            feasible_mask = (
+                (potential_next_socs >= -1e-6)
+                & (potential_next_socs <= capacity + 1e-6)
+            )
+            rounded = np.round(clipped_battery_energies, 10)
+            rounded_flat = rounded.ravel()
+            feasible_flat = feasible_mask.ravel()
+            stage = np.full(rounded.shape, np.inf)
+
+            if feasible_flat.any():
+                values_flat = rounded_flat[feasible_flat]
+                unique_vals, inverse = np.unique(values_flat, return_inverse=True)
+                unique_costs = np.empty(unique_vals.shape, dtype=float)
+                base_rrp = float(forecast_step.get("RRP", 0.0))
+                market_state = {
+                    "SETTLEMENTDATE": forecast_step["SETTLEMENTDATE"],
+                    "TOTALDEMAND": float(forecast_step.get("TOTALDEMAND", 0.0) or 0.0),
+                }
+                for ui, energy in enumerate(unique_vals):
+                    dispatch_mw = -float(energy) / max(float(env.step_duration), 1e-9)
+                    realized_rrp = impact_model.realized_energy_price(
+                        base_rrp,
+                        dispatch_mw,
+                        base_rrp,
+                        market_state,
+                    )
+                    unique_costs[ui] = float(energy) * float(realized_rrp)
+
+                costs_flat = np.full(rounded_flat.shape, np.inf)
+                costs_flat[feasible_flat] = unique_costs[inverse]
+                stage = costs_flat.reshape(rounded.shape)
         stage = stage + linear_deg  # add linear throughput degradation
         future = solver._compute_future_costs(cost_to_go[t + 1, :])
         total = np.where(np.isfinite(stage) & np.isfinite(future), stage + future, np.inf)
@@ -336,6 +391,7 @@ def get_cost_to_go_table(
     soc_resolution: int = 40,
     forecast: Sequence[dict] | None = None,
     profile: Callable[[int, int], float] | None = None,
+    impact_model=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Memoized ``J_t(soc)`` table keyed by (region, step_count, capacity, deg).
 
@@ -368,11 +424,17 @@ def get_cost_to_go_table(
                 profile = _COST_TO_GO_CACHE[key_p]
         forecast = build_rrp_forecast(aemo_data, profile)
 
-    key = (region, len(forecast), cap, deg_cost_per_mwh, soc_resolution)
+    impact_key = (
+        None
+        if impact_model is None
+        else (impact_model.__class__.__name__, float(getattr(impact_model, "intensity", 1.0)))
+    )
+    key = (region, len(forecast), cap, deg_cost_per_mwh, soc_resolution, impact_key)
     if key not in _COST_TO_GO_CACHE:
         _COST_TO_GO_CACHE[key] = compute_cost_to_go_table(
             env, forecast, soc_resolution=soc_resolution,
             deg_cost_per_mwh=deg_cost_per_mwh,
+            impact_model=impact_model,
         )
     return _COST_TO_GO_CACHE[key]
 

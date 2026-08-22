@@ -138,6 +138,10 @@ if __name__ == "__main__":
                              "Makes the impact evaluation a repeatable, canonical benchmark.")
     parser.add_argument("--with-dispatch", action="store_true",
                         help="Add Dalrymple North dispatch replay baseline (SA1 scenarios only).")
+    parser.add_argument("--rtg-mode", type=str, default="auto",
+                        choices=["constant", "j_t_soc", "auto"],
+                        help="DT inference RTG mode: 'constant', 'j_t_soc', or "
+                             "'auto' (use j_t_soc on identity and constant under merit-order impact).")
     args = parser.parse_args()
 
     if args.rtg:
@@ -307,7 +311,8 @@ if __name__ == "__main__":
                         print(f"    dt_rtg{rtg}: skip (done)")
                         continue
                     env = _mk_env()
-                    agent = AEMOAgent(env, algorithm='dt', model=dt_model, rtg_value=rtg)
+                    agent = AEMOAgent(env, algorithm='dt', model=dt_model, rtg_value=rtg,
+                                      rtg_mode=args.rtg_mode)
                     result = run_policy(env, agent, _lab)
                     results.append(result)
                     save_results(results)
