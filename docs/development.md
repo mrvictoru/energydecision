@@ -94,7 +94,7 @@ python scripts/autoresearch_evaluator.py \
   --output-dir eval_output/autoresearch/<run-tag>
 ```
 
-## Test Suite Coverage (330 tests)
+## Test Suite Coverage (332 tests)
 
 | File | Area | Key Coverage |
 |------|------|--------------|

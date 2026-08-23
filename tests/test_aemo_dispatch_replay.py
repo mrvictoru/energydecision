@@ -14,6 +14,9 @@ from decision import AEMOAgent
 
 def _make_stub_env(action_mode: str = 'multi_market', max_battery_flow: float = 5.0,
                    episode_start_idx: int = 0):
+    # The dispatch data in this test file uses 30-min timestamps, so the stub grid
+    # must match.  step_duration is intentionally kept at 0.5h here because the
+    # dispatch replay tests exercise timestamp alignment, not step-duration physics.
     grid_times = [
         datetime(2024, 1, 1, 0, 0),
         datetime(2024, 1, 1, 0, 30),
@@ -118,7 +121,7 @@ def test_paired_duid_dispatch_replay_combines_gen_and_load_streams():
 
 def test_dispatch_action_uses_episode_start_idx():
     """dispatch_actions are indexed by episode_start_idx + current_step, not just current_step."""
-    # Grid has 4 timestamps; episode starts at index 2
+    # Grid has 4 timestamps (30-min spacing); episode starts at index 2
     env = _make_stub_env(action_mode='multi_market', episode_start_idx=2)
     dispatch_data = pl.DataFrame({
         'SETTLEMENTDATE': [

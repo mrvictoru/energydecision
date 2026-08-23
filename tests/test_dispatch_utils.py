@@ -683,10 +683,10 @@ def _make_mock_env(processed_data):
     """Create a minimal mock AEMOBatteryTradingEnv."""
     env = SimpleNamespace(
         aemo_data=processed_data,
-        step_duration=0.5,
+        step_duration=0.083333,
         max_battery_flow=5.0,
         battery_capacity=10.0,
-        action_mode="multi_market",
+        action_mode="full_fcas",
         current_step=0,
         episode_start_idx=0,
     )
@@ -730,10 +730,10 @@ def test_run_dispatch_replay_returns_logs(monkeypatch, tmp_path):
     class FakeEnv:
         def __init__(self, **kw):
             self.aemo_data = processed_data
-            self.step_duration = kw.get("step_duration", 0.5)
+            self.step_duration = kw.get("step_duration", 0.083333)
             self.max_battery_flow = kw.get("max_battery_flow", 5.0)
             self.battery_capacity = kw.get("battery_capacity", 10.0)
-            self.action_mode = kw.get("action_mode", "multi_market")
+            self.action_mode = kw.get("action_mode", "full_fcas")
 
     monkeypatch.setattr(_env_mod, "AEMOBatteryTradingEnv", FakeEnv)
     monkeypatch.setattr(_dec, "run_single", lambda cls, env, agent_kwargs=None, **kw: (fake_ep_log, fake_inc_log))
@@ -811,10 +811,10 @@ def test_run_dispatch_replay_historical_duids_not_filtered_by_region(monkeypatch
     class FakeEnv:
         def __init__(self, **kw):
             self.aemo_data = processed_data
-            self.step_duration = kw.get("step_duration", 0.5)
+            self.step_duration = kw.get("step_duration", 0.083333)
             self.max_battery_flow = kw.get("max_battery_flow", 5.0)
             self.battery_capacity = kw.get("battery_capacity", 10.0)
-            self.action_mode = kw.get("action_mode", "multi_market")
+            self.action_mode = kw.get("action_mode", "full_fcas")
 
     monkeypatch.setattr(_env_mod, "AEMOBatteryTradingEnv", FakeEnv)
     monkeypatch.setattr(_dec, "run_single", lambda cls, env, agent_kwargs=None, **kw: (fake_ep_log, fake_inc_log))

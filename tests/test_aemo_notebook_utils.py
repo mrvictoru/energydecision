@@ -110,6 +110,15 @@ def test_default_aemo_dt_model_kwargs_matches_multimarket_aemo():
     assert kwargs["rope_enabled"] is True
 
 
+def test_default_aemo_dt_model_kwargs_full_fcas():
+    kwargs = default_aemo_dt_model_kwargs(action_mode="full_fcas")
+    assert kwargs["state_dim"] == 18
+    assert kwargs["act_dim"] == 9
+    assert kwargs["context_len"] == 288
+    assert kwargs["max_timestep"] == 2016
+    assert kwargs["rope_enabled"] is True
+
+
 def test_build_dt_dataset_from_logs_tracks_sources_and_episode_ids():
     dataset, manifest = build_dt_dataset_from_logs(
         {

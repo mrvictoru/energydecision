@@ -115,7 +115,7 @@ def test_evaluate_aemo_heldout_writes_metrics_outputs(tmp_path: Path, monkeypatc
         'bootstrap_seed': 1,
         'reference_policy': 'rule',
         'heldout': {
-            'step_duration': 0.5,
+            'step_duration': 0.083333,
             'episode_hours': 1.0,
             'fit_global_stats': False,
             'battery_variants': [{'name': 'medium'}],
@@ -149,7 +149,7 @@ def test_evaluate_aemo_heldout_writes_metrics_outputs(tmp_path: Path, monkeypatc
     assert len(summary['aggregate_metrics']) == 2
     assert 'candidate_dt' in summary['paired_comparisons_vs_reference']
     assert summary['cache_preflight'][0]['label'] == 'heldout_nsw1'
-    assert cache_preflight_calls[0]['step_duration'] == pytest.approx(0.5)
+    assert cache_preflight_calls[0]['step_duration'] == pytest.approx(0.083333)
 
 
 def test_evaluate_aemo_heldout_reuses_cached_reference_rollouts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -201,7 +201,7 @@ def test_evaluate_aemo_heldout_reuses_cached_reference_rollouts(tmp_path: Path, 
         'reference_policy': 'rule',
         'reference_cache_dir': str(tmp_path / 'reference_cache'),
         'heldout': {
-            'step_duration': 0.5,
+            'step_duration': 0.083333,
             'episode_hours': 1.0,
             'fit_global_stats': False,
             'battery_variants': [{'name': 'medium'}],
@@ -333,7 +333,7 @@ def test_evaluate_aemo_heldout_parallel_rollouts_opt_in(tmp_path: Path, monkeypa
         'bootstrap_seed': 1,
         'reference_policy': 'rule',
         'heldout': {
-            'step_duration': 0.5,
+            'step_duration': 0.083333,
             'episode_hours': 1.0,
             'fit_global_stats': False,
             'parallel_workers': 2,

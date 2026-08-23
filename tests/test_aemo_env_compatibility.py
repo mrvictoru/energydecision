@@ -98,7 +98,7 @@ def test_gymnasium_api():
 
 
 def test_multi_market_mode():
-    """Test multi-market action mode."""
+    """Test multi-market action mode (legacy 3-dim)."""
     print("=" * 80)
     print("TEST 3: Multi-Market Mode Compatibility")
     print("=" * 80)
@@ -152,6 +152,58 @@ def test_multi_market_mode():
         
     except Exception as e:
         pytest.fail(f"Multi-market mode test failed: {e}")
+
+
+def test_full_fcas_mode():
+    """Test full-fcas action mode (recommended 9-dim)."""
+    print("=" * 80)
+    print("TEST 3b: Full-FCAS Mode Compatibility")
+    print("=" * 80)
+    
+    try:
+        from AEMOBatteryEnv import AEMOBatteryTradingEnv
+        
+        num_steps = 100
+        timestamps = [datetime(2024, 6, 1) + timedelta(minutes=5*i) for i in range(num_steps)]
+        
+        test_data = pl.DataFrame({
+            'Time': timestamps,
+            'RRP': np.random.uniform(20, 100, num_steps),
+            'TOTALDEMAND': np.random.uniform(5000, 8000, num_steps),
+            'RAISEREG': np.random.uniform(5, 20, num_steps),
+            'LOWERREG': np.random.uniform(5, 20, num_steps),
+            'RAISE6SEC': np.random.uniform(10, 30, num_steps),
+            'LOWER6SEC': np.random.uniform(10, 30, num_steps),
+            'RAISE60SEC': np.random.uniform(8, 25, num_steps),
+            'LOWER60SEC': np.random.uniform(8, 25, num_steps),
+            'RAISE5MIN': np.random.uniform(7, 22, num_steps),
+            'LOWER5MIN': np.random.uniform(7, 22, num_steps),
+            'solar_pct': np.random.uniform(0, 0.3, num_steps),
+            'wind_pct': np.random.uniform(0, 0.2, num_steps),
+        })
+        
+        env = AEMOBatteryTradingEnv(
+            aemo_data=test_data,
+            battery_capacity=10.0,
+            max_battery_flow=5.0,
+            action_mode='full_fcas'
+        )
+        
+        assert env.action_space.shape == (9,), f"full_fcas should have 9D action space, got {env.action_space.shape}"
+        
+        obs, info = env.reset()
+        # [energy, RAISEREG, LOWERREG, RAISE6SEC, LOWER6SEC, RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN]
+        action = np.array([0.5, 0.3, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        obs, reward, terminated, truncated, info = env.step(action)
+        
+        assert 'fcas_revenue' in info
+        print(f"✓ full_fcas environment created and stepped successfully")
+        print(f"  - Action space: {env.action_space}")
+        print(f"  - FCAS revenue: {info.get('fcas_revenue', 'N/A')}")
+        print("\n✓ full_fcas mode compatibility confirmed\n")
+        
+    except Exception as e:
+        pytest.fail(f"full_fcas mode test failed: {e}")
 
 
 def test_sb3_compatibility():
