@@ -28,7 +28,7 @@ Before starting an autoresearch run, work with the human to:
 
 4. **Verify data and paths exist**
    - Household track requires parquet logs under `data/household/logs/`.
-    - AEMO track requires `data/aemo_dt_fcas/aemo_fcas_dataset.parquet` (current recommended corpus) or `data/aemo_dt/aemo_dt_dataset.parquet` (legacy 162-episode dataset) and `configs/aemo_decision_transformer_model_kwargs.json`.
+    - AEMO track requires SDP-teacher trajectories (`data/aemo_dt_sdp/dt_trajectories_jtsoc_combined.parquet`, 640 eps — the shipped Stage C DT training data) or the historical FCAS corpus (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) and `configs/aemo_decision_transformer_model_kwargs.json`.
    - Model outputs must stay under the repository root, typically under `models/household/dt/` or `models/aemo/dt/`.
    - Before running experiments, define which episodes/date ranges/regions are training data, which are validation-only, and which are held out for simulator evaluation.
 
@@ -147,7 +147,7 @@ python3 scripts/pretrain_aemo_decision_transformer.py \
   --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
   --epochs 2 \
-  --batch-size 16 \
+  --batch-size 64 \
   --lr 3e-5 \
   --val-split 0.1 \
   --save-path models/aemo/dt/aemo_dt_model.pt \
