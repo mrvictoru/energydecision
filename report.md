@@ -977,6 +977,36 @@ $11.0k / $56.5k / $69.5k), where explicit j_t_soc still loses −$139.9k /
    distilled models run $88–176/MWh vs PPO's ~$211–310, removing the long-held
    "PPO owns degradation efficiency" caveat (§8.2.6).
 
+##### Statistical significance of the headline claims (2026-08-23)
+
+Bootstrap CIs (10,000 resamples over matched cells — scenario-level for the
+identity surfaces, battery×scenario cells for the impact gate) plus paired
+Wilcoxon signed-rank tests, computed by
+`scripts/stagec_statistical_significance.py`
+(`eval_output/stagec_statistical_significance.json`):
+
+| Comparison | n | Diff (DT−PPO) | 95% CI | Win rate | Wilcoxon p |
+|---|---:|---:|---|---:|---:|
+| Standard Oct | 5 | +$9,220 | [+$7,073, +$11,624] | 5/5 | 0.0625* |
+| Dispatch-matched | 6 | +$12,791 | [+$7,008, +$18,277] | 6/6 | 0.0312* |
+| Expanded broad-2024 | 27 | +$15,257 | [+$4,108, +$33,350] | 25/27 | **0.0002** |
+| 2025 OOD | 6 | +$19,364 | [+$7,138, +$39,670] | 6/6 | 0.0312* |
+| Impact gate (piecewise) | 9 | +$63,064 | [+$33,356, +$100,973] | 9/9 | 0.0039* |
+
+\* For n<10 the Wilcoxon two-sided p has a bounded minimum (n=5→0.0625,
+n=6/9→0.031); these values mean *every* paired difference had the same sign —
+the strongest attainable result at that sample size. **All six paired-difference
+95% CIs exclude zero**, so "DT > PPO" holds at 95% confidence on every surface,
+with the expanded broad-2024 surface additionally significant under a
+conventional test.
+
+Two secondary observations from the same analysis: (a) per-cell bootstrap
+P(DT>PPO) ≥ 0.9998 on every identity surface; (b) within the auto-mode impact
+sweep, the labelled constant-RTG fallback value still matters — rtg≥20
+re-introduces the self-suppression collapse on hornsdale/torrens even in `auto`
+mode, confirming that the shipped fallback value must remain conservative
+(rtg=0.0).
+
 ##### Limitations
 
 - All results are simulator-based (historical AEMO prices, modeled FCAS
@@ -985,8 +1015,10 @@ $11.0k / $56.5k / $69.5k), where explicit j_t_soc still loses −$139.9k /
   forced under market impact; H1 mitigates but the verified shipped default is `auto`.
 - The expanded-broad-2024 energy-arbitrage gap is narrowed ($14.8k vs $17.4k),
   not eliminated; further gains likely need richer teacher diversity.
-- Per-surface headlines are point estimates; bootstrap/Wilcoxon tooling exists
-  (§8.2.9.3) but has not been applied to every new-surface comparison.
+- Bootstrap/Wilcoxon coverage for the headline comparisons is complete
+  (see "Statistical significance" above); per-cell CIs are wide on surfaces with
+  few scenarios (n=5–6), so point estimates should still be read alongside their
+  intervals.
 
 ### 8.3 Key Takeaways
 
@@ -1107,7 +1139,7 @@ This repository introduces a unified framework for learning and planning in batt
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. It has evolved from a hand-tuned scalar (architecture-dependent: modern peaks at 0.0, legacy at 0.5) to a state-dependent J_t(soc) cost-to-go table — with automatic fallback to constant RTG under market impact, since optimistic prompts self-suppress at grid scale (§8.2.10).
 - **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep). FCAS revenue rose 18× (from $77/ep to $1,383/ep), closing most of the prior gap to PPO's $1,616/ep FCAS revenue (the DT reached ~86% of PPO's FCAS revenue, versus ~5% before), while degradation fell 2.9× vs PPO ($212/ep vs $609/ep). This establishes that **offline RL on well-curated data can match online RL**.
-- **Remaining limitations:** all AEMO results are simulator-based (sim-to-real transfer is the top open item, §9 Phase 4); explicit `j_t_soc` inference must not be forced under market impact (shipped `auto` mode handles this); the expanded-broad-2024 energy-arbitrage gap vs PPO's oracle-like timing is narrowed, not eliminated; and per-surface headlines are point estimates pending full bootstrap/Wilcoxon coverage.
+- **Remaining limitations:** all AEMO results are simulator-based (sim-to-real transfer is the top open item, §9 Phase 4); explicit `j_t_soc` inference must not be forced under market impact (shipped `auto` mode handles this); and the expanded-broad-2024 energy-arbitrage gap vs PPO's oracle-like timing is narrowed, not eliminated. Headline DT-vs-PPO comparisons carry bootstrap CIs and Wilcoxon tests (§8.2.10).
 
 This report documents the system and experimental protocol; results can be iteratively updated as additional experiments are run.
 
@@ -1156,6 +1188,6 @@ Appendix B: Household Per-Algorithm Metrics (§8.1)
 Appendix C: Implementation Notes and Known Mismatches
 
 - **Dataset/forecast column mismatch:** the dataset schema emitted by `transform_polars_df` includes `FutureSolar`/`FutureLoad`, but the planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP fall back to `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`. This is a known code-level inconsistency and does not affect the AEMO (utility-scale) results, which use AEMO-native columns.
-- **Statistical confidence on headline AEMO figures:** bootstrap confidence intervals and paired Wilcoxon tests (`src/helper.py`) are applied to the market-impact headline tables (§8.2.9.1) and the expanded dispatch-matched/standard runs (§8.2.9.3). The §8.2.10 per-surface headlines remain point estimates; extending CI coverage to them is near-term work.
+- **Statistical confidence on headline AEMO figures:** bootstrap confidence intervals and paired Wilcoxon tests (`src/helper.py`) are applied to the market-impact headline tables (§8.2.9.1), the expanded dispatch-matched/standard runs (§8.2.9.3), and — as of 2026-08-23 — the §8.2.10 Stage C headlines via `scripts/stagec_statistical_significance.py` (results: `eval_output/stagec_statistical_significance.json`). All six DT-vs-PPO paired-difference CIs exclude zero.
 - **Preferred-policy artifacts (§8.2.10):** plan + session diary `docs/aemo_dt_preferred_policy_plan.md`; shipped checkpoint `models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus.pt` (use `rtg_mode="auto"`); SDP executor `src/aemo_sdp_executor.py`; teacher-trajectory generator `scripts/generate_sdp_dt_trajectories.py`; teacher corpora `data/aemo_dt_sdp/`; impact gate runner `scripts/impact_gate.py`; evaluation outputs under `eval_output/stageb_fullcorpus_mixed_*`, `eval_output/stagec_*`, and `eval_output/exp0_*`.
 - **Figure embedding:** figure paths reference repository-relative SVGs; for PDF export these should be embedded.
