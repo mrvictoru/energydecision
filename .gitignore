@@ -189,6 +189,9 @@ system_logs/
 # eval_output/final/ if they need to be tracked in git.
 /eval_output/
 
+# experiment-tracking log (un-tracked; see AGENTS.md)
+/results.tsv
+
 # whitelist only eval_output/final/ for curated report artifacts
 !/eval_output/final/
 /eval_output/final/*

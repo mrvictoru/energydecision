@@ -65,6 +65,12 @@ This is the single sanctioned experiment surface for autoresearch in this reposi
 - `scripts/pretrain_aemo_decision_transformer.py`
 - `src/aemo_notebook_utils.py`
 - `scripts/autoresearch_evaluator.py`
+- `src/decision.py` (AEMOAgent)
+- `src/aemo_sdp_executor.py`
+- `src/aemo_oracle_algo.py`
+- `src/market_impact.py`
+- `src/grpo_posttraining.py`
+- `scripts/generate_sdp_dt_trajectories.py`
 - the evaluator config fixed for the run
 - notebooks
 - environment dynamics
@@ -76,9 +82,10 @@ This is the single sanctioned experiment surface for autoresearch in this reposi
 Only change knobs already exposed by `scripts/pretrain_decision_transformer.py`, including:
 
 - surface preset / approved model variant selection
-- DT dimensions (`state_dim`, `act_dim`, `n_block`, `h_dim`, `n_heads`, `context_len`, `max_timestep`)
+- DT dimensions (`state_dim`, `act_dim`, `n_block`, `h_dim`, `n_heads`, `context_len`, `max_timestep`, `n_kv_heads`, `qk_norm`, `tie_weights`, `action_head_mode`)
 - dropout and RoPE settings
 - training hyperparameters (`batch_size`, `epochs`, `lr`, `discount`, `return_scale`, loss weights, weight decay)
+- RTG conditioning (`--rtg-source` `auto`/`constant`/`j_t_soc`, `--auto-return-scale`)
 - approved optimizer / scheduler selection, including optional custom class-path hooks already supported by the surface
 - DataLoader settings (`num_workers`, `persistent_workers`, `prefetch_factor`)
 - split-policy handling already supported by the file
@@ -174,8 +181,10 @@ python3 scripts/launch_aemo_training.py --run-tier learning-baseline
 ```
 
 The baked-in `proxy-baseline` defaults now follow the current frontier pilot setting: fixed pilot
-train/validation split, `context_length=180`, `batch_size=16`, `epochs=2`, and a deeper+wider
-transformer (`n_block=8`, `h_dim=384`, `n_heads=8`).
+train/validation split, `context_length=180`, `batch_size=64`, `epochs=2`, and the AEMO proxy
+architecture (deeper+wider). Verify the exact tier values in `scripts/launch_aemo_training.py`
+(`RUN_TIERS["proxy-baseline"]`) rather than relying on this prose, since the launcher is the
+source of truth for tier defaults.
 
 For a separate live dashboard while training runs, use `scripts/dt_progress_runner.py` with the training command and the matching `--progress-snapshot-path`. It watches the JSON snapshot and shows the latest training, validation, best-metric, and resource signals in a dedicated terminal.
 
@@ -276,7 +285,7 @@ For the current AEMO dataset layout:
 - treat `aemo_dt_dataset_train_subset_007` as a **proxy-only** slice, not the main learning baseline
 - the fixed autoresearch pilot uses contiguous week-long slices per episode, so each example carries about one week of 5-minute history
 - prefer one of the normal 24-episode train subsets plus explicit validation subsets/files for learning baselines
-- prefer `context_len=288` for learning baselines; `120` is an acceptable runtime fallback, but `60` is primarily a proxy-loop setting
+- prefer `context_len=180` for learning baselines (the `aemo_learning_baseline` preset default; longer ctx like 288 regressed — see AGENTS.md context-sweep finding). `120` is an acceptable runtime fallback; `60` is primarily a proxy-loop setting
 - wrapper launches can now forward `context_len` and other approved DT shape knobs, but the direct trainer is still the right entrypoint for manual mixed-corpus command lines
 - prefer `lr=3e-5` over `2e-5` as the starting learning-baseline LR unless new evaluator evidence contradicts it
 

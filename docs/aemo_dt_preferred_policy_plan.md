@@ -324,11 +324,21 @@ line. Defer unless Stages A–C plateau.
       j_t_soc inference passes identity but fails hornsdale/torrens under
       merit-order impact. Const-RTG is the official "preferred policy"
       inference mode pending H1 fix.
-- [ ] **Docs** — Update `report.md` §8.2.1a/§8.3 and the README roadmap with
+- [x] **Docs** — Update `report.md` §8.2.1a/§8.3 and the README roadmap with
       the final verdict; supersede Option C (PPO-as-broad-leader) with the
       hierarchical DT+LP result + foresight caveat until Stage A lands.
-- [ ] `python -m pytest tests/ -v` green before merge.
-- [ ] Open/refresh PR description with the headline table + verdict.
+      **DONE (2026-08-23):** full report rewrite — new §8.2.10 (experiment
+      ladder Exp 0/2/3 → Stages A/B/C → impact investigation → `rtg_mode="auto"`),
+      §8.2.7 stages 6–8, §8.3 takeaways, §9 Phase 3 closed, §11 + Appendix C.
+- [x] `python -m pytest tests/ -v` green before merge.
+      **DONE (2026-08-23):** 6 stale tests fixed (act_dim 3→9 padding,
+      cache writable/readable branches, proxy/learning tier batch 16→64 +
+      checkpoints 4→6, subset-mode removal, context_len for window counts,
+      step_duration for deep cycling) — full suite **330 passed** in distrobox.
+- [x] Open/refresh PR description with the headline table + verdict.
+      **DONE (2026-08-23):** PR #36 body refreshed with the goal, the
+      `rtg_mode="auto"` headline table (4 identity surfaces + impact gate),
+      the experiment ladder, methodological findings, files, and caveats.
 
 ## 9. Autoresearch constraints (reminder)
 
@@ -1091,8 +1101,8 @@ The standalone Decision Transformer is now the preferred policy for AEMO battery
 - [x] Stage C — J_t(soc) RTG trained + evaluated **DONE** (const-RTG inference: beats PPO on 3/4 identity surfaces + impact gate; j_t_soc inference: beats PPO on ALL 4 identity surfaces but fails impact gate — see §INVESTIGATION)
 - [x] Shipped inference recommendation decided — **use `rtg_mode="auto"`** (identity resolves to `j_t_soc`; impact resolves to `constant`)
 - [x] Docs — Update `report.md` §8.2.1a/§8.3 and README roadmap; supersede Option C
-- [ ] `python -m pytest tests/ -v` green before merge.
-- [ ] Open/refresh PR description with the headline table + verdict.
+- [x] `python -m pytest tests/ -v` green before merge. **DONE (2026-08-23):** 6 stale tests fixed; full suite **330 passed** in distrobox.
+- [x] Open/refresh PR description with the headline table + verdict. **DONE (2026-08-23):** PR #36 body refreshed.
 
 ---
 
@@ -1238,3 +1248,27 @@ lands. The j_t_soc identity wins are real but gated by impact robustness.
   policy mode. It is the only verified setting that keeps the DT's all-surface
   identity win while also passing the market-impact gate. Explicit `j_t_soc`
   remains a useful identity-only analysis mode, not the production default.
+
+### 2026-08-23 — Report rewrite + PR refresh (final merge prep)
+
+- **`report.md` full rewrite** to fold the whole campaign into the narrative:
+  - New **§8.2.10** "Breaking the Offline-Data Ceiling" — the experiment ladder
+    (Exp 0/2/3, Stages A/B/C, impact investigation, `rtg_mode="auto"` decision)
+    with per-stage tables sourced from this diary + `results.tsv`.
+  - §8.2.1a conclusion replaced with a "superseded by §8.2.10" note (history kept).
+  - §8.2.7 improvement-trajectory table extended with stages 6–8 (hierarchical
+    → honest SDP → standalone J_t(soc)); §8.2.6 degradation-edge bullets updated.
+  - §8.3 takeaways rewritten (+ honest-planner-generalization takeaway #10);
+    §9 Phase 3 marked completed (Thrust 1 → Stage B, SDP-RTG → Stage C, success
+    criteria exceeded); §11 + Appendix C updated with mechanism + artifacts.
+  - Abstract, §1.2 (new RQ4), §1.3, §8.2 intro table all refreshed.
+- **PR #36 description refreshed** (REST PATCH; `gh pr edit` was blocked by a
+  Projects-classic GraphQL deprecation error): goal, `auto` headline table,
+  experiment ladder, methodological findings, files, caveats.
+- **Tests:** the 6 failing tests were stale (not regressions) and have been
+  updated to the current repo behaviour: act_dim 3→9 padding, cache
+  writable/readable branches, proxy/learning tier defaults (batch 64, checkpoints
+  6, no subsets), context_len for window counts, and step_duration for deep
+  cycling. Full suite now **330 passed** in distrobox.
+- **Checklist:** Docs, pytest, and PR-description boxes now ticked in §8 and in
+  the 2026-08-18 "Final checklist".

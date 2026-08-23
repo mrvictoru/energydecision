@@ -201,7 +201,8 @@
     {
       "name": "candidate_dt",
       "kind": "dt",
-      "rtg_value": 0.0
+      "rtg_value": 0.0,
+      "rtg_mode": "j_t_soc"
     },
     {
       "name": "ppo_reference",

@@ -3,7 +3,7 @@
 ## Two tracks, never compare across them
 
 - **Household**: ausgrid solar-battery (SolarBatteryEnv) — DT beats Oracle (SOTA)
-- **AEMO / grid-scale**: NEM market + FCAS (AEMOBatteryTradingEnv) — PPO dominates on the expanded 135-episode eval (+12.82 vs -3.11) when DT is trained on FCAS-poor data. When retrained on the FCAS-rich dataset (2,425 eps, 905 PPO-generated), **DT achieves +$1,522/ep profit, beating PPO (+$1,444/ep)** on the example evaluator (16 eps, 4 regions). FCAS revenue improves 18× ($77 → $1,383/ep).
+- **AEMO / grid-scale**: NEM market + FCAS (AEMOBatteryTradingEnv) — the **standalone Decision Transformer is the preferred policy**. The Stage C standalone DT (`aemo_dt_sdp_jtsoc_fullcorpus.pt`, SDP-teacher trajectories + J_t(soc) RTG) beats PPO on **all 4 identity surfaces** (standard 3.85×, dispatch-matched 2.25×, 2025 OOD 1.98×, expanded broad-2024 1.39×) **and passes the impact gate** (2.6–3.0× under merit-order impact). This supersedes the earlier "PPO dominates" narrative from the FCAS-poor data era — see `docs/aemo_dt_preferred_policy_plan.md`.
 
 ## Repo structure quirks
 
@@ -160,10 +160,12 @@ python3 src/convert_dispatch_to_episodes.py \
 
 ## Pretrained DT model (for GRPO fine-tuning)
 
-Two checkpoints are hosted on HuggingFace. **Verify architecture from the weights, not docs** (each `.pt` carries an embedded `config`; see `docs/next_stage_instructions.md` → "Verifying a checkpoint's architecture").
+Two checkpoints are hosted on HuggingFace. **Verify architecture from the weights, not docs** — each `.pt` carries an embedded `config` (inspect it with `torch.load(ckpt, map_location="cpu")["config"]`, or run `scripts/download_and_verify.py`).
+
+> **Note:** The current SOTA is no longer a HF-hosted model — it is the **Stage C standalone DT** (`models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus.pt`, `--rtg-source j_t_soc`, `--auto-return-scale`), which beats PPO on all 4 identity surfaces + the impact gate (see `docs/aemo_dt_preferred_policy_plan.md`). The HF checkpoints below and GRPO post-training are historical.
 
 - **Legacy**: repo `mrvictoru/energydecision-dt`, file `aemo_dt_fcas_model.pt` — 8×384, ctx=180, learned pos emb (`embed_return` MoLab keys).
-- **Modern v2** (PR#31): repo `mrvictoru/energydecision-dt-v2`, file `aemo_dt_fcas_model.pt` — **8×768, 12 heads, 6 KV heads (GQA), qk_norm, tie_weights, ctx=210, return_scale=2.0, learned timestep emb (rope_enabled=false)**. Canonical config: `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. Helpers in `src/aemo_dt_hf.py` (`MODERN_V2_HF_REPO`, `modern_v2_model_config_path()`, `build_surface_manifest()`). **This is the SOTA checkpoint — GRPO does not improve it.**
+- **Modern v2** (PR#31): repo `mrvictoru/energydecision-dt-v2`, file `aemo_dt_fcas_model.pt` — **8×768, 12 heads, 6 KV heads (GQA), qk_norm, tie_weights, ctx=210, learned timestep emb (rope_enabled=false)**. Canonical config: `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. Helpers in `src/aemo_dt_hf.py` (`MODERN_V2_HF_REPO`, `modern_v2_model_config_path()`, `build_surface_manifest()`). **Historical — GRPO does not improve it and it is superseded by the Stage C standalone DT (see note above).**
 
 GRPO fine-tuning lives in `src/grpo_posttraining.py`. The AEMO GRPO notebook (`notebooks/aemo_dt_grpo_posttraining.ipynb`) downloads the model automatically.
 
@@ -234,8 +236,10 @@ The following results are from the legacy 8×384 model (PR#30, *copilot/online-r
 
 ## Priorities for DT improvement (from `docs/aemo_research_plan.md`)
 
-1. Train DT on PPO-generated trajectories (addresses FCAS gap)
-2. RTG prompt calibration sweep
-3. Scale up training data (100+ episodes, diverse policies) — ✅ done (2,425 eps)
-4. FCAS-weighted loss (higher weight on FCAS action dims)
-5. Re-run context sweep with PPO-rich data
+> **Status (2026-08):** the standalone DT now beats PPO on all 4 identity surfaces + impact gate via **SDP-teacher trajectories + J_t(soc) RTG** (Stages A–C). The historical priorities below are largely superseded — see `docs/aemo_dt_preferred_policy_plan.md`.
+
+1. ~~Train DT on PPO-generated trajectories (addresses FCAS gap)~~ — superseded by SDP-teacher trajectories (PPO-only data explicitly failed).
+2. ~~RTG prompt calibration sweep~~ — superseded by state-dependent J_t(soc) RTG (`--rtg-source j_t_soc`, `--auto-return-scale`).
+3. ~~Scale up training data~~ — done (2,425 eps FCAS + 640 eps SDP-teacher).
+4. ~~FCAS-weighted loss~~ — measured no-op.
+5. ~~Re-run context sweep with PPO-rich data~~ — superseded.

@@ -30,13 +30,13 @@ def test_build_training_command_uses_proxy_baseline_defaults(tmp_path: Path):
 
     assert command[0] == sys.executable
     assert command[command.index("--surface-preset") + 1] == "aemo_proxy_frontier"
-    assert command[command.index("--batch-size") + 1] == "16"
+    assert command[command.index("--batch-size") + 1] == "64"
     assert command[command.index("--epochs") + 1] == "2"
-    assert command[command.index("--checkpoints-per-epoch") + 1] == "4"
+    assert command[command.index("--checkpoints-per-epoch") + 1] == "6"
     assert command[command.index("--val-dataset-path") + 1] == str(paths["val_dataset_path"])
 
 
-def test_build_training_command_enables_subset_mode_for_learning_baseline(tmp_path: Path):
+def test_build_training_command_uses_full_corpus_for_learning_baseline(tmp_path: Path):
     args = launcher.parse_args(["--run-tier", "learning-baseline", "--run-tag", "demo", "--runtime-mode", "allow-host"])
     paths = {
         "dataset_path": tmp_path / "train.parquet",
@@ -53,10 +53,11 @@ def test_build_training_command_enables_subset_mode_for_learning_baseline(tmp_pa
         paths=paths,
     )
 
-    assert "--train-in-subsets" in command
-    assert command[command.index("--subset-episodes") + 1] == "24"
-    assert command[command.index("--epochs-per-subset") + 1] == "2"
-    assert command[command.index("--batch-size") + 1] == "16"
+    # The learning-baseline tier is now the full-corpus run: no subset training,
+    # deeper/wider model variant, FCAS-rich batch size.
+    assert "--train-in-subsets" not in command
+    assert "--val-dataset-path" not in command
+    assert command[command.index("--batch-size") + 1] == "64"
     assert command[command.index("--model-variant") + 1] == "deeper_wider"
 
 

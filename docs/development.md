@@ -94,6 +94,40 @@ python scripts/autoresearch_evaluator.py \
   --output-dir eval_output/autoresearch/<run-tag>
 ```
 
+## Test Suite Coverage (330 tests)
+
+| File | Area | Key Coverage |
+|------|------|--------------|
+| `test_aemo_data_local_file.py` | Data ingestion | Local AEMO cache/zip handling, fallback to NEMOSIS |
+| `test_aemo_degradation.py` | Degradation (rainflow) | Rainflow cycle counting, Muenzel model, capacity fade |
+| `test_aemo_dispatch_replay.py` | Dispatch replay | Historical DISPATCHLOAD replay as env actions |
+| `test_aemo_dt_hf.py` | HuggingFace models | Model download/verify, surface manifest creation |
+| `test_aemo_env_compatibility.py` | Env API | Gymnasium API compliance (step, reset, spaces) |
+| `test_aemo_fcas_units.py` | FCAS units | FCAS enablement model, power/energy calculations |
+| `test_aemo_full_fcas.py` | FCAS env | 9-dim full_fcas action space, co-optimized bidding |
+| `test_aemo_notebook_utils.py` | Notebook utilities | DT dataset building, cache management, eval helpers |
+| `test_aemo_oracle_invariant.py` | Oracle baseline | Perfect-foresight LP revenue dominance invariant |
+| `test_algorithm_classes.py` | Planning algorithms | SDP/MRDP/Oracle solver initialization & basic ops |
+| `test_autoresearch_evaluator.py` | Held-out evaluation | Parallel rollouts, reference caching, metric summarization |
+| `test_build_aemo_autoresearch_pilot.py` | Pilot dataset | Curated train/val split from FCAS-rich corpus |
+| `test_decision_agent.py` | Agent abstraction | Rule/RL/DT/ORACLE dispatch, episode runners |
+| `test_decision_transformer.py` | DT model | Architecture, forward pass, action head, RTG handling |
+| `test_dispatch_utils.py` | Dispatch utilities | DISPATCHLOAD parsing, station resolution, replay |
+| `test_environment.py` | Household env | SolarBatteryEnv dynamics, reward, degradation |
+| `test_episode_visualizer.py` | Visualization | Episode plotting, grid energy, SOC trajectories |
+| `test_forecast_dt_evaluator.py` | Forecast DT eval | Forecast DT dispatch, eval integration |
+| `test_forecast_dt.py` | Forecast DT model | TTM forecast tokens, type embeddings, training |
+| `test_grpo_posttraining.py` | GRPO fine-tuning | Online RL fine-tuning, mixed action distribution |
+| `test_launch_aemo_training.py` | Training launcher | Tier defaults, command building, dry-run plan |
+| `test_performance.py` | Performance | Degradation model microbenchmarks |
+| `test_pretrain_aemo_decision_transformer.py` | AEMO DT CLI | Command building, checkpoint epoch parsing |
+| `test_pretrain_decision_transformer.py` | DT training CLI | Legacy CLI contract, surface presets, artifact manifest |
+| `test_prewarm_aemo_cache.py` | Cache warming | Eval config-driven AEMO cache precomputation |
+| `test_quantile_scenarios.py` | Scenario generation | QuantileScenarioGenerator for SDP/MRDP |
+| `test_real_world_degradation.py` | RealWorld BESS deg | Calendar+cycle aging, NMC/LFP chemistry, Arrhenius |
+| `test_risk_statistics.py` | Risk metrics | VaR/CVaR@5%, Sharpe/Sortino, bootstrap CIs, Wilcoxon |
+| `test_transformer_training.py` | Training internals | Resource monitor, loss aggregation, AMP/grad clip |
+
 ## Contributor Rules Of Thumb
 
 ### Documentation

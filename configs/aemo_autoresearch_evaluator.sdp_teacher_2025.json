@@ -75,7 +75,8 @@
     {
       "name": "candidate_dt",
       "kind": "dt",
-      "rtg_value": 0.0
+      "rtg_value": 0.0,
+      "rtg_mode": "j_t_soc"
     },
     {
       "name": "ppo_reference",
@@ -84,6 +85,11 @@
       "model_path": "models/aemo_sb3/ppo_aemo_fcas_model.zip",
       "deterministic": true,
       "device": "auto"
+    },
+    {
+      "name": "fcas_rule",
+      "kind": "rule",
+      "algorithm": "fcas_rule"
     }
   ]
 }
