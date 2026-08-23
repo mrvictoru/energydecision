@@ -201,6 +201,11 @@ system_logs/
 !/eval_output/final/**/plots/
 !/eval_output/final/**/plots/*.svg
 
+# whitelist paper figures for the report/paper (regenerate with scripts/stagec_paper_figures.py)
+!/eval_output/paper_figures/
+/eval_output/paper_figures/*
+!/eval_output/paper_figures/
+
 # large generated caches and rollouts (always ignored regardless of location)
 heldout_logs/
 reference_cache/
