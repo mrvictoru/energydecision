@@ -50,9 +50,13 @@ We position this work at the intersection of three literatures: battery optimal 
 
 **Reinforcement learning for battery control.** Subramanya et al. [6] survey RL-for-battery-storage across optimization objective, user impact, losses/degradation, and application context, and explicitly call for benchmark environments with a standard interface to enable cross-paper comparability. Their critique — that bespoke environments, private data, and divergent reward/constraint formulations block fair comparison — is the direct motivation for the unified, degradation-aware benchmark in this report.
 
-**Sequence models and offline RL.** The Decision Transformer (DT) of Chen et al. [4] reframes RL as conditional sequence modeling: a transformer predicts actions from return-to-go (RTG), state, and action tokens, enabling offline training from logged trajectories and inference-time policy steering via the RTG prompt. Subsequent work extends DT to online fine-tuning (e.g., Online Decision Transformer) and to continuous control. Our contribution is to bring a *modernized* DT (grouped-query attention, QK-Norm, weight tying, SwiGLU) to the practically under-studied setting of **multi-market BESS dispatch with co-optimized FCAS bidding**, and to test, empirically, whether online RL fine-tuning (GRPO) adds value on top of a strong offline model — a question largely absent from the DT literature.
+**Sequence models and offline RL.** The Decision Transformer (DT) of Chen et al. [4] reframes RL as conditional sequence modeling: a transformer predicts actions from return-to-go (RTG), state, and action tokens, enabling offline training from logged trajectories and inference-time policy steering via the RTG prompt. Subsequent work extends the paradigm along three axes relevant here: **online fine-tuning** (Online Decision Transformer [10]; also the motivation for our GRPO study, §8.2.5), **value-aware conditioning** (Q-learning DT [11] and Trajectory Transformer [12], which mix Bellman targets or beam search into the sequence-model objective), and **architecture modernization** (GQA, RMSNorm/QK-Norm, SwiGLU — adopted wholesale in our modern v2 backbone, §4.2). A parallel offline-RL line addresses behaviour cloning's central weakness — actions outside the data support are unreachable — with value-based constraints (IQL's expectile regression [7], CQL's conservative penalties [8]). We identified IQL/CQL as the principled fix for FCAS-spike capture (§8.2.1a, Exp 5) but de-prioritized it: the teacher-distillation route (§4.3) sidesteps the support problem *by construction*, because the teacher's co-optimized FCAS bids define the training support.
 
-While we are not aware of a directly comparable published result on full 9-dimensional FCAS co-optimization via offline sequence models, the benchmark, baselines, and evaluation protocol here are designed so that such comparisons can be made under identical dynamics and metrics.
+**Planner distillation.** Distilling a planning policy into a reactive student is classical: DAgger [9] formalizes iterative policy aggregation with expert correction, and "learning to plan" work (e.g., value/policy distillation from search, AlphaZero-style training) shows a distilled network can retain most of a search-based teacher's strength at a fraction of inference cost. Our Stage A→B pipeline is this recipe applied to battery dispatch: an SDP teacher (backward induction under a seasonal forecast) generates trajectories, a standalone DT imitates them, and we quantify retention per surface (51–91% of the solver-in-the-loop policy, §8.2.10 Stage B) — with the twist that the *honest* (non-clairvoyant) teacher generalizes better OOD than the perfect-foresight LP it replaced. The state-dependent RTG prompt built from the teacher's cost-to-go ($-J_t(s_t)$, §4.3) connects to prompting studies in the DT literature, which have treated the RTG as a hand-set scalar; to our knowledge pricing it from a planner's value function — and *gating that pricing by the battery's market power* (§8.2.10 impact investigation) — has not previously been reported.
+
+**Reinforcement learning for battery control.** Subramanya et al. [6] survey RL-for-battery-storage across optimization objective, user impact, losses/degradation, and application context, and explicitly call for benchmark environments with a standard interface to enable cross-paper comparability. Their critique — that bespoke environments, private data, and divergent reward/constraint formulations block fair comparison — is the direct motivation for the unified, degradation-aware benchmark in this report.
+
+**Positioning.** Our contribution relative to these lines is threefold: (1) a *modernized* DT applied to the practically under-studied setting of **multi-market BESS dispatch with co-optimized 8-service FCAS bidding**, where we show empirically that GRPO online fine-tuning adds no value on a strong backbone (§8.2.5); (2) evidence that the DT-vs-PPO gap on broad/OOD surfaces is a *data-provenance* problem solved by changing the teacher, not the architecture or loss (§8.2.1a → §8.2.10); and (3) a market-impact validation gate showing that value-based prompts must be gated by market power — a robustness dimension absent from prior DT and battery-RL evaluations. While we are not aware of a directly comparable published result on full 9-dimensional FCAS co-optimization via offline sequence models, the benchmark, baselines, and evaluation protocol here are designed so that such comparisons can be made under identical dynamics and metrics.
 
 ## 3. System Model and Environments
 
@@ -350,6 +354,49 @@ DT hyperparameters:
 Compute and reproducibility:
 - Containerization: the repository includes a `Dockerfile` and `docker-compose.yml` for shared Docker workflows, plus a Distrobox guide for lower-friction local development.
 - Figures: `evaluate_experiments(..., save_dir=..., save_format=...)` can save plots (default `save_format='svg'`).
+
+### PPO Reference Baseline (exact specification)
+
+The PPO reference used in all AEMO comparisons is trained with SB3 via Optuna
+hyperparameter search (10 trials, `src/sb3train.py::ppo_model_kwargs_fn`;
+search spaces: lr ∈ [1e-5, 1e-3] log-uniform, γ ∈ [0.90, 0.999],
+clip ∈ [0.1, 0.3], entropy ∈ [1e-8, 1e-2] log-uniform, net_arch ∈
+{[64,64], [256,256], [400,300]}), up to 4M total timesteps in chunked
+vectorized training. The shipped checkpoints' selected hyperparameters,
+extracted from the checkpoint archives:
+
+| Parameter | `ppo_aemo_fcas_model.zip` (9-dim, narrow surfaces) | `ppo_aemo_model.zip` (3-dim, broad surfaces) |
+|---|---|---|
+| n_steps / batch / epochs | 2048 / 64 / 10 | 2048 / 64 / 10 |
+| γ | 0.99 | 0.964 |
+| learning rate | 3.0e-4 | 7.15e-5 |
+| clip range | 0.2 | 0.238 |
+| entropy coef | 0.0 | 1.63e-7 |
+| GAE λ | 0.95 | 0.95 |
+| vf coef | 0.5 | 0.607 |
+| max grad norm | 0.5 | 0.5 |
+| net arch | SB3 MlpPolicy default | [400, 300] |
+
+### Evaluation-Protocol Notes and Caveats
+
+- **Action-space asymmetry across surfaces (disclosed).** The narrow surfaces
+  (standard Oct, dispatch-matched) evaluate all policies in `full_fcas`
+  (9-dim), where the 9-dim DT competes against the 9-dim
+  `ppo_aemo_fcas_model`. The broad surfaces (expanded 2024, 2025 OOD) were
+  configured with `multi_market` (3-dim), which scores only dims 0–2 of the
+  DT's action — dropping its 6 contingency-FCAS dims — while the PPO reference
+  is itself the 3-dim `ppo_aemo_model`. Broad-surface comparisons therefore
+  read as "3-dim-effective DT vs 3-dim PPO"; the DT's headline broad-surface
+  wins are achieved with a *handicapped* action space, which strengthens (not
+  weakens) the claim, but per-surface FCAS decompositions are not comparable
+  across the two surface families. A `full_fcas` broad-surface variant is a
+  natural follow-up.
+- **Step protocol.** All AEMO evaluation configs use 5-min steps
+  (`step_duration=0.083333`), matching DT training data (2026-08-07 protocol
+  fix; 30-min steps nearly halve DT performance).
+- **Scenario-level pairing.** Each (scenario × battery) cell is one
+  deterministic episode (no random-start room in 14-day windows); statistical
+  treatment therefore resamples cells, not episodes (§8.2.10).
 
 ## 7. Metrics and Analysis
 
@@ -1336,6 +1383,18 @@ This report documents the system and experimental protocol; results can be itera
 [5] Ausgrid. Solar home electricity data. https://github.com/pierre-haessig/ausgrid-solar-data?tab=readme-ov-file. Accessed April 2017.
 
 [6] R. Subramanya, S. A. Sierla, and V. Vyatkin, "Exploiting Battery Storages With Reinforcement Learning: A Review for Energy Professionals," *IEEE Access*, vol. 10, 2022, doi: 10.1109/ACCESS.2022.3176446.
+
+[7] I. Kostrikov, A. Nair, and S. Levine, "Offline Reinforcement Learning with Implicit Q-Learning," *International Conference on Learning Representations (ICLR)*, 2022, arXiv:2110.06169.
+
+[8] A. Kumar, A. Zhou, G. Tucker, and S. Levine, "Conservative Q-Learning for Offline Reinforcement Learning," *Advances in Neural Information Processing Systems (NeurIPS)*, 2020, arXiv:2006.04779.
+
+[9] S. Ross, G. Gordon, and J. A. Bagnell, "A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning," *International Conference on Artificial Intelligence and Statistics (AISTATS)*, 2011, arXiv:1011.0686.
+
+[10] G. Zheng, A. Calandra, F. Wan, S. Levine, and K. Pertsch, "Online Decision Transformer," *International Conference on Machine Learning (ICML)*, 2022, arXiv:2202.05607.
+
+[11] W. Li, X. Chen, W. Chen, and L. Wang, "Q-learning Decision Transformer: Learning to Seek Improvements Instead of Rewards," 2023, arXiv:2306.03966.
+
+[12] M. Janner, Q. Li, and S. Levine, "Sequence Modeling is a Scalable Framework for Reinforcement Learning," *International Conference on Machine Learning (ICML)*, 2021, arXiv:2109.10120.
 
 ---
 
