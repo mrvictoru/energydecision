@@ -142,7 +142,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 
 **Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
-### 4.2 Modern v2 Architecture (current best-performing model)
+### 4.2 Modern v2 Architecture (backbone of the shipped Stage C model)
 
 The headline results in Section 8 are produced by the **modern v2 Decision Transformer**
 ([`mrvictoru/energydecision-dt-v2`](https://huggingface.co/mrvictoru/energydecision-dt-v2)), an
@@ -162,6 +162,112 @@ but the decisive gains come from the following):
 Canonical hyperparameters are shipped at
 `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. The architecture
 is verified from the uploaded checkpoint's embedded `config`, not from documentation.
+
+### 4.3 Problem Formulation: MDP, Teacher, and State-Dependent Prompting
+
+This subsection formalizes the four objects the shipped pipeline is built from:
+the environment MDP, the behaviour-cloning objective, the honest SDP teacher,
+and the J_t(soc) RTG prompt. Source references: `src/AEMOBatteryEnv.py`
+(`_calculate_reward`, `_compute_fcas_enablement`), `src/aemo_sdp_executor.py`
+(`sdp_energy_dispatch`, `compute_cost_to_go_table`), `src/sdp_algorithm.py`
+(`_compute_stage_costs`).
+
+**MDP.** Battery dispatch over an episode of $T$ steps ($\Delta t = 5$ min) is a
+finite-horizon MDP with state
+$s_t \in \mathbb{R}^{18}$ (normalized energy and FCAS prices, demand,
+generation mix, time features, state of charge) and action
+
+$$
+a_t = \big(\underbrace{a^{E}_t \in [-1,1]}_{\text{energy dispatch}},\;
+\underbrace{a^{1}_t,\dots,a^{8}_t \in [0,1]}_{\text{FCAS bids}}\big) .
+$$
+
+The energy command $E_t = a^{E}_t P_{\max} \Delta t$ (MWh; $E_t > 0$ charging,
+$E_t < 0$ discharging) is clipped by SOC limits. The per-step reward is
+
+$$
+r_t \;=\; \underbrace{-\,E_t\, p^{E}_t}_{\text{energy arbitrage}}
+\;+\; \underbrace{\Delta t \sum_{k \in \mathcal{K}} e_{k,t}\, p^{k}_t}_{\text{FCAS revenue}}
+\;-\; \underbrace{c^{\text{deg}}_t}_{\text{degradation}}
+\;+\; \underbrace{c^{\text{soc}}_t}_{\text{SOC guard penalty}},
+$$
+
+where $p^{E}_t$ is the regional spot price (RRP), $\mathcal{K}$ is the set of 8
+FCAS services with cleared prices $p^{k}_t$, and $e_{k,t} \ge 0$ is the
+*enabled* MW of service $k$. Enablement is co-optimized with the energy
+dispatch through directional headroom: for the raise (resp. lower) direction,
+
+$$
+h^{\text{raise}}_t = \Big[\min\big(P_{\max},\; \mathrm{soc}_t / \Delta t\big) - \max(0, -P_t)\Big]^{+},
+$$
+
+with $P_t = E_t / \Delta t$ the realized power; if the sum of raise-direction
+bids exceeds $h^{\text{raise}}_t$ the bids are **proportionally scaled** (not
+clipped). This coupling is what makes joint energy+FCAS bidding non-trivial
+(§4, diagnosis item 2). The objective is total profit per episode,
+$\sum_t r_t$, which is already net of degradation.
+
+**Behaviour cloning and its ceiling.** A standard DT (Chen et al. [4]) models
+$p_\theta(a_t \mid \hat{R}_t, s_{\le t}, a_{<t})$ with a causal transformer over
+interleaved (return-to-go, state, action) tokens, trained by regression
+
+$$
+\mathcal{L}(\theta) = w_a\, \| a_t - \hat{a}_\theta \|^2 \;+\; w_s\, \| s_{t+1} - \hat{s}_\theta \|^2 \;+\; w_r\, \| \hat{R}_{t+1} - \hat{r}_\theta \|^2,
+\quad (w_a, w_s, w_r) = (0.999,\, 0.002,\, 0.0001).
+$$
+
+Because the training targets are logged market behaviour, the policy cannot
+exceed the data's skill — the offline-data ceiling of §8.2.1a.
+
+**Honest SDP teacher.** The teacher plans energy timing by stochastic dynamic
+programming against a *seasonal* price forecast only:
+$\hat{p}^{E}_t = f(\mathrm{month}_t, \mathrm{hour}_t)$, fitted on pre-2024 data
+(`build_seasonal_rrp_profile`) — no realized future prices enter the plan.
+With SOC discretized into $n_s$ levels and actions into $n_a$ energy steps
+(clipped to feasible transitions $s' = s + E \in [0, C]$), backward induction
+gives the action-value plan
+
+$$
+J_t(s) \;=\; \min_{E \in \mathcal{E}(s)} \Big[ \hat{p}^{E}_t\, E \;+\; \lambda_{\text{deg}}\, |E| \;+\; J_{t+1}\!\big(s + E\big) \Big],
+\qquad J_T \equiv 0 \ \text{(free terminal)},
+$$
+
+where $\hat{p}^{E}_t E$ is negative (i.e. profitable) when discharging into a
+high forecast price, and $\lambda_{\text{deg}}$ ($\$/\text{MWh}$, linear
+throughput surrogate) is the degradation-awareness term that the plan *requires*:
+without it the Muenzel rainflow model under-counts 5-minute cycling and the
+teacher over-cycles OOD (§8.2.10 Exp 3 / Stage A). For the hierarchical
+executors the terminal is instead a soft pin to the waypoint-DT's target SOC
+(quadratic penalty); FCAS bids are then allocated greedily from the residual
+headroom at current prices. The teacher is *honest* in the sense of §8.2.10
+Stage A: it never observes realized future prices.
+
+**J_t(soc) as the RTG prompt.** The same recursion, run with the free terminal
+over an episode-length seasonal forecast, yields a cost-to-go table
+$\{J_t(s_j)\}_{t \le T,\, j \le n_s}$ (`compute_cost_to_go_table`). At inference
+the DT's return-to-go token is set to
+
+$$
+\hat{R}_t \;=\; -\,J_t(s_t),
+$$
+
+i.e. the *state-dependent* remaining value under the seasonal forecast —
+replacing the hand-tuned constant prompt. This is what recovered the energy
+arbitrage gap (§8.2.10 Stage C): a constant prompt under-promises value from a
+charged battery at pre-spike hours, whereas $-J_t(s_t)$ prices the opportunity
+exactly. Under a non-identity market-impact model the stage cost is re-priced
+through `realized_energy_price`, making the table impact-aware; the shipped
+`rtg_mode="auto"` selects $-J_t(s_t)$ on price-taking surfaces and falls back
+to a conservative constant ($0.0$) under impact (§8.2.10, impact investigation).
+
+**Distillation.** Teacher trajectories
+$\tau = \{(o_t, a^{\text{teacher}}_t, r_t)\}$ are generated by executing the
+honest planner (waypoint-DT → SDP energy → greedy FCAS) over cached 2021–2023
+processed parquets (`scripts/generate_sdp_dt_trajectories.py`), then the
+standalone student DT is trained on $\tau$ with the same BC objective. Because
+the teacher's FCAS bids are co-optimized by construction, the student breaks
+the FCAS-cloning ceiling *by construction* rather than by data re-weighting
+(§8.2.10 Stage B).
 
 ## 5. Data and Preprocessing
 
@@ -188,6 +294,41 @@ For the AEMO/NEM environment, the repository includes `src/aemo_data.py`, which 
 For historical replay, the repository also queries unit metadata and `DISPATCHLOAD` records so that a notebook can discover which battery stations were active in a date window, resolve historical DUID changes for a named station, and reconstruct observed dispatch actions as episode logs.
 
 > **NOTE (repo-backed):** Actual AEMO data fetching requires the optional dependency `nemosis` to be installed; otherwise fetch functions raise `ImportError`.
+
+### 5.4 SDP-Teacher Trajectory Corpora (training data for the shipped model)
+
+The shipped Stage C DT (§8.2.10) is **not** trained on the historical FCAS
+corpora of the earlier models — it is trained on trajectories generated by the
+honest SDP teacher (§4.3). Three corpora were produced by
+`scripts/generate_sdp_dt_trajectories.py`, which replays the executor
+(waypoint-DT → SDP energy → greedy FCAS) over cached 2021–2023 processed
+parquets, slicing each region's training window into episode-length chunks with
+random starts and recording self-consistent
+$(\text{norm\_observation}, \text{action}[9], \text{reward})$ triples
+(observation consistency with the env verified to ~5e-8).
+
+| Corpus | Episodes | Rows | Size | Teacher | RTG column |
+|---|---:|---:|---:|---|---|
+| `dt_trajectories_full.parquet` | 320 | 3.13M | 368 MB | conservative ($\lambda_{\text{deg}}$ = \$50/MWh) | discounted return |
+| `dt_trajectories_aggressive.parquet` | 320 | 3.13M | 373 MB | aggressive ($\lambda_{\text{deg}}$ = \$20/MWh; +57% energy throughput) | discounted return |
+| **`dt_trajectories_jtsoc_combined.parquet`** | **640** | **6.2M** | **762 MB** | both, concatenated | **J_t(soc) cost-to-go** |
+
+All three cover 5 regions × short+medium horizons × 4 battery configurations
+(`medium_1c`, `large_07c`, `small_05c`, `fast_375c`), balanced across slots.
+The combined corpus is the training data of the shipped checkpoint
+`models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus.pt`; the two single-teacher
+corpora are the Stage B ablation points (§8.2.10). The J_t(soc) column is
+computed per episode from the episode's own seasonal forecast
+(`--rtg-mode j_t_soc`) with `--auto-return-scale` calibration
+(90th-percentile/10 ≈ 25,990 for the combined corpus).
+
+Schema (superset of the trajectory-log contract in §4.1):
+`episode_id`, `step`, `norm_observation` (18-dim), `action` (9-dim), `reward`,
+`source_policy` (`sdp_teacher_*`), plus the RTG column consumed via
+`use_rtg_col` / `--rtg-source j_t_soc`. The historical FCAS corpora
+(§5.4 predecessors in `data/aemo_dt_fcas/`, 2,425 episodes) remain available
+for reproducing the v2/GRPO-era results but are **not** used by the shipped
+model.
 
 ## 6. Experimental Setup
 
