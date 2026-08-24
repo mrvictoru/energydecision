@@ -16,8 +16,8 @@ def test_main_writes_cache_manifest(tmp_path: Path, monkeypatch):
     config_path.write_text(
         json.dumps(
             {
-                "heldout": {
-                    "step_duration": 0.5,
+                    "heldout": {
+                    "step_duration": 0.083333,
                     "fit_global_stats": False,
                     "scenarios": [
                         {
@@ -69,8 +69,8 @@ def test_main_serializes_datetime_entries_in_manifest(tmp_path: Path, monkeypatc
     config_path.write_text(
         json.dumps(
             {
-                "heldout": {
-                    "step_duration": 0.5,
+                    "heldout": {
+                    "step_duration": 0.083333,
                     "fit_global_stats": False,
                     "scenarios": [
                         {

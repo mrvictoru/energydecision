@@ -27,6 +27,7 @@ from aemo_notebook_utils import (
     preflight_processed_cache_paths,
     resolve_battery_variants,
     resolve_dispatch_battery_life_cost,
+    run_dt_soc_oracle_episodes,
     run_rule_episodes,
     run_sb3_episodes,
     should_run_dispatch_for_scenario,
@@ -392,7 +393,7 @@ def _resolve_reference_cache_dir(evaluation_config: dict[str, Any]) -> Path | No
 def _cacheable_policy(policy_cfg: dict[str, Any], reference_cache_dir: Path | None) -> bool:
     if reference_cache_dir is None:
         return False
-    return str(policy_cfg.get("kind", "")).lower() != "dt" and bool(policy_cfg.get("cache_rollouts", True))
+    return str(policy_cfg.get("kind", "")).lower() not in ("dt", "dt_soc_oracle") and bool(policy_cfg.get("cache_rollouts", True))
 
 
 def _cache_slug(value: str) -> str:
@@ -458,6 +459,10 @@ def _dt_rtg_value(policy_cfg: dict[str, Any], training_summary: dict[str, Any]) 
     return 0.0 if best_val is None else float(best_val)
 
 
+def _dt_rtg_mode(policy_cfg: dict[str, Any]) -> str:
+    return str(policy_cfg.get("rtg_mode", "constant")).lower()
+
+
 def run_dt_episodes(
     *,
     processed_data: pl.DataFrame,
@@ -475,6 +480,7 @@ def run_dt_episodes(
     base_seed: int,
     forecast_npz_path: str | None = None,
     dt_gamma: float = 0.99,
+    rtg_mode: str = "constant",
 ) -> list[pl.DataFrame]:
     """Roll out the DT candidate across ``num_episodes`` episodes in lockstep,
     batching the transformer forward pass per step over all active episodes.
@@ -484,6 +490,37 @@ def run_dt_episodes(
     leg of an evaluation by several times.
     """
     from decision import _build_dt_inference_context, stable_rtg_update
+
+    # j_t_soc RTG is per-episode stateful (SDP value table keyed on SOC + step),
+    # and 'auto' may resolve to j_t_soc at runtime, so the batched path is
+    # bypassed in favor of the serial AEMOAgent path for both.
+    if rtg_mode in {"j_t_soc", "auto"}:
+        episodes: list[pl.DataFrame] = []
+        for episode_idx in range(num_episodes):
+            env = create_aemo_env(
+                processed_data=processed_data,
+                battery_variant=battery_variant,
+                max_step=max_step,
+                step_duration=step_duration,
+                action_mode=action_mode,
+                degradation_mode=degradation_mode,
+                degradation_chemistry=degradation_chemistry,
+                degradation_temperature=degradation_temperature,
+                random_episode_start=random_episode_start,
+            )
+            agent = AEMOAgent(
+                env,
+                algorithm="dt",
+                model=model,
+                rtg_value=rtg_value,
+                dt_gamma=dt_gamma,
+                rtg_mode=rtg_mode,
+                reset_seed=base_seed + episode_idx if random_episode_start else None,
+                forecast_npz_path=forecast_npz_path,
+            )
+            episode_df, _ = agent.run_episode()
+            episodes.append(episode_df)
+        return episodes
 
     # Forecast models keep the serial agent path (forecast window construction
     # is per-episode stateful).
@@ -581,6 +618,9 @@ def run_dt_episodes(
             b = buffers[i]
             env = envs[i]
             action_vec = np.asarray(act[j], dtype=np.float32)
+            if str(action_mode).lower() == "full_fcas" and action_vec.shape[0] >= 2:
+                action_vec = action_vec.copy()
+                action_vec[1:] = np.clip(action_vec[1:], 0.0, 1.0)
             obs, reward, terminated, truncated, info = env.step(action_vec.tolist())
             b["logs"].append(
                 {
@@ -658,6 +698,30 @@ def run_policy_episodes(
             rtg_value=_dt_rtg_value(policy_cfg, training_summary),
             base_seed=base_seed,
             forecast_npz_path=forecast_npz_path,
+            rtg_mode=_dt_rtg_mode(policy_cfg),
+        )
+
+    if policy_kind == "dt_soc_oracle":
+        # Hierarchical DT+LP: the waypoint DT predicts target-SOC waypoints and
+        # the SOC-waypoint-pinned Oracle LP executes per-step actions.
+        if dt_model is None:
+            raise ValueError("DT policy requested but no model was loaded.")
+        return run_dt_soc_oracle_episodes(
+            processed_data=processed_data,
+            battery_variant=battery_variant,
+            model=dt_model,
+            num_episodes=episodes_per_variant,
+            max_step=max_step,
+            step_duration=step_duration,
+            action_mode=action_mode,
+            degradation_mode=degradation_mode,
+            degradation_chemistry=degradation_chemistry,
+            degradation_temperature=degradation_temperature,
+            random_episode_start=random_episode_start,
+            rtg_value=_dt_rtg_value(policy_cfg, training_summary),
+            base_seed=base_seed,
+            deg_cost_per_mwh=float(policy_cfg.get("deg_cost_per_mwh", 50.0)),
+            executor=str(policy_cfg.get("executor", "lp")),
         )
 
     if policy_kind == "rule":
@@ -1378,7 +1442,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     dt_model = None
     model_path = None
     model_device = None
-    if any(str(policy.get("kind", "")).lower() == "dt" for policy in policies):
+    if any(str(policy.get("kind", "")).lower() in ("dt", "dt_soc_oracle") for policy in policies):
         dt_model, model_path, model_device = load_dt_model(
             surface_manifest,
             model_path=args.model_path.resolve() if args.model_path is not None else None,

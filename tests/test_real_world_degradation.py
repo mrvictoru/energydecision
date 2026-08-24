@@ -339,19 +339,22 @@ class TestAEMORealWorldDegradation:
         """NMC should accumulate more degradation than LFP under deep cycling.
 
         At high DoD NMC's larger k_cyc dominates; at very shallow DoD the
-        difference in alpha_dod exponents can flip the ordering, so we use
-        near-full-capacity cycling to keep DoD close to 100 %.
+        difference in alpha_dod exponents flips the ordering, so we use
+        near-full-capacity cycling to keep DoD close to 100 %. The env defaults
+        to 5-min steps (step_duration=0.0833 h), where a ±1.0 action at 5 MW /
+        5 MWh moves only ~8 % SOC (shallow) — so we explicitly set a 1 h step so
+        each ±1.0 action swings the full battery (~100 % DoD).
         """
-        # Use a small capacity so each ±1.0 action cycles most of the battery.
         actions = [1.0, -1.0] * 25
 
         def run(chemistry):
             env = AEMOBatteryTradingEnv(
                 aemo_data=aemo_test_data,
-                battery_capacity=5.0,    # small → ±2.5 MWh ≈ 100 % DoD
+                battery_capacity=5.0,    # small → ±5 MWh per 1 h step ≈ 100 % DoD
                 max_battery_flow=5.0,
                 init_battery_level=0.0,  # start empty for full-swing cycling
                 max_step=100,
+                step_duration=1.0,       # 1 h steps → full-capacity swing per ±1.0 action
                 degradation_mode='real_world',
                 degradation_chemistry=chemistry,
             )

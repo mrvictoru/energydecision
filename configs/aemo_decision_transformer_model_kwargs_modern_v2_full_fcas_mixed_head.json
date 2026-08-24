@@ -1,0 +1,17 @@
+{
+  "act_dim": 9,
+  "context_len": 210,
+  "drop_p": 0.15,
+  "h_dim": 768,
+  "max_timestep": 100000,
+  "n_block": 8,
+  "n_heads": 12,
+  "n_kv_heads": 6,
+  "qk_norm": true,
+  "rope_base": 10000.0,
+  "rope_enabled": false,
+  "rope_max_position": 4096,
+  "state_dim": 18,
+  "tie_weights": true,
+  "action_head_mode": "mixed"
+}

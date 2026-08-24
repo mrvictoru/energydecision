@@ -53,7 +53,7 @@ python3 scripts/pretrain_aemo_decision_transformer.py \
   --val-dataset-path data/aemo_dt_fcas/autoresearch_pilot/aemo_dt_val_pilot.parquet \
   --surface-preset aemo_learning_baseline \
   --model-config configs/aemo_decision_transformer_model_kwargs.json \
-  --batch-size 16 \
+  --batch-size 64 \
   --epochs 2 \
   --lr 3e-5 \
   --train-in-subsets \

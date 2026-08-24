@@ -44,11 +44,19 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
         "n_kv_heads",
         "qk_norm",
         "tie_weights",
+        "action_head_mode",
     }
 )
 APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
 APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none", "custom")
-ACTION_MODE_TO_ACT_DIM = {"simple": 1, "multi_market": 3, "full_fcas": 9}
+ACTION_MODE_TO_ACT_DIM = {
+    "simple": 1,
+    "multi_market": 3,
+    "full_fcas": 9,
+    # Hierarchical DT: the 'action' is a K-dim normalized target-SOC waypoint
+    # vector consumed by the dt_soc_oracle LP executor, not a direct env action.
+    "soc_waypoint": 8,
+}
 VALID_AEMO_ACT_DIMS = frozenset(ACTION_MODE_TO_ACT_DIM.values())
 AEMO_STATE_DIM = 18
 SEARCHABLE_KNOBS = (
@@ -511,6 +519,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         default=1,
         help="Window stride for TrajectoryDataset. Use context_length // 2 for the v2 recipe.",
+    )
+    parser.add_argument(
+        "--rtg-source",
+        type=str,
+        default="auto",
+        choices=["auto", "constant", "j_t_soc"],
+        help="RTG source used for training. 'auto' detects the presence of an "
+             "rtg_value column in the trajectories (j_t_soc) and falls back to "
+             "'constant' (discounted reward-to-go) otherwise. 'j_t_soc' trains on "
+             "the SDP cost-to-go J_t(soc) value column (Stage C); 'constant' forces "
+             "the legacy discounted-reward behavior.",
+    )
+    parser.add_argument(
+        "--auto-return-scale",
+        action="store_true",
+        help="When training with --rtg-source j_t_soc, auto-calibrate return_scale "
+             "so that the 90th percentile of |J_t(soc)| / return_scale ~= 10 (keeps "
+             "the return-loss magnitude comparable to the action loss). Ignored for "
+             "constant RTG.",
     )
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--lr", type=float, default=2e-5)
@@ -990,6 +1017,7 @@ def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDa
         first.state_dim,
         first.act_dim,
         first.gamma,
+        use_rtg_col=getattr(first, "use_rtg_col", False),
     )
 
 
@@ -1243,6 +1271,35 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Training samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
 
+    # --- Stage C: resolve RTG source + auto-calibrate return_scale for J_t(soc) ---
+    rtg_source = args.rtg_source
+    data_has_jtsoc = bool(getattr(train_dataset, "use_rtg_col", False))
+    if rtg_source == "auto":
+        rtg_source = "j_t_soc" if data_has_jtsoc else "constant"
+    if rtg_source == "j_t_soc" and not data_has_jtsoc:
+        raise RuntimeError(
+            "--rtg-source j_t_soc requested but the training trajectories have no "
+            "rtg_value column. Re-generate the corpus with "
+            "generate_sdp_dt_trajectories.py --rtg-mode j_t_soc."
+        )
+    if rtg_source == "constant" and data_has_jtsoc:
+        print("[WARN] Training data contains an rtg_value column (J_t(soc)) but "
+              "--rtg-source is constant; using discounted reward-to-go.")
+    surface.training_kwargs["rtg_source"] = rtg_source
+    print(f"[rtg-source] {rtg_source}")
+
+    if rtg_source == "j_t_soc" and args.auto_return_scale:
+        _rtg_vals = np.concatenate(
+            [ep["rtgs"] for ep in train_dataset.episodes if ep["rtgs"].size]
+        ).astype(np.float64)
+        _abs = np.abs(_rtg_vals)
+        _scale = float(np.percentile(_abs, 90) / 10.0) if _abs.size else 10.0
+        if not np.isfinite(_scale) or _scale <= 0:
+            _scale = 10.0
+        surface.training_kwargs["return_scale"] = _scale
+        print(f"[auto-return-scale] return_scale={_scale:.4g} "
+              f"(90th pct |rtg|={np.percentile(_abs, 90):.4g})")
+
     surface_manifest = build_surface_manifest(
         root=root,
         args=args,
@@ -1262,13 +1319,19 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     model = DecisionTransformer(**model_kwargs)
     started_at = time.monotonic()
+
+    # Resolve "auto" device to cuda/cpu
+    train_device = surface.training_kwargs["device"]
+    if train_device == "auto":
+        train_device = "cuda" if torch.cuda.is_available() else "cpu"
+
     _, train_losses, val_losses, history = train_decision_transformer(
         ds=train_dataset,
         model=model,
         batch_size=surface.training_kwargs["batch_size"],
         lr=surface.training_kwargs["lr"],
         epochs=surface.training_kwargs["epochs"],
-        device=surface.training_kwargs["device"],
+        device=train_device,
         save_path=str(save_path),
         checkpoint_path=str(checkpoint_path),
         checkpoint_interval=surface.training_kwargs["checkpoint_interval"],

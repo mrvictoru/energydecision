@@ -55,7 +55,7 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [x] **Forecast-conditioned DT (negative result):** Built and evaluated a ForecastDecisionTransformer with 48-step TTM forecast tokens. Result: $4,564/ep vs modern v2's $4,991/ep — explicit forecasts do not beat implicit context. See report.md §8.2.8.
 *   [x] **Market-impact BESS evaluation:** Piecewise-linear merit-order impact model (`src/market_impact.py`) hooking into `AEMOBatteryTradingEnv` (backward-compatible `identity` default). Phase 3: v2 DT under impact retains 62/83/49% of identity profit at 8/150/250 MW vs PPO's 62/40/32%. Phase 4: impact-aware DT retrain (`mrvictoru/energydecision-dt-v2-impact`) beats PPO significantly (+$115K/cell, p=0.004) and edges the naive v2 6/9 cells (+$96K/cell). See report.md §8.2.9.
 *   [x] **AEMO Oracle upper bound:** Perfect-foresight LP co-optimizer (`src/aemo_oracle_algo.py`) as evaluator baseline; Oracle_MI (impact-aware LP) is the impact ceiling, but its fixed-point solve at 150 MW+ exceeds 100% of PT (unreliable at large scale). Invariant-validated as a *revenue* ceiling (dominates every policy on 9/9 Phase-3 cells and 6/6 dispatch-matched episodes); under real-world degradation its net profit is beaten by degradation-aware DTs on small batteries (LP is degradation-blind) — see report §8.2.9.3.
-*   [x] **Regime-shift / broad-surface evaluation (measured 2026-08):** On the 5-min expanded 2024 surface (5 regions × 6 periods) the modern v2 DT earns **$4.6k/ep vs PPO $15.0k (~3.3×)**; on out-of-distribution **2025** it earns **−$0.7k vs PPO $14.3k**. The DT's SOTA is **surface-specific** (wins dispatch-matched, standard-Oct, market-impact, mild months; loses broadly/out-of-distribution via FCAS under-bidding). A systematic attempt to close the gap (RTG, loss-weighting, data re-composition, GRPO, full-PPO, architecture) found it is an **offline-data ceiling**. **PPO is the broad-year/out-of-distribution leader.** Any "best" claim now requires the broad + OOD surfaces.
+*   [x] **AEMO preferred-policy recommendation (verified 2026-08):** The standalone DT ships with **surface-aware `rtg_mode="auto"`** (SDP-teacher distillation + J_t(soc) prompting). On all 4 identity surfaces: standard **$11.6k/ep vs PPO $2.35k** (4.9×), dispatch-matched **$35.3k vs $22.5k** (1.57×), expanded broad-2024 **$34.8k vs $19.5k** (1.78×), 2025 OOD **$25.9k vs $6.5k** (3.98×). Passes the impact gate (2.5–3.1× under merit-order impact). Weights + training corpus on Hugging Face: [mrvictoru/energydecision-dt-v2-sdp](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp). See `docs/aemo_dt_preferred_policy_plan.md` and `report.md §8.2.10`.
 *   [ ] **Sim-to-real readiness (highest priority):** Add safety wrappers and evaluate policies with hardware-in-the-loop (where available). The real path to operation; the DT is positioned for its winning surfaces (impact, dispatch-matched, mild markets, FCAS/degradation efficiency).
 *   [ ] **Artifact provenance:** Add lightweight checksums/config logging for datasets, models, and evaluation outputs.
 *   [ ] **Offline dataset studies (de-prioritized — data-ceiling):** Evaluate DT sensitivity to behavior-policy mixtures. The 2026 session showed re-composition only partially helps (+23% FCAS from FCAS-heavy policies); the DT-vs-PPO gap is a data ceiling, not a mixture-tuning artifact.
@@ -137,12 +137,14 @@ tests/        Pytest suite
 - Report: [report.md](report.md)
 - Research notes index: [docs/research/README.md](docs/research/README.md)
 - Hugging Face models:
-  - [Modern v2 Decision Transformer (8×768 GQA, SOTA)](https://huggingface.co/mrvictoru/energydecision-dt-v2)
+  - [Stage C Decision Transformer (shipped, SDP-teacher distilled)](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp) — `aemo_dt_sdp_jtsoc_fullcorpus.pt`; also mirrored in-repo at `models/aemo/dt/`
+  - [Modern v2 Decision Transformer (8×768 GQA, historical)](https://huggingface.co/mrvictoru/energydecision-dt-v2)
   - [Forecast-conditioned Decision Transformer (negative result)](https://huggingface.co/mrvictoru/energydecision-dt-v2-forecast)
   - [Pretrained Decision Transformer v1 (legacy)](https://huggingface.co/mrvictoru/energydecision-dt)
   - [GRPO finetuned Decision Transformer v1 (legacy)](https://huggingface.co/mrvictoru/energydecision-dt-grpo)
-- Hugging Face dataset:
-  - [AEMO simulated trade episodes (FCAS + SDP + GRPO + TTM forecasts)](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade)
+- Hugging Face datasets:
+  - [AEMO SDP-teacher trajectories (Stage B corpora + shipped J_t(soc) combined corpus)](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp)
+  - [AEMO simulated trade episodes (FCAS + SDP + GRPO + TTM forecasts, behaviour-cloning era)](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade)
 
 ## Notes For Contributors
 

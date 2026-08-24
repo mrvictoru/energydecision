@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import polars as pl
 import warnings
+from pathlib import Path
 from typing import Optional, Any, Dict, List, Tuple
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
@@ -578,25 +579,59 @@ class AEMOAgent:
                  dispatch_action_mode: Optional[str] = None,
                  rtg_value: float = 0.0,
                  dt_gamma: float = 0.99,
+                 rtg_mode: str = "constant",
                  reset_seed: Optional[int] = None,
                  reset_options: Optional[Dict[str, Any]] = None,
                  fcas_raise_threshold: float | None = None,
                  fcas_lower_threshold: float | None = None,
                  fcas_pctile: float = 0.80,
-                 forecast_npz_path: str | None = None):
+                 forecast_npz_path: str | None = None,
+                 deg_cost_per_mwh: float = 50.0,
+                 executor: str = "lp"):
         self.env = env
         self.algorithm = algorithm.lower()
         self.model = model
-        self.rule_presistence = False
+        self.rule_persistence = False
         self.reset_seed = reset_seed
         self.reset_options = reset_options
 
+        # dt_soc_oracle executor selection:
+        #   'lp'  — SOC-waypoint-pinned Oracle LP (perfect foresight)
+        #   'sdp' — SDP energy dispatch on a seasonal forecast + greedy
+        #           current-price FCAS bidder (honest, no foresight).
+        if executor not in ("lp", "sdp"):
+            raise ValueError(f"Unsupported dt_soc_oracle executor={executor!r}; use 'lp' or 'sdp'.")
+        self.executor = executor
+
+        # Linear throughput degradation surrogate for the dt_soc_oracle LP
+        # executor ($/MWh charged or discharged). Makes the executor
+        # degradation-aware; tune to match the env's real degradation cost.
+        # (Only used by the 'lp' executor; the 'sdp' executor uses the repo's
+        # rainflow DegradationCalculator directly.)
+        self.deg_cost_per_mwh = float(deg_cost_per_mwh)
+
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
+        # Stage C: RTG conditioning mode. 'constant' uses a fixed scalar prompt;
+        # 'j_t_soc' uses the SDP cost-to-go J_t(soc) as a state-dependent prompt;
+        # 'auto' defaults to j_t_soc on identity surfaces and constant RTG under
+        # merit-order impact unless the caller explicitly overrides to j_t_soc.
+        if rtg_mode not in ("constant", "j_t_soc", "auto"):
+            raise ValueError(
+                f"Unsupported rtg_mode={rtg_mode!r}; use 'constant', 'j_t_soc', or 'auto'."
+            )
+        self.requested_rtg_mode = rtg_mode
+        self.rtg_mode = self._resolve_rtg_mode(rtg_mode)
+        self._jtsoc_ctg: np.ndarray | None = None
+        self._jtsoc_soc_levels: np.ndarray | None = None
         self.dt_states_buffer = []
         self.dt_actions_buffer = []
         self.dt_rtgs_buffer = []
         self.dt_timesteps_buffer = []
+
+        # Lazy-build the J_t(soc) table for rtg_mode='j_t_soc' when DT buffers
+        # are first initialized (needs env + forecast, both available at run time).
+        self._jtsoc_initialized = False
 
         self.dispatch_action_mode = dispatch_action_mode or getattr(env, 'action_mode', 'simple')
         self.dispatch_actions = None
@@ -616,6 +651,14 @@ class AEMOAgent:
         if self.algorithm == 'aemo_oracle':
             self._init_oracle()
 
+        # Hierarchical DT+LP executor: a DT predicts a coarse target-SOC
+        # waypoint trajectory; the SOC-waypoint-pinned Oracle LP co-optimizes
+        # energy + FCAS within each segment while tracking it.
+        self._soc_oracle_actions: np.ndarray | None = None
+        self._soc_oracle_waypoints: list[float] = []
+        if self.algorithm == 'dt_soc_oracle':
+            self._init_soc_oracle()
+
         # FCAS rule config
         self.fcas_raise_threshold = fcas_raise_threshold
         self.fcas_lower_threshold = fcas_lower_threshold
@@ -626,6 +669,15 @@ class AEMOAgent:
         # Forecast DT config
         self.forecast_npz_path = forecast_npz_path
         self._forecast_map: np.ndarray | None = None
+
+    def _env_has_non_identity_impact(self) -> bool:
+        impact = getattr(self.env, "_impact", None)
+        return impact is not None and impact.__class__.__name__ != "IdentityImpact"
+
+    def _resolve_rtg_mode(self, rtg_mode: str) -> str:
+        if rtg_mode != "auto":
+            return rtg_mode
+        return "constant" if self._env_has_non_identity_impact() else "j_t_soc"
 
     def set_dispatch_data(self,
                           dispatch_data: pl.DataFrame,
@@ -1045,9 +1097,368 @@ class AEMOAgent:
         action = self._oracle_actions[step].tolist()
         return action
 
+    def _init_soc_oracle(self):
+        """Hierarchical DT+LP: predict target-SOC waypoints, then solve the
+        SOC-waypoint-pinned Oracle LP once and cache per-step actions.
+
+        The DT is expected to be a SOC-waypoint model: its action output is a
+        K-dim vector of normalized target SOC at K evenly-spaced checkpoints
+        (K = model.act_dim). The executor denormalizes to MWh, pins the SOC at
+        those intervals in the Oracle LP (which co-optimizes energy + all 8
+        FCAS within each segment), and replays the LP's per-step actions.
+        """
+        try:
+            if self.model is None:
+                raise ValueError("dt_soc_oracle requires a DT model.")
+            aemo_data = self.env.aemo_data
+            if aemo_data is None:
+                return
+            T = max(1, len(aemo_data))
+            K = int(getattr(self.model, 'act_dim', 0))
+            if K < 2:
+                raise ValueError(f"dt_soc_oracle requires act_dim>=2 (got {K}).")
+
+            # Predict the K normalized waypoints from the initial context.
+            self.model.eval()
+            params = list(self.model.parameters())
+            device = params[0].device if params else torch.device('cpu')
+            states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
+                self.model, self.dt_states_buffer, self.dt_actions_buffer,
+                self.dt_rtgs_buffer, self.dt_timesteps_buffer,
+            )
+            states = torch.tensor(states, dtype=torch.float32, device=device).unsqueeze(0)
+            actions = torch.tensor(actions, dtype=torch.float32, device=device).unsqueeze(0)
+            rtgs = torch.tensor(rtgs, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(-1)
+            timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
+            attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
+            with torch.no_grad():
+                wp = self.model.get_action(
+                    states, actions, rtgs, timesteps, attention_mask=attention_mask,
+                )
+            waypoints_norm = torch.nan_to_num(wp, nan=0.0, posinf=0.0, neginf=0.0)
+            waypoints_norm = waypoints_norm.detach().cpu().numpy().astype(float)
+            # get_action returns [B, T=1, act_dim] for batched input; squeeze.
+            if waypoints_norm.ndim == 3:
+                waypoints_norm = waypoints_norm[0, -1]
+            if waypoints_norm.ndim == 0:
+                waypoints_norm = np.array([float(waypoints_norm)])
+
+            # Denormalize to MWh. DT was trained with normalized SOC targets in
+            # [0,1] (index 17 of the obs = soc/capacity).
+            capacity = float(self.env.battery_capacity)
+            waypoints_mwh = np.clip(waypoints_norm, 0.0, 1.0) * capacity
+            # Waypoint 0 is the SOC at the START of interval 0, which the env
+            # fixes to init_battery_level. Force it (and clamp to capacity) so
+            # the LP is always feasible at the boundary.
+            init_soc = float(getattr(self.env, 'init_battery_level', capacity * 0.5))
+            waypoints_mwh[0] = float(np.clip(init_soc, 0.0, capacity))
+            waypoints_mwh = np.clip(waypoints_mwh, 0.0, capacity)
+            self._soc_oracle_waypoints = waypoints_mwh.tolist()
+
+            # Map K waypoints to interval indices spread across the episode
+            # (waypoint 0 == episode start, last == terminal SOC at t=T).
+            # K=2 -> [0, T]; K>2 -> include interior points.
+            idxs = [int(round(i * T / max(1, K - 1))) for i in range(K)]
+            idxs = [max(0, min(T, i)) for i in idxs]
+            soc_waypoints = {t: float(waypoints_mwh[i]) for i, t in enumerate(idxs)}
+
+            env = self.env
+            if self.executor == "sdp":
+                self._soc_oracle_actions = self._execute_sdp(
+                    aemo_data, idxs, waypoints_mwh, capacity)
+                print(f"  [dt_soc_sdp] waypoints={[round(w,1) for w in waypoints_mwh]} "
+                      f"-> {self._soc_oracle_actions.shape[0]} steps planned "
+                      f"(honest SDP energy + greedy FCAS)")
+                return
+
+            solver = AEMOOracleSolver(
+                battery_capacity=capacity,
+                max_battery_flow=float(env.max_battery_flow),
+                step_duration=float(env.step_duration),
+                init_soc=float(env.init_battery_level),
+                min_soc=0.0,
+                max_soc=capacity,
+            )
+            result = solver.solve(aemo_data, verbose=False, soc_waypoints=soc_waypoints,
+                                  deg_cost_per_mwh=self.deg_cost_per_mwh)
+            if result.total_profit < -1e11:
+                # Full-episode pinned LP infeasible (DT trajectory not
+                # physically trackable). Fall back to per-segment solves: pin
+                # only the terminal SOC of each segment so each sub-LP is
+                # feasible (a single segment only needs to reach one SOC).
+                print(f"  [dt_soc_oracle] full-episode LP infeasible "
+                      f"({result.solver_message}); falling back to per-segment solves")
+                result = self._solve_soc_segments(aemo_data, solver, idxs, waypoints_mwh)
+            # Impact-aware planning: if the env carries a merit-order impact
+            # model (supply curves + FCAS depth), re-solve with the fixed-point
+            # so the LP sees the realized (self-impacted) prices its own actions
+            # create, instead of the base price-taking prices.
+            impact_curves = getattr(env, 'supply_curves', None)
+            impact_depth = getattr(env, 'fcas_depth', None)
+            impact_kind = getattr(env, '_impact', None)
+            if (impact_curves is not None and impact_depth is not None
+                    and impact_kind is not None
+                    and getattr(impact_kind, '__class__', None) is not None
+                    and impact_kind.__class__.__name__ != 'IdentityImpact'):
+                try:
+                    pt_profit = result.total_profit
+                    mi_result = solver.solve_mi(
+                        aemo_data, impact_curves, impact_depth,
+                        impact_intensity=1.0, max_iter=5, verbose=False,
+                        soc_waypoints=soc_waypoints,
+                        deg_cost_per_mwh=self.deg_cost_per_mwh,
+                    )
+                    if mi_result is not None and mi_result.total_profit > -1e11:
+                        result = mi_result
+                        print(f"  [dt_soc_oracle] impact-aware solve_mi: "
+                              f"${result.total_profit:,.0f}/ep "
+                              f"(vs price-taking ${pt_profit:,.0f})")
+                except Exception as e:
+                    print(f"  [dt_soc_oracle] solve_mi failed ({e}); keeping price-taking LP")
+            max_flow = float(env.max_battery_flow)
+            env_fcas_order = getattr(self.env, '_fcas_services', None)
+            n = max(1, result.n_intervals)
+            actions_out = np.zeros((n, 1 + 8))
+            actions_out[:, 0] = np.clip(-result.optimal_dispatch / max_flow, -1.0, 1.0)
+            if env_fcas_order is not None:
+                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
+                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
+                for i, svc in enumerate(env_fcas_order):
+                    if svc.startswith('RAISE'):
+                        acts = result.optimal_raise_bids
+                        oidx = ORAISE.get(svc, 0)
+                    else:
+                        acts = result.optimal_lower_bids
+                        oidx = OLOWER.get(svc, 0)
+                    actions_out[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+            else:
+                actions_out[:, 1:5] = np.clip(result.optimal_raise_bids / max_flow, 0.0, 1.0)
+                actions_out[:, 5:9] = np.clip(result.optimal_lower_bids / max_flow, 0.0, 1.0)
+            self._soc_oracle_actions = actions_out
+            print(f"  [dt_soc_oracle] waypoints={[round(w,1) for w in waypoints_mwh]} "
+                  f"-> ${result.total_profit:,.0f}/ep (E ${result.energy_revenue:,.0f} "
+                  f"+ F ${result.fcas_revenue:,.0f})")
+        except Exception as e:
+            print(f"  [dt_soc_oracle] Init failed: {e}")
+            import traceback; traceback.print_exc()
+            self._soc_oracle_actions = None
+
+    def _soc_oracle_action(self) -> list[float]:
+        if self._soc_oracle_actions is None:
+            return [0.0] * (1 + 8)
+        step = int(getattr(self.env, 'current_step', 0))
+        step = max(0, min(step, len(self._soc_oracle_actions) - 1))
+        return self._soc_oracle_actions[step].tolist()
+
+    def _solve_soc_segments(
+        self,
+        aemo_data: pl.DataFrame,
+        solver: AEMOOracleSolver,
+        idxs: list[int],
+        waypoints_mwh: np.ndarray,
+    ) -> OracleResult:
+        """Fallback executor: solve one SOC-pinned LP per segment.
+
+        Each segment [t_i, t_{i+1}] is solved independently with its terminal
+        SOC pinned, so every segment is feasible by construction (a single
+        segment only needs to reach one SOC within ramp limits). Concatenates
+        the per-segment actions into a full-episode action plan. Returns the
+        best-effort OracleResult (revenue summed, dispatch concatenated).
+        """
+        env = self.env
+        max_flow = float(env.max_battery_flow)
+        env_fcas_order = getattr(self.env, '_fcas_services', None)
+        T = max(1, len(aemo_data))
+        n = max(1, T)
+        actions_out = np.zeros((n, 1 + 8))
+        ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
+        OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
+
+        total_profit = 0.0
+        energy_rev = 0.0
+        fcas_rev = 0.0
+        dispatch_all: list[np.ndarray] = []
+        raise_all: list[np.ndarray] = []
+        lower_all: list[np.ndarray] = []
+        soc_all: list[np.ndarray] = []
+        last_soc = float(env.init_battery_level)
+        last_idx = 0
+
+        for seg in range(len(idxs) - 1):
+            t0, t1 = idxs[seg], idxs[seg + 1]
+            if t1 <= t0:
+                continue
+            seg_data = aemo_data.slice(t0, t1 - t0)
+            seg_solver = AEMOOracleSolver(
+                battery_capacity=float(env.battery_capacity),
+                max_battery_flow=max_flow,
+                step_duration=float(env.step_duration),
+                init_soc=last_soc,
+                min_soc=0.0,
+                max_soc=float(env.battery_capacity),
+            )
+            seg_wp = {t1 - t0: float(waypoints_mwh[seg + 1])}
+            res = seg_solver.solve(seg_data, verbose=False, soc_waypoints=seg_wp)
+            if res.total_profit < -1e11:
+                # Segment itself infeasible: pin the terminal SOC to the last
+                # achievable value (clamp within ramp reach from current SOC).
+                max_delta = max_flow * float(env.step_duration) * (t1 - t0)
+                target = float(np.clip(waypoints_mwh[seg + 1],
+                                       last_soc - max_delta, last_soc + max_delta))
+                res = seg_solver.solve(seg_data, verbose=False,
+                                       soc_waypoints={t1 - t0: target})
+                if res.total_profit < -1e11:
+                    # Last resort: flat SOC segment (no net dispatch).
+                    flat = AEMOOracleSolver(
+                        battery_capacity=float(env.battery_capacity),
+                        max_battery_flow=max_flow,
+                        step_duration=float(env.step_duration),
+                        init_soc=last_soc,
+                        min_soc=0.0,
+                        max_soc=float(env.battery_capacity),
+                    )
+                    res = flat.solve(seg_data, verbose=False,
+                                     soc_waypoints={t1 - t0: last_soc})
+                    if res.total_profit < -1e11:
+                        continue
+
+            seg_len = res.n_intervals
+            actions_out[last_idx:last_idx + seg_len, 0] = np.clip(
+                -res.optimal_dispatch / max_flow, -1.0, 1.0)
+            if env_fcas_order is not None:
+                for i, svc in enumerate(env_fcas_order):
+                    if svc.startswith('RAISE'):
+                        acts = res.optimal_raise_bids
+                        oidx = ORAISE.get(svc, 0)
+                    else:
+                        acts = res.optimal_lower_bids
+                        oidx = OLOWER.get(svc, 0)
+                    actions_out[last_idx:last_idx + seg_len, 1 + i] = np.clip(
+                        acts[:, oidx] / max_flow, 0.0, 1.0)
+            else:
+                actions_out[last_idx:last_idx + seg_len, 1:5] = np.clip(
+                    res.optimal_raise_bids / max_flow, 0.0, 1.0)
+                actions_out[last_idx:last_idx + seg_len, 5:9] = np.clip(
+                    res.optimal_lower_bids / max_flow, 0.0, 1.0)
+
+            total_profit += res.total_profit
+            energy_rev += res.energy_revenue
+            fcas_rev += res.fcas_revenue
+            dispatch_all.append(res.optimal_dispatch)
+            raise_all.append(res.optimal_raise_bids)
+            lower_all.append(res.optimal_lower_bids)
+            soc_all.append(res.optimal_soc[:-1])
+            last_soc = float(res.optimal_soc[-1])
+            last_idx += seg_len
+
+        dispatch = np.concatenate(dispatch_all) if dispatch_all else np.zeros(n)
+        raise_bid = np.concatenate(raise_all) if raise_all else np.zeros((n, 4))
+        lower_bid = np.concatenate(lower_all) if lower_all else np.zeros((n, 4))
+        soc = np.concatenate(soc_all + [np.array([last_soc])]) if soc_all else np.full(n + 1, last_soc)
+        return OracleResult(
+            total_profit=float(total_profit),
+            energy_revenue=float(energy_rev),
+            fcas_revenue=float(fcas_rev),
+            total_dispatch_mwh=float(np.clip(dispatch, 0, None).sum() * float(env.step_duration)),
+            total_charge_mwh=float(np.clip(-dispatch, 0, None).sum() * float(env.step_duration)),
+            n_intervals=int(dispatch.shape[0]),
+            optimal_dispatch=dispatch,
+            optimal_raise_bids=raise_bid,
+            optimal_lower_bids=lower_bid,
+            optimal_soc=soc,
+            per_step_fcas_revenue=np.zeros(dispatch.shape[0]),
+            per_step_energy_revenue=np.zeros(dispatch.shape[0]),
+            solver_status=0,
+            solver_message="segmented fallback",
+        )
+
+    def _execute_sdp(
+        self,
+        aemo_data: pl.DataFrame,
+        idxs: list[int],
+        waypoints_mwh: np.ndarray,
+        capacity: float,
+    ) -> np.ndarray:
+        """Honest executor (Stage A): SDP energy dispatch + greedy FCAS.
+
+        For each waypoint segment, run SDP backward induction over a *seasonal
+        forecast* of RRP (built only from training-era data) pinned to reach
+        the segment's target SOC. Then, at each step, bid FCAS greedily on the
+        residual headroom (after the energy action) using *current* FCAS
+        prices. Returns a (T, 9) action plan: energy in [-1,1], FCAS in [0,1].
+
+        No future prices are used — this lifts the perfect-foresight caveat of
+        the 'lp' executor.
+        """
+        from aemo_sdp_executor import (
+            build_seasonal_rrp_profile, build_rrp_forecast,
+            sdp_energy_dispatch, greedy_fcas_bids, FCAS_ORDER,
+        )
+
+        env = self.env
+        max_flow = float(env.max_battery_flow)
+        step_h = float(env.step_duration)
+        env_fcas_order = getattr(env, '_fcas_services', None) or FCAS_ORDER
+        T = max(1, len(aemo_data))
+
+        # Honest forecast: seasonal time-of-day RRP profile from training data.
+        region = None
+        if "REGIONID" in aemo_data.columns and aemo_data.height > 0:
+            region = str(aemo_data["REGIONID"][0])
+        cache_dir = Path(__file__).resolve().parent.parent / "data" / "aemo"
+        profile = None
+        if region is not None:
+            try:
+                profile = build_seasonal_rrp_profile(cache_dir, region, step_h)
+            except Exception as e:
+                print(f"  [dt_soc_sdp] seasonal profile unavailable ({e}); "
+                      f"falling back to persistence forecast")
+        if profile is None:
+            # Persistence fallback: future RRP = current RRP (still honest).
+            first_rrp = float(aemo_data["RRP"][0]) if "RRP" in aemo_data.columns else 50.0
+            profile = lambda m, h: first_rrp  # noqa: E731
+        forecast = build_rrp_forecast(aemo_data, profile)
+
+        fcas_price_cols = {f"FCAS_{s}": f"FCAS_{s}" for s in FCAS_ORDER}
+        fcas_present = [c for c in fcas_price_cols if c in aemo_data.columns]
+
+        actions_out = np.zeros((T, 9), dtype=float)
+        start_soc = float(getattr(env, 'init_battery_level', capacity * 0.5))
+        for seg in range(len(idxs) - 1):
+            t0, t1 = idxs[seg], idxs[seg + 1]
+            if t1 <= t0:
+                continue
+            seg_len = t1 - t0
+            target = float(np.clip(waypoints_mwh[seg + 1], 0.0, capacity))
+            try:
+                energy, soc = sdp_energy_dispatch(
+                    env, forecast[t0:t1], start_soc, target,
+                    deg_cost_per_mwh=self.deg_cost_per_mwh,
+                )
+            except Exception as e:
+                print(f"  [dt_soc_sdp] SDP failed on segment {seg} ({e}); flat SOC")
+                energy = np.zeros(seg_len)
+                soc = np.full(seg_len + 1, start_soc)
+
+            for k in range(seg_len):
+                gidx = t0 + k
+                dispatch_mw = float(energy[k]) / step_h if step_h > 0 else 0.0
+                soc_before = float(np.clip(soc[k], 0.0, capacity))
+                actions_out[gidx, 0] = float(np.clip(dispatch_mw / max_flow, -1.0, 1.0))
+                if fcas_present:
+                    prices = {c: float(aemo_data[c][gidx]) for c in fcas_present}
+                    bids = greedy_fcas_bids(env, dispatch_mw, soc_before, prices)
+                    for j, svc in enumerate(env_fcas_order):
+                        if svc in bids:
+                            actions_out[gidx, 1 + j] = float(np.clip(bids[svc], 0.0, 1.0))
+            start_soc = float(np.clip(soc[-1], 0.0, capacity))
+        return actions_out
+
     def choose_action(self, obs):
         if self.algorithm == 'aemo_oracle':
             return self._oracle_action()
+        if self.algorithm == 'dt_soc_oracle':
+            return self._soc_oracle_action()
         if self.algorithm in ('rule', 'fcas_rule'):
             return self.fcas_rule_based_action(obs) if self.algorithm == 'fcas_rule' else self.rule_based_action(obs)
         if self.algorithm == 'dispatch':
@@ -1111,9 +1522,30 @@ class AEMOAgent:
                 action = action[0]
             if action.ndim == 0:
                 action = np.array([float(action)], dtype=np.float32)
+            if self._action_is_full_fcas():
+                action = self._clip_fcas_dims(action)
             return action.tolist()
 
         raise ValueError(f"Unsupported algorithm: {self.algorithm}")
+
+    def _action_is_full_fcas(self) -> bool:
+        action_mode = getattr(self.env, 'action_mode', 'multi_market')
+        return action_mode == 'full_fcas' and getattr(self.model, 'act_dim', 0) >= 2
+
+    def _clip_fcas_dims(self, action: np.ndarray) -> np.ndarray:
+        """Clip the 8 FCAS bid dims (indices 1..8) of a 9-dim full_fcas action to [0, 1].
+
+        Energy dim 0 stays in [-1, 1]. This is a no-op for the 'mixed' head (which
+        already emits FCAS in [0, 1] via Sigmoid) but corrects Tanh-head models whose
+        FCAS predictions can be negative (the env would otherwise treat them as 0 via
+        max(0, ...) but leaving them negative wastes headroom signal in buffers).
+        """
+        action = np.asarray(action, dtype=np.float32)
+        if action.ndim == 1 and action.shape[0] >= 2:
+            out = action.copy()
+            out[1:] = np.clip(out[1:], 0.0, 1.0)
+            return out
+        return action
 
     def rule_based_action(self, obs):
         # AEMO raw obs layout: [time(5), RRP, TOTALDEMAND, FCAS(8), GEN(2), SOC]
@@ -1215,15 +1647,92 @@ class AEMOAgent:
         fcas_lower = 1.0 if fcas_lower_raw >= self._fcas_lower_thresh and soc_norm < 0.85 else 0.0
         return np.array([np.float32(action_val), np.float32(fcas_raise), np.float32(fcas_lower)], dtype=np.float32)
 
+    # ---- Stage C: SDP cost-to-go J_t(soc) as the DT's RTG prompt -------------
+
+    def _obs_soc_kwh(self, obs) -> float:
+        """Normalized obs index 17 holds soc/capacity (matches the DT training)."""
+        arr = np.asarray(obs, dtype=float)
+        cap = float(self.env.battery_capacity)
+        if arr.size > 17:
+            return float(arr[17]) * cap
+        return cap * 0.5
+
+    def _init_jtsoc_table(self) -> None:
+        """Build (and cache) the free-terminal J_t(soc) value table for this episode.
+
+        Uses the same honest seasonal RRP forecast as the 'sdp' executor, with the
+        same linear degradation surrogate. The table is keyed on the env so a
+        single episode reuses the table across its own steps.
+        """
+        if self.model is None:
+            raise ValueError("j_t_soc rtg_mode requires a DT model.")
+        if self._jtsoc_ctg is not None:
+            return
+        from aemo_sdp_executor import (
+            build_rrp_forecast, build_seasonal_rrp_profile, compute_cost_to_go_table,
+        )
+        env = self.env
+        aemo_data = getattr(env, 'aemo_data', None)
+        if aemo_data is None:
+            raise ValueError("j_t_soc rtg_mode requires env.aemo_data.")
+        step_h = float(env.step_duration)
+        region = None
+        if "REGIONID" in aemo_data.columns and aemo_data.height > 0:
+            region = str(aemo_data["REGIONID"][0])
+        cache_dir = Path(__file__).resolve().parent.parent / "data" / "aemo"
+        profile = None
+        if region is not None:
+            try:
+                profile = build_seasonal_rrp_profile(cache_dir, region, step_h)
+            except Exception:
+                profile = None
+        if profile is None:
+            first_rrp = float(aemo_data["RRP"][0]) if "RRP" in aemo_data.columns else 50.0
+            profile = lambda m, h: first_rrp  # noqa: E731
+        forecast = build_rrp_forecast(aemo_data, profile)
+        if "SETTLEMENTDATE" in aemo_data.columns:
+            timestamps = aemo_data["SETTLEMENTDATE"].to_list()
+            if "TOTALDEMAND" in aemo_data.columns:
+                total_demand = aemo_data["TOTALDEMAND"].to_list()
+            else:
+                total_demand = [0.0] * len(timestamps)
+            for idx, step in enumerate(forecast):
+                if idx >= len(timestamps):
+                    break
+                step["SETTLEMENTDATE"] = timestamps[idx]
+                step["TOTALDEMAND"] = float(total_demand[idx] or 0.0)
+        impact_model = getattr(env, "_impact", None)
+        self._jtsoc_ctg, self._jtsoc_soc_levels = compute_cost_to_go_table(
+            env,
+            forecast,
+            deg_cost_per_mwh=self.deg_cost_per_mwh,
+            impact_model=impact_model,
+        )
+
+    def _lookup_jtsoc_rtg(self, step_idx: int, soc_kwh: float) -> float:
+        """Return -J_t(soc) (the return-to-go) at step `step_idx` and SOC `soc_kwh`."""
+        if self._jtsoc_ctg is None:
+            self._init_jtsoc_table()
+        ctg = self._jtsoc_ctg
+        soc_levels = self._jtsoc_soc_levels
+        s_idx = int(np.argmin(np.abs(soc_levels - soc_kwh)))
+        t_idx = min(max(int(step_idx), 0), ctg.shape[0] - 1)
+        return -float(ctg[t_idx, s_idx])
+
     def run_episode(self, render: bool = False, display_progress: bool = False):
         obs, info = _reset_env(self.env, seed=self.reset_seed, options=self.reset_options)
         raw_obs = self.env.get_raw_obs()
         max_possible_steps = len(self.env.aemo_data) if hasattr(self.env, 'aemo_data') else 0
 
         if self.algorithm == 'dt':
+            if self.rtg_mode == 'j_t_soc':
+                self._init_jtsoc_table()
+                init_soc = self._obs_soc_kwh(obs)
+                self.dt_rtgs_buffer = [self._lookup_jtsoc_rtg(self.env.current_step, init_soc)]
+            else:
+                self.dt_rtgs_buffer = [self.rtg_value]
             self.dt_states_buffer = [obs.copy()]
             self.dt_actions_buffer = [np.zeros(self.model.act_dim)]
-            self.dt_rtgs_buffer = [self.rtg_value]
             self.dt_timesteps_buffer = [self.env.current_step]
 
         logs = []
@@ -1257,10 +1766,15 @@ class AEMOAgent:
                         action_array = np.array([action], dtype=np.float32) if np.isscalar(action) else action
                     self.dt_actions_buffer[-1] = action_array
 
-                    next_rtg = stable_rtg_update(
-                        self.dt_rtgs_buffer[-1], reward,
-                        dt_gamma=self.dt_gamma, initial_rtg=self.rtg_value,
-                    )
+                    if self.rtg_mode == 'j_t_soc':
+                        next_soc = self._obs_soc_kwh(next_obs)
+                        next_rtg = self._lookup_jtsoc_rtg(
+                            self.env.current_step, next_soc)
+                    else:
+                        next_rtg = stable_rtg_update(
+                            self.dt_rtgs_buffer[-1], reward,
+                            dt_gamma=self.dt_gamma, initial_rtg=self.rtg_value,
+                        )
 
                     self.dt_states_buffer.append(next_obs.copy())
                     self.dt_actions_buffer.append(np.zeros(self.model.act_dim))

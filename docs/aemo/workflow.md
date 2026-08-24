@@ -236,7 +236,7 @@ python3 scripts/pretrain_aemo_decision_transformer.py \
   --train-in-subsets \
   --subset-episodes 24 \
   --epochs-per-subset 1 \
-  --batch-size 16 \
+  --batch-size 64 \
   --num-workers 0
 ```
 
@@ -266,7 +266,7 @@ Practical guidance:
 - start serious baseline refreshes from `aemo_learning_baseline`
 - use explicit validation subsets/files rather than tiny episode splits
 - start with `lr=3e-5`
-- prefer `context_len=288` for learning baselines; `120` is a reasonable fallback if runtime is too high
+- prefer `context_len=180` for learning baselines (best on pilot data); longer ctx (288, 576) regressed
 - keep `aemo_proxy` for rapid triage only
 
 For interactive autoresearch loops, it is often better to pin a small **fixed pilot train/val split**

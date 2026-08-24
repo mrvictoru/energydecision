@@ -357,7 +357,9 @@ def test_main_writes_backward_compatible_artifacts_and_surface_manifest(
     data_dir.mkdir()
     output_dir.mkdir()
     _write_dataset(data_dir / "train_episode_01.parquet")
-    config_path.write_text(json.dumps({"state_dim": 12, "act_dim": 1}), encoding="utf-8")
+    # The 2-step episodes need a context length <= 2 to produce sliding windows;
+    # otherwise the default context_len=60 yields zero training samples.
+    config_path.write_text(json.dumps({"state_dim": 12, "act_dim": 1, "context_len": 2}), encoding="utf-8")
 
     monkeypatch.setattr(pretrain_dt, "repo_root", lambda: tmp_path)
 

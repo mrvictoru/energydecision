@@ -94,7 +94,7 @@ The example figures in this guide are historical reference points, not guarantee
 | `--battery-capacity` | 10.0 | Battery capacity in MWh |
 | `--max-power` | 5.0 | Max charge/discharge rate in MW |
 | `--episode-hours` | 24.0 | Episode length. 48h balances speed and quality |
-| `--step-duration` | 0.5 | Step duration in hours. Use 0.08333 (5 min) to match pretrained data |
+| `--step-duration` | 0.08333 | Step duration in hours (5 min, matching DT training data) |
 
 ## Choosing the Right Battery
 

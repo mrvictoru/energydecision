@@ -254,6 +254,7 @@ done
 Use the best RTG for the Standard and Comprehensive tiers.
 
 **Known optimal values** (starting points — calibrate per surface):
+- **Stage C DT (`rtg_mode="auto"`)**: recommended default — auto-selects j_t_soc on identity, constant RTG under impact
 - Legacy HF model: `rtg_value=0.0`
 - Phase 1 GRPO on legacy: `rtg_value=0.5`
 - Modern v2: **surface-dependent** — peaks at `10` on the Oct-standard surface,
@@ -327,17 +328,18 @@ From actual results:
 
 **Regime-shift / broad-surface finding (2026-08-07):** on the **expanded 2024
 surface** (5 regions × 6 periods, 5-min, `expanded_rtg10.json`) the modern v2
-DT earns **$4.6k/ep vs PPO's $15.0k** — the DT's "SOTA" is **surface-specific**
-(it wins Oct-standard, dispatch-matched, and mild months like Jan, but loses
-broadly to PPO in FCAS-spike months due to FCAS under-bidding). PPO's FCAS
-capture is ~2× the DT's on the broad year.
+DT earns **$4.6k/ep vs PPO's $15.0k** — the DT's "SOTA" was **surface-specific**
+(it won Oct-standard, dispatch-matched, and mild months like Jan, but lost
+broadly to PPO in FCAS-spike months due to FCAS under-bidding). **This finding
+was superseded by the Stage C standalone DT** (see `report.md §8.2.10`), which
+distilled an honest SDP-planning teacher and now beats PPO on **all 4 identity
+surfaces** (standard 4.9×, dispatch 1.57×, expanded 1.78×, 2025 OOD 3.98×) and
+passes the impact gate (2.5–3.1×).
 
-**Conclusion**: **any claim that a model is "best" / SOTA now requires BOTH the
-Standard tier, the expanded broad surface (`expanded_rtg10.json`), AND the
-2025 out-of-distribution surface (`aemo_autoresearch_evaluator.2025.json`)**.
-A model that wins Standard or even the expanded year but loses on a genuinely
-unseen year (2025) is not the leader. Dispatch-matched remains a secondary
-comparison for head-to-head vs real operators. The canonical launch plan
+**Conclusion (updated Aug 2026):** the Stage C DT with `rtg_mode="auto"` now
+passes all required gates: standard, expanded, 2025 OOD, and impact. The
+methodology requirement (evaluate on all surfaces) remains valid — the Stage C
+DT is the first model to satisfy it. The canonical launch plan
 (`launch_aemo_training.py`) lists the broad surface in
 `recommended_evaluation_configs`.
 
@@ -349,14 +351,13 @@ comparison for head-to-head vs real operators. The canonical launch plan
 
 Always calibrate RTG before reporting final results.
 
-### The modern v2 model is already strong
+### The modern v2 model is strong — but superseded
 
 The modern v2 pretrained model ($7,392/ep on dispatch-matched) nearly matches
-the legacy Phase 1 GRPO ($8,242/ep). The modern architecture (GQA, RoPE) may
-capture much of the benefit that GRPO provides for legacy models. **Caveat
-(2026-08-07):** this strength is surface-specific — on the broad expanded 2024
-surface PPO dominates (see "Eval surface matters" above), because the DT's
-offline data under-represents FCAS-spike behaviour.
+the legacy Phase 1 GRPO ($8,242/ep). The modern architecture (GQA, RoPE)
+captures much of the benefit that GRPO provides for legacy models. **However,
+the Stage C standalone DT** (SDP-teacher distilled, `rtg_mode="auto"`) has
+superseded the modern v2 on all surfaces — see `report.md §8.2.10`.
 
 ---
 

@@ -189,6 +189,9 @@ system_logs/
 # eval_output/final/ if they need to be tracked in git.
 /eval_output/
 
+# experiment-tracking log (un-tracked; see AGENTS.md)
+/results.tsv
+
 # whitelist only eval_output/final/ for curated report artifacts
 !/eval_output/final/
 /eval_output/final/*
@@ -197,6 +200,11 @@ system_logs/
 !/eval_output/final/**/*.csv
 !/eval_output/final/**/plots/
 !/eval_output/final/**/plots/*.svg
+
+# whitelist paper figures for the report/paper (regenerate with scripts/stagec_paper_figures.py)
+!/eval_output/paper_figures/
+/eval_output/paper_figures/*
+!/eval_output/paper_figures/
 
 # large generated caches and rollouts (always ignored regardless of location)
 heldout_logs/

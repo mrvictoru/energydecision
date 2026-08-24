@@ -110,6 +110,15 @@ def test_default_aemo_dt_model_kwargs_matches_multimarket_aemo():
     assert kwargs["rope_enabled"] is True
 
 
+def test_default_aemo_dt_model_kwargs_full_fcas():
+    kwargs = default_aemo_dt_model_kwargs(action_mode="full_fcas")
+    assert kwargs["state_dim"] == 18
+    assert kwargs["act_dim"] == 9
+    assert kwargs["context_len"] == 288
+    assert kwargs["max_timestep"] == 2016
+    assert kwargs["rope_enabled"] is True
+
+
 def test_build_dt_dataset_from_logs_tracks_sources_and_episode_ids():
     dataset, manifest = build_dt_dataset_from_logs(
         {
@@ -124,10 +133,11 @@ def test_build_dt_dataset_from_logs_tracks_sources_and_episode_ids():
     assert manifest["episode_count"] == 2
     assert manifest["row_count"] == 4
     assert manifest["state_dims"] == [18]
-    assert manifest["act_dims"] == [3]
+    # Legacy 3-dim multi_market actions are padded to 9-dim full_fcas on ingest.
+    assert manifest["act_dims"] == [9]
     assert manifest["sources"]["rule"]["episodes"] == 1
     assert manifest["sources"]["dispatch"]["rows"] == 2
-    validate_aemo_dt_dimensions(manifest, action_mode="multi_market")
+    validate_aemo_dt_dimensions(manifest, action_mode="full_fcas")
 
 
 def test_write_and_load_combined_episode_logs_round_trip(tmp_path: Path):
@@ -585,9 +595,36 @@ def test_ensure_processed_cache_writable_rejects_locked_file(monkeypatch, tmp_pa
     cache_path = tmp_path / "processed_SA1_2024-01-01_2024-01-02_0.0833h.parquet"
     cache_path.write_bytes(b"stub")
 
-    monkeypatch.setattr("aemo_notebook_utils.os.access", lambda path, mode: path != cache_path)
+    # A stale cache file that is readable but not writable must be rejected when a
+    # (re)write is requested (refresh / fixed-stats path).
+    monkeypatch.setattr(
+        "aemo_notebook_utils.os.access",
+        lambda path, mode: not (path == cache_path and mode == os.W_OK),
+    )
 
     with pytest.raises(PermissionError, match="not writable"):
+        ensure_processed_cache_writable(
+            cache_dir=tmp_path,
+            region="SA1",
+            start_date=datetime(2024, 1, 1),
+            end_date=datetime(2024, 1, 2),
+            step_duration=5 / 60,
+            needs_write=True,
+        )
+
+
+def test_ensure_processed_cache_writable_rejects_unreadable_file(monkeypatch, tmp_path: Path):
+    cache_path = tmp_path / "processed_SA1_2024-01-01_2024-01-02_0.0833h.parquet"
+    cache_path.write_bytes(b"stub")
+
+    # A cache file the runtime cannot read at all must be rejected regardless of
+    # whether a write is requested.
+    monkeypatch.setattr(
+        "aemo_notebook_utils.os.access",
+        lambda path, mode: path != cache_path,
+    )
+
+    with pytest.raises(PermissionError, match="not readable"):
         ensure_processed_cache_writable(
             cache_dir=tmp_path,
             region="SA1",
