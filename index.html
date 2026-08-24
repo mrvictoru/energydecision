@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>energydecision — Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch</title>
+<meta name="description" content="A degradation-aware AEMO/NEM benchmark showing a planner-distilled Decision Transformer beating online RL (PPO) and real-world dispatch on all four canonical evaluation surfaces, plus the market-impact gate.">
+<meta property="og:title" content="energydecision — Offline DT Outperforms Online RL for Battery Dispatch">
+<meta property="og:description" content="Planner-distilled Decision Transformer beats PPO on 4/4 identity surfaces + impact gate in Australia's NEM. Interactive results dashboard.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mrvictoru.github.io/energydecision/">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="10" y="4" width="12" height="6" rx="1.5" fill="%232dd4bf"/><rect x="6" y="10" width="20" height="20" rx="3" fill="%232dd4bf"/><rect x="9" y="13" width="8" height="14" rx="1.5" fill="%230b1220"/></svg>'>
+<script>
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('ed-theme'); } catch (e) {}
+  if (!t) t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<style>
+:root[data-theme="dark"] {
+  --bg: #0b1220;
+  --bg-alt: #0f172a;
+  --surface: #121c30;
+  --surface-2: #18243d;
+  --border: #24324e;
+  --text: #e6edf5;
+  --text-muted: #93a1b8;
+  --heading: #f4f7fb;
+  --accent: #2dd4bf;
+  --accent-dim: rgba(45, 212, 191, 0.14);
+  --ppo: #f59e0b;
+  --fail: #ef4444;
+  --solver: #a78bfa;
+  --shadow: 0 8px 28px rgba(0,0,0,0.35);
+  --grid: rgba(147,161,184,0.15);
+}
+:root[data-theme="light"] {
+  --bg: #f7f9fc;
+  --bg-alt: #eef2f8;
+  --surface: #ffffff;
+  --surface-2: #f1f5fb;
+  --border: #d8e0ec;
+  --text: #1a2333;
+  --text-muted: #55627a;
+  --heading: #101828;
+  --accent: #0d9488;
+  --accent-dim: rgba(13, 148, 136, 0.12);
+  --ppo: #b45309;
+  --fail: #dc2626;
+  --solver: #7c3aed;
+  --shadow: 0 8px 28px rgba(16,24,40,0.08);
+  --grid: rgba(85,98,122,0.18);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+body {
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  font-size: 16px;
+}
+code, pre, .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+.skip-link {
+  position: absolute; left: -999px; top: 0; z-index: 200;
+  background: var(--accent); color: #06281f; padding: 10px 18px; border-radius: 0 0 8px 0; font-weight: 600;
+}
+.skip-link:focus { left: 0; }
+
+/* ---------- Nav ---------- */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  max-width: 1100px; margin: 0 auto; padding: 0 20px;
+  display: flex; align-items: center; gap: 8px; height: 56px;
+}
+.nav-brand {
+  display: flex; align-items: center; gap: 9px; font-weight: 700; color: var(--heading);
+  margin-right: auto; white-space: nowrap;
+}
+.nav-brand svg { flex-shrink: 0; }
+.nav-links { display: flex; gap: 2px; align-items: center; }
+.nav-links a {
+  color: var(--text-muted); font-size: 0.88rem; font-weight: 500;
+  padding: 7px 11px; border-radius: 7px; transition: color .15s, background .15s;
+}
+.nav-links a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+.nav-links a.active { color: var(--accent); background: var(--accent-dim); }
+.theme-btn {
+  margin-left: 10px; width: 36px; height: 36px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  cursor: pointer; display: grid; place-items: center; transition: background .15s;
+}
+.theme-btn:hover { background: var(--surface-2); }
+@media (max-width: 760px) {
+  .nav-links { display: none; }
+  .nav-links.open {
+    display: flex; flex-direction: column; position: absolute; top: 56px; right: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 8px; min-width: 180px;
+  }
+  .nav-toggle { display: block !important; }
+}
+.nav-toggle {
+  display: none; width: 36px; height: 36px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  cursor: pointer; font-size: 1.05rem;
+}
+
+/* ---------- Layout ---------- */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+section { padding: 72px 0; scroll-margin-top: 64px; }
+section:nth-of-type(even) { background: var(--bg-alt); }
+h1, h2, h3 { color: var(--heading); line-height: 1.25; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-bottom: 10px; letter-spacing: -0.01em; }
+h3 { font-size: 1.12rem; margin-bottom: 8px; }
+.section-kicker {
+  color: var(--accent); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.09em; font-size: 0.78rem; margin-bottom: 8px;
+}
+.section-sub { color: var(--text-muted); max-width: 760px; margin-bottom: 34px; }
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .55s ease, transform .55s ease; }
+.reveal.visible { opacity: 1; transform: none; }
+
+/* ---------- Hero ---------- */
+.hero {
+  padding: 96px 0 80px;
+  background:
+    radial-gradient(900px 420px at 78% -10%, var(--accent-dim), transparent),
+    radial-gradient(700px 380px at 8% 110%, rgba(167,139,250,0.10), transparent),
+    var(--bg);
+}
+.hero h1 {
+  font-size: clamp(1.75rem, 4.6vw, 3.1rem);
+  letter-spacing: -0.02em; max-width: 900px; margin-bottom: 18px;
+}
+.hero .tagline { color: var(--text-muted); font-size: clamp(1rem, 1.6vw, 1.18rem); max-width: 720px; margin-bottom: 34px; }
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px; max-width: 900px; margin-bottom: 38px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px 22px; box-shadow: var(--shadow);
+}
+.stat-num {
+  font-size: clamp(1.7rem, 3vw, 2.3rem); font-weight: 800; color: var(--accent);
+  letter-spacing: -0.02em; line-height: 1.1;
+}
+.stat-label { color: var(--text-muted); font-size: 0.84rem; margin-top: 6px; line-height: 1.45; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-radius: 10px; font-weight: 600; font-size: 0.95rem;
+  transition: transform .12s ease, box-shadow .12s ease, background .15s;
+}
+.btn:hover { transform: translateY(-1px); text-decoration: none; }
+.btn-primary { background: var(--accent); color: #06281f; box-shadow: 0 4px 16px var(--accent-dim); }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--surface-2); }
+
+/* ---------- Cards / panels ---------- */
+.panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 22px; box-shadow: var(--shadow);
+}
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.prose { max-width: 800px; }
+.prose p { margin-bottom: 14px; }
+.prose strong { color: var(--heading); }
+
+/* ---------- Tables ---------- */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 560px; }
+th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--heading); font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; background: var(--surface-2); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--surface-2); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pos { color: var(--accent); font-weight: 600; }
+.neg { color: var(--fail); font-weight: 600; }
+.tag {
+  display: inline-block; padding: 2px 9px; border-radius: 99px;
+  font-size: 0.74rem; font-weight: 700; white-space: nowrap;
+}
+.tag-win { background: var(--accent-dim); color: var(--accent); }
+.tag-flag { background: rgba(239,68,68,0.13); color: var(--fail); }
+.tag-solver { background: rgba(167,139,250,0.14); color: var(--solver); }
+.tag-neutral { background: var(--surface-2); color: var(--text-muted); }
+tfoot td { font-size: 0.8rem; color: var(--text-muted); border-top: 1px solid var(--border); }
+
+/* ---------- Charts ---------- */
+.chart-panel { margin-top: 22px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+.seg {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
+  background: var(--surface);
+}
+.seg button {
+  border: none; background: transparent; color: var(--text-muted);
+  padding: 8px 16px; font-size: 0.86rem; font-weight: 600; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: #06281f; }
+.check {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 0.86rem;
+  color: var(--text-muted); cursor: pointer; user-select: none;
+}
+.check input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.chart-box { position: relative; height: 380px; }
+.chart-box.tall { height: 420px; }
+.chart-caption { color: var(--text-muted); font-size: 0.82rem; margin-top: 12px; }
+.legend-note { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 0.83rem; color: var(--text-muted); }
+.legend-note span::before {
+  content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+  margin-right: 7px; vertical-align: -1px;
+}
+.ln-dt::before { background: var(--accent); }
+.ln-ppo::before { background: var(--ppo); }
+.ln-fail::before { background: var(--fail); }
+.ln-solver::before { background: var(--solver); }
+
+/* ---------- Environment diagram ---------- */
+.env-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; }
+.env-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px; position: relative; transition: border-color .15s, transform .15s;
+  cursor: default;
+}
+.env-card:hover, .env-card:focus-visible { border-color: var(--accent); transform: translateY(-2px); }
+.env-card h3 { font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+.env-card .dim-badge {
+  font-size: 0.72rem; background: var(--accent-dim); color: var(--accent);
+  padding: 1px 8px; border-radius: 99px; font-weight: 700;
+}
+.env-card ul { list-style: none; margin-top: 10px; }
+.env-card li { font-size: 0.84rem; color: var(--text-muted); padding: 3px 0 3px 14px; position: relative; }
+.env-card li::before { content: "·"; position: absolute; left: 2px; color: var(--accent); font-weight: 800; }
+.reward-flow {
+  margin-top: 22px; padding: 18px 20px; border-radius: 12px;
+  background: var(--surface); border: 1px dashed var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem; overflow-x: auto; white-space: nowrap; color: var(--text-muted);
+}
+.reward-flow b { color: var(--accent); }
+.reward-flow s { color: var(--fail); text-decoration: none; }
+
+/* ---------- Timeline ---------- */
+.timeline-steps {
+  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 18px;
+}
+.tstep {
+  flex: 0 0 auto; min-width: 118px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px 8px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.tstep:hover { border-color: var(--accent); }
+.tstep .tnum { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.06em; }
+.tstep .tname { font-size: 0.82rem; font-weight: 600; color: var(--heading); margin-top: 3px; line-height: 1.3; }
+.tstep .tprofit { font-size: 0.86rem; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tstep.selected { border-color: var(--accent); background: var(--accent-dim); }
+.timeline-detail {
+  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  border-radius: 12px; padding: 20px 22px; margin-top: 4px;
+}
+.timeline-detail h3 { margin-bottom: 6px; }
+.timeline-detail .meta { display: flex; flex-wrap: wrap; gap: 8px 22px; color: var(--text-muted); font-size: 0.84rem; margin-bottom: 12px; }
+.timeline-detail p { font-size: 0.92rem; }
+
+/* ---------- Pipeline diagram ---------- */
+.pipe { display: flex; flex-direction: column; align-items: stretch; gap: 0; max-width: 860px; }
+.pipe-node {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; text-align: center; position: relative;
+}
+.pipe-node b { color: var(--heading); }
+.pipe-node .sub { color: var(--text-muted); font-size: 0.84rem; }
+.pipe-node.accent { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.pipe-arrow {
+  align-self: center; color: var(--text-muted); font-size: 1.15rem;
+  padding: 4px 0; line-height: 1;
+}
+.pipe-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .pipe-split { grid-template-columns: 1fr; } }
+
+/* ---------- Artifacts ---------- */
+.artifact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.artifact-card {
+  display: block; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px; color: var(--text);
+  transition: border-color .15s, transform .15s;
+}
+.artifact-card:hover { border-color: var(--accent); transform: translateY(-2px); text-decoration: none; }
+.artifact-card .kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent); font-weight: 700; }
+.artifact-card h3 { margin: 5px 0 6px; font-size: 1rem; }
+.artifact-card p { color: var(--text-muted); font-size: 0.84rem; }
+pre.code-block {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55;
+  color: var(--text); position: relative; margin-top: 14px;
+}
+.copy-btn {
+  position: absolute; top: 10px; right: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); border-radius: 7px;
+  font-size: 0.76rem; padding: 5px 11px; cursor: pointer;
+}
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---------- Limitations ---------- */
+.limit-list { list-style: none; display: grid; gap: 12px; max-width: 860px; }
+.limit-list li {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 15px 18px 15px 46px; position: relative; font-size: 0.92rem;
+}
+.limit-list li::before {
+  content: "!"; position: absolute; left: 16px; top: 14px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(245,158,11,0.16); color: var(--ppo);
+  font-weight: 800; display: grid; place-items: center; font-size: 0.85rem;
+}
+
+/* ---------- Footer ---------- */
+footer { border-top: 1px solid var(--border); padding: 40px 0 52px; color: var(--text-muted); font-size: 0.86rem; }
+footer .container { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; }
+
+.footnote { font-size: 0.8rem; color: var(--text-muted); margin-top: 14px; }
+.no-chart-msg {
+  display: none; padding: 26px; text-align: center; color: var(--text-muted);
+  border: 1px dashed var(--border); border-radius: 12px; font-size: 0.9rem;
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav class="nav" aria-label="Main navigation">
+  <div class="nav-inner">
+    <a class="nav-brand" href="#top" aria-label="energydecision home">
+      <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect x="10" y="4" width="12" height="6" rx="1.5" fill="var(--accent)"/><rect x="6" y="10" width="20" height="20" rx="3" fill="var(--accent)"/><rect x="9" y="13" width="8" height="14" rx="1.5" fill="var(--bg)"/></svg>
+      energydecision
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Toggle navigation">☰</button>
+    <div class="nav-links" id="navLinks">
+      <a href="#results">Results</a>
+      <a href="#timeline">Timeline</a>
+      <a href="#method">Method</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#artifacts">Artifacts</a>
+      <a href="#limitations">Limitations</a>
+    </div>
+    <button class="theme-btn" id="themeBtn" aria-label="Toggle dark/light theme">
+      <svg id="iconMoon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="iconSun" style="display:none" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+  </div>
+</nav>
+
+<main id="main">
+<!-- ==================== HERO ==================== -->
+<header class="hero" id="top">
+  <div class="container">
+    <p class="section-kicker">AEMO / NEM · Decision Transformer Benchmark</p>
+    <h1>Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch</h1>
+    <p class="tagline">A degradation-aware benchmark for battery trading in Australia's National Electricity Market:
+      a planner-distilled Decision Transformer beats online RL (PPO) and real-world dispatch replay on
+      every evaluation surface tested — with no solver at inference time.</p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num"><span data-countup data-end="4.9" data-decimals="1" data-suffix="×">0</span></div>
+        <div class="stat-label">Profit vs PPO on the standard surface ($11,573 vs $2,353 per episode)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">4/4<span style="font-size:0.55em;color:var(--text-muted)"> + gate</span></div>
+        <div class="stat-label">Identity surfaces won, plus the market-impact gate passed on all grid-scale batteries</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">0</div>
+        <div class="stat-label">Solvers at inference — a fully deployable standalone transformer</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">6/6</div>
+        <div class="stat-label">DT-vs-PPO paired comparisons whose 95% bootstrap CIs exclude zero</div>
+      </div>
+    </div>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/mrvictoru/energydecision/blob/main/report.md" target="_blank" rel="noopener">Read the full report →</a>
+      <a class="btn btn-secondary" href="https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp" target="_blank" rel="noopener">Get the model (Hugging Face)</a>
+      <a class="btn btn-secondary" href="#results">See interactive results ↓</a>
+    </div>
+  </div>
+</header>
+
+<!-- ==================== INTRO ==================== -->
+<section id="intro">
+  <div class="container reveal">
+    <p class="section-kicker">What is this?</p>
+    <h2>Battery trading as a sequential decision problem</h2>
+    <div class="prose">
+      <p>Grid-scale batteries in Australia's National Electricity Market (NEM) earn money two ways:
+        <strong>energy arbitrage</strong> — buying low and selling high on 5-minute spot prices — and
+        <strong>FCAS ancillary services</strong>, eight co-optimized frequency-control markets.
+        The controller must decide dispatch plus all eight FCAS bids every 5 minutes,
+        while paying for every cycle of battery wear.</p>
+      <p>The prior belief: only online reinforcement learning (PPO) could capture rare FCAS price spikes,
+        because offline behaviour cloning cannot output skills that are absent from its logged data.
+        This project shows that belief was an artifact of the <em>teacher</em>, not the student:
+        by distilling an honest stochastic-dynamic-programming (SDP) planning agent into a standalone
+        Decision Transformer, the offline-data ceiling breaks entirely — no clairvoyance,
+        no solver at deployment, and better than PPO everywhere it was tested.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ENVIRONMENT ==================== -->
+<section id="environment">
+  <div class="container reveal">
+    <p class="section-kicker">The testbed</p>
+    <h2>AEMOBatteryTradingEnv</h2>
+    <p class="section-sub">A Gymnasium environment simulating a grid-scale BESS participating in energy and all 8 FCAS markets,
+      driven by real historical AEMO market data at 5-minute resolution. Hover or focus each component for detail.</p>
+    <div class="env-grid">
+      <div class="env-card" tabindex="0" data-tip="Cyclical encodings let the policy learn time-of-day and day-of-year structure.">
+        <h3><span aria-hidden="true">🕐</span> Time features <span class="dim-badge">5-D</span></h3>
+        <ul><li>hour sin/cos</li><li>day-of-year sin/cos</li><li>is-peak flag</li></ul>
+      </div>
+      <div class="env-card" tabindex="0" data-tip="Regional reference price (RRP) and demand, min-max normalized from NEMOSIS DISPATCHPRICE / DISPATCHREGIONSUM.">
+        <h3><span aria-hidden="true">⚡</span> Energy market <span class="dim-badge">2-D</span></h3>
+        <ul><li>RRP normalized</li><li>demand normalized</li></ul>
+      </div>
+      <div class="env-card" tabindex="0" data-tip="RAISEREG, LOWERREG, RAISE/LOWER 6SEC, 60SEC, 5MIN — cleared prices per service. FCAS spikes are rare, aggressive, and nearly unpredictable from history (corr ≈ 0.01–0.07).">
+        <h3><span aria-hidden="true">📶</span> FCAS prices <span class="dim-badge">8-D</span></h3>
+        <ul><li>regulation (raise/lower)</li><li>6-second contingency</li><li>60-second contingency</li><li>5-minute contingency</li></ul>
+      </div>
+      <div class="env-card" tabindex="0" data-tip="Generation mix by fuel type signals renewable penetration — a proxy for price volatility.">
+        <h3><span aria-hidden="true">🌬️</span> Generation mix <span class="dim-badge">2-D</span></h3>
+        <ul><li>solar %</li><li>wind %</li></ul>
+      </div>
+      <div class="env-card" tabindex="0" data-tip="Normalized state of charge in [0,1] — the physical memory of the system.">
+        <h3><span aria-hidden="true">🔋</span> Battery SOC <span class="dim-badge">1-D</span></h3>
+        <ul><li>SOC ∈ [0, 1]</li><li>capacity-limited</li></ul>
+      </div>
+      <div class="env-card" tabindex="0" data-tip="Energy dispatch in [-1,1] (charge/discharge) plus one bid fraction in [0,1] per FCAS service. Raise-direction bids + discharge are proportionally scaled to fit SOC headroom — the coupling that makes joint bidding hard.">
+        <h3><span aria-hidden="true">🎮</span> Action space <span class="dim-badge">9-D full_fcas</span></h3>
+        <ul><li>dispatch ∈ [-1, 1]</li><li>8 × FCAS bids ∈ [0, 1]</li><li>co-optimized headroom scaling</li></ul>
+      </div>
+    </div>
+    <div class="reward-flow" role="img" aria-label="Reward formula: energy arbitrage plus FCAS revenue minus degradation cost minus SOC penalties">
+      reward&nbsp;=&nbsp;<b>+ energy arbitrage</b>&nbsp;(E × RRP)&nbsp;&nbsp;<b>+ FCAS revenue</b>&nbsp;(Σ enablement × price)
+      &nbsp;&nbsp;<s>− degradation cost</s>&nbsp;&nbsp;<s>− SOC guard penalty</s>&nbsp;&nbsp;→&nbsp; profit is already net of degradation
+    </div>
+    <p class="footnote">Degradation is modeled with real-world calendar + cycle aging (Kampker et al. 2025), NMC/LFP chemistry presets,
+      and Arrhenius temperature dependence. All evaluation uses 5-minute steps matching the training-data protocol.</p>
+  </div>
+</section>
+
+<!-- ==================== HEADLINE RESULTS ==================== -->
+<section id="results">
+  <div class="container reveal">
+    <p class="section-kicker">Headline result</p>
+    <h2>Beats PPO on every surface — including out-of-distribution 2025</h2>
+    <p class="section-sub">Total profit per episode (USD, net of degradation). Identity (price-taking) surfaces plus the
+      mandatory market-impact validation gate. Stage C standalone Decision Transformer under the shipped
+      <code>rtg_mode="auto"</code>.</p>
+
+    <div class="panel chart-panel">
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Result view">
+          <button type="button" id="viewProfit" aria-pressed="true">Profit / episode ($)</button>
+          <button type="button" id="viewRatio" aria-pressed="false">DT ÷ PPO ratio</button>
+        </div>
+        <label class="check"><input type="checkbox" id="ciToggle"> Show confidence intervals</label>
+      </div>
+      <div class="chart-box tall">
+        <canvas id="headlineChart" role="img" aria-label="Grouped bar chart: Decision Transformer versus PPO profit across four identity surfaces"></canvas>
+      </div>
+      <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline). Exact values are in the table below.</div>
+      <p class="chart-caption">Standard Oct: 5 regions × 144 h · Dispatch-matched: same-asset Dalrymple North (8 MWh / 30 MW) SA1 ·
+        Expanded broad-2024: 5 regions × 6 periods · 2025 OOD: NSW1/SA1/QLD1 × Jan/Feb (unseen year).</p>
+      <div class="legend-note">
+        <span class="ln-dt">Decision Transformer (shipped)</span>
+        <span class="ln-ppo">PPO reference (online RL)</span>
+        <span id="ciLegend" style="display:none">┃&nbsp; 95% bootstrap CI (10,000 resamples)</span>
+      </div>
+    </div>
+
+    <h3 style="margin-top:34px">Exact values &amp; statistical treatment</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th scope="col">Surface</th>
+          <th scope="col" class="num">DT $/ep</th>
+          <th scope="col" class="num">PPO $/ep</th>
+          <th scope="col" class="num">Ratio</th>
+          <th scope="col" class="num">Diff [95% CI]</th>
+          <th scope="col" class="num">Win rate</th>
+          <th scope="col" class="num">Wilcoxon p</th>
+        </tr></thead>
+        <tbody id="headlineTableBody"></tbody>
+        <tfoot><tr><td colspan="7">\* At n&lt;10 the two-sided Wilcoxon minimum is bounded (every paired difference had the same sign).
+          Expanded broad-2024 is additionally significant under a conventional test.</td></tr></tfoot>
+      </table>
+    </div>
+
+    <h3 style="margin-top:44px">Market-impact gate <span class="tag tag-win">PASS</span></h3>
+    <p class="prose" style="margin-top:10px">At grid scale a battery's own dispatch moves prices. Under a piecewise merit-order impact model,
+      the shipped auto-mode DT still beats PPO on every canonical grid-scale battery — where explicit
+      state-dependent prompting would catastrophically self-suppress (see <a href="#automode">why auto exists</a>).</p>
+    <div class="chart-box" style="height:330px;margin-top:18px">
+      <canvas id="impactChart" role="img" aria-label="Bar chart: auto-mode Decision Transformer versus PPO under market impact across three battery scales"></canvas>
+    </div>
+    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): Small $34.6k vs $11.0k · Hornsdale-class $142.1k vs $56.5k · Torrens-class $173.1k vs $69.5k (DT vs PPO).</div>
+    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact. Diff +$63,064/cell, 95% CI [+$33,356, +$100,973], Wilcoxon p = 0.0039, win rate 9/9 cells.</p>
+  </div>
+</section>
+
+<!-- ==================== DECOMPOSITION ==================== -->
+<section id="decomposition">
+  <div class="container reveal">
+    <p class="section-kicker">Where the money comes from</p>
+    <h2>The edge is FCAS capture — and degradation parity</h2>
+    <p class="section-sub">Revenue decomposition matters more than any single number. The distilled DT's dominance comes from
+      co-optimized FCAS bidding inherited from the planning teacher, while its energy arbitrage narrowed the residual gap.</p>
+    <div class="card-grid">
+      <div class="panel">
+        <h3><span aria-hidden="true">📶</span> FCAS revenue</h3>
+        <p style="color:var(--text-muted);font-size:0.9rem">The distilled DT earns <strong class="pos" style="color:var(--accent)">3–6.8× PPO's FCAS</strong>
+          on every surface tested. The skill comes from the teacher's co-optimization — not from cloning behaviour mass.</p>
+      </div>
+      <div class="panel">
+        <h3><span aria-hidden="true">⚡</span> Energy arbitrage</h3>
+        <p style="color:var(--text-muted);font-size:0.9rem">On expanded broad-2024 the DT's energy edge reached
+          <strong>$14.8k/ep</strong> vs PPO's <strong>$17.4k</strong> — narrowed but not eliminated (see limitations).</p>
+      </div>
+      <div class="panel">
+        <h3><span aria-hidden="true">🔋</span> Degradation cost</h3>
+        <p style="color:var(--text-muted);font-size:0.9rem">Distilled models run <strong class="pos">$88–176/MWh</strong>
+          throughput cost vs PPO's ~$211–310/MWh. The SDP teacher plans against an explicit degradation penalty,
+          closing the long-standing "PPO owns efficiency" caveat.</p>
+      </div>
+    </div>
+    <p class="footnote">Per-surface dollar decompositions across the narrow/broad surface families are not directly comparable due to a disclosed
+      action-space protocol asymmetry (report §6); figures above quote like-for-like surfaces only.</p>
+  </div>
+</section>
+
+<!-- ==================== TIMELINE ==================== -->
+<section id="timeline">
+  <div class="container reveal">
+    <p class="section-kicker">How we got here</p>
+    <h2>Eight stages from −$10.6k to SOTA</h2>
+    <p class="section-sub">Dispatch-matched profit per episode across model generations. Click a stage for details.
+      Stages 6–7 keep a solver in the loop and are <em>not directly comparable</em>; stage 8 is the deployable shipped policy.</p>
+
+    <div class="panel chart-panel">
+      <div class="chart-box" style="height:340px">
+        <canvas id="timelineChart" role="img" aria-label="Bar chart of dispatch-matched profit per episode across eight model stages"></canvas>
+      </div>
+      <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline). Values shown in the stage buttons below.</div>
+      <div class="legend-note">
+        <span class="ln-dt">Deployable DT</span>
+        <span class="ln-solver">Solver-in-the-loop (not comparable)</span>
+        <span class="ln-fail">Negative / overfit era</span>
+      </div>
+    </div>
+
+    <div class="timeline-steps" id="timelineSteps" role="tablist" aria-label="Model generations"></div>
+    <div class="timeline-detail" id="timelineDetail" role="tabpanel" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- ==================== CEILING STORY ==================== -->
+<section id="ceiling">
+  <div class="container reveal">
+    <p class="section-kicker">Why this was hard</p>
+    <h2>Every fix inside behaviour cloning failed first</h2>
+    <div class="prose" style="margin-bottom:26px">
+      <p>Behaviour cloning cannot output skills absent from its data. Rare, aggressive FCAS spike bidding sits far outside
+        the offline behaviour mass, so it survived every attempt to prompt, re-weight, re-compose, or fine-tune it away.
+        The project documented these failures systematically — they are the evidence that the ceiling was real:</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">#</th><th scope="col">Attempted fix (within paradigm)</th><th scope="col">Result</th></tr></thead>
+        <tbody id="failedFixesBody"></tbody>
+      </table>
+    </div>
+    <div class="timeline-detail" style="margin-top:24px;border-left-color:var(--accent)">
+      <h3>The resolution: change the teacher, not the student</h3>
+      <p style="font-size:0.92rem">Instead of cloning market history, the team distilled an <strong>honest planner</strong>: a
+        stochastic-dynamic-programming agent that plans against a seasonal forecast only (never realized future prices),
+        is degradation-aware, and co-optimizes FCAS by construction. A standalone transformer trained on those trajectories
+        inherits the planning skill — breaking the FCAS-cloning ceiling <em>by construction</em>. State-dependent
+        J_t(soc) prompting then recovered the remaining energy-arbitrage gap. See <a href="#method">the method</a>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== METHOD ==================== -->
+<section id="method">
+  <div class="container reveal">
+    <p class="section-kicker">Method</p>
+    <h2>Teacher distillation + state-dependent prompts</h2>
+    <p class="section-sub">The shipped pipeline in one picture: plan honestly, distill into a transformer, prompt with the planner's own value function — gated by market power.</p>
+
+    <div class="pipe" role="img" aria-label="Pipeline diagram: seasonal forecast feeds an honest SDP teacher which produces trajectories and a cost-to-go table, both feeding the standalone Decision Transformer deployed with rtg_mode auto">
+      <div class="pipe-node"><b>Seasonal price forecast</b> <span class="sub">(month × hour profile, fitted on pre-2024 data only)</span></div>
+      <div class="pipe-arrow">↓</div>
+      <div class="pipe-node"><b>Honest SDP teacher</b> <span class="sub">degradation-aware backward induction · never sees realized future prices</span></div>
+      <div class="pipe-arrow">↓</div>
+      <div class="pipe-split">
+        <div class="pipe-node"><b>Teacher trajectories</b><br><span class="sub">640 episodes · 6.2M rows<br>(conservative λ=$50 + aggressive λ=$20)</span></div>
+        <div class="pipe-node"><b>J_t(soc) cost-to-go table</b><br><span class="sub">remaining value per (timestep, SOC)<br>under the seasonal forecast</span></div>
+      </div>
+      <div class="pipe-arrow">↓&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓</div>
+      <div class="pipe-node accent"><b>Standalone Decision Transformer</b> <span class="sub">modern v2 · 8×768 GQA · mixed action head · no solver at inference</span></div>
+      <div class="pipe-arrow">↓</div>
+      <div class="pipe-node"><b>Inference: rtg_mode="auto"</b><br><span class="sub">identity (price-taking) surfaces → J_t(soc) state-dependent prompt&nbsp;&nbsp;·&nbsp;&nbsp;impact surfaces → conservative constant RTG</span></div>
+    </div>
+
+    <h3 style="margin-top:40px">Training corpora</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th scope="col">Corpus</th><th scope="col" class="num">Episodes</th><th scope="col" class="num">Rows</th>
+          <th scope="col" class="num">Size</th><th scope="col">Teacher</th><th scope="col">RTG column</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>dt_trajectories_full.parquet</td><td class="num mono">320</td><td class="num mono">3.13M</td><td class="num mono">368 MB</td><td>Conservative (λ_deg = $50/MWh)</td><td>discounted return</td></tr>
+          <tr><td>dt_trajectories_aggressive.parquet</td><td class="num mono">320</td><td class="num mono">3.13M</td><td class="num mono">373 MB</td><td>Aggressive (λ_deg = $20/MWh, +57% throughput)</td><td>discounted return</td></tr>
+          <tr><td><strong>dt_trajectories_jtsoc_combined.parquet</strong></td><td class="num mono"><strong>640</strong></td><td class="num mono"><strong>6.2M</strong></td><td class="num mono"><strong>762 MB</strong></td><td>both, concatenated</td><td><strong>J_t(soc) cost-to-go</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="footnote">All corpora cover 5 regions × short+medium horizons × 4 realistic battery configurations
+      (medium_1c, large_07c, small_05c, fast_375c). The combined corpus trains the shipped checkpoint.</p>
+  </div>
+</section>
+
+<!-- ==================== AUTO MODE ==================== -->
+<section id="automode">
+  <div class="container reveal">
+    <p class="section-kicker">Failure modes, handled</p>
+    <h2>Why the shipped default is <code>rtg_mode="auto"</code></h2>
+    <p class="section-sub">State-dependent J_t(soc) prompting is strictly better when the battery is a price-taker —
+      and catastrophic when it isn't. At grid scale under merit-order impact, the optimistic prompt drives over-dispatch,
+      the battery suppresses its own realized price, and energy revenue collapses. Auto mode gates the prompt by market power.</p>
+    <div class="chart-box" style="height:360px;max-width:860px">
+      <canvas id="autoModeChart" role="img" aria-label="Grouped bar chart comparing PPO, auto mode, and explicit j_t_soc prompting under market impact on Hornsdale and Torrens scale batteries"></canvas>
+    </div>
+    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): j_t_soc under impact loses −$139.9k (Hornsdale) and −$346.6k (Torrens); auto passes with +$142.1k / +$173.1k vs PPO $56.5k / $69.5k.</div>
+    <p class="chart-caption">Mean profit/ep under piecewise impact, verified reruns (2026-08-22). Explicit j_t_soc remains available as an identity-only analysis mode.
+      Within auto mode, the constant fallback must stay conservative (rtg = 0.0): fallback values ≥ 20 re-introduce the collapse.</p>
+    <p class="footnote">Takeaway: <strong>prompts should be state-dependent, but gated by market power.</strong></p>
+  </div>
+</section>
+
+<!-- ==================== EVIDENCE ==================== -->
+<section id="evidence">
+  <div class="container reveal">
+    <p class="section-kicker">Statistical rigor</p>
+    <h2>All six paired-difference CIs exclude zero</h2>
+    <p class="section-sub">Bootstrap resampling (10,000 draws) over matched cells plus paired Wilcoxon signed-rank tests
+      (<code>scripts/stagec_statistical_significance.py</code>). Per-cell bootstrap P(DT &gt; PPO) ≥ 0.9998 on every identity surface.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th scope="col">Comparison</th><th scope="col" class="num">n</th><th scope="col" class="num">Diff (DT−PPO)</th>
+          <th scope="col" class="num">95% CI</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Wilcoxon p</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Standard Oct</td><td class="num mono">5</td><td class="num pos">+$9,220</td><td class="num mono">[+$7,073, +$11,624]</td><td class="num">5/5</td><td class="num mono">0.0625*</td></tr>
+          <tr><td>Dispatch-matched</td><td class="num mono">6</td><td class="num pos">+$12,791</td><td class="num mono">[+$7,008, +$18,277]</td><td class="num">6/6</td><td class="num mono">0.0312*</td></tr>
+          <tr><td>Expanded broad-2024</td><td class="num mono">27</td><td class="num pos">+$15,257</td><td class="num mono">[+$4,108, +$33,350]</td><td class="num">25/27</td><td class="num mono"><strong>0.0002</strong></td></tr>
+          <tr><td>2025 OOD</td><td class="num mono">6</td><td class="num pos">+$19,364</td><td class="num mono">[+$7,138, +$39,670]</td><td class="num">6/6</td><td class="num mono">0.0312*</td></tr>
+          <tr><td>Impact gate (piecewise)</td><td class="num mono">9</td><td class="num pos">+$63,064</td><td class="num mono">[+$33,356, +$100,973]</td><td class="num">9/9</td><td class="num mono">0.0039*</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="footnote">* Bounded Wilcoxon minimum at small n (see note on the results table). Scenario-level pairing: each cell is one deterministic episode;
+      statistical treatment resamples cells, not episodes. Point estimates on low-n surfaces should be read alongside their intervals.</p>
+  </div>
+</section>
+
+<!-- ==================== ARTIFACTS ==================== -->
+<section id="artifacts">
+  <div class="container reveal">
+    <p class="section-kicker">Reproduce it</p>
+    <h2>Code, report, weights, and data — all public</h2>
+    <div class="artifact-grid">
+      <a class="artifact-card" href="https://github.com/mrvictoru/energydecision" target="_blank" rel="noopener">
+        <span class="kind">GitHub</span><h3>energydecision</h3>
+        <p>Full codebase: environments, baselines, DT stack, evaluator, tests.</p>
+      </a>
+      <a class="artifact-card" href="https://github.com/mrvictoru/energydecision/blob/main/report.md" target="_blank" rel="noopener">
+        <span class="kind">Technical report</span><h3>report.md</h3>
+        <p>Methods, experiment ladder, statistical analysis, limitations.</p>
+      </a>
+      <a class="artifact-card" href="https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp" target="_blank" rel="noopener">
+        <span class="kind">Model · shipped</span><h3>aemo_dt_sdp_jtsoc_fullcorpus.pt</h3>
+        <p>Stage C standalone DT with config sidecar. Run with rtg_mode="auto".</p>
+      </a>
+      <a class="artifact-card" href="https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp" target="_blank" rel="noopener">
+        <span class="kind">Dataset</span><h3>AEMO_simulated_trade_sdp</h3>
+        <p>SDP-teacher trajectory corpora incl. the J_t(soc) combined corpus.</p>
+      </a>
+      <a class="artifact-card" href="https://huggingface.co/mrvictoru" target="_blank" rel="noopener">
+        <span class="kind">Historical models</span><h3>v2 · v2-impact · legacy</h3>
+        <p>Prior-generation checkpoints preserved for reproduction of earlier sections.</p>
+      </a>
+    </div>
+    <h3 style="margin-top:36px">Quick start</h3>
+    <pre class="code-block" id="reproBlock"><code>pip install -r requirements.txt &amp;&amp; pip install -r torch_req.txt
+
+# Canonical CLI training (Distrobox recommended; run from repo root)
+python3 scripts/launch_aemo_training.py --run-tier proxy-baseline
+
+# Held-out evaluation
+python3 scripts/autoresearch_evaluator.py \
+  --surface-manifest-path &lt;surface-manifest.json&gt; \
+  --evaluation-config configs/aemo_autoresearch_evaluator.example.json \
+  --output-dir eval_output/my_eval
+
+# Test suite
+python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="button">Copy</button></pre>
+  </div>
+</section>
+
+<!-- ==================== LIMITATIONS ==================== -->
+<section id="limitations">
+  <div class="container reveal">
+    <p class="section-kicker">Read this before citing</p>
+    <h2>Limitations &amp; honest caveats</h2>
+    <ul class="limit-list">
+      <li><strong>Simulator-based results.</strong> All revenue/degradation figures come from the in-repo simulator driven by historical AEMO
+        prices with modeled FCAS co-optimization — not settled market outcomes. Sim-to-real transfer is the top open item.</li>
+      <li><strong>Explicit j_t_soc is identity-only.</strong> It must never be forced under market impact; the shipped default is the
+        surface-aware auto mode.</li>
+      <li><strong>Energy-arbitrage gap narrowed, not closed.</strong> On expanded broad-2024 the DT reaches $14.8k/ep energy vs PPO's $17.4k.</li>
+      <li><strong>Small samples on some surfaces.</strong> Headline surfaces have as few as n=5–6 scenarios; read point estimates alongside their intervals.</li>
+      <li><strong>Disclosed protocol asymmetry.</strong> Broad-surface comparisons ran with a handicapped 3-dim-effective action space
+        (multi_market scoring dims 0–2 only) — which strengthens rather than weakens the claim, but limits cross-family decomposition comparability.</li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="container">
+    <div>
+      <strong style="color:var(--heading)">energydecision</strong> — offline sequence modeling for utility-scale battery control.<br>
+      Results verified 2026-08 · Built with vanilla JS + Chart.js · No trackers.
+    </div>
+    <div>
+      <a href="https://github.com/mrvictoru/energydecision" target="_blank" rel="noopener">GitHub</a> &nbsp;·&nbsp;
+      <a href="https://huggingface.co/mrvictoru" target="_blank" rel="noopener">Hugging Face</a> &nbsp;·&nbsp;
+      <a href="https://github.com/mrvictoru/energydecision/blob/main/report.md" target="_blank" rel="noopener">Report</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+<script defer>
+(function () {
+"use strict";
+
+/* =====================================================================
+   DATA LAYER — verified numbers from report.md §8.2.10 (2026-08-23).
+   Do not modify without cross-checking the technical report.
+   ===================================================================== */
+var DATA = {
+  headline: [
+    { surface: "Standard Oct",        dt: 11573, ppo: 2353,  diff: "+$9,220",  ciLo: 7073,  ciHi: 11624,  n: 5,  winRate: "5/5",   p: "0.0625*" },
+    { surface: "Dispatch-matched",    dt: 35320, ppo: 22530, diff: "+$12,791", ciLo: 7008,  ciHi: 18277,  n: 6,  winRate: "6/6",   p: "0.0312*" },
+    { surface: "Expanded broad-2024", dt: 34761, ppo: 19504, diff: "+$15,257", ciLo: 4108,  ciHi: 33350,  n: 27, winRate: "25/27", p: "0.0002" },
+    { surface: "2025 OOD",            dt: 25862, ppo: 6498,  diff: "+$19,364", ciLo: 7138,  ciHi: 39670,  n: 6,  winRate: "6/6",   p: "0.0312*" }
+  ],
+  impactGate: [
+    { battery: "Small (~8 MWh)",            dt: 34600,  ppo: 11000 },
+    { battery: "Hornsdale-class (150 MW)",  dt: 142100, ppo: 56500 },
+    { battery: "Torrens-class (250 MWh)",   dt: 173100, ppo: 69500 }
+  ],
+  timeline: [
+    { stage: 1, name: "Pilot DT", arch: "4×128, ctx=1152", data: "6 proxy episodes", dm: -10620, cls: "neg",
+      desc: "Baseline model trained on six proxy episodes. Catastrophic cycling produced −$10,620/ep with $12,975/ep degradation cost — proof that architecture alone cannot compensate for absent or poor data." },
+    { stage: 2, name: "Autoresearch tuning", arch: "8×512, ctx=180", data: "24 episodes (mixed)", dm: -1396, cls: "neg",
+      desc: "A hyperparameter sweep (8×512, context 180, dropout 0.15) cut dispatch intensity 6.8× and degradation 5.2×. The model learned to be conservative — but FCAS revenue stayed near zero because the training data contained no FCAS-active behaviour." },
+    { stage: 3, name: "FCAS-rich offline DT", arch: "8×384, ctx=180", data: "2,425 episodes (PPO-rich)", dm: 1522, cls: "",
+      desc: "Retraining on a 2,425-episode corpus generated by PPO/TD3/A2C/DDPG/SAC/fcas_rule policies flipped the DT profitable (+$1,522/ep on the example evaluator) with an 18× FCAS-revenue improvement — the first evidence that offline DT can close the FCAS gap purely through data quality." },
+    { stage: 4, name: "GRPO fine-tune (legacy)", arch: "8×384 + GRPO", data: "v2 HF + 5 GRPO iterations", dm: 8242, cls: "",
+      desc: "Online RL fine-tuning peaked at $8,242/ep dispatch-matched — later exposed as a narrow overfit: the same checkpoint collapsed to $1,533/ep on the broader standard surface. The lesson: validate on diverse surfaces before believing a headline." },
+    { stage: 5, name: "Modern v2 pretrained", arch: "8×768 GQA", data: "2,401 eps, realistic battery configs", dm: 10138, cls: "",
+      desc: "Architecture modernization (GQA, RMSNorm/QK-norm, SwiGLU, weight tying) on realistic station-matched battery configurations beat every GRPO variant without any online RL: $10,138/ep dispatch-matched, $4,630/ep standard." },
+    { stage: 6, name: "Hierarchical DT+LP", arch: "waypoint-DT + Oracle-LP", data: "Oracle SOC paths (1,200 eps)", dm: 291841, solver: true, cls: "solver",
+      desc: "Structural decomposition: a waypoint-DT predicts a coarse target-SOC trajectory; an LP executor co-optimizes energy + all 8 FCAS within each segment. First policy to beat PPO on all four identity surfaces ($291,841/ep dispatch-matched). Fatal flaw: the LP sees full-episode prices — perfect foresight, not deployable." },
+    { stage: 7, name: "Honest SDP executor", arch: "waypoint-DT + SDP", data: "seasonal forecast only", dm: 59091, solver: true, cls: "solver",
+      desc: "Replacing the clairvoyant LP with a non-clairvoyant SDP planner (seasonal forecast, degradation-aware) lifted the foresight caveat — and beat the LP out-of-distribution ($59,091 DM, wins on expanded and 2025 OOD). Honest planners generalize better than clairvoyant ones. A solver still runs at inference." },
+    { stage: 8, name: "Standalone J_t(soc) DT — SHIPPED", arch: "8×768 mixed-head", data: "SDP teacher trajs (640 eps)", dm: 35320, cls: "",
+      desc: "The teacher distilled into a standalone transformer with no solver at inference. Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped with rtg_mode=\"auto\": beats PPO on all four identity surfaces and passes the market-impact gate." }
+  ],
+  failedFixes: [
+    { fix: "RTG prompt sweep (0–50)", result: "Flat — not a prompting artifact.", tag: "negative" },
+    { fix: "PPO-only training data (legacy 8×384 & modern 8×768)", result: "$17.6–17.8k broad-2024 via energy arbitrage, but collapses on 2025 OOD (~$4.2k vs PPO $14.3k). Architecture-independent — data composition was the determinant.", tag: "negative" },
+    { fix: "FCAS-heavy data subset", result: "FCAS capture +23% ($4.8k → $5.9k) but still 1.7× below PPO on broad surfaces.", tag: "partial" },
+    { fix: "FCAS-weighted action loss (--action-dim-weights)", result: "No effect — there was no higher-FCAS behaviour in the data to amplify.", tag: "negative" },
+    { fix: "Mixed action head (Sigmoid FCAS dims)", result: "Ambiguous: helps OOD (+22% on 2025) but hurts in-distribution full_fcas surfaces.", tag: "mixed" },
+    { fix: "GRPO / full-PPO value-critic fine-tuning", result: "Flat-to-negative. Legacy GRPO champion shown to be a narrow overfit ($8,242 DM → $1,533 standard).", tag: "negative" },
+    { fix: "Forecast tokens (TTM, 48-step prefix)", result: "Negative result: $4,564/ep vs modern v2's $4,991/ep. TTM FCAS forecasts carry ~zero signal (corr 0.01–0.07); implicit context wins.", tag: "negative" }
+  ],
+  autoMode: {
+    labels: ["Hornsdale-class (150 MW)", "Torrens-class (250 MWh)"],
+    ppo:   [56500, 69500],
+    auto:  [142100, 173100],
+    jtsoc: [-139900, -346600]
+  }
+};
+
+/* ===================== helpers ===================== */
+function $(id) { return document.getElementById(id); }
+function fmt$(v) {
+  var sign = v < 0 ? "−$" : "$";
+  return sign + Math.abs(Math.round(v)).toLocaleString("en-US");
+}
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function reduceMotion() {
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/* ===================== theme ===================== */
+var themeBtn = $("themeBtn");
+function applyThemeIcons() {
+  var t = document.documentElement.getAttribute("data-theme");
+  $("iconMoon").style.display = t === "light" ? "" : "none";
+  $("iconSun").style.display = t === "dark" ? "" : "none";
+}
+themeBtn.addEventListener("click", function () {
+  var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("ed-theme", next); } catch (e) {}
+  applyThemeIcons();
+  if (window.__edRebuildCharts) window.__edRebuildCharts();
+});
+applyThemeIcons();
+
+/* ===================== mobile nav ===================== */
+var navToggle = $("navToggle"), navLinks = $("navLinks");
+navToggle.addEventListener("click", function () {
+  var open = navLinks.classList.toggle("open");
+  navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+});
+navLinks.addEventListener("click", function (e) {
+  if (e.target.tagName === "A") navLinks.classList.remove("open");
+});
+
+/* ===================== static tables ===================== */
+(function buildHeadlineTable() {
+  var rows = DATA.headline.map(function (r) {
+    var ratio = (r.dt / r.ppo).toFixed(1);
+    return "<tr>" +
+      "<td>" + r.surface + "</td>" +
+      '<td class="num mono pos">' + fmt$(r.dt) + "</td>" +
+      '<td class="num mono">' + fmt$(r.ppo) + "</td>" +
+      '<td class="num mono">' + ratio + "×</td>" +
+      '<td class="num mono">' + r.diff + " [" + fmt$(r.ciLo) + ", " + fmt$(r.ciHi) + "]</td>" +
+      '<td class="num">' + r.winRate + "</td>" +
+      '<td class="num mono">' + r.p + "</td>" +
+      "</tr>";
+  }).join("");
+  $("headlineTableBody").innerHTML = rows;
+})();
+
+(function buildFailedFixes() {
+  var tagCls = { negative: "tag-flag", partial: "tag-solver", mixed: "tag-neutral" };
+  var rows = DATA.failedFixes.map(function (f, i) {
+    return "<tr><td class=\"mono\">" + (i + 1) + "</td><td>" + f.fix +
+      '</td><td><span class="tag ' + tagCls[f.tag] + '">' + f.tag.toUpperCase() + "</span> " + f.result + "</td></tr>";
+  }).join("");
+  $("failedFixesBody").innerHTML = rows;
+})();
+
+/* ===================== timeline stepper ===================== */
+(function buildTimeline() {
+  var stepsEl = $("timelineSteps"), detailEl = $("timelineDetail");
+  DATA.timeline.forEach(function (t, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "tstep";
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", i === 7 ? "true" : "false");
+    var profitHtml = '<div class="tprofit ' + (t.dm >= 0 ? "pos" : "neg") + '">' + fmt$(t.dm) + "/ep</div>";
+    b.innerHTML = '<div class="tnum">STAGE ' + t.stage + (t.solver ? " · SOLVER" : "") + "</div>" +
+      '<div class="tname">' + t.name + "</div>" + profitHtml;
+    b.addEventListener("click", function () { select(i); });
+    stepsEl.appendChild(b);
+  });
+  function select(i) {
+    var t = DATA.timeline[i];
+    Array.prototype.forEach.call(stepsEl.children, function (el, j) {
+      el.classList.toggle("selected", j === i);
+      el.setAttribute("aria-selected", j === i ? "true" : "false");
+    });
+    var flags = [];
+    if (t.solver) flags.push('<span class="tag tag-solver">SOLVER-IN-THE-LOOP · NOT DIRECTLY COMPARABLE</span>');
+    if (t.stage === 8) flags.push('<span class="tag tag-win">SHIPPED POLICY</span>');
+    if (t.stage === 4) flags.push('<span class="tag tag-flag">LATER SHOWN OVERFIT</span>');
+    detailEl.innerHTML =
+      "<h3>Stage " + t.stage + " — " + t.name + "</h3>" +
+      '<div class="meta"><span><strong style="color:var(--heading)">Arch:</strong> ' + t.arch + "</span>" +
+      "<span><strong style=\"color:var(--heading)\">Data:</strong> " + t.data + "</span>" +
+      '<span><strong style="color:var(--heading)">DM profit:</strong> ' + fmt$(t.dm) + "/ep</span></div>" +
+      (flags.length ? '<div style="margin-bottom:10px">' + flags.join(" ") + "</div>" : "") +
+      "<p>" + t.desc + "</p>";
+  }
+  select(7);
+})();
+
+/* ===================== count-up hero stats ===================== */
+(function initCountUp() {
+  var els = document.querySelectorAll("[data-countup]");
+  if (!els.length) return;
+  function animate(el) {
+    var end = parseFloat(el.getAttribute("data-end"));
+    var dec = parseInt(el.getAttribute("data-decimals") || "0", 10);
+    var suffix = el.getAttribute("data-suffix") || "";
+    if (reduceMotion()) { el.textContent = end.toFixed(dec) + suffix; return; }
+    var start = null, dur = 1200;
+    function tick(ts) {
+      if (!start) start = ts;
+      var prog = Math.min((ts - start) / dur, 1);
+      var eased = 1 - Math.pow(1 - prog, 3);
+      el.textContent = (end * eased).toFixed(dec) + suffix;
+      if (prog < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  if (!("IntersectionObserver" in window)) {
+    Array.prototype.forEach.call(els, animate); return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting) { animate(en.target); io.unobserve(en.target); }
+    });
+  }, { threshold: 0.5 });
+  Array.prototype.forEach.call(els, function (el) { io.observe(el); });
+})();
+
+/* ===================== scroll reveal ===================== */
+(function initReveal() {
+  var els = document.querySelectorAll(".reveal");
+  if (!els.length) return;
+  if (reduceMotion() || !("IntersectionObserver" in window)) {
+    Array.prototype.forEach.call(els, function (el) { el.classList.add("visible"); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting) { en.target.classList.add("visible"); io.unobserve(en.target); }
+    });
+  }, { threshold: 0.06 });
+  Array.prototype.forEach.call(els, function (el) { io.observe(el); });
+})();
+
+/* ===================== active nav highlight ===================== */
+(function initNavSpy() {
+  var ids = ["results", "timeline", "method", "evidence", "artifacts", "limitations"];
+  var links = {};
+  Array.prototype.forEach.call(navLinks.querySelectorAll("a"), function (a) {
+    links[a.getAttribute("href").slice(1)] = a;
+  });
+  if (!("IntersectionObserver" in window)) return;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting && links[en.target.id]) {
+        Array.prototype.forEach.call(navLinks.querySelectorAll("a"), function (a) { a.classList.remove("active"); });
+        links[en.target.id].classList.add("active");
+      }
+    });
+  }, { rootMargin: "-38% 0px -55% 0px" });
+  ids.forEach(function (id) { var s = $(id); if (s) io.observe(s); });
+})();
+
+/* ===================== copy button ===================== */
+(function initCopy() {
+  var btn = $("copyBtn");
+  btn.addEventListener("click", function () {
+    var text = document.querySelector("#reproBlock code").innerText;
+    function done() { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy"; }, 1600); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, done);
+    } else { done(); }
+  });
+})();
+
+/* =====================================================================
+   CHARTS (graceful degradation: guarded behind Chart availability)
+   ===================================================================== */
+var charts = [];
+
+function baseOpts(extra) {
+  var opts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: cssVar("--text-muted"), boxWidth: 14, boxHeight: 14 } },
+      tooltip: {
+        callbacks: {
+          label: function (ctx) {
+            var label = ctx.dataset.label || "";
+            var val = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
+            if (typeof val === "number") return label + ": " + fmt$(val);
+            return label;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: cssVar("--text-muted") }, grid: { display: false } },
+      y: {
+        ticks: {
+          color: cssVar("--text-muted"),
+          callback: function (v) { return (Math.abs(v) >= 1000 ? (v / 1000) + "k" : v); }
+        },
+        grid: { color: cssVar("--grid") }
+      }
+    }
+  };
+  if (extra) {
+    Object.keys(extra).forEach(function (k) { opts[k] = extra[k]; });
+  }
+  return opts;
+}
+
+/* --- error-bar plugin for CI whiskers --- */
+var ciPlugin = {
+  id: "ciWhiskers",
+  afterDatasetsDraw: function (chart) {
+    var cis = chart.$ciBars;
+    if (!cis) return;
+    var ctx = chart.ctx, yScale = chart.scales.y;
+    ctx.save();
+    ctx.strokeStyle = cssVar("--text");
+    ctx.lineWidth = 2;
+    cis.forEach(function (ci) {
+      var bar = chart.getDatasetMeta(ci.ds) && chart.getDatasetMeta(ci.ds).data[ci.i];
+      if (!bar) return;
+      var px = bar.x, yTop = yScale.getPixelForValue(ci.hi), yBot = yScale.getPixelForValue(ci.lo);
+      ctx.beginPath();
+      ctx.moveTo(px, yTop); ctx.lineTo(px, yBot);
+      ctx.moveTo(px - 7, yTop); ctx.lineTo(px + 7, yTop);
+      ctx.moveTo(px - 7, yBot); ctx.lineTo(px + 7, yBot);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+};
+
+function destroyCharts() {
+  charts.forEach(function (c) { try { c.destroy(); } catch (e) {} });
+  charts = [];
+}
+
+function buildCharts() {
+  if (typeof Chart === "undefined") {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-chart-fallback]"), function (el) {
+      el.style.display = "block";
+    });
+    return;
+  }
+  destroyCharts();
+  Chart.register(ciPlugin);
+
+  var cDt = cssVar("--accent"), cPpo = cssVar("--ppo"), cFail = cssVar("--fail"), cSolver = cssVar("--solver");
+
+  /* ---- headline chart ---- */
+  var viewMode = "profit";
+  var showCi = false;
+
+  function renderHeadline() {
+    var labels = DATA.headline.map(function (r) { return r.surface; });
+    var datasets;
+    var opts = baseOpts({
+      plugins: {
+        legend: { labels: { color: cssVar("--text-muted"), boxWidth: 14, boxHeight: 14 } },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              var v = ctx.parsed.y;
+              if (viewMode === "ratio") return ctx.dataset.label + ": " + v.toFixed(2) + "×";
+              return ctx.dataset.label + ": " + fmt$(v);
+            }
+          }
+        }
+      }
+    });
+    if (viewMode === "ratio") {
+      datasets = [{
+        label: "DT ÷ PPO",
+        data: DATA.headline.map(function (r) { return +(r.dt / r.ppo).toFixed(2); }),
+        backgroundColor: cDt, borderRadius: 6
+      }];
+      opts.scales.y.title = { display: true, text: "profit multiple vs PPO", color: cssVar("--text-muted") };
+    } else {
+      datasets = [
+        { label: "Decision Transformer", data: DATA.headline.map(function (r) { return r.dt; }), backgroundColor: cDt, borderRadius: 6 },
+        { label: "PPO (online RL)", data: DATA.headline.map(function (r) { return r.ppo; }), backgroundColor: cPpo, borderRadius: 6 }
+      ];
+    }
+    var chart = new Chart($("headlineChart"), {
+      type: "bar",
+      data: { labels: labels, datasets: datasets },
+      options: opts
+    });
+    if (viewMode === "profit" && showCi) {
+      chart.$ciBars = DATA.headline.map(function (r, i) {
+        return { ds: 0, i: i, lo: r.ppo + r.ciLo, hi: r.ppo + r.ciHi };
+      });
+      chart.draw();
+    }
+    charts.push(chart);
+  }
+  renderHeadline();
+
+  var vp = $("viewProfit"), vr = $("viewRatio"), ciT = $("ciToggle"), ciLeg = $("ciLegend");
+  vp.addEventListener("click", function () {
+    viewMode = "profit"; vp.setAttribute("aria-pressed", "true"); vr.setAttribute("aria-pressed", "false");
+    ciT.disabled = false; rebuild();
+  });
+  vr.addEventListener("click", function () {
+    viewMode = "ratio"; vr.setAttribute("aria-pressed", "true"); vp.setAttribute("aria-pressed", "false");
+    ciT.checked = false; ciT.disabled = true; ciLeg.style.display = "none"; rebuild();
+  });
+  ciT.addEventListener("change", function () {
+    showCi = ciT.checked;
+    ciLeg.style.display = showCi ? "" : "none";
+    rebuild();
+  });
+  function rebuild() { destroyCharts(); renderHeadline(); buildImpact(); buildTimelineChart(); buildAutoMode(); }
+
+  /* ---- impact gate ---- */
+  function buildImpact() {
+    var chart = new Chart($("impactChart"), {
+      type: "bar",
+      data: {
+        labels: DATA.impactGate.map(function (r) { return r.battery; }),
+        datasets: [
+          { label: "Decision Transformer (auto)", data: DATA.impactGate.map(function (r) { return r.dt; }), backgroundColor: cDt, borderRadius: 6 },
+          { label: "PPO (online RL)", data: DATA.impactGate.map(function (r) { return r.ppo; }), backgroundColor: cPpo, borderRadius: 6 }
+        ]
+      },
+      options: baseOpts()
+    });
+    charts.push(chart);
+  }
+  buildImpact();
+
+  /* ---- timeline ---- */
+  function buildTimelineChart() {
+    var colors = DATA.timeline.map(function (t) {
+      if (t.solver) return cSolver;
+      if (t.dm < 0 || t.stage === 4) return cFail;
+      return cDt;
+    });
+    var chart = new Chart($("timelineChart"), {
+      type: "bar",
+      data: {
+        labels: DATA.timeline.map(function (t) { return "S" + t.stage + " · " + t.name.split("—")[0]; }),
+        datasets: [{ label: "DM profit $/ep", data: DATA.timeline.map(function (t) { return t.dm; }), backgroundColor: colors, borderRadius: 6 }]
+      },
+      options: baseOpts({
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) { return fmt$(ctx.parsed.y) + " /ep" + (DATA.timeline[ctx.dataIndex].solver ? "  (solver-in-loop)" : ""); } } }
+        },
+        scales: { x: { ticks: { color: cssVar("--text-muted"), maxRotation: 42, minRotation: 0, font: { size: 10 } }, grid: { display: false } },
+                  y: { ticks: { color: cssVar("--text-muted"), callback: function (v) { return "$" + (v / 1000) + "k"; } }, grid: { color: cssVar("--grid") } } }
+      })
+    });
+    charts.push(chart);
+  }
+  buildTimelineChart();
+
+  /* ---- auto-mode before/after ---- */
+  function buildAutoMode() {
+    var am = DATA.autoMode;
+    var chart = new Chart($("autoModeChart"), {
+      type: "bar",
+      data: {
+        labels: am.labels,
+        datasets: [
+          { label: "PPO", data: am.ppo, backgroundColor: cPpo, borderRadius: 6 },
+          { label: "Shipped auto-mode DT", data: am.auto, backgroundColor: cDt, borderRadius: 6 },
+          { label: "Explicit j_t_soc (fails under impact)", data: am.jtsoc, backgroundColor: cFail, borderRadius: 6 }
+        ]
+      },
+      options: baseOpts()
+    });
+    charts.push(chart);
+  }
+  buildAutoMode();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", function () { buildCharts(); });
+} else {
+  buildCharts();
+}
+window.__edRebuildCharts = function () { buildCharts(); };
+
+})();
+</script>
+</body>
+</html>
