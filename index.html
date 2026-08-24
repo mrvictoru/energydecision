@@ -302,7 +302,7 @@ tfoot td { font-size: 11px; color: var(--graphite); border-top: 2px solid var(--
   font-size: 12.5px; overflow-x: auto; white-space: nowrap;
 }
 .reward-flow b { background: var(--pale); padding: 1px 5px; border: 1px solid var(--ink); }
-.reward-flow s { text-decoration: line-through; color: var(--graphite); }
+.reward-flow .minus { color: #c0392b; font-weight: 600; }
 
 /* ---------- Timeline ---------- */
 .timeline-steps { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px; }
@@ -419,6 +419,7 @@ footer strong { color: var(--ink); }
     <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Toggle navigation">☰</button>
     <div class="nav-links" id="navLinks">
       <a href="#results">Results</a>
+      <a href="#policies">Policies</a>
       <a href="#behavior">Behaviour</a>
       <a href="#timeline">Timeline</a>
       <a href="#method">Method</a>
@@ -548,10 +549,74 @@ footer strong { color: var(--ink); }
     </div>
     <div class="reward-flow" role="img" aria-label="Reward formula: energy arbitrage plus FCAS revenue minus degradation cost minus SOC penalties">
       reward = <b>+ energy arbitrage</b>&nbsp;(E × RRP)&nbsp;&nbsp;<b>+ FCAS revenue</b>&nbsp;(Σ enablement × price)
-      &nbsp;&nbsp;<s>− degradation cost</s>&nbsp;&nbsp;<s>− SOC guard penalty</s>&nbsp;&nbsp;→&nbsp; profit is already net of degradation
+      &nbsp;&nbsp;<span class="minus">− degradation cost</span>&nbsp;&nbsp;<span class="minus">− SOC guard penalty</span>
+      &nbsp;&nbsp;→&nbsp; headline profit is <strong>already net of degradation</strong> — wear is charged, never ignored
     </div>
     <p class="footnote">Degradation is modeled with real-world calendar + cycle aging (Kampker et al. 2025), NMC/LFP chemistry presets,
       and Arrhenius temperature dependence. All evaluation uses 5-minute steps matching the training-data protocol.</p>
+  </div>
+</section>
+
+<!-- ==================== POLICIES ==================== -->
+<section id="policies">
+  <div class="container reveal">
+    <span class="section-kicker">The contenders</span>
+    <h2>Where every policy on the leaderboard comes from</h2>
+    <p class="section-sub">"DT vs PPO vs real life" only means something if you know how each contender was built.
+      Six families are evaluated — two learned online, three learned offline, one that involves no model at all.</p>
+    <div class="env-grid">
+      <div class="env-card" tabindex="0" title="Stable-Baselines3 PPO trained inside the simulator, with Optuna hyperparameter search.">
+        <h3>🤖 PPO <span class="dim-badge">ONLINE RL</span></h3>
+        <ul>
+          <li>Stable-Baselines3 PPO in the same simulator</li>
+          <li>Optuna search: 10 trials over lr, γ, clip, entropy, net arch</li>
+          <li>Up to 4M timesteps, chunked vectorized training</li>
+          <li>Shipped checkpoint: 9-dim full_fcas (γ=0.99, lr=3e-4)</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="The shipped Stage C Decision Transformer: modern v2 backbone distilled from an honest SDP planner, prompted with J_t(soc).">
+        <h3>⚡ Shipped DT <span class="dim-badge">OFFLINE · DISTILLED</span></h3>
+        <ul>
+          <li>Modern v2: 8×768, GQA (12Q/6KV), RMSNorm+QK-norm, SwiGLU</li>
+          <li>Mixed action head (tanh energy / sigmoid FCAS)</li>
+          <li>Trained on 640 honest SDP-teacher episodes — not market logs</li>
+          <li>J_t(soc) prompts via rtg_mode="auto"; no solver at inference</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="Earlier DT generations kept for comparison: behaviour-cloned and GRPO-tuned variants.">
+        <h3>🕰️ Historical DTs <span class="dim-badge">OFFLINE · CLONED</span></h3>
+        <ul>
+          <li>Legacy 8×384 cloned from a 2,425-episode FCAS-rich corpus</li>
+          <li>Modern v2 pretrained on 2,401 realistic-battery episodes</li>
+          <li>GRPO online fine-tunes of both (legacy champion later shown to be a narrow overfit)</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="Real operator baseline: replays actual cleared dispatch of the Dalrymple North BESS.">
+        <h3>🏭 Dispatch replay <span class="dim-badge">NO MODEL</span></h3>
+        <ul>
+          <li>The real Dalrymple North BESS's cleared DISPATCHLOAD actions</li>
+          <li>Replayed as env actions on the identical asset, prices, steps</li>
+          <li>The closest thing to "real life" available without hardware</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="Hand-coded heuristics, zero learning.">
+        <h3>📏 Rule baselines <span class="dim-badge">HEURISTIC</span></h3>
+        <ul>
+          <li>rule: charge below ~$30, discharge above ~$120, SOC guardrails</li>
+          <li>fcas_rule adds FCAS bids when price exceeds data-driven p80 thresholds</li>
+          <li>No training — thresholds computed from the env's own data at init</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="Dynamic-programming planners: the honest teacher behind the shipped DT, plus the clairvoyant ceiling.">
+        <h3>🧮 Planners <span class="dim-badge">TEACHER / CEILING</span></h3>
+        <ul>
+          <li>SDP/MRDP: stochastic DP against seasonal forecasts — the honest teacher distilled into the shipped DT</li>
+          <li>Oracle LP: perfect-foresight energy+FCAS co-optimizer; revenue ceiling, degradation-blind, not deployable</li>
+        </ul>
+      </div>
+    </div>
+    <p class="footnote">Every policy is evaluated through the same harness (scripts/autoresearch_evaluator.py): identical scenarios,
+      asset sizing, 5-minute protocol, degradation model, and metrics — with non-DT rollouts cached for exact reproducibility.</p>
   </div>
 </section>
 
@@ -1131,7 +1196,7 @@ navLinks.addEventListener("click", function (e) {
 
 /* ===================== active nav highlight ===================== */
 (function initNavSpy() {
-  var ids = ["results", "behavior", "timeline", "method", "evidence", "artifacts", "limitations"];
+  var ids = ["results", "policies", "behavior", "timeline", "method", "evidence", "artifacts", "limitations"];
   var links = {};
   Array.prototype.forEach.call(navLinks.querySelectorAll("a"), function (a) {
     links[a.getAttribute("href").slice(1)] = a;
