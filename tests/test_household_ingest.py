@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from household_ingest import (  # noqa: E402
+    convert_watts_to_kilo,
     detect_column_map,
     ingest_file,
     load_csv,
@@ -158,3 +159,42 @@ def test_load_csv_applies_column_map(tmp_path):
     _write_week_csv(p, portal_names=True)
     df = load_csv(p, column_map={"Timestamp": "Date Time", "SolarGen": "Solar (kW)", "HouseLoad": "Consumption (kW)"})
     assert {"Timestamp", "SolarGen", "HouseLoad"}.issubset(df.columns)
+
+
+def test_sma_ennexos_semicolon_decimal_comma_watts(tmp_path):
+    """SMA/ennexos exports: ';' separator, decimal commas, power in W."""
+    import datetime as dt
+
+    base = dt.datetime(2023, 6, 1)
+    n = 20
+    times = [(base + dt.timedelta(minutes=5 * i)).isoformat() for i in range(n)]
+    lines = ["Time;PV-Generator (W);Consumption (W)"]
+    lines += [f"{t};2500,5;1100,3" for t in times]
+    p = tmp_path / "sma_week.csv"
+    p.write_text("\n".join(lines), encoding="utf-8")
+
+    colmap = {"Timestamp": "Time", "SolarGen": "PV-Generator (W)", "HouseLoad": "Consumption (W)"}
+    df = load_csv(p, column_map=colmap, decimal_comma=True)
+    assert df["SolarGen"].dtype.is_numeric()
+    assert abs(df["SolarGen"][0] - 2500.5) < 1e-6
+
+    converted = convert_watts_to_kilo(df, ["SolarGen", "HouseLoad"])
+    assert abs(converted["SolarGen"][0] - 2.5005) < 1e-6
+    assert abs(converted["HouseLoad"][0] - 1.1003) < 1e-6
+
+    out_path, report = ingest_file(
+        p, tmp_path / "norm", column_map=colmap, decimal_comma=True, watts_to_kilo=True
+    )
+    got = pl.read_parquet(out_path)
+    assert abs(got["SolarGen"][0] - 2.5005) < 1e-6
+    assert report.rows_out == n
+
+
+def test_sniff_separator_semicolon(tmp_path):
+    from household_ingest import _sniff_separator
+    p = tmp_path / "s.csv"
+    p.write_text("a;b;c\n1;2;3\n", encoding="utf-8")
+    assert _sniff_separator(p) == ";"
+    p2 = tmp_path / "c.csv"
+    p2.write_text("a,b,c\n1,2,3\n", encoding="utf-8")
+    assert _sniff_separator(p2) == ","

@@ -47,6 +47,10 @@ def main(argv=None) -> int:
                    help="Flat import price $/kWh used when the portal has no tariff channel")
     p.add_argument("--tariff-export", type=float, default=0.05,
                    help="Flat export/FiT price $/kWh used when the portal has no tariff channel")
+    p.add_argument("--decimal-comma", action="store_true", default=False,
+                   help="CSV numerics use decimal commas (European locale, e.g. SMA/ennexos exports)")
+    p.add_argument("--watts-to-kilo", action="store_true", default=False,
+                   help="Portal reports power in W (typical for SMA/ennexos); convert to kW")
     args = p.parse_args(argv)
 
     input_path = Path(args.input)
@@ -74,6 +78,8 @@ def main(argv=None) -> int:
                 expected_resolution_minutes=args.resolution_minutes,
                 tariff_import=args.tariff_import,
                 tariff_export=args.tariff_export,
+                decimal_comma=args.decimal_comma,
+                watts_to_kilo=args.watts_to_kilo,
             )
             reports.append(report)
             status = "OK" if not report.warnings else f"OK ({len(report.warnings)} warnings)"

@@ -90,15 +90,56 @@ def detect_column_map(columns: List[str]) -> Dict[str, str]:
     return mapping
 
 
-def load_csv(path: Path, column_map: Optional[Dict[str, str]] = None) -> pl.DataFrame:
-    """Load one portal CSV and rename mapped columns to canonical names."""
-    df = pl.read_csv(path, infer_schema_length=10_000)
+def _sniff_separator(path: Path) -> str:
+    """Detect ',' vs ';' delimiters (SMA/ennexos exports use ';')."""
+    import csv as _csv
+    with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+        sample = "".join(f.readline() for _ in range(5))
+    try:
+        return _csv.Sniffer().sniff(sample, delimiters=",;\t").delimiter
+    except _csv.Error:
+        return ","
+
+
+def load_csv(
+    path: Path,
+    column_map: Optional[Dict[str, str]] = None,
+    decimal_comma: bool = False,
+) -> pl.DataFrame:
+    """Load one portal CSV and rename mapped columns to canonical names.
+
+    Handles SMA/ennexos conventions when present: ';' separators (sniffed),
+    BOM, and decimal commas (``decimal_comma=True`` converts '2,5' -> 2.5).
+    """
+    sep = _sniff_separator(path)
+    df = pl.read_csv(path, separator=sep, infer_schema_length=10_000)
+    # decimal-comma locales: numerics arrive as strings like '2,5'
+    if decimal_comma:
+        for col in df.columns:
+            if df[col].dtype == pl.Utf8:
+                stripped = df[col].str.strip_chars()
+                if stripped.str.contains(",").any() and stripped.str.replace_all(",", ".", literal=True).str.contains(r"^-?\d+(\.\d+)?$").any():
+                    df = df.with_columns(
+                        stripped.str.replace_all(",", ".", literal=True)
+                        .str.replace_all("\u00a0", "", literal=False)
+                        .cast(pl.Float64, strict=False)
+                        .alias(col)
+                    )
     if column_map is None:
         column_map = detect_column_map(df.columns)
     # invert: portal-name -> canonical-name rename
     rename = {portal: canon for canon, portal in column_map.items() if portal in df.columns}
     df = df.rename(rename)
     return df
+
+
+def convert_watts_to_kilo(df: pl.DataFrame, columns: List[str]) -> pl.DataFrame:
+    """SMA portals report power in W; convert selected channels to kW."""
+    renames = {}
+    for c in columns:
+        if c in df.columns and df[c].dtype.is_numeric():
+            renames[c] = (pl.col(c) / 1000.0).alias(c)
+    return df.with_columns(list(renames.values())) if renames else df
 
 
 def validate_and_normalize(
@@ -206,10 +247,14 @@ def ingest_file(
     expected_resolution_minutes: int = 5,
     tariff_import: float = 0.30,
     tariff_export: float = 0.05,
+    decimal_comma: bool = False,
+    watts_to_kilo: bool = False,
 ) -> tuple[Path, IngestReport]:
     """Ingest one raw portal CSV -> normalized parquet + report."""
     digest = sha256_of(path)
-    raw = load_csv(path, column_map=column_map)
+    raw = load_csv(path, column_map=column_map, decimal_comma=decimal_comma)
+    if watts_to_kilo:
+        raw = convert_watts_to_kilo(raw, ["SolarGen", "HouseLoad", "BatteryPower"])
     norm, report = validate_and_normalize(
         raw,
         source_file=path.name,
