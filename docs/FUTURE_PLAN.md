@@ -98,6 +98,48 @@
 
 ---
 
+## 6b. Household Track — Modern Real-Data Rebuild (Priority 2, parallel with AEMO)
+
+> **Motivation:** the Ausgrid benchmark (2010–2013, 300 homes, half-hourly) predates
+> the collapse of Australian feed-in tariffs (~20¢ → ~5¢/kWh) and the rise of small
+> home batteries. The economics are arguably obsolete. We have access to a real
+> household (solar + small home battery) telemetry from **2019 onward**, downloadable
+> weekly as high-resolution CSVs from an online portal.
+
+### Why this is easier than AEMO
+
+| AEMO element | Household equivalent |
+|---|---|
+| FCAS co-optimization (9-D coupled action) | **Gone** — 1D dispatch action, no headroom coupling |
+| Price forecasting / SDP MC scenarios | **Trivial** — ToU tariffs are deterministic schedules; uncertainty shifts to solar/load |
+| Dalrymple dispatch replay | **The household's actual battery operation** — real ground truth for the replay-gap study |
+| Planner distillation + J_t(soc) + CI discipline | Ports directly — `src/sdp_algorithm.py` / MRDP already support the household env |
+
+### Research questions
+
+1. **Does the Ausgrid-era result survive a decade?** Retrain/evaluate old baselines on 2019+ data under modern tariff economics. Expectation: the old DT's learned behaviour does not transfer — a motivating distribution-shift finding.
+2. **How suboptimal is real home-battery operation?** Replay the household's actual battery actions vs optimized policies on identical windows → "real households leave $X/year on the table" (household analog of the Dalrymple-North comparison, with ground truth).
+3. **Does planner distillation transfer across scales?** Port the full Stage C recipe: SDP-teacher trajectories → standalone DT → J_t(soc)-style cost-to-go prompting (exact here, since ToU is deterministic). Compare against cloning-era DT on the same data.
+4. **Degradation realism at home scale.** Small LFP battery cycled daily; high-resolution data enables sharper rainflow counting and calendar+cycle aging (`RealWorldBESSDegradationModel`) — relatively more important than in grid-scale arbitrage.
+
+### Phased checklist
+
+| Phase | Task | Notes |
+|---|---|---|
+| **H0** | **Data pipeline**: ingestion script normalizing portal CSVs → `transform_polars_df` schema (`Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, Time`); validate gaps / DST transitions / meter resets / resolution changes; merge script + manifest for ~52 files/year | Unglamorous, critical first step |
+| **H0** | **Privacy guardrails**: anonymize identifiers; raw data stays local-only (`.gitignore`); consent documented; only derived stats or one synthetic household published | Non-negotiable before any commit of data |
+| **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on modern data; define surfaces — train 2019–2022, OOD 2023–2025; seasonal splits; tariff-regime splits (e.g., if plan changed over time) | Establishes whether old results hold |
+| **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → smoke/standard/comprehensive eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
+| **H3** | **Replay-gap analysis**: quantify actual vs optimal operation per year; decompose into timing errors vs capacity misallocation | The headline result unique to this track |
+| **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through (e.g. Amber-style plans) — same hardware, different tariffs → policy-relevant economics | Reuses everything built in H1–H2 |
+
+### Quick wins
+
+- QH1: Ingestion script skeleton (`scripts/ingest_household_portal_csv.py`) + `.gitignore` entry for `data/household/real/`
+- QH2: One-week pilot: normalize a single file end-to-end into an env episode and render a plot
+
+---
+
 ## 7. Deprioritized / On Hold (with rationale)
 
 | ID | Task | Rationale |

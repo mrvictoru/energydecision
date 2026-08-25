@@ -24,6 +24,7 @@ Use the household track if you want residential PV + battery control under house
 - Workflow: [docs/household/workflow.md](docs/household/workflow.md)
 - Environment reference: [docs/household/environment.md](docs/household/environment.md)
 - Degradation reference: [docs/household/degradation.md](docs/household/degradation.md)
+- Modern-data rebuild plan: [docs/FUTURE_PLAN.md](docs/FUTURE_PLAN.md) §6b — real 2019+ telemetry, planner distillation, replay-gap study
 
 ### AEMO / Grid-Scale
 
@@ -69,6 +70,7 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [ ] **Impact-aware J_t(soc):** Recompute cost-to-go with post-impact realized prices; validate on grid-scale batteries under merit-order.
 *   [ ] **Multi-agent NEM extension:** Multi-BESS coordination under merit-order impact (PettingZoo integration).
 *   [ ] **Paper pipeline:** Benchmark paper (Datasets & Benchmarks track) + Method paper (planner distillation + impact gate).
+*   [ ] **Household modern-data rebuild (H0–H3):** Ingest real 2019+ household telemetry (solar + home battery, privacy-gated); re-establish benchmark under modern tariff economics; port the AEMO playbook (SDP distillation + cost-to-go prompting); real-battery replay-gap analysis. See `docs/FUTURE_PLAN.md` §6b.
 
 ## Quick Setup
 
