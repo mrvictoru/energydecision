@@ -25,17 +25,9 @@ asserts no metering values leak into it.
 
 ## Workflow
 
-1. Download weekly CSVs from the portal into `data/household/real/raw/` using the
-   naming convention `<portal>_<start-date>.csv` (e.g. `portal_2023-06-01.csv`).
-2. Normalize each batch:
-   ```bash
-   python3 scripts/ingest_household_portal_csv.py \
-     --input "data/household/real/raw/*.csv" \
-     --resolution-minutes 5
-   ```
-   Auto-detection maps common portal column names; pass `--column-map '{"canonical": "Portal Name", ...}'`
-   if detection fails. Review every warning — gaps/DST anomalies/negative values are
-   reported, never silently fixed or fabricated.
+1. Download weekly/daily CSVs from the portal per the acquisition section above.
+2. Normalize each batch (command shown above), reviewing every warning — gaps,
+   DST anomalies and negative values are reported, never silently fixed or fabricated.
 3. The manifest updates incrementally; commit it so ingested batches are traceable
    by checksum without exposing any telemetry.
 4. Downstream experiments read only from `data/household/real/normalized/`.
@@ -49,28 +41,30 @@ asserts no metering values leak into it.
 - Tariff history: record which import/export plans were active when, since H1
   surface splits may need tariff-regime boundaries.
 
-## Automated fetch (Playwright — preferred over manual download)
+## Data acquisition: manual download (current approach)
 
-The portal's energy-balance view exposes an API endpoint at
-`https://uiapi.sunnyportal.com/api/v1/measurements/{plantId}/energybalance?dateBeginLocal=...&interval=...`,
-but the Authorization Bearer token visible in DevTools is the Keycloak **account**
-token (`aud=account`, ~15 min lifetime) — it is **not** the token uiapi validates.
-uiapi checks an internal session cookie set after the OIDC SSO callback.
-Manually replaying both pieces is brittle.
+The portal's energy-balance view exposes an internal API
+(`https://uiapi.sunnyportal.com/api/v1/measurements/{plantId}/energybalance?dateBeginLocal=...&interval=...`),
+but its auth is a Keycloak OIDC flow with short-lived tokens (~15 min) and a
+session cookie set after the SSO callback — automating it requires browser
+automation (Playwright), which was explored and **deferred** (see git history on
+`feature/household-modern-data` if ever revisited). Manual download it is.
 
-Use `scripts/fetch_ennexos_playwright.py` to drive a real browser — it handles
-the full SSO flow, including the silent token exchange uiapi depends on:
+**Manual workflow:**
 
-```
-pip install playwright && python -m playwright install chromium
-
-python3 scripts/fetch_ennexos_playwright.py --plant-id 10574124 \
-    --start 2026-08-20 --end 2026-08-20 --headed --probe   # diagnose first
-python3 scripts/fetch_ennexos_playwright.py --plant-id 10574124 \
-    --start 2019-01-01 --end 2026-08-01                    # full range
-```
-
-The first run uses `--headed` so you can authenticate once; subsequent runs
-reuse the browser profile. Polling for the daily 5-min resolution requires
-identifying the correct `interval` value (likely `Minute5` or `QuarterHour` —
-probe to confirm) before any bulk loop.
+1. Download from the portal UI. Note the two granularities:
+   - **Daily batch** → 5-minute resolution (preferred; fetch these when possible)
+   - **Weekly batch** → 15-minute resolution (fallback)
+2. Save into `data/household/real/raw/` as `<portal>_<start-date>_<res>.csv`
+   (e.g. `ennexos_2023-06-01_5min.csv`, `ennexos_2023-06-01_15min.csv`) — the
+   resolution suffix matters because gap detection needs the expected step size.
+3. Normalize each batch, passing the matching resolution:
+   ```bash
+   python3 scripts/ingest_household_portal_csv.py \
+     --input "data/household/real/raw/*_5min.csv" --resolution-minutes 5 \
+     --decimal-comma --watts-to-kilo   # SMA/ennexos conventions; drop if not applicable
+   python3 scripts/ingest_household_portal_csv.py \
+     --input "data/household/real/raw/*_15min.csv" --resolution-minutes 15 \
+     --decimal-comma --watts-to-kilo
+   ```
+4. Commit the updated `household_ingest_manifest.json` (checksums + stats only).
