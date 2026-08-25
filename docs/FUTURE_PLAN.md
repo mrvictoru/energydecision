@@ -135,8 +135,8 @@
 
 ### Quick wins
 
-- QH1: Ingestion script skeleton (`scripts/ingest_household_portal_csv.py`) + `.gitignore` entry for `data/household/real/`
-- QH2: One-week pilot: normalize a single file end-to-end into an env episode and render a plot
+- ✅ QH1: Ingestion script (`scripts/ingest_household_portal_csv.py` + `src/household_ingest.py`) — normalization to env schema, gap/DST/duplicate/negative-value validation, sha256 manifest (share-safe, privacy-tested). PR `feature/household-modern-data`.
+- ⬜ QH2: One-week pilot — blocked on first real portal download; will finalize column hints + units (kW vs kWh) against a real sample (see `docs/household/real_data_protocol.md` "Known format unknowns").
 
 ---
 
