@@ -62,6 +62,13 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [ ] **Long-context DT experiments (de-prioritized):** Study larger `context_len` and RoPE for seasonal/weekly structure.
 *   [ ] **Multi-agent extension:** Microgrid setting with multiple households and coordination.
 *   [x] **Statistical confidence on AEMO headlines:** Bootstrap confidence intervals and paired Wilcoxon signed-rank tests applied to the market-impact headline tables (n=9 cells, §8.2.9.1) and to the per-surface profit headlines — dispatch-matched ($10,138; n=6 episodes, Jul–Dec 2024) and standard ($4,630; n=15, Sep–Nov 2024) — via `scripts/phase3_bootstrap_over_scenarios.py`, `phase3_paired_wilcoxon.py`, and the evaluator's built-in bootstrap.
+*   [ ] **Full_fcas broad-surface evaluation:** Run expanded surface with 9-dim `full_fcas` actions (currently uses 3-dim `multi_market`); closes disclosed protocol asymmetry.
+*   [ ] **Sim-to-real settlement backtest:** Validate simulator revenue against AEMO settlement data for Dalrymple North; produce calibration curve.
+*   [ ] **Safety-constrained policies:** Constrained policy with degradation budget, SOC guardrails, FCAS enablement limits (CMDP formulation).
+*   [ ] **Offline-Q baseline (IQL/CQL):** Implement and compare to planner-distillation on the same FCAS-rich corpus + impact surface.
+*   [ ] **Impact-aware J_t(soc):** Recompute cost-to-go with post-impact realized prices; validate on grid-scale batteries under merit-order.
+*   [ ] **Multi-agent NEM extension:** Multi-BESS coordination under merit-order impact (PettingZoo integration).
+*   [ ] **Paper pipeline:** Benchmark paper (Datasets & Benchmarks track) + Method paper (planner distillation + impact gate).
 
 ## Quick Setup
 

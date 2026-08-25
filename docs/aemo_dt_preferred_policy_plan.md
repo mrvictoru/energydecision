@@ -1,16 +1,11 @@
-# AEMO DT as Preferred Policy — Plan, Checklist & Session Diary
+# AEMO DT as Preferred Policy — Plan, Checklist & Session Diary — **ARCHIVED**
 
-> **STATUS:** Stages A–C are DONE and the shipped recommendation is now settled:
+> **STATUS:** Stages A–C are **DONE** and the shipped recommendation is now settled:
 > use **`rtg_mode="auto"`**. It reproduces the `j_t_soc` wins on **all 4 identity
 > surfaces** exactly (standard 4.9×, dispatch 1.57×, 2025 OOD 3.98×, expanded 1.78×)
-> while preserving the **impact-gate pass** on large batteries by falling back to
-> constant RTG under merit-order impact. **OPEN ISSUE:** explicit `j_t_soc`
-> inference still fails the impact gate on hornsdale/torrens
-> (price-taking J_t(soc) table → self-suppressing over-dispatch), so it remains
-> an identity-only mode rather than the shipped default.
-> Branch: `feature/dt-preferred-aemo-policy`.
-> This file is the living plan + checklist + session diary. Keep every completed
-> checkbox ticked and append dated diary entries at the bottom as work is done.
+> while preserving the **impact-gate pass** on every grid-scale battery by falling back to
+> constant RTG under merit-order impact. This file is **ARCHIVED** — the final session
+> was 2026-08-23. The forward plan is now in **`docs/FUTURE_PLAN.md`**.
 
 ## 1. Goal
 
