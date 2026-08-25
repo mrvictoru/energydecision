@@ -25,7 +25,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from household_ingest import ingest_file, update_manifest  # noqa: E402
+from household_ingest import (  # noqa: E402
+    ingest_file,
+    ingest_sma_file,
+    is_sma_energy_balance_csv,
+    update_manifest,
+)
 
 DEFAULT_REAL_DIR = Path("data/household/real")
 
@@ -72,15 +77,22 @@ def main(argv=None) -> int:
     csv_files = [Path(f) for f in csv_files]
     for f in csv_files:
         try:
-            out_path, report = ingest_file(
-                f, output_dir,
-                column_map=column_map,
-                expected_resolution_minutes=args.resolution_minutes,
-                tariff_import=args.tariff_import,
-                tariff_export=args.tariff_export,
-                decimal_comma=args.decimal_comma,
-                watts_to_kilo=args.watts_to_kilo,
-            )
+            if is_sma_energy_balance_csv(f):
+                out_path, report = ingest_sma_file(
+                    f, output_dir,
+                    tariff_import=args.tariff_import,
+                    tariff_export=args.tariff_export,
+                )
+            else:
+                out_path, report = ingest_file(
+                    f, output_dir,
+                    column_map=column_map,
+                    expected_resolution_minutes=args.resolution_minutes,
+                    tariff_import=args.tariff_import,
+                    tariff_export=args.tariff_export,
+                    decimal_comma=args.decimal_comma,
+                    watts_to_kilo=args.watts_to_kilo,
+                )
             reports.append(report)
             status = "OK" if not report.warnings else f"OK ({len(report.warnings)} warnings)"
             print(f"[{status}] {f.name} -> {out_path} ({report.rows_out} rows)")

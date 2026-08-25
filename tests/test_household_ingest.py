@@ -198,3 +198,83 @@ def test_sniff_separator_semicolon(tmp_path):
     p2 = tmp_path / "c.csv"
     p2.write_text("a,b,c\n1,2,3\n", encoding="utf-8")
     assert _sniff_separator(p2) == ","
+
+
+SMA_CSV = '''sep=;
+"Version";"4";;;;
+"System ID";"10574124";;;;
+"Time period";"Direct consumption [W]";"Discharge battery [W]";"Grid-supplied power [W]";"Charge battery [W]";"Grid feed-in [W]";"Battery state of charge [%]";"Total consumption [W]";"Total generation [W]"
+"12.00 AM";"500";"0";"700";"0";"0";"10";"1,200";"500"
+"12.05 AM";"600";"200";"800";"300";"0";"15";"1,200";"600"
+"12.10 AM";"700";"0";"0";"400";"900";"20";"700";"2,000"
+"01.30 PM";"2,500";"0";"0";"0";"1,000";"80";"2,500";"3,500"
+'''
+
+
+def test_is_sma_energy_balance_detection(tmp_path):
+    from household_ingest import is_sma_energy_balance_csv
+    p = tmp_path / "sma.csv"
+    p.write_text(SMA_CSV, encoding="utf-8")
+    assert is_sma_energy_balance_csv(p)
+    plain = tmp_path / "plain.csv"
+    _write_week_csv(plain)
+    assert not is_sma_energy_balance_csv(plain)
+
+
+def test_sma_energy_balance_full_pipeline(tmp_path):
+    from household_ingest import ingest_sma_file
+    p = tmp_path / "Energy balance - Day - Some System Name - 2026-05-21.csv"
+    p.write_text(SMA_CSV, encoding="utf-8")
+    out_path, report = ingest_sma_file(p, tmp_path / "norm")
+    df = pl.read_parquet(out_path)
+
+    # date + owner name anonymized in the manifest identity
+    assert report.source_file == "sma_2026-05-21"
+
+    # 12-h dotted clock parsed correctly (12.00 AM -> 00:00, 12.05 -> 00:05,
+    # 01.30 PM -> 13:30); timestamps carry the file date
+    ts = df["Timestamp"].dt.to_string("%Y-%m-%dT%H:%M").to_list()
+    assert ts[0] == "2026-05-21T00:00"
+    assert ts[1] == "2026-05-21T00:05"
+    assert ts[2] == "2026-05-21T00:10"
+    assert ts[3] == "2026-05-21T13:30"
+
+    # W -> kW with thousands commas stripped
+    assert abs(df["HouseLoad"][0] - 1.2) < 1e-9
+    assert abs(df["SolarGen"][3] - 3.5) < 1e-9
+
+    # net battery power = charge - discharge (+charge convention)
+    assert abs(df["BatteryPower"][1] - (0.3 - 0.2)) < 1e-9
+    assert abs(df["BatteryPower"][0]) < 1e-12
+
+    # SOC percent -> fraction 0..1
+    assert abs(df["BatterySOC"][3] - 0.8) < 1e-9
+
+    assert report.rows_out == 4
+
+
+SMA_CSV_KW = SMA_CSV.replace("[W]", "[kW]").replace(
+    '"12.00 AM";"500";"0";"700";"0";"0";"10";"1,200";"500"',
+    '"12.00 AM";"0.50";"0.00";"0.70";"0.00";"0.00";"10";"1.20";"0.50"'
+)
+
+
+def test_sma_energy_balance_kilowatt_variant(tmp_path):
+    """Newer portal exports use [kW] columns with decimal-point values."""
+    from household_ingest import ingest_sma_file
+    p = tmp_path / "Energy balance - Day - Name - 2026-05-21.csv"
+    p.write_text(SMA_CSV_KW, encoding="utf-8")
+    out_path, report = ingest_sma_file(p, tmp_path / "norm")
+    df = pl.read_parquet(out_path)
+    # values already in kW: no /1000 applied
+    assert abs(df["HouseLoad"][0] - 1.2) < 1e-9
+    assert abs(df["SolarGen"][0] - 0.5) < 1e-9
+    assert report.rows_out == 4
+
+
+def test_sma_energy_balance_requires_date_in_filename(tmp_path):
+    from household_ingest import ingest_sma_file
+    p = tmp_path / "no-date-here.csv"
+    p.write_text(SMA_CSV, encoding="utf-8")
+    with pytest.raises(ValueError, match="Cannot derive date"):
+        ingest_sma_file(p, tmp_path / "norm")

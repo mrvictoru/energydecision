@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 from dataclasses import dataclass, field, asdict
+import datetime as dt_
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -140,6 +142,159 @@ def convert_watts_to_kilo(df: pl.DataFrame, columns: List[str]) -> pl.DataFrame:
         if c in df.columns and df[c].dtype.is_numeric():
             renames[c] = (pl.col(c) / 1000.0).alias(c)
     return df.with_columns(list(renames.values())) if renames else df
+
+
+# ---------------------------------------------------------------------------
+# SMA ennexos "Energy balance - Day" exports
+# ---------------------------------------------------------------------------
+# Format (verified against real exports):
+#   line 1:  sep=;
+#   lines 2..k: metadata ("Version", "System ID", ...) — skipped
+#   header row begins with "Time period"
+#   data rows: "12.05 AM";"0";"1,200";...  (12-h dotted clock, no date;
+#   date must come from the filename), powers in W with thousands commas,
+#   battery SOC in percent.
+
+
+def _parse_sma_time(t: str) -> dt_.time:
+    """'12.05 AM' -> 00:05, '12.05 PM' -> 12:05, '01.30 PM' -> 13:30."""
+    normalized = t.strip().replace(".", ":")
+    return dt_.datetime.strptime(normalized, "%I:%M %p").time()
+
+
+def is_sma_energy_balance_csv(path: Path) -> bool:
+    """Detect the SMA 'Energy balance - Day' export format ([W] or [kW] variants)."""
+    try:
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+            head = f.read(4096)
+    except OSError:
+        return False
+    return '"Time period"' in head and ("[W]" in head or "[kW]" in head)
+
+
+def _sma_header_index(header: List[str], base: str) -> Optional[int]:
+    """Find e.g. 'Total consumption' as 'Total consumption [W]' or 'Total consumption [kW]'."""
+    for i, h in enumerate(header):
+        if h.strip() == base or re.match(rf"^{re.escape(base)}\s*\[(k?)W\]$", h.strip()):
+            return i
+    return None
+
+
+def load_sma_energy_balance_csv(path: Path, date_iso: str,
+                                decimal_comma: bool = True) -> pl.DataFrame:
+    """
+    Parse one SMA energy-balance daily export into canonical channels:
+
+      HouseLoad   <- "Total consumption [W]"       (kW)
+      SolarGen    <- "Total generation [W]"        (kW)
+      BatteryPower<- "Charge battery [W]" - "Discharge battery [W]"  (net, kW, +charge)
+      BatterySOC  <- "Battery state of charge [%]" (fraction 0..1)
+    """
+    import csv as _csv
+
+    rows_started = False
+    header: List[str] = []
+    records: List[List[str]] = []
+    with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+        # first line may be a 'sep=;' pragma
+        lines = f.read().splitlines()
+    for line in lines:
+        if line.startswith("sep="):
+            continue
+        if not rows_started:
+            if line.startswith('"Time period"'):
+                header = next(_csv.reader([line], delimiter=";", quotechar='"'))
+                rows_started = True
+            continue  # metadata preamble
+        records.append(next(_csv.reader([line], delimiter=";", quotechar='"')))
+    if not rows_started:
+        raise ValueError(f"No 'Time period' header found in {path.name}")
+
+    def col(base: str) -> List[str]:
+        idx = _sma_header_index(header, base)
+        if idx is None:
+            raise ValueError(f"Missing SMA column '{base}' in {path.name}")
+        return [r[idx] if len(r) > idx else "" for r in records]
+
+    def to_float(cell: str) -> float:
+        v = cell.strip().replace(",", "") if decimal_comma else cell.strip()
+        try:
+            return float(v)
+        except ValueError:
+            return float("nan")
+
+    day = dt_.date.fromisoformat(date_iso)
+
+    def to_timestamp(t: str) -> str:
+        tod = _parse_sma_time(t)
+        # SMA exports midnight as "12.00 AM"; a row showing 00:xx on the same
+        # calendar day is unambiguous because each file covers exactly one day.
+        return f"{day.isoformat()}T{tod.strftime('%H:%M')}"
+
+    timestamps = [to_timestamp(t) for t in col("Time period")]
+
+    def channel_scaled(base: str) -> List[float]:
+        """Channel values scaled to kW regardless of [W]/[kW] header unit."""
+        idx = _sma_header_index(header, base)
+        scale = 1.0 / 1000.0 if (idx is not None and "[W]" in header[idx]) else 1.0
+        return [v * scale if v == v else None for v in (to_float(c) for c in col(base))]
+
+    total_cons = channel_scaled("Total consumption")
+    total_gen = channel_scaled("Total generation")
+    charge = channel_scaled("Charge battery")
+    discharge = channel_scaled("Discharge battery")
+
+    df = pl.DataFrame({
+        "Timestamp": timestamps,
+        "HouseLoad": total_cons,
+        "SolarGen": total_gen,
+        "BatteryPower": [
+            ((c - dch) if (c is not None and dch is not None) else None)
+            for c, dch in zip(charge, discharge)
+        ],
+        "BatterySOC": [
+            (to_float(c) * 0.01 if to_float(c) == to_float(c) else None)
+            for c in col("Battery state of charge [%]")
+        ],
+    })
+    return df
+
+
+def ingest_sma_file(
+    path: Path,
+    output_dir: Path,
+    date_iso: Optional[str] = None,
+    tariff_import: float = 0.30,
+    tariff_export: float = 0.05,
+) -> tuple[Path, IngestReport]:
+    """
+    Ingest one SMA 'Energy balance - Day' CSV. The date is taken from the
+    trailing YYYY-MM-DD in the filename (which also keeps owner/system names
+    OUT of the shareable manifest — source_file is recorded as sma_<date>).
+    """
+    if date_iso is None:
+        matches = re.findall(r"(\d{4}-\d{2}-\d{2})", path.stem)
+        if not matches:
+            raise ValueError(
+                f"Cannot derive date from filename '{path.name}'; "
+                "expected a trailing YYYY-MM-DD"
+            )
+        date_iso = matches[-1]
+
+    digest = sha256_of(path)
+    df = load_sma_energy_balance_csv(path, date_iso=date_iso)
+    norm, report = validate_and_normalize(
+        df,
+        source_file=f"sma_{date_iso}",  # anonymized: never record owner/system names
+        source_sha256=digest,
+        expected_resolution_minutes=5,
+        tariff_import=tariff_import,
+        tariff_export=tariff_export,
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"sma_{date_iso}_normalized.parquet"
+    norm.write_parquet(out_path)
+    return out_path, report
 
 
 def validate_and_normalize(
