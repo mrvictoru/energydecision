@@ -278,3 +278,71 @@ def test_sma_energy_balance_requires_date_in_filename(tmp_path):
     p.write_text(SMA_CSV, encoding="utf-8")
     with pytest.raises(ValueError, match="Cannot derive date"):
         ingest_sma_file(p, tmp_path / "norm")
+
+
+def _write_norm_day(tmp_path, date_iso, load_kw=2.0, solar_kw=0.0):
+    import datetime as dt
+    base = dt.datetime.fromisoformat(date_iso)
+    n = 288
+    df = pl.DataFrame({
+        "Timestamp": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+        "HouseLoad": [load_kw] * n,
+        "SolarGen": [solar_kw] * n,
+        "BatteryPower": [0.0] * n,
+        "BatterySOC": [0.5] * n,
+        "ImportEnergyPrice": [0.3] * n,
+        "ExportEnergyPrice": [0.05] * n,
+        "Time": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+    })
+    df.write_parquet(tmp_path / f"sma_{date_iso}_normalized.parquet")
+
+
+def test_build_year_dataset_merges_and_converts(tmp_path):
+    from household_ingest import build_year_dataset, env_view
+    d = tmp_path / "normalized"
+    d.mkdir()
+    _write_norm_day(d, "2026-05-20", load_kw=2.0)
+    _write_norm_day(d, "2026-05-21", load_kw=4.0)
+
+    full = build_year_dataset(d)
+    assert full.height == 576  # 2 days x 288
+
+    # kW -> kWh conversion: 2.0 kW over 5 min = 2.0 * 5/60 kWh
+    first = full.filter(pl.col("Timestamp") == pl.datetime(2026, 5, 20, 0, 0))
+    assert abs(first["SolarGen"][0]) < 1e-12
+    assert abs(first["HouseLoad"][0] - 2.0 * 5 / 60) < 1e-9
+    # day-2 rows use their own (4.0 kW) scale
+    day2 = full.filter(pl.col("Timestamp") == pl.datetime(2026, 5, 21, 0, 0))
+    assert abs(day2["HouseLoad"][0] - 4.0 * 5 / 60) < 1e-9
+
+    # day-ahead persistence: on day 2, FutureSolar == day 1's SolarGen at same slot;
+    # leading 24h falls back to current value
+    assert (full.filter(pl.col("Timestamp") < pl.datetime(2026, 5, 21))["FutureSolar"].abs().sum() == 0)
+    day2_fut = full.filter(pl.col("Timestamp") >= pl.datetime(2026, 5, 21))
+    assert day2_fut["FutureLoad"].null_count() == 0
+
+    # env view has exactly the env columns and drops battery channels
+    ev = env_view(full)
+    assert set(ev.columns) == {
+        "Timestamp", "Time", "SolarGen", "HouseLoad",
+        "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice",
+    }
+    assert ev["Time"].dtype == pl.Datetime
+
+
+def test_build_year_dataset_dedupes_timestamps(tmp_path):
+    from household_ingest import build_year_dataset
+    d = tmp_path / "normalized"
+    d.mkdir()
+    _write_norm_day(d, "2026-05-20")
+    # duplicate file for same day -> identical timestamps; keep-first dedupes
+    _write_norm_day(d, "2026-05-20", load_kw=99.0)
+    full = build_year_dataset(d)
+    assert full.height == 288
+    assert full["HouseLoad"].max() <= 99.0 * 5 / 60 + 1e-9
+
+
+def test_build_year_dataset_empty_dir_raises(tmp_path):
+    from household_ingest import build_year_dataset
+    with pytest.raises(FileNotFoundError):
+        build_year_dataset(tmp_path)

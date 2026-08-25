@@ -297,6 +297,78 @@ def ingest_sma_file(
     return out_path, report
 
 
+# ---------------------------------------------------------------------------
+# Year dataset assembly (FUTURE_PLAN §6b H0 -> H1 bridge)
+# ---------------------------------------------------------------------------
+
+ENV_COLUMNS = [
+    "Timestamp", "Time", "SolarGen", "HouseLoad",
+    "FutureSolar", "FutureLoad", "ImportEnergyPrice", "ExportEnergyPrice",
+]
+
+
+def build_year_dataset(normalized_dir: Path) -> pl.DataFrame:
+    """
+    Merge per-day normalized parquets into one continuous, env-ready DataFrame.
+
+    - Concatenates all *_normalized.parquet files, drops duplicate timestamps
+      (keeps first), sorts by Timestamp.
+    - Converts HouseLoad/SolarGen from kW to kWh-per-step using each row's
+      actual time delta (the env's reward math expects energy per step).
+    - Adds FutureSolar/FutureLoad as a DAY-AHEAD PERSISTENCE forecast: the
+      value observed 24h earlier. Honest (non-clairvoyant); the first 24h
+      falls back to the current value.
+    - BatteryPower/BatterySOC are preserved in the output for the H3 replay
+      analysis but are NOT part of ENV_COLUMNS (they would change the env's
+      observation dimensionality).
+    """
+    files = sorted(Path(normalized_dir).glob("*_normalized.parquet"))
+    if not files:
+        raise FileNotFoundError(f"No *_normalized.parquet under {normalized_dir}")
+    dfs = [pl.read_parquet(f) for f in files]
+    df = pl.concat(dfs).unique(subset=["Timestamp"], keep="first").sort("Timestamp")
+
+    # kW -> kWh per step using the row's own delta to the previous timestamp
+    step_hours = (
+        pl.col("Timestamp").diff().dt.total_seconds().fill_null(300).clip(1, None) / 3600.0
+    )
+    df = df.with_columns([
+        (pl.col("HouseLoad") * step_hours).alias("HouseLoad"),
+        (pl.col("SolarGen") * step_hours).alias("SolarGen"),
+    ])
+
+    # day-ahead persistence forecast
+    df = df.with_columns([
+        pl.col("SolarGen").shift(288).fill_null(pl.col("SolarGen")).alias("FutureSolar"),
+        pl.col("HouseLoad").shift(288).fill_null(pl.col("HouseLoad")).alias("FutureLoad"),
+    ])
+
+    # interior nulls were already interpolated per-day by validate_and_normalize;
+    # leading/trailing nulls (partial exports) are edge-filled here so the env
+    # never sees a NaN. Null counts remain visible in the ingest manifest.
+    df = df.with_columns([
+        pl.col(c).fill_null(strategy="forward").fill_null(strategy="backward")
+        for c in ["HouseLoad", "SolarGen", "BatteryPower", "BatterySOC",
+                  "FutureSolar", "FutureLoad"]
+    ])
+
+    # ensure Time is a proper datetime column for the env's step-duration inference
+    if "Time" not in df.columns:
+        df = df.with_columns(pl.col("Timestamp").alias("Time"))
+    else:
+        df = df.with_columns(pl.col("Time").cast(pl.Datetime))
+
+    return df.sort("Timestamp")
+
+
+def env_view(df: pl.DataFrame) -> pl.DataFrame:
+    """Select only the columns SolarBatteryEnv should observe."""
+    missing = [c for c in ENV_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Dataset missing env columns: {missing}")
+    return df.select(ENV_COLUMNS).sort("Time")
+
+
 def validate_and_normalize(
     df: pl.DataFrame,
     source_file: str,

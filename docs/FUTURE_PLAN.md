@@ -126,12 +126,12 @@
 
 | Phase | Task | Notes |
 |---|---|---|
-| **H0** | **Data pipeline**: ingestion script normalizing portal CSVs → `transform_polars_df` schema (`Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, Time`); validate gaps / DST transitions / meter resets / resolution changes; merge script + manifest for ~52 files/year | Unglamorous, critical first step |
-| **H0** | **Privacy guardrails**: anonymize identifiers; raw data stays local-only (`.gitignore`); consent documented; only derived stats or one synthetic household published | Non-negotiable before any commit of data |
-| **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on modern data; define surfaces — train 2019–2022, OOD 2023–2025; seasonal splits; tariff-regime splits (e.g., if plan changed over time) | Establishes whether old results hold |
-| **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → smoke/standard/comprehensive eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
-| **H3** | **Replay-gap analysis**: quantify actual vs optimal operation per year; decompose into timing errors vs capacity misallocation | The headline result unique to this track |
-| **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through (e.g. Amber-style plans) — same hardware, different tariffs → policy-relevant economics | Reuses everything built in H1–H2 |
+| ✅ **H0** | **Data pipeline**: SMA 'Energy balance - Day' parser (`src/household_ingest.py`) — 12-h dotted clock, [W]/[kW] variants auto-scaled, battery SOC/power channels preserved; year dataset builder (`build_year_dataset`): merge/dedupe/convert kW→kWh + day-ahead persistence `FutureSolar`/`FutureLoad`; privacy-anonymized manifest. **First real year ingested: 365/365 days, 105,108 rows, zero gaps** (2025-08-25 → 2026-08-24, VPP household). Env smoke-tested end-to-end on the full year (12-D obs, 5-min steps inferred correctly). | Done |
+| ✅ **H0** | **Privacy guardrails**: raw + normalized telemetry gitignored under `data/household/real/`; only the anonymized manifest (`sma_<date>` identities, sha256 checksums) is committed; privacy leak test enforced. Protocol: `docs/household/real_data_protocol.md`. Data source is a **VPP-coordinated** battery (grid-charging schedule) — noted for H3 interpretation. | Done |
+| 🟡 **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on the real-year dataset (env verified working); define surfaces — train vs OOD splits, seasonal splits | In progress — env ready, baselines next |
+| ⬜ **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
+| ⬜ **H3** | **Replay-gap analysis**: quantify actual (VPP) vs optimal operation per period using the recorded BatteryPower/BatterySOC channels | Battery telemetry confirmed available |
+| ⬜ **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through — same hardware, different tariffs → policy-relevant economics | Current data uses flat 0.30/0.05 defaults |
 
 ### Quick wins
 
