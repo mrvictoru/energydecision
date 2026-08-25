@@ -48,3 +48,29 @@ asserts no metering values leak into it.
   determines whether true replay-gap analysis is possible (H3) vs simulated placement.
 - Tariff history: record which import/export plans were active when, since H1
   surface splits may need tariff-regime boundaries.
+
+## Automated fetch (Playwright — preferred over manual download)
+
+The portal's energy-balance view exposes an API endpoint at
+`https://uiapi.sunnyportal.com/api/v1/measurements/{plantId}/energybalance?dateBeginLocal=...&interval=...`,
+but the Authorization Bearer token visible in DevTools is the Keycloak **account**
+token (`aud=account`, ~15 min lifetime) — it is **not** the token uiapi validates.
+uiapi checks an internal session cookie set after the OIDC SSO callback.
+Manually replaying both pieces is brittle.
+
+Use `scripts/fetch_ennexos_playwright.py` to drive a real browser — it handles
+the full SSO flow, including the silent token exchange uiapi depends on:
+
+```
+pip install playwright && python -m playwright install chromium
+
+python3 scripts/fetch_ennexos_playwright.py --plant-id 10574124 \
+    --start 2026-08-20 --end 2026-08-20 --headed --probe   # diagnose first
+python3 scripts/fetch_ennexos_playwright.py --plant-id 10574124 \
+    --start 2019-01-01 --end 2026-08-01                    # full range
+```
+
+The first run uses `--headed` so you can authenticate once; subsequent runs
+reuse the browser profile. Polling for the daily 5-min resolution requires
+identifying the correct `interval` value (likely `Minute5` or `QuarterHour` —
+probe to confirm) before any bulk loop.
