@@ -128,10 +128,104 @@
 |---|---|---|
 | ✅ **H0** | **Data pipeline**: SMA 'Energy balance - Day' parser (`src/household_ingest.py`) — 12-h dotted clock, [W]/[kW] variants auto-scaled, battery SOC/power channels preserved; year dataset builder (`build_year_dataset`): merge/dedupe/convert kW→kWh + day-ahead persistence `FutureSolar`/`FutureLoad`; privacy-anonymized manifest. **First real year ingested: 365/365 days, 105,108 rows, zero gaps** (2025-08-25 → 2026-08-24, VPP household). Env smoke-tested end-to-end on the full year (12-D obs, 5-min steps inferred correctly). | Done |
 | ✅ **H0** | **Privacy guardrails**: raw + normalized telemetry gitignored under `data/household/real/`; only the anonymized manifest (`sma_<date>` identities, sha256 checksums) is committed; privacy leak test enforced. Protocol: `docs/household/real_data_protocol.md`. Data source is a **VPP-coordinated** battery (grid-charging schedule) — noted for H3 interpretation. | Done |
+| ✅ **H0** | **Gap & disconnection guards** (2026-08): raw exports contain month-scale holes (renovation disconnection) and offline periods log as hard zeros, not NaN. Defenses: `find_gap_boundaries`/`split_segments` (>90-min timestamp jumps → contiguous episodes with `SegmentID`, DST-passing threshold); seam-row kW→kWh conversion capped at nominal step; `drop_dead_runs` removes sustained all-zero stretches (HouseLoad AND SolarGen == 0 for ≥2h); per-file `exact_zero_rows` manifest stat. Current corpus: 821 days (2024-01-24 → 2026-08-24), 236,424 rows, 3 segments — no sustained offline stretches found in existing data (110 scattered blips kept). Env must always run per-segment. | Done |
 | 🟡 **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on the real-year dataset (env verified working); define surfaces — train vs OOD splits, seasonal splits | In progress — env ready, baselines next |
+| ⬜ **H1.5** | **Synthetic diverse-household generator** — see detailed plan below | Spec'd, ready to build |
 | ⬜ **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
 | ⬜ **H3** | **Replay-gap analysis**: quantify actual (VPP) vs optimal operation per period using the recorded BatteryPower/BatterySOC channels | Battery telemetry confirmed available |
 | ⬜ **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through — same hardware, different tariffs → policy-relevant economics | Current data uses flat 0.30/0.05 defaults |
+
+### H1.5 — Synthetic diverse-household generator (detailed plan)
+
+> **Problem:** one real household cannot provide behavioral diversity
+> (occupancy patterns, appliance stocks, solar/battery sizing). Policies
+> trained only on it will not generalize. Goal: a controllable corpus of
+> synthetic households recomposed from REAL components, validated against
+> real statistics.
+
+#### Architecture: statistical recomposition (primary), TTM as auxiliary
+
+Generative LLM/diffusion approaches (TimeGAN, Diffusion-TS) are rejected:
+finicky to train, weak control over semantics, no guarantee samples stay
+physically consistent. Bootstrap-from-real keeps every sample traceable.
+
+```
+synthetic household = archetype(load profile)
+                    × season/day-type resampling weights
+                    × injected appliance blocks (EV / AC / pool)
+                  + residual noise (TTM-imputed or bootstrap)
+with roof = f(solar scaling factor), battery = g(capacity, flow)
+```
+
+1. **Archetypes** (occupancy/behavior classes, each parameterized from the
+   real data's daily-profile clusters):
+   - `retiree-low`: flat low load, early peak, minimal evening spike
+   - `family-ev`: double peak + 7–14 kWh overnight/evening EV charge,
+     random weekdays-only or daily
+   - `ac-heavy`: summer afternoon duty-cycled AC blocks (2–5 kW),
+     temperature-driven frequency
+   - `wfh-daytime`: elevated daytime baseline, midday peaks
+   - `shift-worker`: inverted schedule (overnight activity)
+2. **Day resampling**: for target (season × weekday/weekend × archetype),
+   bootstrap whole days from the real corpus's matching cluster, then scale
+   by household-size factor λ ∈ [0.4, 3.0]. Whole-day resampling preserves
+   realistic intra-day autocorrelation (row-wise i.i.d. noise destroys it).
+3. **Appliance injection**: add stochastic blocks ON TOP of resampled days
+   (EV start time ~ N(18h, 45m) truncated, duration from battery-size draw;
+   AC duty cycle Markov chain conditioned on hour & season). Injection is
+   additive on HouseLoad; never negative-clipped silently.
+4. **Solar synthesis**: reuse the real solar shape scaled by installed kW
+   (3–15 kW) × orientation derate (0.75–1.0); optionally swap in TTM
+   weather-residual variation so different years feel like different weather.
+5. **Battery assignment**: capacity ∈ {5, 7, 10, 13.5, 20} kWh, flow ∈
+   {3.3, 5, 7} kW — env already parameterizes this.
+6. **TTM role (auxiliary, optional)**: `ibm-granite/granite-timeseries-ttm-r2`
+   (few-M params, CPU-fine) for (a) plausible imputation of the Feb–Jun 2024
+   renovation gap (labeled SYNTHETIC if used in training), (b) weather-driven
+   residual generation on top of bootstrapped profiles. TTM is NOT the
+   primary generator — it reproduces its context window; it does not invent
+   new households.
+
+#### Validation gate (all gates must pass before a synthetic day is accepted)
+
+| Gate | Statistic | Tolerance vs real corpus |
+|---|---|---|
+| G1 | Daily energy distribution (per archetype×season) | KS test p > 0.05 against matching real cluster |
+| G2 | Peak timing histogram (morning/evening modes) | ±1 h mode shift |
+| G3 | Ramp-rate distribution (95th pct 5-min ΔkW) | within ±20% |
+| G4 | Autocorrelation (lag 1–12 steps) | within ±0.1 |
+| G5 | Zero-energy rows | 0 (no fake idle days) |
+| G6 | Physical sanity | HouseLoad ≥ 0, SolarGen ≥ 0, no NaN |
+
+Gate failures loop back to resampling/injection parameters, never hand-fixed.
+
+#### Corpus target & surfaces
+
+- 5 archetypes × 4 seasons × 3 battery sizes × 20 seeds ≈ **1,200 episodes**
+  (episode = one segment-week; matches AEMO-track corpus scale)
+- Splits: train 70% (archetype-balanced), val 15%, test 15% + held-out
+  OOD surface = the REAL household segments (never trained on)
+- Output: `data/household/synth/<archetype>/<seed>_ep<id>.parquet` +
+  `manifest.json` (params per episode for reproducibility)
+
+#### Implementation phases
+
+| Step | Deliverable | Test |
+|---|---|---|
+| 1 | `src/household_synthetic.py`: day clustering (season×daytype k-means on normalized profiles) | cluster purity > 0.8 on held-out labels |
+| 2 | Resampler + λ-scaling + injection blocks | G1–G6 harness green |
+| 3 | Battery/solar assignment + env-view export | env instantiates per episode, 12-D obs |
+| 4 | Corpus build CLI (`scripts/build_household_synth_corpus.py`) | manifest complete, counts exact |
+| 5 | Optional TTM imputation module (isolated flag) | gap-imputed segment passes G1–G6, marked synthetic |
+
+#### Risks
+
+- Archetype parameters are guesses until more real households exist — keep
+  every knob explicit and versioned in the manifest.
+- Over-trusting synthetic diversity: the OOD surface of record stays the
+  real household; synthetic is for training breadth only.
+- EV/AC injection may dominate small-λ archetypes (appliance block bigger
+  than base load) — cap injection at ≤60% of daily energy.
 
 ### Quick wins
 

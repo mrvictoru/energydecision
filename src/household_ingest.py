@@ -61,6 +61,7 @@ class IngestReport:
     max_gap_minutes: Optional[float] = None
     null_values: int = 0
     negative_solar_rows: int = 0
+    exact_zero_rows: int = 0
     dst_anomaly_suspected: bool = False
     warnings: List[str] = field(default_factory=list)
 
@@ -307,6 +308,45 @@ ENV_COLUMNS = [
 ]
 
 
+def drop_dead_runs(
+    df: pl.DataFrame,
+    min_run_minutes: float = 120.0,
+    eps_kw: float = 1e-6,
+    nominal_step_minutes: float = 5.0,
+) -> tuple[pl.DataFrame, int]:
+    """
+    Remove sustained all-zero stretches (system offline, e.g. renovation
+    disconnection). The portal logs 0 instead of NaN when disconnected, and an
+    occupied house never draws exactly 0.000 kW for hours — so runs where
+    HouseLoad AND SolarGen are exactly zero for >= ``min_run_minutes`` are
+    treated as missing data and DROPPED, letting split_segments() cut episodes
+    around them instead of the env training on fake idle days.
+
+    Short blips (< min_run_minutes) are kept: brief exact-zero readings can be
+    metering rounding, and dropping them would punch needless holes.
+    """
+    df = df.with_columns(
+        (
+            (pl.col("HouseLoad").abs() <= eps_kw)
+            & (pl.col("SolarGen").abs() <= eps_kw)
+        ).alias("_dead")
+    )
+    df = df.with_columns(
+        (pl.col("_dead") != pl.col("_dead").shift(fill_value=False))
+        .cum_sum()
+        .alias("_run")
+    )
+    runs = df.group_by("_run").agg([
+        pl.col("_dead").first().alias("dead"),
+        (pl.len() * nominal_step_minutes).alias("minutes"),
+    ])
+    bad_runs = runs.filter(pl.col("dead") & (pl.col("minutes") >= min_run_minutes))["_run"]
+    dropped = int(df.filter(pl.col("_run").is_in(bad_runs)).height) if len(bad_runs) else 0
+    if len(bad_runs):
+        df = df.filter(~pl.col("_run").is_in(bad_runs))
+    return df.drop(["_dead", "_run"]), dropped
+
+
 def build_year_dataset(normalized_dir: Path) -> pl.DataFrame:
     """
     Merge per-day normalized parquets into one continuous, env-ready DataFrame.
@@ -331,6 +371,12 @@ def build_year_dataset(normalized_dir: Path) -> pl.DataFrame:
         raise FileNotFoundError(f"No *_normalized.parquet under {normalized_dir}")
     dfs = [pl.read_parquet(f) for f in files]
     df = pl.concat(dfs).unique(subset=["Timestamp"], keep="first").sort("Timestamp")
+
+    # sustained all-zero stretches (system offline) are missing data, not idle
+    df, dropped_dead = drop_dead_runs(df)
+    if dropped_dead:
+        print(f"build_year_dataset: dropped {dropped_dead} rows in offline "
+              f"(all-zero) stretches; split_segments() will cut episodes there")
 
     # kW -> kWh per step using the row's own delta, capped at the nominal
     # step so gap-seam rows don't absorb weeks of phantom energy.
@@ -466,6 +512,23 @@ def validate_and_normalize(
         if neg_solar:
             warnings.append(f"{neg_solar} rows with negative SolarGen (check sign convention)")
 
+    # --- disconnection heuristic: ALL channels exactly zero ---
+    # An occupied house never draws exactly 0.000 kW for long; simultaneous
+    # hard zeros in load AND solar usually mean the system was offline
+    # (e.g. renovation disconnection) and the portal logged 0 instead of NaN.
+    exact_zero_rows = 0
+    if "HouseLoad" in df.columns and "SolarGen" in df.columns:
+        EPS = 1e-6
+        dead = df.filter(
+            (pl.col("HouseLoad").abs() <= EPS) & (pl.col("SolarGen").abs() <= EPS)
+        )
+        exact_zero_rows = dead.height
+        if exact_zero_rows >= 2 * 60 // expected_resolution_minutes:
+            warnings.append(
+                f"{exact_zero_rows} rows with HouseLoad AND SolarGen exactly 0 "
+                "(suspected system offline — zeros, not missing data)"
+            )
+
     # --- fill defaults: flat tariffs when portal has none ---
     if "ImportEnergyPrice" not in df.columns:
         df = df.with_columns(pl.lit(tariff_import).alias("ImportEnergyPrice"))
@@ -491,6 +554,7 @@ def validate_and_normalize(
         max_gap_minutes=max_gap,
         null_values=int(nulls or 0),
         negative_solar_rows=neg_solar,
+        exact_zero_rows=int(exact_zero_rows),
         dst_anomaly_suspected=bool(dst_suspect),
         warnings=warnings,
     )

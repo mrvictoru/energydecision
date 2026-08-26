@@ -3,6 +3,7 @@
     "sma_2024-01-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -17,6 +18,7 @@
     "sma_2024-01-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -31,6 +33,7 @@
     "sma_2024-01-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -45,6 +48,7 @@
     "sma_2024-01-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -59,6 +63,7 @@
     "sma_2024-01-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -73,6 +78,7 @@
     "sma_2024-01-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -87,6 +93,7 @@
     "sma_2024-01-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -101,6 +108,7 @@
     "sma_2024-02-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -115,6 +123,7 @@
     "sma_2024-02-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -129,6 +138,7 @@
     "sma_2024-02-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -143,6 +153,7 @@
     "sma_2024-02-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -157,6 +168,7 @@
     "sma_2024-02-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -171,6 +183,7 @@
     "sma_2024-02-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -185,6 +198,7 @@
     "sma_2024-02-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -199,6 +213,7 @@
     "sma_2024-02-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -213,6 +228,7 @@
     "sma_2024-02-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -227,6 +243,7 @@
     "sma_2024-02-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -241,6 +258,7 @@
     "sma_2024-02-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -255,6 +273,7 @@
     "sma_2024-02-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -269,6 +288,7 @@
     "sma_2024-02-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -283,6 +303,7 @@
     "sma_2024-02-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -297,6 +318,7 @@
     "sma_2024-02-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -311,6 +333,7 @@
     "sma_2024-02-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -325,6 +348,7 @@
     "sma_2024-02-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -339,6 +363,7 @@
     "sma_2024-02-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -353,6 +378,7 @@
     "sma_2024-02-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -367,6 +393,7 @@
     "sma_2024-02-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -381,6 +408,7 @@
     "sma_2024-02-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -395,6 +423,7 @@
     "sma_2024-02-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -409,6 +438,7 @@
     "sma_2024-02-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -423,6 +453,7 @@
     "sma_2024-02-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -437,6 +468,7 @@
     "sma_2024-02-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -451,6 +483,7 @@
     "sma_2024-02-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -465,6 +498,7 @@
     "sma_2024-02-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -479,6 +513,7 @@
     "sma_2024-02-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -493,6 +528,7 @@
     "sma_2024-02-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -507,6 +543,7 @@
     "sma_2024-07-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -521,6 +558,7 @@
     "sma_2024-07-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -535,6 +573,7 @@
     "sma_2024-07-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -549,6 +588,7 @@
     "sma_2024-07-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -563,6 +603,7 @@
     "sma_2024-07-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -577,6 +618,7 @@
     "sma_2024-07-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -591,6 +633,7 @@
     "sma_2024-07-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -605,6 +648,7 @@
     "sma_2024-07-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -619,6 +663,7 @@
     "sma_2024-07-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -633,6 +678,7 @@
     "sma_2024-07-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -647,6 +693,7 @@
     "sma_2024-07-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -661,6 +708,7 @@
     "sma_2024-07-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -675,6 +723,7 @@
     "sma_2024-07-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -689,6 +738,7 @@
     "sma_2024-07-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -703,6 +753,7 @@
     "sma_2024-07-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -717,6 +768,7 @@
     "sma_2024-07-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -731,6 +783,7 @@
     "sma_2024-07-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -745,6 +798,7 @@
     "sma_2024-07-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -759,6 +813,7 @@
     "sma_2024-07-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -773,6 +828,7 @@
     "sma_2024-07-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -787,6 +843,7 @@
     "sma_2024-07-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -801,6 +858,7 @@
     "sma_2024-07-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -815,6 +873,7 @@
     "sma_2024-07-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -829,6 +888,7 @@
     "sma_2024-07-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -843,6 +903,7 @@
     "sma_2024-07-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -857,6 +918,7 @@
     "sma_2024-07-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -871,6 +933,7 @@
     "sma_2024-07-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -885,6 +948,7 @@
     "sma_2024-07-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -899,6 +963,7 @@
     "sma_2024-07-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -913,6 +978,7 @@
     "sma_2024-07-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -927,6 +993,7 @@
     "sma_2024-07-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -941,6 +1008,7 @@
     "sma_2024-08-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -955,6 +1023,7 @@
     "sma_2024-08-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -969,6 +1038,7 @@
     "sma_2024-08-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -983,6 +1053,7 @@
     "sma_2024-08-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -997,6 +1068,7 @@
     "sma_2024-08-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1011,6 +1083,7 @@
     "sma_2024-08-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1025,6 +1098,7 @@
     "sma_2024-08-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1039,6 +1113,7 @@
     "sma_2024-08-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1053,6 +1128,7 @@
     "sma_2024-08-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1067,6 +1143,7 @@
     "sma_2024-08-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1081,6 +1158,7 @@
     "sma_2024-08-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1095,6 +1173,7 @@
     "sma_2024-08-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1109,6 +1188,7 @@
     "sma_2024-08-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1123,6 +1203,7 @@
     "sma_2024-08-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1137,6 +1218,7 @@
     "sma_2024-08-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1151,6 +1233,7 @@
     "sma_2024-08-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1165,6 +1248,7 @@
     "sma_2024-08-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1179,6 +1263,7 @@
     "sma_2024-08-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1193,6 +1278,7 @@
     "sma_2024-08-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1207,6 +1293,7 @@
     "sma_2024-08-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1221,6 +1308,7 @@
     "sma_2024-08-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1235,6 +1323,7 @@
     "sma_2024-08-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1249,6 +1338,7 @@
     "sma_2024-08-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1263,6 +1353,7 @@
     "sma_2024-08-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1277,6 +1368,7 @@
     "sma_2024-08-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1291,6 +1383,7 @@
     "sma_2024-08-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1305,6 +1398,7 @@
     "sma_2024-08-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1319,6 +1413,7 @@
     "sma_2024-08-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1333,6 +1428,7 @@
     "sma_2024-08-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1347,6 +1443,7 @@
     "sma_2024-08-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1361,6 +1458,7 @@
     "sma_2024-08-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1375,6 +1473,7 @@
     "sma_2024-09-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1389,6 +1488,7 @@
     "sma_2024-09-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1403,6 +1503,7 @@
     "sma_2024-09-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1417,6 +1518,7 @@
     "sma_2024-09-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1431,6 +1533,7 @@
     "sma_2024-09-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1445,6 +1548,7 @@
     "sma_2024-09-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1459,6 +1563,7 @@
     "sma_2024-09-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1473,6 +1578,7 @@
     "sma_2024-09-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1487,6 +1593,7 @@
     "sma_2024-09-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1501,6 +1608,7 @@
     "sma_2024-09-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1515,6 +1623,7 @@
     "sma_2024-09-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1529,6 +1638,7 @@
     "sma_2024-09-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1543,6 +1653,7 @@
     "sma_2024-09-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1557,6 +1668,7 @@
     "sma_2024-09-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1571,6 +1683,7 @@
     "sma_2024-09-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1585,6 +1698,7 @@
     "sma_2024-09-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1599,6 +1713,7 @@
     "sma_2024-09-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1613,6 +1728,7 @@
     "sma_2024-09-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1627,6 +1743,7 @@
     "sma_2024-09-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1641,6 +1758,7 @@
     "sma_2024-09-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1655,6 +1773,7 @@
     "sma_2024-09-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1669,6 +1788,7 @@
     "sma_2024-09-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1683,6 +1803,7 @@
     "sma_2024-09-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1697,6 +1818,7 @@
     "sma_2024-09-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1711,6 +1833,7 @@
     "sma_2024-09-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1725,6 +1848,7 @@
     "sma_2024-09-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1739,6 +1863,7 @@
     "sma_2024-09-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1753,6 +1878,7 @@
     "sma_2024-09-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1767,6 +1893,7 @@
     "sma_2024-09-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1781,6 +1908,7 @@
     "sma_2024-09-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1795,6 +1923,7 @@
     "sma_2024-10-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1809,6 +1938,7 @@
     "sma_2024-10-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1823,6 +1953,7 @@
     "sma_2024-10-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1837,6 +1968,7 @@
     "sma_2024-10-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1851,6 +1983,7 @@
     "sma_2024-10-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1865,6 +1998,7 @@
     "sma_2024-10-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1879,6 +2013,7 @@
     "sma_2024-10-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1893,6 +2028,7 @@
     "sma_2024-10-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1907,6 +2043,7 @@
     "sma_2024-10-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1921,6 +2058,7 @@
     "sma_2024-10-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1935,6 +2073,7 @@
     "sma_2024-10-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1949,6 +2088,7 @@
     "sma_2024-10-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1963,6 +2103,7 @@
     "sma_2024-10-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1977,6 +2118,7 @@
     "sma_2024-10-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -1991,6 +2133,7 @@
     "sma_2024-10-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2005,6 +2148,7 @@
     "sma_2024-10-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2019,6 +2163,7 @@
     "sma_2024-10-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2033,6 +2178,7 @@
     "sma_2024-10-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2047,6 +2193,7 @@
     "sma_2024-10-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2061,6 +2208,7 @@
     "sma_2024-10-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2075,6 +2223,7 @@
     "sma_2024-10-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2089,6 +2238,7 @@
     "sma_2024-10-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2103,6 +2253,7 @@
     "sma_2024-10-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2117,6 +2268,7 @@
     "sma_2024-10-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2131,6 +2283,7 @@
     "sma_2024-10-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2145,6 +2298,7 @@
     "sma_2024-10-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2159,6 +2313,7 @@
     "sma_2024-10-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2173,6 +2328,7 @@
     "sma_2024-10-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2187,6 +2343,7 @@
     "sma_2024-10-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2201,6 +2358,7 @@
     "sma_2024-10-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2215,6 +2373,7 @@
     "sma_2024-10-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2229,6 +2388,7 @@
     "sma_2024-11-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2243,6 +2403,7 @@
     "sma_2024-11-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2257,6 +2418,7 @@
     "sma_2024-11-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2271,6 +2433,7 @@
     "sma_2024-11-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2285,6 +2448,7 @@
     "sma_2024-11-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2299,6 +2463,7 @@
     "sma_2024-11-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2313,6 +2478,7 @@
     "sma_2024-11-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2327,6 +2493,7 @@
     "sma_2024-11-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2341,6 +2508,7 @@
     "sma_2024-11-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2355,6 +2523,7 @@
     "sma_2024-11-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2369,6 +2538,7 @@
     "sma_2024-11-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2383,6 +2553,7 @@
     "sma_2024-11-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2397,6 +2568,7 @@
     "sma_2024-11-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2411,6 +2583,7 @@
     "sma_2024-11-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2425,6 +2598,7 @@
     "sma_2024-11-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2439,6 +2613,7 @@
     "sma_2024-11-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2453,6 +2628,7 @@
     "sma_2024-11-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2467,6 +2643,7 @@
     "sma_2024-11-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2481,6 +2658,7 @@
     "sma_2024-11-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2495,6 +2673,7 @@
     "sma_2024-11-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2509,6 +2688,7 @@
     "sma_2024-11-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2523,6 +2703,7 @@
     "sma_2024-11-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2537,6 +2718,7 @@
     "sma_2024-11-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2551,6 +2733,7 @@
     "sma_2024-11-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2565,6 +2748,7 @@
     "sma_2024-11-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2579,6 +2763,7 @@
     "sma_2024-11-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2593,6 +2778,7 @@
     "sma_2024-11-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2607,6 +2793,7 @@
     "sma_2024-11-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2621,6 +2808,7 @@
     "sma_2024-11-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2635,6 +2823,7 @@
     "sma_2024-11-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2649,6 +2838,7 @@
     "sma_2024-12-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2663,6 +2853,7 @@
     "sma_2024-12-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2677,6 +2868,7 @@
     "sma_2024-12-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2691,6 +2883,7 @@
     "sma_2024-12-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2705,6 +2898,7 @@
     "sma_2024-12-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2719,6 +2913,7 @@
     "sma_2024-12-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2733,6 +2928,7 @@
     "sma_2024-12-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2747,6 +2943,7 @@
     "sma_2024-12-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2761,6 +2958,7 @@
     "sma_2024-12-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2775,6 +2973,7 @@
     "sma_2024-12-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2789,6 +2988,7 @@
     "sma_2024-12-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2803,6 +3003,7 @@
     "sma_2024-12-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2817,6 +3018,7 @@
     "sma_2024-12-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2831,6 +3033,7 @@
     "sma_2024-12-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2845,6 +3048,7 @@
     "sma_2024-12-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2859,6 +3063,7 @@
     "sma_2024-12-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2873,6 +3078,7 @@
     "sma_2024-12-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2887,6 +3093,7 @@
     "sma_2024-12-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2901,6 +3108,7 @@
     "sma_2024-12-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2915,6 +3123,7 @@
     "sma_2024-12-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2929,6 +3138,7 @@
     "sma_2024-12-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2943,6 +3153,7 @@
     "sma_2024-12-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2957,6 +3168,7 @@
     "sma_2024-12-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2971,6 +3183,7 @@
     "sma_2024-12-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2985,6 +3198,7 @@
     "sma_2024-12-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -2999,6 +3213,7 @@
     "sma_2024-12-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3013,6 +3228,7 @@
     "sma_2024-12-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3027,6 +3243,7 @@
     "sma_2024-12-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3041,6 +3258,7 @@
     "sma_2024-12-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3055,6 +3273,7 @@
     "sma_2024-12-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3069,6 +3288,7 @@
     "sma_2024-12-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3083,6 +3303,7 @@
     "sma_2025-01-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3097,6 +3318,7 @@
     "sma_2025-01-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3111,6 +3333,7 @@
     "sma_2025-01-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3125,6 +3348,7 @@
     "sma_2025-01-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3139,6 +3363,7 @@
     "sma_2025-01-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3153,6 +3378,7 @@
     "sma_2025-01-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3167,6 +3393,7 @@
     "sma_2025-01-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3181,6 +3408,7 @@
     "sma_2025-01-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3195,6 +3423,7 @@
     "sma_2025-01-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3209,6 +3438,7 @@
     "sma_2025-01-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3223,6 +3453,7 @@
     "sma_2025-01-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3237,6 +3468,7 @@
     "sma_2025-01-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3251,6 +3483,7 @@
     "sma_2025-01-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3265,6 +3498,7 @@
     "sma_2025-01-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3279,6 +3513,7 @@
     "sma_2025-01-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3293,6 +3528,7 @@
     "sma_2025-01-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3307,6 +3543,7 @@
     "sma_2025-01-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3321,6 +3558,7 @@
     "sma_2025-01-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3335,6 +3573,7 @@
     "sma_2025-01-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3349,6 +3588,7 @@
     "sma_2025-01-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3363,6 +3603,7 @@
     "sma_2025-01-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3377,6 +3618,7 @@
     "sma_2025-01-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3391,6 +3633,7 @@
     "sma_2025-01-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3405,6 +3648,7 @@
     "sma_2025-01-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3419,6 +3663,7 @@
     "sma_2025-01-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3433,6 +3678,7 @@
     "sma_2025-01-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3447,6 +3693,7 @@
     "sma_2025-01-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3461,6 +3708,7 @@
     "sma_2025-01-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3475,6 +3723,7 @@
     "sma_2025-01-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3489,6 +3738,7 @@
     "sma_2025-01-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3503,6 +3753,7 @@
     "sma_2025-01-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3517,6 +3768,7 @@
     "sma_2025-02-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3531,6 +3783,7 @@
     "sma_2025-02-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3545,6 +3798,7 @@
     "sma_2025-02-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3559,6 +3813,7 @@
     "sma_2025-02-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3573,6 +3828,7 @@
     "sma_2025-02-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3587,6 +3843,7 @@
     "sma_2025-02-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3601,6 +3858,7 @@
     "sma_2025-02-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3615,6 +3873,7 @@
     "sma_2025-02-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3629,6 +3888,7 @@
     "sma_2025-02-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3643,6 +3903,7 @@
     "sma_2025-02-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3657,6 +3918,7 @@
     "sma_2025-02-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3671,6 +3933,7 @@
     "sma_2025-02-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3685,6 +3948,7 @@
     "sma_2025-02-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3699,6 +3963,7 @@
     "sma_2025-02-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3713,6 +3978,7 @@
     "sma_2025-02-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3727,6 +3993,7 @@
     "sma_2025-02-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3741,6 +4008,7 @@
     "sma_2025-02-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3755,6 +4023,7 @@
     "sma_2025-02-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3769,6 +4038,7 @@
     "sma_2025-02-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3783,6 +4053,7 @@
     "sma_2025-02-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3797,6 +4068,7 @@
     "sma_2025-02-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3811,6 +4083,7 @@
     "sma_2025-02-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3825,6 +4098,7 @@
     "sma_2025-02-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3839,6 +4113,7 @@
     "sma_2025-02-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3853,6 +4128,7 @@
     "sma_2025-02-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3867,6 +4143,7 @@
     "sma_2025-02-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3881,6 +4158,7 @@
     "sma_2025-02-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3895,6 +4173,7 @@
     "sma_2025-02-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3909,6 +4188,7 @@
     "sma_2025-03-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3923,6 +4203,7 @@
     "sma_2025-03-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3937,6 +4218,7 @@
     "sma_2025-03-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3951,6 +4233,7 @@
     "sma_2025-03-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3965,6 +4248,7 @@
     "sma_2025-03-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3979,6 +4263,7 @@
     "sma_2025-03-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -3993,6 +4278,7 @@
     "sma_2025-03-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4007,6 +4293,7 @@
     "sma_2025-03-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4021,6 +4308,7 @@
     "sma_2025-03-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4035,6 +4323,7 @@
     "sma_2025-03-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4049,6 +4338,7 @@
     "sma_2025-03-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4063,6 +4353,7 @@
     "sma_2025-03-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4077,6 +4368,7 @@
     "sma_2025-03-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4091,6 +4383,7 @@
     "sma_2025-03-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4105,6 +4398,7 @@
     "sma_2025-03-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4119,6 +4413,7 @@
     "sma_2025-03-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4133,6 +4428,7 @@
     "sma_2025-03-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4147,6 +4443,7 @@
     "sma_2025-03-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4161,6 +4458,7 @@
     "sma_2025-03-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4175,6 +4473,7 @@
     "sma_2025-03-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4189,6 +4488,7 @@
     "sma_2025-03-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4203,6 +4503,7 @@
     "sma_2025-03-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4217,6 +4518,7 @@
     "sma_2025-03-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4231,6 +4533,7 @@
     "sma_2025-03-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4245,6 +4548,7 @@
     "sma_2025-03-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4259,6 +4563,7 @@
     "sma_2025-03-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4273,6 +4578,7 @@
     "sma_2025-03-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4287,6 +4593,7 @@
     "sma_2025-03-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4301,6 +4608,7 @@
     "sma_2025-03-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4315,6 +4623,7 @@
     "sma_2025-03-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4329,6 +4638,7 @@
     "sma_2025-03-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4343,6 +4653,7 @@
     "sma_2025-04-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4357,6 +4668,7 @@
     "sma_2025-04-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4371,6 +4683,7 @@
     "sma_2025-04-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4385,6 +4698,7 @@
     "sma_2025-04-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4399,6 +4713,7 @@
     "sma_2025-04-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4413,6 +4728,7 @@
     "sma_2025-04-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 12,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4429,6 +4745,7 @@
     "sma_2025-04-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4443,6 +4760,7 @@
     "sma_2025-04-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4457,6 +4775,7 @@
     "sma_2025-04-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4471,6 +4790,7 @@
     "sma_2025-04-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4485,6 +4805,7 @@
     "sma_2025-04-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4499,6 +4820,7 @@
     "sma_2025-04-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4513,6 +4835,7 @@
     "sma_2025-04-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4527,6 +4850,7 @@
     "sma_2025-04-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4541,6 +4865,7 @@
     "sma_2025-04-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4555,6 +4880,7 @@
     "sma_2025-04-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4569,6 +4895,7 @@
     "sma_2025-04-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4583,6 +4910,7 @@
     "sma_2025-04-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4597,6 +4925,7 @@
     "sma_2025-04-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4611,6 +4940,7 @@
     "sma_2025-04-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4625,6 +4955,7 @@
     "sma_2025-04-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4639,6 +4970,7 @@
     "sma_2025-04-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4653,6 +4985,7 @@
     "sma_2025-04-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4667,6 +5000,7 @@
     "sma_2025-04-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4681,6 +5015,7 @@
     "sma_2025-04-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4695,6 +5030,7 @@
     "sma_2025-04-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4709,6 +5045,7 @@
     "sma_2025-04-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4723,6 +5060,7 @@
     "sma_2025-04-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4737,6 +5075,7 @@
     "sma_2025-04-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4751,6 +5090,7 @@
     "sma_2025-04-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4765,6 +5105,7 @@
     "sma_2025-05-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4779,6 +5120,7 @@
     "sma_2025-05-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4793,6 +5135,7 @@
     "sma_2025-05-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4807,6 +5150,7 @@
     "sma_2025-05-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4821,6 +5165,7 @@
     "sma_2025-05-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4835,6 +5180,7 @@
     "sma_2025-05-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4849,6 +5195,7 @@
     "sma_2025-05-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4863,6 +5210,7 @@
     "sma_2025-05-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4877,6 +5225,7 @@
     "sma_2025-05-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4891,6 +5240,7 @@
     "sma_2025-05-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4905,6 +5255,7 @@
     "sma_2025-05-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4919,6 +5270,7 @@
     "sma_2025-05-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4933,6 +5285,7 @@
     "sma_2025-05-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4947,6 +5300,7 @@
     "sma_2025-05-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4961,6 +5315,7 @@
     "sma_2025-05-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4975,6 +5330,7 @@
     "sma_2025-05-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -4989,6 +5345,7 @@
     "sma_2025-05-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5003,6 +5360,7 @@
     "sma_2025-05-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5017,6 +5375,7 @@
     "sma_2025-05-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5031,6 +5390,7 @@
     "sma_2025-05-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5045,6 +5405,7 @@
     "sma_2025-05-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5059,6 +5420,7 @@
     "sma_2025-05-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5073,6 +5435,7 @@
     "sma_2025-05-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5087,6 +5450,7 @@
     "sma_2025-05-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5101,6 +5465,7 @@
     "sma_2025-05-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5115,6 +5480,7 @@
     "sma_2025-05-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5129,6 +5495,7 @@
     "sma_2025-05-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5143,6 +5510,7 @@
     "sma_2025-05-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5157,6 +5525,7 @@
     "sma_2025-05-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5171,6 +5540,7 @@
     "sma_2025-05-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5185,6 +5555,7 @@
     "sma_2025-05-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5199,6 +5570,7 @@
     "sma_2025-06-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5213,6 +5585,7 @@
     "sma_2025-06-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5227,6 +5600,7 @@
     "sma_2025-06-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5241,6 +5615,7 @@
     "sma_2025-06-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5255,6 +5630,7 @@
     "sma_2025-06-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5269,6 +5645,7 @@
     "sma_2025-06-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5283,6 +5660,7 @@
     "sma_2025-06-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5297,6 +5675,7 @@
     "sma_2025-06-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5311,6 +5690,7 @@
     "sma_2025-06-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5325,6 +5705,7 @@
     "sma_2025-06-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5339,6 +5720,7 @@
     "sma_2025-06-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5353,6 +5735,7 @@
     "sma_2025-06-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5367,6 +5750,7 @@
     "sma_2025-06-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5381,6 +5765,7 @@
     "sma_2025-06-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5395,6 +5780,7 @@
     "sma_2025-06-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5409,6 +5795,7 @@
     "sma_2025-06-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5423,6 +5810,7 @@
     "sma_2025-06-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5437,6 +5825,7 @@
     "sma_2025-06-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5451,6 +5840,7 @@
     "sma_2025-06-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5465,6 +5855,7 @@
     "sma_2025-06-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5479,6 +5870,7 @@
     "sma_2025-06-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5493,6 +5885,7 @@
     "sma_2025-06-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5507,6 +5900,7 @@
     "sma_2025-06-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5521,6 +5915,7 @@
     "sma_2025-06-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5535,6 +5930,7 @@
     "sma_2025-06-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5549,6 +5945,7 @@
     "sma_2025-06-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5563,6 +5960,7 @@
     "sma_2025-06-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5577,6 +5975,7 @@
     "sma_2025-06-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5591,6 +5990,7 @@
     "sma_2025-06-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5605,6 +6005,7 @@
     "sma_2025-06-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5619,6 +6020,7 @@
     "sma_2025-07-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5633,6 +6035,7 @@
     "sma_2025-07-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5647,6 +6050,7 @@
     "sma_2025-07-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5661,6 +6065,7 @@
     "sma_2025-07-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5675,6 +6080,7 @@
     "sma_2025-07-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5689,6 +6095,7 @@
     "sma_2025-07-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5703,6 +6110,7 @@
     "sma_2025-07-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5717,6 +6125,7 @@
     "sma_2025-07-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5731,6 +6140,7 @@
     "sma_2025-07-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5745,6 +6155,7 @@
     "sma_2025-07-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5759,6 +6170,7 @@
     "sma_2025-07-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5773,6 +6185,7 @@
     "sma_2025-07-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5787,6 +6200,7 @@
     "sma_2025-07-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5801,6 +6215,7 @@
     "sma_2025-07-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5815,6 +6230,7 @@
     "sma_2025-07-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5829,6 +6245,7 @@
     "sma_2025-07-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5843,6 +6260,7 @@
     "sma_2025-07-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5857,6 +6275,7 @@
     "sma_2025-07-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5871,6 +6290,7 @@
     "sma_2025-07-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5885,6 +6305,7 @@
     "sma_2025-07-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5899,6 +6320,7 @@
     "sma_2025-07-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5913,6 +6335,7 @@
     "sma_2025-07-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5927,6 +6350,7 @@
     "sma_2025-07-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5941,6 +6365,7 @@
     "sma_2025-07-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5955,6 +6380,7 @@
     "sma_2025-07-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5969,6 +6395,7 @@
     "sma_2025-07-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5983,6 +6410,7 @@
     "sma_2025-07-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -5997,6 +6425,7 @@
     "sma_2025-07-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6011,6 +6440,7 @@
     "sma_2025-07-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6025,6 +6455,7 @@
     "sma_2025-07-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6039,6 +6470,7 @@
     "sma_2025-07-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6053,6 +6485,7 @@
     "sma_2025-08-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6067,6 +6500,7 @@
     "sma_2025-08-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6081,6 +6515,7 @@
     "sma_2025-08-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6095,6 +6530,7 @@
     "sma_2025-08-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6109,6 +6545,7 @@
     "sma_2025-08-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6123,6 +6560,7 @@
     "sma_2025-08-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6137,6 +6575,7 @@
     "sma_2025-08-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6151,6 +6590,7 @@
     "sma_2025-08-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6165,6 +6605,7 @@
     "sma_2025-08-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6179,6 +6620,7 @@
     "sma_2025-08-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6193,6 +6635,7 @@
     "sma_2025-08-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6207,6 +6650,7 @@
     "sma_2025-08-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6221,6 +6665,7 @@
     "sma_2025-08-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6235,6 +6680,7 @@
     "sma_2025-08-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6249,6 +6695,7 @@
     "sma_2025-08-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6263,6 +6710,7 @@
     "sma_2025-08-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6277,6 +6725,7 @@
     "sma_2025-08-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6291,6 +6740,7 @@
     "sma_2025-08-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6305,6 +6755,7 @@
     "sma_2025-08-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6319,6 +6770,7 @@
     "sma_2025-08-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6333,6 +6785,7 @@
     "sma_2025-08-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6347,6 +6800,7 @@
     "sma_2025-08-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6361,6 +6815,7 @@
     "sma_2025-08-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6375,6 +6830,7 @@
     "sma_2025-08-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6389,6 +6845,7 @@
     "sma_2025-08-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6403,6 +6860,7 @@
     "sma_2025-08-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6417,6 +6875,7 @@
     "sma_2025-08-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6431,6 +6890,7 @@
     "sma_2025-08-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6445,6 +6905,7 @@
     "sma_2025-08-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6459,6 +6920,7 @@
     "sma_2025-08-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6473,6 +6935,7 @@
     "sma_2025-08-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6487,6 +6950,7 @@
     "sma_2025-09-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6501,6 +6965,7 @@
     "sma_2025-09-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6515,6 +6980,7 @@
     "sma_2025-09-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6529,6 +6995,7 @@
     "sma_2025-09-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6543,6 +7010,7 @@
     "sma_2025-09-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6557,6 +7025,7 @@
     "sma_2025-09-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6571,6 +7040,7 @@
     "sma_2025-09-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6585,6 +7055,7 @@
     "sma_2025-09-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6599,6 +7070,7 @@
     "sma_2025-09-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6613,6 +7085,7 @@
     "sma_2025-09-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6627,6 +7100,7 @@
     "sma_2025-09-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6641,6 +7115,7 @@
     "sma_2025-09-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6655,6 +7130,7 @@
     "sma_2025-09-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6669,6 +7145,7 @@
     "sma_2025-09-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6683,6 +7160,7 @@
     "sma_2025-09-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6697,6 +7175,7 @@
     "sma_2025-09-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6711,6 +7190,7 @@
     "sma_2025-09-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6725,6 +7205,7 @@
     "sma_2025-09-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6739,6 +7220,7 @@
     "sma_2025-09-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6753,6 +7235,7 @@
     "sma_2025-09-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6767,6 +7250,7 @@
     "sma_2025-09-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6781,6 +7265,7 @@
     "sma_2025-09-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6795,6 +7280,7 @@
     "sma_2025-09-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6809,6 +7295,7 @@
     "sma_2025-09-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6823,6 +7310,7 @@
     "sma_2025-09-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6837,6 +7325,7 @@
     "sma_2025-09-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6851,6 +7340,7 @@
     "sma_2025-09-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6865,6 +7355,7 @@
     "sma_2025-09-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6879,6 +7370,7 @@
     "sma_2025-09-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6893,6 +7385,7 @@
     "sma_2025-09-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6907,6 +7400,7 @@
     "sma_2025-10-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6921,6 +7415,7 @@
     "sma_2025-10-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6935,6 +7430,7 @@
     "sma_2025-10-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6949,6 +7445,7 @@
     "sma_2025-10-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6963,6 +7460,7 @@
     "sma_2025-10-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 2,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6977,6 +7475,7 @@
     "sma_2025-10-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -6991,6 +7490,7 @@
     "sma_2025-10-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7005,6 +7505,7 @@
     "sma_2025-10-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7019,6 +7520,7 @@
     "sma_2025-10-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7033,6 +7535,7 @@
     "sma_2025-10-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7047,6 +7550,7 @@
     "sma_2025-10-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7061,6 +7565,7 @@
     "sma_2025-10-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7075,6 +7580,7 @@
     "sma_2025-10-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7089,6 +7595,7 @@
     "sma_2025-10-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7103,6 +7610,7 @@
     "sma_2025-10-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7117,6 +7625,7 @@
     "sma_2025-10-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7131,6 +7640,7 @@
     "sma_2025-10-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7145,6 +7655,7 @@
     "sma_2025-10-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7159,6 +7670,7 @@
     "sma_2025-10-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7173,6 +7685,7 @@
     "sma_2025-10-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7187,6 +7700,7 @@
     "sma_2025-10-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7201,6 +7715,7 @@
     "sma_2025-10-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7215,6 +7730,7 @@
     "sma_2025-10-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7229,6 +7745,7 @@
     "sma_2025-10-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7243,6 +7760,7 @@
     "sma_2025-10-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7257,6 +7775,7 @@
     "sma_2025-10-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7271,6 +7790,7 @@
     "sma_2025-10-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7285,6 +7805,7 @@
     "sma_2025-10-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7299,6 +7820,7 @@
     "sma_2025-10-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7313,6 +7835,7 @@
     "sma_2025-10-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7327,6 +7850,7 @@
     "sma_2025-10-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7341,6 +7865,7 @@
     "sma_2025-11-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7355,6 +7880,7 @@
     "sma_2025-11-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7369,6 +7895,7 @@
     "sma_2025-11-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7383,6 +7910,7 @@
     "sma_2025-11-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7397,6 +7925,7 @@
     "sma_2025-11-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7411,6 +7940,7 @@
     "sma_2025-11-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7425,6 +7955,7 @@
     "sma_2025-11-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7439,6 +7970,7 @@
     "sma_2025-11-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7453,6 +7985,7 @@
     "sma_2025-11-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7467,6 +8000,7 @@
     "sma_2025-11-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7481,6 +8015,7 @@
     "sma_2025-11-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7495,6 +8030,7 @@
     "sma_2025-11-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7509,6 +8045,7 @@
     "sma_2025-11-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7523,6 +8060,7 @@
     "sma_2025-11-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7537,6 +8075,7 @@
     "sma_2025-11-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7551,6 +8090,7 @@
     "sma_2025-11-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7565,6 +8105,7 @@
     "sma_2025-11-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7579,6 +8120,7 @@
     "sma_2025-11-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7593,6 +8135,7 @@
     "sma_2025-11-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7607,6 +8150,7 @@
     "sma_2025-11-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7621,6 +8165,7 @@
     "sma_2025-11-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7635,6 +8180,7 @@
     "sma_2025-11-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7649,6 +8195,7 @@
     "sma_2025-11-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7663,6 +8210,7 @@
     "sma_2025-11-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7677,6 +8225,7 @@
     "sma_2025-11-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7691,6 +8240,7 @@
     "sma_2025-11-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7705,6 +8255,7 @@
     "sma_2025-11-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7719,6 +8270,7 @@
     "sma_2025-11-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7733,6 +8285,7 @@
     "sma_2025-11-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7747,6 +8300,7 @@
     "sma_2025-11-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7761,6 +8315,7 @@
     "sma_2025-12-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7775,6 +8330,7 @@
     "sma_2025-12-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7789,6 +8345,7 @@
     "sma_2025-12-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7803,6 +8360,7 @@
     "sma_2025-12-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7817,6 +8375,7 @@
     "sma_2025-12-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7831,6 +8390,7 @@
     "sma_2025-12-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7845,6 +8405,7 @@
     "sma_2025-12-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7859,6 +8420,7 @@
     "sma_2025-12-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7873,6 +8435,7 @@
     "sma_2025-12-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7887,6 +8450,7 @@
     "sma_2025-12-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7901,6 +8465,7 @@
     "sma_2025-12-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7915,6 +8480,7 @@
     "sma_2025-12-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7929,6 +8495,7 @@
     "sma_2025-12-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7943,6 +8510,7 @@
     "sma_2025-12-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7957,6 +8525,7 @@
     "sma_2025-12-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7971,6 +8540,7 @@
     "sma_2025-12-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7985,6 +8555,7 @@
     "sma_2025-12-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -7999,6 +8570,7 @@
     "sma_2025-12-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8013,6 +8585,7 @@
     "sma_2025-12-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8027,6 +8600,7 @@
     "sma_2025-12-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8041,6 +8615,7 @@
     "sma_2025-12-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8055,6 +8630,7 @@
     "sma_2025-12-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8069,6 +8645,7 @@
     "sma_2025-12-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8083,6 +8660,7 @@
     "sma_2025-12-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8097,6 +8675,7 @@
     "sma_2025-12-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8111,6 +8690,7 @@
     "sma_2025-12-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8125,6 +8705,7 @@
     "sma_2025-12-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8139,6 +8720,7 @@
     "sma_2025-12-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8153,6 +8735,7 @@
     "sma_2025-12-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8167,6 +8750,7 @@
     "sma_2025-12-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8181,6 +8765,7 @@
     "sma_2025-12-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8195,6 +8780,7 @@
     "sma_2026-01-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8209,6 +8795,7 @@
     "sma_2026-01-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8223,6 +8810,7 @@
     "sma_2026-01-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8237,6 +8825,7 @@
     "sma_2026-01-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8251,6 +8840,7 @@
     "sma_2026-01-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8265,6 +8855,7 @@
     "sma_2026-01-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8279,6 +8870,7 @@
     "sma_2026-01-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8293,6 +8885,7 @@
     "sma_2026-01-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8307,6 +8900,7 @@
     "sma_2026-01-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8321,6 +8915,7 @@
     "sma_2026-01-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8335,6 +8930,7 @@
     "sma_2026-01-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8349,6 +8945,7 @@
     "sma_2026-01-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8363,6 +8960,7 @@
     "sma_2026-01-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8377,6 +8975,7 @@
     "sma_2026-01-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8391,6 +8990,7 @@
     "sma_2026-01-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8405,6 +9005,7 @@
     "sma_2026-01-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8419,6 +9020,7 @@
     "sma_2026-01-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8433,6 +9035,7 @@
     "sma_2026-01-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8447,6 +9050,7 @@
     "sma_2026-01-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8461,6 +9065,7 @@
     "sma_2026-01-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8475,6 +9080,7 @@
     "sma_2026-01-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8489,6 +9095,7 @@
     "sma_2026-01-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8503,6 +9110,7 @@
     "sma_2026-01-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8517,6 +9125,7 @@
     "sma_2026-01-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8531,6 +9140,7 @@
     "sma_2026-01-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8545,6 +9155,7 @@
     "sma_2026-01-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8559,6 +9170,7 @@
     "sma_2026-01-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8573,6 +9185,7 @@
     "sma_2026-01-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8587,6 +9200,7 @@
     "sma_2026-01-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8601,6 +9215,7 @@
     "sma_2026-01-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8615,6 +9230,7 @@
     "sma_2026-01-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8629,6 +9245,7 @@
     "sma_2026-02-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8643,6 +9260,7 @@
     "sma_2026-02-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8657,6 +9275,7 @@
     "sma_2026-02-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8671,6 +9290,7 @@
     "sma_2026-02-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8685,6 +9305,7 @@
     "sma_2026-02-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8699,6 +9320,7 @@
     "sma_2026-02-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8713,6 +9335,7 @@
     "sma_2026-02-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8727,6 +9350,7 @@
     "sma_2026-02-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8741,6 +9365,7 @@
     "sma_2026-02-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8755,6 +9380,7 @@
     "sma_2026-02-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8769,6 +9395,7 @@
     "sma_2026-02-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8783,6 +9410,7 @@
     "sma_2026-02-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8797,6 +9425,7 @@
     "sma_2026-02-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8811,6 +9440,7 @@
     "sma_2026-02-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8825,6 +9455,7 @@
     "sma_2026-02-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8839,6 +9470,7 @@
     "sma_2026-02-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8853,6 +9485,7 @@
     "sma_2026-02-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8867,6 +9500,7 @@
     "sma_2026-02-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8881,6 +9515,7 @@
     "sma_2026-02-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8895,6 +9530,7 @@
     "sma_2026-02-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8909,6 +9545,7 @@
     "sma_2026-02-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8923,6 +9560,7 @@
     "sma_2026-02-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8937,6 +9575,7 @@
     "sma_2026-02-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8951,6 +9590,7 @@
     "sma_2026-02-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8965,6 +9605,7 @@
     "sma_2026-02-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8979,6 +9620,7 @@
     "sma_2026-02-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -8993,6 +9635,7 @@
     "sma_2026-02-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9007,6 +9650,7 @@
     "sma_2026-02-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9021,6 +9665,7 @@
     "sma_2026-03-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9035,6 +9680,7 @@
     "sma_2026-03-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9049,6 +9695,7 @@
     "sma_2026-03-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9063,6 +9710,7 @@
     "sma_2026-03-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9077,6 +9725,7 @@
     "sma_2026-03-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9091,6 +9740,7 @@
     "sma_2026-03-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9105,6 +9755,7 @@
     "sma_2026-03-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9119,6 +9770,7 @@
     "sma_2026-03-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9133,6 +9785,7 @@
     "sma_2026-03-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9147,6 +9800,7 @@
     "sma_2026-03-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9161,6 +9815,7 @@
     "sma_2026-03-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9175,6 +9830,7 @@
     "sma_2026-03-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9189,6 +9845,7 @@
     "sma_2026-03-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9203,6 +9860,7 @@
     "sma_2026-03-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9217,6 +9875,7 @@
     "sma_2026-03-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9231,6 +9890,7 @@
     "sma_2026-03-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9245,6 +9905,7 @@
     "sma_2026-03-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9259,6 +9920,7 @@
     "sma_2026-03-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9273,6 +9935,7 @@
     "sma_2026-03-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9287,6 +9950,7 @@
     "sma_2026-03-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9301,6 +9965,7 @@
     "sma_2026-03-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9315,6 +9980,7 @@
     "sma_2026-03-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9329,6 +9995,7 @@
     "sma_2026-03-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9343,6 +10010,7 @@
     "sma_2026-03-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9357,6 +10025,7 @@
     "sma_2026-03-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9371,6 +10040,7 @@
     "sma_2026-03-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9385,6 +10055,7 @@
     "sma_2026-03-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 3,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9399,6 +10070,7 @@
     "sma_2026-03-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9413,6 +10085,7 @@
     "sma_2026-03-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9427,6 +10100,7 @@
     "sma_2026-03-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9441,6 +10115,7 @@
     "sma_2026-03-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9455,6 +10130,7 @@
     "sma_2026-04-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9469,6 +10145,7 @@
     "sma_2026-04-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9483,6 +10160,7 @@
     "sma_2026-04-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9497,6 +10175,7 @@
     "sma_2026-04-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9511,6 +10190,7 @@
     "sma_2026-04-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 12,
+      "exact_zero_rows": 2,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9527,6 +10207,7 @@
     "sma_2026-04-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9541,6 +10222,7 @@
     "sma_2026-04-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9555,6 +10237,7 @@
     "sma_2026-04-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9569,6 +10252,7 @@
     "sma_2026-04-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9583,6 +10267,7 @@
     "sma_2026-04-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9597,6 +10282,7 @@
     "sma_2026-04-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9611,6 +10297,7 @@
     "sma_2026-04-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9625,6 +10312,7 @@
     "sma_2026-04-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9639,6 +10327,7 @@
     "sma_2026-04-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9653,6 +10342,7 @@
     "sma_2026-04-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9667,6 +10357,7 @@
     "sma_2026-04-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9681,6 +10372,7 @@
     "sma_2026-04-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9695,6 +10387,7 @@
     "sma_2026-04-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9709,6 +10402,7 @@
     "sma_2026-04-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9723,6 +10417,7 @@
     "sma_2026-04-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9737,6 +10432,7 @@
     "sma_2026-04-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9751,6 +10447,7 @@
     "sma_2026-04-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9765,6 +10462,7 @@
     "sma_2026-04-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9779,6 +10477,7 @@
     "sma_2026-04-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9793,6 +10492,7 @@
     "sma_2026-04-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9807,6 +10507,7 @@
     "sma_2026-04-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9821,6 +10522,7 @@
     "sma_2026-04-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9835,6 +10537,7 @@
     "sma_2026-04-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9849,6 +10552,7 @@
     "sma_2026-04-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9863,6 +10567,7 @@
     "sma_2026-04-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9877,6 +10582,7 @@
     "sma_2026-05-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9891,6 +10597,7 @@
     "sma_2026-05-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9905,6 +10612,7 @@
     "sma_2026-05-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9919,6 +10627,7 @@
     "sma_2026-05-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9933,6 +10642,7 @@
     "sma_2026-05-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9947,6 +10657,7 @@
     "sma_2026-05-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9961,6 +10672,7 @@
     "sma_2026-05-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9975,6 +10687,7 @@
     "sma_2026-05-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -9989,6 +10702,7 @@
     "sma_2026-05-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10003,6 +10717,7 @@
     "sma_2026-05-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10017,6 +10732,7 @@
     "sma_2026-05-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10031,6 +10747,7 @@
     "sma_2026-05-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10045,6 +10762,7 @@
     "sma_2026-05-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10059,6 +10777,7 @@
     "sma_2026-05-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10073,6 +10792,7 @@
     "sma_2026-05-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10087,6 +10807,7 @@
     "sma_2026-05-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10101,6 +10822,7 @@
     "sma_2026-05-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10115,6 +10837,7 @@
     "sma_2026-05-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10129,6 +10852,7 @@
     "sma_2026-05-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10143,6 +10867,7 @@
     "sma_2026-05-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10157,6 +10882,7 @@
     "sma_2026-05-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10171,6 +10897,7 @@
     "sma_2026-05-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10185,6 +10912,7 @@
     "sma_2026-05-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10199,6 +10927,7 @@
     "sma_2026-05-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10213,6 +10942,7 @@
     "sma_2026-05-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10227,6 +10957,7 @@
     "sma_2026-05-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10241,6 +10972,7 @@
     "sma_2026-05-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10255,6 +10987,7 @@
     "sma_2026-05-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10269,6 +11002,7 @@
     "sma_2026-05-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10283,6 +11017,7 @@
     "sma_2026-05-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10297,6 +11032,7 @@
     "sma_2026-05-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10311,6 +11047,7 @@
     "sma_2026-06-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10325,6 +11062,7 @@
     "sma_2026-06-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10339,6 +11077,7 @@
     "sma_2026-06-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10353,6 +11092,7 @@
     "sma_2026-06-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10367,6 +11107,7 @@
     "sma_2026-06-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10381,6 +11122,7 @@
     "sma_2026-06-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10395,6 +11137,7 @@
     "sma_2026-06-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10409,6 +11152,7 @@
     "sma_2026-06-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10423,6 +11167,7 @@
     "sma_2026-06-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10437,6 +11182,7 @@
     "sma_2026-06-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10451,6 +11197,7 @@
     "sma_2026-06-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10465,6 +11212,7 @@
     "sma_2026-06-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10479,6 +11227,7 @@
     "sma_2026-06-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10493,6 +11242,7 @@
     "sma_2026-06-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10507,6 +11257,7 @@
     "sma_2026-06-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10521,6 +11272,7 @@
     "sma_2026-06-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10535,6 +11287,7 @@
     "sma_2026-06-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10549,6 +11302,7 @@
     "sma_2026-06-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10563,6 +11317,7 @@
     "sma_2026-06-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10577,6 +11332,7 @@
     "sma_2026-06-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10591,6 +11347,7 @@
     "sma_2026-06-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10605,6 +11362,7 @@
     "sma_2026-06-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10619,6 +11377,7 @@
     "sma_2026-06-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10633,6 +11392,7 @@
     "sma_2026-06-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10647,6 +11407,7 @@
     "sma_2026-06-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10661,6 +11422,7 @@
     "sma_2026-06-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10675,6 +11437,7 @@
     "sma_2026-06-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10689,6 +11452,7 @@
     "sma_2026-06-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10703,6 +11467,7 @@
     "sma_2026-06-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10717,6 +11482,7 @@
     "sma_2026-06-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10731,6 +11497,7 @@
     "sma_2026-07-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10745,6 +11512,7 @@
     "sma_2026-07-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10759,6 +11527,7 @@
     "sma_2026-07-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10773,6 +11542,7 @@
     "sma_2026-07-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10787,6 +11557,7 @@
     "sma_2026-07-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10801,6 +11572,7 @@
     "sma_2026-07-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10815,6 +11587,7 @@
     "sma_2026-07-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10829,6 +11602,7 @@
     "sma_2026-07-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10843,6 +11617,7 @@
     "sma_2026-07-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10857,6 +11632,7 @@
     "sma_2026-07-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10871,6 +11647,7 @@
     "sma_2026-07-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10885,6 +11662,7 @@
     "sma_2026-07-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10899,6 +11677,7 @@
     "sma_2026-07-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10913,6 +11692,7 @@
     "sma_2026-07-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10927,6 +11707,7 @@
     "sma_2026-07-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10941,6 +11722,7 @@
     "sma_2026-07-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10955,6 +11737,7 @@
     "sma_2026-07-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10969,6 +11752,7 @@
     "sma_2026-07-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10983,6 +11767,7 @@
     "sma_2026-07-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -10997,6 +11782,7 @@
     "sma_2026-07-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11011,6 +11797,7 @@
     "sma_2026-07-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11025,6 +11812,7 @@
     "sma_2026-07-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11039,6 +11827,7 @@
     "sma_2026-07-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11053,6 +11842,7 @@
     "sma_2026-07-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11067,6 +11857,7 @@
     "sma_2026-07-25": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11081,6 +11872,7 @@
     "sma_2026-07-26": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11095,6 +11887,7 @@
     "sma_2026-07-27": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11109,6 +11902,7 @@
     "sma_2026-07-28": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11123,6 +11917,7 @@
     "sma_2026-07-29": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11137,6 +11932,7 @@
     "sma_2026-07-30": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11151,6 +11947,7 @@
     "sma_2026-07-31": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11165,6 +11962,7 @@
     "sma_2026-08-01": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 3,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11179,6 +11977,7 @@
     "sma_2026-08-02": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11193,6 +11992,7 @@
     "sma_2026-08-03": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11207,6 +12007,7 @@
     "sma_2026-08-04": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11221,6 +12022,7 @@
     "sma_2026-08-05": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11235,6 +12037,7 @@
     "sma_2026-08-06": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11249,6 +12052,7 @@
     "sma_2026-08-07": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11263,6 +12067,7 @@
     "sma_2026-08-08": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11277,6 +12082,7 @@
     "sma_2026-08-09": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11291,6 +12097,7 @@
     "sma_2026-08-10": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11305,6 +12112,7 @@
     "sma_2026-08-11": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11319,6 +12127,7 @@
     "sma_2026-08-12": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11333,6 +12142,7 @@
     "sma_2026-08-13": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11347,6 +12157,7 @@
     "sma_2026-08-14": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11361,6 +12172,7 @@
     "sma_2026-08-15": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11375,6 +12187,7 @@
     "sma_2026-08-16": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11389,6 +12202,7 @@
     "sma_2026-08-17": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11403,6 +12217,7 @@
     "sma_2026-08-18": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11417,6 +12232,7 @@
     "sma_2026-08-19": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11431,6 +12247,7 @@
     "sma_2026-08-20": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11445,6 +12262,7 @@
     "sma_2026-08-21": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11459,6 +12277,7 @@
     "sma_2026-08-22": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 0,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11473,6 +12292,7 @@
     "sma_2026-08-23": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,
@@ -11487,6 +12307,7 @@
     "sma_2026-08-24": {
       "dst_anomaly_suspected": false,
       "duplicate_timestamps": 0,
+      "exact_zero_rows": 1,
       "gap_count": 0,
       "max_gap_minutes": 5.0,
       "negative_solar_rows": 0,

@@ -384,3 +384,83 @@ def test_seam_row_energy_conversion_capped_at_nominal_step(tmp_path):
     seam = full.filter(pl.col("Timestamp") == pl.datetime(2025, 8, 1, 0, 0))
     # 3.0 kW x 5 min, NOT 3.0 kW x ~19 months
     assert abs(seam["HouseLoad"][0] - 3.0 * 5 / 60) < 1e-9
+
+
+def _with_dead_stretch(df, start_idx, n_rows):
+    """Zero out HouseLoad/SolarGen for n_rows from start_idx (offline sim)."""
+    idx = list(range(start_idx, start_idx + n_rows))
+    return df.with_columns([
+        pl.when(pl.arange(0, df.height).is_in(idx))
+        .then(0.0).otherwise(pl.col("HouseLoad")).alias("HouseLoad"),
+        pl.when(pl.arange(0, df.height).is_in(idx))
+        .then(0.0).otherwise(pl.col("SolarGen")).alias("SolarGen"),
+    ])
+
+
+def test_drop_dead_runs_removes_sustained_offline():
+    from household_ingest import drop_dead_runs
+    df = _write_norm_day.__wrapped__ if False else None
+    # reuse helper: one day, then zero out 3h in the middle
+    import datetime as dt
+    base = dt.datetime.fromisoformat("2026-05-20")
+    n = 288
+    day = pl.DataFrame({
+        "Timestamp": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+        "HouseLoad": [2.0] * n,
+        "SolarGen": [1.0] * n,
+    })
+    out, dropped = drop_dead_runs(_with_dead_stretch(day, 100, 36), min_run_minutes=120)
+    assert dropped == 36
+    assert out.height == n - 36
+
+
+def test_drop_dead_runs_keeps_short_blips():
+    from household_ingest import drop_dead_runs
+    import datetime as dt
+    base = dt.datetime.fromisoformat("2026-05-20")
+    n = 288
+    day = pl.DataFrame({
+        "Timestamp": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+        "HouseLoad": [2.0] * n,
+        "SolarGen": [1.0] * n,
+    })
+    out, dropped = drop_dead_runs(_with_dead_stretch(day, 100, 12), min_run_minutes=120)
+    assert dropped == 0  # 60-min blip < 120-min threshold
+    assert out.height == n
+
+
+def test_build_year_dataset_splits_at_offline_stretch(tmp_path):
+    from household_ingest import build_year_dataset, split_segments
+    d = tmp_path / "normalized"
+    d.mkdir()
+    _write_norm_day(d, "2026-05-20", load_kw=2.0)
+    _write_norm_day(d, "2026-05-21", load_kw=3.0)
+
+    raw = pl.concat([pl.read_parquet(f) for f in sorted(d.glob("*.parquet"))])
+    dead = _with_dead_stretch(raw, 288 + 100, 60)  # 5h dead inside day 2
+    dead.write_parquet(d / "sma_2026-05-21_normalized.parquet")
+
+    full = build_year_dataset(d)
+    segs = split_segments(full)
+    # the offline stretch must not survive as a fake idle episode
+    zero_rows = full.filter((pl.col("HouseLoad") == 0) & (pl.col("SolarGen") == 0))
+    assert zero_rows.height <= 23  # only the kept short tail of the run
+    assert len(segs) >= 2
+
+
+def test_validate_flags_exact_zero_rows():
+    import datetime as dt
+    from household_ingest import validate_and_normalize
+    base = dt.datetime.fromisoformat("2026-05-20")
+    n = 288
+    df = pl.DataFrame({
+        "Timestamp": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+        "HouseLoad": [2.0] * n,
+        "SolarGen": [1.0] * n,
+        "BatterySOC": [0.5] * n,
+        "BatteryPower": [0.0] * n,
+    })
+    dead = _with_dead_stretch(df, 50, 48)  # 4h all-zero
+    _, report = validate_and_normalize(dead, source_file="t", source_sha256="x")
+    assert report.exact_zero_rows == 48
+    assert any("offline" in w for w in report.warnings)
