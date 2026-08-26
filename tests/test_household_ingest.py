@@ -346,3 +346,41 @@ def test_build_year_dataset_empty_dir_raises(tmp_path):
     from household_ingest import build_year_dataset
     with pytest.raises(FileNotFoundError):
         build_year_dataset(tmp_path)
+
+
+def test_split_segments_detects_month_gap(tmp_path):
+    from household_ingest import build_year_dataset, find_gap_boundaries, split_segments
+    d = tmp_path / "normalized"
+    d.mkdir()
+    _write_norm_day(d, "2024-01-24")
+    _write_norm_day(d, "2024-01-25")
+    # three-month hole in the raw exports
+    _write_norm_day(d, "2025-08-01")
+
+    full = build_year_dataset(d)
+    bounds = find_gap_boundaries(full)
+    assert bounds == [576]  # seam right after day 2
+
+    segs = split_segments(full)
+    assert len(segs) == 2
+    assert segs[0].height == 576 and segs[1].height == 288
+    assert segs[0]["SegmentID"][0] == 0 and segs[1]["SegmentID"][0] == 1
+
+    # each segment is internally contiguous at 5-min steps
+    for s in segs:
+        dt = s["Timestamp"].diff().dt.total_seconds().drop_nulls()
+        assert dt.max() <= 15 * 60
+
+
+def test_seam_row_energy_conversion_capped_at_nominal_step(tmp_path):
+    """A month-scale gap must not turn the seam row into weeks of kWh."""
+    from household_ingest import build_year_dataset
+    d = tmp_path / "normalized"
+    d.mkdir()
+    _write_norm_day(d, "2024-01-24", load_kw=2.0)
+    _write_norm_day(d, "2025-08-01", load_kw=3.0)
+
+    full = build_year_dataset(d)
+    seam = full.filter(pl.col("Timestamp") == pl.datetime(2025, 8, 1, 0, 0))
+    # 3.0 kW x 5 min, NOT 3.0 kW x ~19 months
+    assert abs(seam["HouseLoad"][0] - 3.0 * 5 / 60) < 1e-9

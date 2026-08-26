@@ -314,10 +314,14 @@ def build_year_dataset(normalized_dir: Path) -> pl.DataFrame:
     - Concatenates all *_normalized.parquet files, drops duplicate timestamps
       (keeps first), sorts by Timestamp.
     - Converts HouseLoad/SolarGen from kW to kWh-per-step using each row's
-      actual time delta (the env's reward math expects energy per step).
+      actual time delta, CAPPED at the nominal step (raw exports have
+      day/month-scale gaps; treating those as elapsed energy would corrupt
+      the seam row).
     - Adds FutureSolar/FutureLoad as a DAY-AHEAD PERSISTENCE forecast: the
       value observed 24h earlier. Honest (non-clairvoyant); the first 24h
-      falls back to the current value.
+      falls back to the current value. NOTE: forecasts crossing a gap
+      boundary are stale-by-days — downstream users working near seams
+      should re-derive or drop them.
     - BatteryPower/BatterySOC are preserved in the output for the H3 replay
       analysis but are NOT part of ENV_COLUMNS (they would change the env's
       observation dimensionality).
@@ -328,9 +332,13 @@ def build_year_dataset(normalized_dir: Path) -> pl.DataFrame:
     dfs = [pl.read_parquet(f) for f in files]
     df = pl.concat(dfs).unique(subset=["Timestamp"], keep="first").sort("Timestamp")
 
-    # kW -> kWh per step using the row's own delta to the previous timestamp
+    # kW -> kWh per step using the row's own delta, capped at the nominal
+    # step so gap-seam rows don't absorb weeks of phantom energy.
+    # NOTE: total_seconds() is SECONDS -> bounds are [60s, 300s].
+    NOMINAL_MIN = 5.0
     step_hours = (
-        pl.col("Timestamp").diff().dt.total_seconds().fill_null(300).clip(1, None) / 3600.0
+        pl.col("Timestamp").diff().dt.total_seconds().fill_null(NOMINAL_MIN * 60)
+        .clip(60.0, NOMINAL_MIN * 60) / 3600.0
     )
     df = df.with_columns([
         (pl.col("HouseLoad") * step_hours).alias("HouseLoad"),
@@ -359,6 +367,36 @@ def build_year_dataset(normalized_dir: Path) -> pl.DataFrame:
         df = df.with_columns(pl.col("Time").cast(pl.Datetime))
 
     return df.sort("Timestamp")
+
+
+def find_gap_boundaries(df: pl.DataFrame, max_gap_minutes: float = 90.0) -> List[int]:
+    """Row indices where the timestamp jumps by more than ``max_gap_minutes``.
+
+    The raw portal exports have day/month-scale holes (manual downloads).
+    Treating the concatenation as one continuous episode would let the env
+    step seamlessly across e.g. a 3-month hole, corrupting SOC dynamics and
+    reward accounting. Callers should split at these indices.
+
+    Default 90 min sits ABOVE the ~55-min timestamp jump of an Australian
+    DST spring-forward (so clock changes don't fragment episodes) but well
+    below any genuine multi-hour data hole.
+    """
+    deltas = df["Timestamp"].diff().dt.total_seconds() / 60.0
+    return [i for i in range(1, len(df)) if deltas[i] is not None and deltas[i] > max_gap_minutes]
+
+
+def split_segments(df: pl.DataFrame, max_gap_minutes: float | None = None) -> List[pl.DataFrame]:
+    """Split a merged dataset into contiguous episodes at gap boundaries."""
+    if max_gap_minutes is None:
+        max_gap_minutes = 90.0
+    bounds = find_gap_boundaries(df, max_gap_minutes)
+    edges = [0] + bounds + [len(df)]
+    return [
+        df.slice(edges[i], edges[i + 1] - edges[i]).with_columns(
+            pl.lit(i, dtype=pl.Int64).alias("SegmentID")
+        )
+        for i in range(len(edges) - 1)
+    ]
 
 
 def env_view(df: pl.DataFrame) -> pl.DataFrame:
