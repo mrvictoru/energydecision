@@ -62,6 +62,7 @@ class IngestReport:
     null_values: int = 0
     negative_solar_rows: int = 0
     exact_zero_rows: int = 0
+    suspect_zero_rows: int = 0
     dst_anomaly_suspected: bool = False
     warnings: List[str] = field(default_factory=list)
 
@@ -512,22 +513,62 @@ def validate_and_normalize(
         if neg_solar:
             warnings.append(f"{neg_solar} rows with negative SolarGen (check sign convention)")
 
-    # --- disconnection heuristic: ALL channels exactly zero ---
-    # An occupied house never draws exactly 0.000 kW for long; simultaneous
-    # hard zeros in load AND solar usually mean the system was offline
-    # (e.g. renovation disconnection) and the portal logged 0 instead of NaN.
+    # --- disconnection / missing-as-zero heuristics ---
+    # An occupied house never draws exactly 0.000 kW for long. Simultaneous
+    # hard zeros in load AND solar are either (a) the system genuinely offline
+    # (e.g. renovation disconnection) logged as 0, or (b) a single dropped
+    # 5-min sample that the portal rendered as 0 instead of NaN. We separate
+    # the two: sustained runs (>=2h) are flagged as offline and dropped at
+    # build time; isolated short runs (<=2 rows) flanked by normal data are
+    # treated as missing samples, nulled and interpolated here.
     exact_zero_rows = 0
+    suspect_zero_rows = 0
     if "HouseLoad" in df.columns and "SolarGen" in df.columns:
         EPS = 1e-6
-        dead = df.filter(
-            (pl.col("HouseLoad").abs() <= EPS) & (pl.col("SolarGen").abs() <= EPS)
+        df = df.with_columns(
+            ((pl.col("HouseLoad").abs() <= EPS) & (pl.col("SolarGen").abs() <= EPS))
+            .alias("_dead")
         )
-        exact_zero_rows = dead.height
+        df = df.with_columns(
+            (pl.col("_dead") != pl.col("_dead").shift(fill_value=False))
+            .cum_sum()
+            .alias("_run")
+        )
+        run_info = df.group_by("_run").agg([
+            pl.col("_dead").first().alias("is_dead"),
+            pl.len().alias("run_len"),
+        ])
+        df = df.join(run_info, on="_run", how="left")
+        exact_zero_rows = int(df.filter(pl.col("_dead")).height)
+
+        first_run = df["_run"][0]
+        last_run = df["_run"][-1]
+        # isolated = short dead run (<=2 rows) that does NOT touch the file edge
+        suspect_mask = (
+            pl.col("_dead")
+            & (pl.col("run_len") <= 2)
+            & (pl.col("_run") != first_run)
+            & (pl.col("_run") != last_run)
+        )
+        suspect_zero_rows = int(df.filter(suspect_mask).height)
+        if suspect_zero_rows:
+            df = df.with_columns([
+                pl.when(suspect_mask).then(None).otherwise(pl.col("HouseLoad"))
+                .alias("HouseLoad"),
+                pl.when(suspect_mask).then(None).otherwise(pl.col("SolarGen"))
+                .alias("SolarGen"),
+            ])
+            warnings.append(
+                f"{suspect_zero_rows} isolated all-zero rows (<=10 min, flanked "
+                "by normal data) treated as missing samples and interpolated"
+            )
+
         if exact_zero_rows >= 2 * 60 // expected_resolution_minutes:
             warnings.append(
                 f"{exact_zero_rows} rows with HouseLoad AND SolarGen exactly 0 "
                 "(suspected system offline — zeros, not missing data)"
             )
+        df = df.drop(["_dead", "_run", "is_dead", "run_len"])
 
     # --- fill defaults: flat tariffs when portal has none ---
     if "ImportEnergyPrice" not in df.columns:
@@ -555,6 +596,7 @@ def validate_and_normalize(
         null_values=int(nulls or 0),
         negative_solar_rows=neg_solar,
         exact_zero_rows=int(exact_zero_rows),
+        suspect_zero_rows=int(suspect_zero_rows),
         dst_anomaly_suspected=bool(dst_suspect),
         warnings=warnings,
     )

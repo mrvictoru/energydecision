@@ -4,9 +4,20 @@ Ingest raw household portal CSVs into the SolarBatteryEnv schema.
 
 FUTURE_PLAN §6b (H0). One command per batch of weekly downloads:
 
-    python3 scripts/ingest_household_portal_csv.py \
-      --input "data/household/real/raw/*.csv" \
-      --resolution-minutes 5
+     python3 scripts/ingest_household_portal_csv.py \
+       --input "data/household/real/raw/*.csv" \
+       --resolution-minutes 5
+
+Date-range filtering (date parsed from the filename, inclusive):
+
+     python3 scripts/ingest_household_portal_csv.py \
+       --input "data/household/real/raw/*.csv" \
+       --start-date 2024-07-01 --end-date 2024-09-30
+
+Missing-data handling: sustained all-zero runs (>=2h of HouseLoad AND
+SolarGen == 0) are flagged as suspected system-offline; isolated short
+all-zero runs (<=10 min, flanked by normal data) are treated as dropped
+samples and interpolated. Both are surfaced in the manifest.
 
 Outputs normalized parquet files + a shareable manifest (checksums and
 validation stats only — no metering values) under data/household/real/.
@@ -20,7 +31,9 @@ If the portal's column names are not auto-detected, pass an explicit map:
 
 import argparse
 import json
+import re
 import sys
+from datetime import date as _date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -33,6 +46,31 @@ from household_ingest import (  # noqa: E402
 )
 
 DEFAULT_REAL_DIR = Path("data/household/real")
+
+
+def files_in_date_range(files, start_date=None, end_date=None):
+    """Filter files to those whose filename embeds a date within [start, end].
+
+    Files whose name has no YYYY-MM-DD are kept (ambiguous -> do not silently
+    drop), but those with a parseable date outside the range are skipped.
+    """
+    if not (start_date or end_date):
+        return list(files)
+    sd = _date.fromisoformat(start_date) if start_date else None
+    ed = _date.fromisoformat(end_date) if end_date else None
+    kept, skipped = [], 0
+    for f in files:
+        m = re.findall(r"(\d{4}-\d{2}-\d{2})", Path(f).stem)
+        if not m:
+            kept.append(f)
+            continue
+        d = _date.fromisoformat(m[-1])
+        if (sd and d < sd) or (ed and d > ed):
+            skipped += 1
+            continue
+        kept.append(f)
+    print(f"date filter [{sd}..{ed}]: {skipped} file(s) outside range skipped")
+    return kept
 
 
 def main(argv=None) -> int:
@@ -56,6 +94,11 @@ def main(argv=None) -> int:
                    help="CSV numerics use decimal commas (European locale, e.g. SMA/ennexos exports)")
     p.add_argument("--watts-to-kilo", action="store_true", default=False,
                    help="Portal reports power in W (typical for SMA/ennexos); convert to kW")
+    p.add_argument("--start-date", default=None,
+                   help="Inclusive start YYYY-MM-DD; files outside range are skipped "
+                        "(date parsed from filename, same as ingest derivation)")
+    p.add_argument("--end-date", default=None,
+                   help="Inclusive end YYYY-MM-DD; files outside range are skipped")
     args = p.parse_args(argv)
 
     input_path = Path(args.input)
@@ -67,6 +110,8 @@ def main(argv=None) -> int:
     if not csv_files:
         print(f"No CSVs matched: {args.input}", file=sys.stderr)
         return 1
+
+    csv_files = files_in_date_range(csv_files, args.start_date, args.end_date)
 
     column_map = json.loads(args.column_map) if args.column_map else None
     output_dir = Path(args.output_dir)

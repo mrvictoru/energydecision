@@ -3,11 +3,13 @@
 import json
 import os
 import sys
+from pathlib import Path
 
 import polars as pl
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from household_ingest import (  # noqa: E402
     convert_watts_to_kilo,
@@ -464,3 +466,61 @@ def test_validate_flags_exact_zero_rows():
     _, report = validate_and_normalize(dead, source_file="t", source_sha256="x")
     assert report.exact_zero_rows == 48
     assert any("offline" in w for w in report.warnings)
+
+
+def test_isolated_zero_row_flagged_and_interpolated():
+    import datetime as dt
+    from household_ingest import validate_and_normalize
+    base = dt.datetime.fromisoformat("2026-05-20")
+    n = 288
+    df = pl.DataFrame({
+        "Timestamp": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+        "HouseLoad": [2.0] * n,
+        "SolarGen": [1.0] * n,
+        "BatterySOC": [0.5] * n,
+        "BatteryPower": [0.0] * n,
+    })
+    # a single interior dropped-sample rendered as 0 (not flanked by edge)
+    dead = _with_dead_stretch(df, 100, 1)
+    out, report = validate_and_normalize(dead, source_file="t", source_sha256="x")
+    assert report.suspect_zero_rows == 1
+    row = out.filter(pl.col("Timestamp") == pl.datetime(2026, 5, 20, 8, 20))
+    # interpolated between neighbors (2.0) rather than left as exactly 0
+    assert abs(row["HouseLoad"][0] - 2.0) < 1e-9
+
+
+def test_isolated_zero_at_file_edge_not_flagged():
+    import datetime as dt
+    from household_ingest import validate_and_normalize
+    base = dt.datetime.fromisoformat("2026-05-20")
+    n = 288
+    df = pl.DataFrame({
+        "Timestamp": [base + dt.timedelta(minutes=5 * i) for i in range(n)],
+        "HouseLoad": [2.0] * n,
+        "SolarGen": [1.0] * n,
+        "BatterySOC": [0.5] * n,
+        "BatteryPower": [0.0] * n,
+    })
+    dead = _with_dead_stretch(df, 0, 1)  # zero at row 0 -> touches edge
+    _, report = validate_and_normalize(dead, source_file="t", source_sha256="x")
+    assert report.suspect_zero_rows == 0
+
+
+def test_files_in_date_range():
+    from scripts.ingest_household_portal_csv import files_in_date_range
+    import tempfile
+    d = Path(tempfile.mkdtemp())
+    for s in ["2025-08-01", "2025-09-15", "2025-12-31", "2026-03-04", "no-date-here"]:
+        (d / f"Energy balance - Day - X - {s}.csv").touch()
+    files = [d / f for f in [
+        "Energy balance - Day - X - 2025-08-01.csv",
+        "Energy balance - Day - X - 2025-09-15.csv",
+        "Energy balance - Day - X - 2025-12-31.csv",
+        "Energy balance - Day - X - 2026-03-04.csv",
+        "Energy balance - Day - X - no-date-here.csv",
+    ]]
+    kept = files_in_date_range(files, "2025-09-01", "2026-01-01")
+    names = sorted(p.name for p in kept)
+    assert "Energy balance - Day - X - 2025-08-01.csv" not in names
+    assert "Energy balance - Day - X - 2026-03-04.csv" not in names
+    assert "Energy balance - Day - X - no-date-here.csv" in names  # ambiguous -> kept
