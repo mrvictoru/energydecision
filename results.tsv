@@ -108,7 +108,6 @@ bb17d5b	aemo	n/a	crash	opt+sched sweep: proxy-smoke crashed with Xid79 (GPU fell
 609dd24	aemo	-2.295426695845123	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 rmsprop_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/rmsprop_none
 609dd24	aemo	-2.137930759377132	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 adamw_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/adamw_none
 609dd24	aemo	-1.830449334661178	keep	mini evaluator: opt_sweep_clkLOW_20260604_135339 muon_none candidate_dt mean_reward (rule=-0.6746989306021743); eval_output/autoresearch/opt_sweep_clkLOW_20260604_135339/muon_none
-<<<<<<< Updated upstream
 20260610-ctx-sweep	aemo	0.070363	keep	frontier context sweep: aemo_proxy_frontier, 8x512, drop_p=0.15, ctx=180, b=16, e=2 on proxy pilot — confirms baseline ctx=180
 20260610-ctx-sweep	aemo	0.070160	keep	frontier context sweep: ctx=180 baseline rerun at b=8 for fair comparison
 20260610-ctx-sweep	aemo	0.082855	keep	frontier context sweep: ctx=180 at b=4 for direct comparison with longer context at b=4
