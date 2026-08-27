@@ -82,6 +82,38 @@ Typical evaluation outputs live under:
 
 - `eval_output/`
 
+### 6. Build the synthetic diverse-household corpus
+
+H1.5 recomposes complete normalized 5-minute days; it does not add row-wise
+noise. The generator clusters real load profiles by season and weekday/weekend,
+samples five explicit archetypes, injects optional EV/AC/pool blocks under a
+60% daily-energy cap, scales the real solar curve, and rejects candidates that
+fail any G1–G6 validation gate.
+
+From the repository root in the GPU Distrobox:
+
+```bash
+python3 scripts/build_household_synth_corpus.py \
+  --normalized-dir data/household/real/normalized \
+  --output-dir data/household/synth \
+  --episodes 1200 \
+  --days-per-episode 7 \
+  --seed 42
+```
+
+Each episode is an env-view-compatible parquet under
+`data/household/synth/<archetype>/`, with `SolarGen` and `HouseLoad` stored as
+kWh per 5-minute step and the day-ahead `FutureSolar`/`FutureLoad` columns.
+`manifest.json` records the seed, source dates and clusters, archetype,
+lambda scale, appliance parameters, solar and battery configuration, gate
+metrics, split (`train`/`val`/`test`), and the real source dates reserved for
+OOD evaluation. The real household remains the OOD surface of record and must
+not be included in synthetic training data.
+
+The optional `--use-ttm --ttm-mode {gap_imputation,weather_residual}` path is
+intentionally isolated and fails explicitly until the Granite TTM runtime is
+provisioned; TTM is not used as the primary generator.
+
 ## Main Artifacts
 
 Common household artifact locations:
@@ -102,6 +134,8 @@ Common household artifact locations:
 - `src/sb3train.py`: SB3 helper functions
 - `src/decision_transformer.py`: DT model implementation
 - `src/transformer_training.py`: DT training engine
+- `src/household_synthetic.py`: clustered day library, archetypes, appliance/solar synthesis, validation gates, and episode export
+- `scripts/build_household_synth_corpus.py`: reproducible H1.5 corpus builder
 
 ## Validation And Iteration
 

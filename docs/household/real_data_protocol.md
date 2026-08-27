@@ -18,7 +18,7 @@
 | Raw portal CSVs (`data/household/real/raw/`) | **NEVER** | Gitignored; local-only |
 | Normalized parquets (`data/household/real/normalized/`) | **NEVER** | Gitignored; still raw telemetry |
 | `household_ingest_manifest.json` (repo root) | Yes | Checksums + row/validation counts only; no metering values. Kept outside `data/` so it can be tracked despite the blanket `data/` ignore |
-| Aggregated statistics, plots with binned/anonymized data, synthetic households derived from the schema | Case-by-case | Prefer derived/synthetic for anything public |
+| Aggregated statistics, plots with binned/anonymized data, synthetic households derived from the schema | Case-by-case | Prefer derived/synthetic for anything public; synthetic outputs remain traceable through their manifest |
 
 The manifest is designed to be share-safe: `tests/test_household_ingest.py::test_manifest_tracks_checksums_and_stats_only`
 asserts no metering values leak into it.
@@ -68,3 +68,13 @@ automation (Playwright), which was explored and **deferred** (see git history on
      --decimal-comma --watts-to-kilo
    ```
 4. Commit the updated `household_ingest_manifest.json` (checksums + stats only).
+
+## Synthetic-data handling
+
+The H1.5 builder reads local normalized telemetry but writes only derived
+synthetic episodes and a parameter manifest. Run it with a held-out real-source
+date fraction (the default is 15%); those dates are recorded as the OOD surface
+and must not be used to train the synthetic corpus. Do not commit raw or
+normalized telemetry, and review the generated manifest before any external
+release. The manifest contains source dates and generation parameters, not
+metering values.

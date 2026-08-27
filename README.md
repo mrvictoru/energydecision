@@ -71,6 +71,7 @@ Use the AEMO track if you want grid-scale battery trading in energy and FCAS mar
 *   [ ] **Multi-agent NEM extension:** Multi-BESS coordination under merit-order impact (PettingZoo integration).
 *   [ ] **Paper pipeline:** Benchmark paper (Datasets & Benchmarks track) + Method paper (planner distillation + impact gate).
 *   [ ] **Household modern-data rebuild (H0–H3):** Ingest real 2019+ household telemetry (solar + home battery, privacy-gated); re-establish benchmark under modern tariff economics; port the AEMO playbook (SDP distillation + cost-to-go prompting); real-battery replay-gap analysis. See `docs/FUTURE_PLAN.md` §6b.
+*   [x] **Synthetic diverse-household corpus (H1.5):** Whole-day clustered recomposition with five household archetypes, capped EV/AC/pool appliance injection, solar/battery scaling, automated G1–G6 validation, and reproducible train/val/test manifests. See `scripts/build_household_synth_corpus.py` and `docs/household/workflow.md`.
 
 ## Quick Setup
 
