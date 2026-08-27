@@ -168,8 +168,17 @@ python3 scripts/generate_household_sdp_trajectories.py \
 
 Build a matching `--split val` corpus before invoking the sanctioned shared
 trainer. Do not include real OOD segments in either corpus. The full corpus
-build and trained-DT OOD evaluation are pending; a two-episode smoke run
-verified the emitted schema and finite J_t(soc) values.
+build is now complete: 840 training and 180 validation episodes emitted
+1,693,440 and 362,880 rows respectively. A 2×128 standalone DT trained for
+five epochs achieves 0.0424 validation total loss (0.0423 action loss), but
+on real OOD saves only $27/year. This improves the cloning-era DT (−$6/year)
+but does not beat the causal rule ($70/year); it is a negative transfer result,
+not a policy recommendation.
+
+The teacher data carries exact `rtg_value = -J_t(soc)`, but the current shared
+inference agent uses its standard realized-reward RTG recurrence. Implement
+per-step inference-time J_t(soc) recomputation before interpreting this as a
+complete Stage-C-equivalent transfer.
 
 ## Main Artifacts
 
