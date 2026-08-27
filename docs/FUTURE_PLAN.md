@@ -130,7 +130,7 @@
 | ✅ **H0** | **Privacy guardrails**: raw + normalized telemetry gitignored under `data/household/real/`; only the anonymized manifest (`sma_<date>` identities, sha256 checksums) is committed; privacy leak test enforced. Protocol: `docs/household/real_data_protocol.md`. Data source is a **VPP-coordinated** battery (grid-charging schedule) — noted for H3 interpretation. | Done |
 | ✅ **H0** | **Gap & disconnection guards** (2026-08): raw exports contain month-scale holes (renovation disconnection) and offline periods log as hard zeros, not NaN. Defenses: `find_gap_boundaries`/`split_segments` (>90-min timestamp jumps → contiguous episodes with `SegmentID`, DST-passing threshold); seam-row kW→kWh conversion capped at nominal step; `drop_dead_runs` removes sustained all-zero stretches (HouseLoad AND SolarGen == 0 for ≥2h); per-file `exact_zero_rows` manifest stat. Current corpus: 821 days (2024-01-24 → 2026-08-24), 236,424 rows, 3 segments — no sustained offline stretches found in existing data (110 scattered blips kept). Env must always run per-segment. | Done |
 | 🟡 **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on the real-year dataset (env verified working); define surfaces — train vs OOD splits, seasonal splits | In progress — env ready, baselines next |
-| ⬜ **H1.5** | **Synthetic diverse-household generator** — see detailed plan below | Spec'd, ready to build |
+| 🟡 **H1.5** | **Synthetic diverse-household generator** — see detailed plan below | Core whole-day generator, gates, and corpus CLI implemented; optional Granite TTM adapter remains separately provisioned |
 | ⬜ **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
 | ⬜ **H3** | **Replay-gap analysis**: quantify actual (VPP) vs optimal operation per period using the recorded BatteryPower/BatterySOC channels | Battery telemetry confirmed available |
 | ⬜ **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through — same hardware, different tariffs → policy-relevant economics | Current data uses flat 0.30/0.05 defaults |
@@ -212,11 +212,11 @@ Gate failures loop back to resampling/injection parameters, never hand-fixed.
 
 | Step | Deliverable | Test |
 |---|---|---|
-| 1 | `src/household_synthetic.py`: day clustering (season×daytype k-means on normalized profiles) | cluster purity > 0.8 on held-out labels |
-| 2 | Resampler + λ-scaling + injection blocks | G1–G6 harness green |
-| 3 | Battery/solar assignment + env-view export | env instantiates per episode, 12-D obs |
-| 4 | Corpus build CLI (`scripts/build_household_synth_corpus.py`) | manifest complete, counts exact |
-| 5 | Optional TTM imputation module (isolated flag) | gap-imputed segment passes G1–G6, marked synthetic |
+| ✅ 1 | `src/household_synthetic.py`: day clustering (season×daytype k-means on normalized profiles) | cluster purity > 0.8 on held-out labels |
+| ✅ 2 | Resampler + λ-scaling + injection blocks | G1–G6 harness green |
+| ✅ 3 | Battery/solar assignment + env-view export | env instantiates per episode, 12-D obs |
+| ✅ 4 | Corpus build CLI (`scripts/build_household_synth_corpus.py`) | manifest complete, counts exact |
+| 🟡 5 | Optional TTM imputation module (isolated flag) | Fail-fast flag-gated adapter is present; Granite runtime provisioning and imputation validation remain |
 
 #### Risks
 
