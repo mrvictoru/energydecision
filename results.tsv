@@ -3,6 +3,7 @@ commit	track	metric	status	description
 45d0b37	aemo	1.103598	discard	pilot lr sweep: proxy-baseline on lengthened pilot split, lr=2e-5, batch=128
 45d0b37	aemo	0.570140	keep	pilot batch sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=64
 45d0b37	aemo	n/a	crash	context-length 120 launch failed in the current proxy-baseline wrapper shape
+b369e54	household	$355/yr	keep	H3 re-optimized 5 kWh/3.3 kW/0.80 RTE dispatch gap under 31.042c import, free 11:00-14:00, 1c FiT; annualized 95% bootstrap CI $342-$368 over 1,084 complete real days
 0beb9bc	aemo	1.026434	keep	pilot context sweep after RoPE fix: proxy-baseline on lengthened pilot split, lr=3e-5, batch=128, context=120
 0beb9bc	aemo	0.534541	keep	pilot combined sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=64, context=120
 0beb9bc	aemo	0.361425	keep	pilot combined sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=32, context=120

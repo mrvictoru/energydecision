@@ -114,6 +114,26 @@ The optional `--use-ttm --ttm-mode {gap_imputation,weather_residual}` path is
 intentionally isolated and fails explicitly until the Granite TTM runtime is
 provisioned; TTM is not used as the primary generator.
 
+### 7. Compare observed and optimized real-battery dispatch
+
+Use the H3 harness to replay recorded VPP actions and compare them with a
+new cost-minimizing dispatch over each complete real day. It uses normalized
+kW telemetry directly (not `build_year_dataset()`, whose values are already
+converted to kWh per step), fits one corpus-wide action sign, and never spans
+a gap seam:
+
+```bash
+python3 scripts/evaluate_household_tariffs.py \
+  --normalized-dir data/household/real/normalized \
+  --capacity-kwh 5 --max-flow-kw 3.3 --roundtrip-eff 0.80
+```
+
+The output is `eval_output/household/tariff_optimization/summary.json` with
+per-day bootstrap CIs for observed replay, optimized dispatch, the
+optimization gap, and the no-battery baseline under flat and free-window ToU
+tariffs. Do not label a spot-pass-through result until a time-aligned retail
+spot-price series is supplied.
+
 ## Main Artifacts
 
 Common household artifact locations:
@@ -136,6 +156,8 @@ Common household artifact locations:
 - `src/transformer_training.py`: DT training engine
 - `src/household_synthetic.py`: clustered day library, archetypes, appliance/solar synthesis, validation gates, and episode export
 - `scripts/build_household_synth_corpus.py`: reproducible H1.5 corpus builder
+- `src/household_optimization.py`: deterministic dispatch optimizer and bootstrap CI helper
+- `scripts/evaluate_household_tariffs.py`: H3 replay-gap and tariff evaluation
 
 ## Validation And Iteration
 

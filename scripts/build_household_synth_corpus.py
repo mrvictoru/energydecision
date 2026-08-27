@@ -7,7 +7,7 @@ import argparse
 import datetime as dt
 import json
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +21,7 @@ from household_synthetic import (  # noqa: E402
     BATTERY_CAPACITIES_KWH,
     BATTERY_FLOWS_KW,
     DAY_TYPES,
+    ApplianceRecipe,
     DayLibrary,
     TTMConfig,
     apply_ttm_auxiliary,
@@ -105,12 +106,22 @@ def _build_one(
 ) -> tuple[object, dict[str, object]]:
     seed = episode_seed(master_seed, archetype, season, capacity_kwh, replicate)
     rng = np.random.default_rng(seed)
-    load_scale = float(rng.uniform(0.4, 3.0))
     installed_kw = float(rng.uniform(3.0, 15.0))
     orientation_derate = float(rng.uniform(0.75, 1.0))
     flow_kw = float(rng.choice(BATTERY_FLOWS_KW))
 
     for attempt in range(1, max_attempts + 1):
+        # Regenerate sampling/injection parameters after a gate rejection. This
+        # follows the H1.5 rule that failed days are regenerated, never edited.
+        load_scale = float(rng.uniform(0.4, 3.0))
+        intensity = 0.72 ** (attempt - 1)
+        base_recipe = ARCHETYPE_RECIPES[archetype]
+        recipe = replace(
+            base_recipe,
+            ev_probability=base_recipe.ev_probability * intensity,
+            ac_probability=base_recipe.ac_probability * intensity,
+            pool_probability=base_recipe.pool_probability * intensity,
+        )
         start = _start_date(library, season, rng, days_per_episode)
         sampled = []
         for offset in range(days_per_episode):
@@ -141,6 +152,7 @@ def _build_one(
                 archetype=archetype,
                 day_type=selected.day_type,
                 rng=rng,
+                recipe=recipe,
             )
             synthetic_days.append(generated)
             reference_days.append(reference)
@@ -154,6 +166,8 @@ def _build_one(
                 "archetype": archetype,
                 "season": season,
                 "load_scale_lambda": load_scale,
+                "appliance_intensity": intensity,
+                "appliance_recipe": asdict(recipe),
                 "solar": {
                     "installed_kw": installed_kw,
                     "orientation_derate": orientation_derate,

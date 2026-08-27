@@ -132,8 +132,8 @@
 | 🟡 **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on the real-year dataset (env verified working); define surfaces — train vs OOD splits, seasonal splits | In progress — env ready, baselines next |
 | ✅ **H1.5** | **Synthetic diverse-household generator** — see detailed plan below | Core generator, G1–G6 gates, env-view export, OOD holdout, and reproducible corpus CLI implemented; optional Granite TTM adapter remains separately provisioned |
 | ⬜ **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
-| ⬜ **H3** | **Replay-gap analysis**: quantify actual (VPP) vs optimal operation per period using the recorded BatteryPower/BatterySOC channels | Battery telemetry confirmed available |
-| ⬜ **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through — same hardware, different tariffs → policy-relevant economics | Current data uses flat 0.30/0.05 defaults |
+| 🟡 **H3** | **Replay-gap analysis**: deterministic 5-minute optimizer now compares recorded VPP actions with re-optimized dispatch per contiguous real day. At 5 kWh / 3.3 kW / 0.80 RTE: the observed-to-optimal gap is annualized **$214** under flat pricing and **$355** with free 11:00–14:00 pricing (95% bootstrap CIs documented in `docs/household/replay_battery_size_analysis.md`). | Spot pass-through remains pending a time-aligned retail spot-price series |
+| 🟡 **H3** | **Tariff-policy experiments**: flat and realistic free-window ToU sweep implemented in `scripts/evaluate_household_tariffs.py`; prices are re-derived rather than using stored 0.30/0.05 defaults. | Add observed retail spot-price input before claiming a spot pass-through result |
 
 ### H1.5 — Synthetic diverse-household generator (detailed plan)
 
