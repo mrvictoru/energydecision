@@ -18,6 +18,24 @@ from household_optimization import optimize_dispatch
 from household_replay import Tariff
 
 
+def tariff_for_name(name: str) -> Tariff:
+    if name == "realistic":
+        return Tariff(
+            import_cents_per_kwh=31.042,
+            feed_in_cents_per_kwh=1.0,
+            free_window_start_hour=11,
+            free_window_end_hour=14,
+        )
+    if name == "legacy_flat":
+        return Tariff(
+            import_cents_per_kwh=30.0,
+            feed_in_cents_per_kwh=5.0,
+            free_window_start_hour=24,
+            free_window_end_hour=24,
+        )
+    raise ValueError(f"Unsupported tariff {name!r}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--synth-dir", type=Path, default=ROOT / "data/household/synth")
@@ -26,18 +44,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-episodes", type=int, default=None)
     parser.add_argument("--soc-resolution", type=int, default=31)
     parser.add_argument("--action-resolution", type=int, default=21)
+    parser.add_argument("--tariff", choices=("realistic", "legacy_flat"), default="realistic")
     return parser.parse_args()
 
 
 def _trajectory_for_episode(
     frame: pl.DataFrame, episode_id: int, capacity: float, flow: float,
-    soc_resolution: int, action_resolution: int,
+    soc_resolution: int, action_resolution: int, tariff: Tariff,
 ) -> pl.DataFrame:
     """Roll out per-day deterministic DP actions through the actual env."""
-    tariff = Tariff(import_cents_per_kwh=30.0, feed_in_cents_per_kwh=5.0,
-                    free_window_start_hour=24, free_window_end_hour=24)
+    priced_frame = frame.with_columns([
+        pl.Series("ImportEnergyPrice", [tariff.import_price(ts) for ts in frame["Timestamp"]]),
+        pl.lit(tariff.feed_in_price()).alias("ExportEnergyPrice"),
+    ])
     env = SolarBatteryEnv(
-        frame, battery_capacity=capacity, max_battery_flow=flow,
+        priced_frame, battery_capacity=capacity, max_battery_flow=flow,
         init_battery_level=capacity / 2.0, max_step=len(frame),
     )
     observation, _ = env.reset()
@@ -87,12 +108,13 @@ def main() -> None:
     if not episodes:
         raise ValueError(f"No {args.split} episodes in {args.synth_dir / 'manifest.json'}")
     frames = []
+    tariff = tariff_for_name(args.tariff)
     for entry in episodes:
         frame = pl.read_parquet(args.synth_dir / entry["path"])
         battery = entry["battery"]
         frames.append(_trajectory_for_episode(
             frame, entry["episode_id"], float(battery["capacity_kwh"]),
-            float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution,
+            float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution, tariff,
         ))
     result = pl.concat(frames)
     args.out.parent.mkdir(parents=True, exist_ok=True)

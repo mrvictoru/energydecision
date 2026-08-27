@@ -141,6 +141,57 @@ def optimize_dispatch(
     )
 
 
+def build_j_t_soc_prompt_provider(
+    frame: pl.DataFrame,
+    *,
+    tariff: Tariff,
+    capacity_kwh: float,
+    max_flow_kw: float,
+    soc_resolution: int = 31,
+    action_resolution: int = 21,
+) -> Callable[[float, int], float]:
+    """Precompute exact deterministic ``-J_t(soc)`` prompts for an env frame.
+
+    ``frame`` is in ``SolarBatteryEnv`` units (kWh per 5-minute step), while
+    :func:`optimize_dispatch` accepts normalized portal kW.  The provider is
+    intentionally precomputed once per day, avoiding an O(T²) DP solve during
+    autoregressive DT inference.
+    """
+    tables: list[tuple[int, int, np.ndarray, np.ndarray]] = []
+    dated = frame.with_columns(pl.col("Timestamp").dt.date().alias("_date"))
+    offset = 0
+    for day in dated.partition_by("_date", maintain_order=True):
+        day = day.drop("_date")
+        day_kw = day.with_columns([
+            (pl.col("HouseLoad") * 12.0).alias("HouseLoad"),
+            (pl.col("SolarGen") * 12.0).alias("SolarGen"),
+        ])
+        result = optimize_dispatch(
+            day_kw,
+            tariff=tariff,
+            capacity_kwh=capacity_kwh,
+            max_flow_kw=max_flow_kw,
+            roundtrip_eff=1.0,
+            soc_resolution=soc_resolution,
+            action_resolution=action_resolution,
+        )
+        tables.append((offset, offset + len(day), result.cost_to_go, result.soc_levels_kwh))
+        offset += len(day)
+
+    def prompt(soc_kwh: float, step: int) -> float:
+        if not 0 <= step < len(frame):
+            raise ValueError(f"Step {step} is outside the J_t(soc) prompt frame")
+        day_start, day_end, table, states = next(
+            entry for entry in tables if entry[0] <= step < entry[1]
+        )
+        del day_end
+        local_step = step - day_start
+        state_index = int(np.argmin(np.abs(states - soc_kwh)))
+        return -float(table[local_step, state_index])
+
+    return prompt
+
+
 def greedy_self_consumption_actions(
     frame: pl.DataFrame,
     *,

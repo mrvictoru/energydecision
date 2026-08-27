@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from decision_transformer import DecisionTransformer
+from dt_artifacts import write_model_kwargs
 from transformer_training import (
     TrajectoryDataset,
     episode_train_val_split,
@@ -1316,6 +1317,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         val_parquet_files=val_parquet_files,
     )
     write_json(surface_manifest_path, surface_manifest)
+    # A checkpoint's architecture is part of its artifact contract.  Do not
+    # make downstream inference recover it from an unrelated legacy config.
+    model_kwargs_path = save_path.with_name(save_path.stem + "_model_kwargs.json")
+    write_model_kwargs(model_kwargs_path, model_kwargs)
 
     model = DecisionTransformer(**model_kwargs)
     started_at = time.monotonic()
@@ -1479,6 +1484,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if val_losses:
         print(f"Final validation total loss {val_losses[-1]:.6f}")
     print(f"Trained weights available at {save_path}")
+    print(f"Model configuration written to {model_kwargs_path}")
     print(f"Loss history written to {loss_csv_path} and {checkpoints_csv}")
     print(f"Training surface manifest written to {surface_manifest_path}")
 

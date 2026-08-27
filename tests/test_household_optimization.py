@@ -2,8 +2,13 @@ import datetime as dt
 
 import numpy as np
 import polars as pl
+import torch
 
 from EnergySimEnv import SolarBatteryEnv
+from decision import Agent
+from decision_transformer import DecisionTransformer
+from dt_artifacts import write_model_kwargs
+from household_optimization import build_j_t_soc_prompt_provider
 from household_optimization import bill_for_actions, bootstrap_mean_ci, optimize_dispatch
 from household_replay import Tariff
 
@@ -55,3 +60,52 @@ def test_environment_returns_terminal_observation_at_final_row():
     obs, _, _, truncated, _ = env.step([0.0])
     assert truncated
     assert obs.shape == env.observation_space.shape
+
+
+def test_j_t_soc_provider_varies_by_state_and_agent_uses_it():
+    frame = _frame().with_columns([
+        (pl.col("HouseLoad") / 12.0).alias("HouseLoad"),
+        (pl.col("SolarGen") / 12.0).alias("SolarGen"),
+        pl.col("SolarGen").alias("FutureSolar"),
+        pl.col("HouseLoad").alias("FutureLoad"),
+        pl.lit(0.30).alias("ImportEnergyPrice"),
+        pl.lit(0.05).alias("ExportEnergyPrice"),
+        pl.col("Timestamp").alias("Time"),
+    ])
+    provider = build_j_t_soc_prompt_provider(
+        frame, tariff=Tariff(), capacity_kwh=5.0, max_flow_kw=3.3
+    )
+    assert provider(0.0, 0) != provider(5.0, 0)
+
+    class CaptureModel(torch.nn.Module):
+        context_len = 1
+        state_dim = 12
+        act_dim = 1
+
+        def __init__(self):
+            super().__init__()
+            self.parameter = torch.nn.Parameter(torch.zeros(1))
+            self.embed_timestep = torch.nn.Embedding(2, 1)
+            self.prompts = []
+
+        def get_action(self, states, actions, rtg, timesteps, attention_mask=None):
+            self.prompts.append(float(rtg[0, -1, 0]))
+            return torch.zeros(1, device=states.device)
+
+    env = SolarBatteryEnv(frame.head(2), battery_capacity=5.0, max_step=2)
+    model = CaptureModel()
+    Agent(env, algorithm="dt", model=model, rtg_prompt_provider=lambda soc, step: -7.5).run_episode()
+    assert model.prompts == [-7.5, -7.5]
+
+
+def test_checkpoint_model_configuration_round_trip(tmp_path):
+    kwargs = {
+        "state_dim": 12, "act_dim": 1, "n_block": 2, "h_dim": 128,
+        "context_len": 60, "n_heads": 8, "drop_p": 0.1,
+        "max_timestep": 2016,
+    }
+    path = write_model_kwargs(tmp_path / "h2_sdp_jtsoc_model_kwargs.json", kwargs)
+    loaded = __import__("json").loads(path.read_text())
+    model = DecisionTransformer(**loaded)
+    assert loaded == kwargs
+    assert model.embed_timestep.num_embeddings == 2016

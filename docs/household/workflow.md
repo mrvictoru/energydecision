@@ -175,10 +175,19 @@ on real OOD saves only $27/year. This improves the cloning-era DT (−$6/year)
 but does not beat the causal rule ($70/year); it is a negative transfer result,
 not a policy recommendation.
 
-The teacher data carries exact `rtg_value = -J_t(soc)`, but the current shared
-inference agent uses its standard realized-reward RTG recurrence. Implement
-per-step inference-time J_t(soc) recomputation before interpreting this as a
-complete Stage-C-equivalent transfer.
+The teacher data carries exact `rtg_value = -J_t(soc)`. The H2 inference
+evaluation now precomputes an exact deterministic table per segment-local
+calendar day and supplies the current-SOC prompt before each DT action; it
+does not use the standard realized-reward recurrence for this policy. The
+trainer also writes `<checkpoint-stem>_model_kwargs.json` beside every
+checkpoint, so evaluation must use that file rather than a legacy model config.
+
+The tariff-consistent correction is a negative result: the trained 2×128 DT
+loses $53/year versus no battery on the five-segment real OOD surface
+(annualized bootstrap bill CI $876–$2,412), compared with rule savings of
+$82/year and oracle savings of $894/year. Thus the current synthetic
+SDP-teacher corpus does not yet transfer household planner distillation across
+scales.
 
 ## Main Artifacts
 

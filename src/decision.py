@@ -5,7 +5,7 @@ import torch
 import polars as pl
 import warnings
 from pathlib import Path
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Callable, Dict, List, Tuple
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
 from batterydeg import DegradationModel, RainflowCounter
@@ -136,7 +136,8 @@ class Agent:
                  horizon=72, soc_resolution=20, action_resolution=41,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99,
-                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None):
+                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None,
+                 rtg_prompt_provider: Optional[Callable[[float, int], float]] = None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp', 'sdp', or 'oracle'.
@@ -152,6 +153,7 @@ class Agent:
         self.rule_presistence = False  # Preset for rule-based action persistence
         self.reset_seed = reset_seed
         self.reset_options = reset_options
+        self.rtg_prompt_provider = rtg_prompt_provider
 
         if self.algorithm in ('sdp', 'mrdp', 'oracle'):
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
@@ -264,6 +266,13 @@ class Agent:
                 raise ValueError("Decision Transformer selected but no model provided.")
             self.model.eval()
             device = next(self.model.parameters()).device
+            if self.rtg_prompt_provider is not None:
+                prompt = self.rtg_prompt_provider(
+                    float(self.env.battery_level), int(self.env.current_step)
+                )
+                if not np.isfinite(prompt):
+                    raise ValueError("rtg_prompt_provider returned a non-finite value")
+                self.dt_rtgs_buffer[-1] = float(prompt)
             
             states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
                 self.model, self.dt_states_buffer, self.dt_actions_buffer,
@@ -458,7 +467,13 @@ class Agent:
         if self.algorithm == 'dt':
             self.dt_states_buffer = [obs.copy()]
             self.dt_actions_buffer = [np.zeros(self.model.act_dim)]  # Placeholder action for first step
-            self.dt_rtgs_buffer = [self.rtg_value]
+            initial_rtg = (
+                self.rtg_prompt_provider(float(self.env.battery_level), int(self.env.current_step))
+                if self.rtg_prompt_provider is not None else self.rtg_value
+            )
+            if not np.isfinite(initial_rtg):
+                raise ValueError("rtg_prompt_provider returned a non-finite value")
+            self.dt_rtgs_buffer = [float(initial_rtg)]
             self.dt_timesteps_buffer = [self.env.current_step]
 
         logs = []
