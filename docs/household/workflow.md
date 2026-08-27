@@ -153,6 +153,24 @@ is available. These legacy checkpoints therefore do not transfer to modern
 household telemetry. See `eval_output/household/ood_baselines/summary.json`
 for exact CI values and do not conflate this with an H2-trained policy.
 
+### 9. Generate H2 SDP-teacher trajectories
+
+The H2 handoff reuses the shared DT data schema. It solves a deterministic
+per-day cost-to-go table over each synthetic environment episode, rolls its
+actions through `SolarBatteryEnv`, and writes `rtg_value = -J_t(soc)` alongside
+the normalized observation, action, and realized reward:
+
+```bash
+python3 scripts/generate_household_sdp_trajectories.py \
+  --synth-dir data/household/synth --split train \
+  --out data/household/dt/sdp_teacher_train.parquet
+```
+
+Build a matching `--split val` corpus before invoking the sanctioned shared
+trainer. Do not include real OOD segments in either corpus. The full corpus
+build and trained-DT OOD evaluation are pending; a two-episode smoke run
+verified the emitted schema and finite J_t(soc) values.
+
 ## Main Artifacts
 
 Common household artifact locations:
@@ -178,6 +196,7 @@ Common household artifact locations:
 - `src/household_optimization.py`: deterministic dispatch optimizer and bootstrap CI helper
 - `scripts/evaluate_household_tariffs.py`: H3 replay-gap and tariff evaluation
 - `scripts/evaluate_household_ood_baselines.py`: H1 rule/oracle/PPO/DT real-OOD evaluation
+- `scripts/generate_household_sdp_trajectories.py`: H2 synthetic SDP-teacher trajectory builder
 
 ## Validation And Iteration
 

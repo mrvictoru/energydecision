@@ -30,6 +30,8 @@ class OptimizationResult:
     import_kwh: float
     export_kwh: float
     free_import_kwh: float
+    cost_to_go: np.ndarray
+    soc_levels_kwh: np.ndarray
 
 
 def apply_tariff(frame: pl.DataFrame, tariff: Tariff) -> pl.DataFrame:
@@ -87,6 +89,8 @@ def optimize_dispatch(
     eff = roundtrip_eff ** 0.5
     horizon = len(frame)
     value = np.zeros(soc_resolution, dtype=float)
+    cost_to_go = np.empty((horizon + 1, soc_resolution), dtype=float)
+    cost_to_go[horizon] = value
     policy = np.zeros((horizon, soc_resolution), dtype=np.int16)
 
     state_grid = states[:, None]
@@ -103,6 +107,7 @@ def optimize_dispatch(
         total = np.where(feasible, stage + future, np.inf)
         policy[index] = np.argmin(total, axis=1)
         value = np.min(total, axis=1)
+        cost_to_go[index] = value
 
     soc = float(np.clip(initial_soc, 0.0, 1.0)) * capacity_kwh
     soc_path = np.empty(horizon + 1, dtype=float)
@@ -131,6 +136,8 @@ def optimize_dispatch(
         import_kwh=float(imports.sum()),
         export_kwh=float(exports.sum()),
         free_import_kwh=float(imports[import_price == 0.0].sum()),
+        cost_to_go=cost_to_go,
+        soc_levels_kwh=states,
     )
 
 

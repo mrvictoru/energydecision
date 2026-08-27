@@ -33,6 +33,8 @@ def test_optimizer_reduces_bill_and_respects_hardware_limits():
     assert np.abs(result.actions_kw).max() <= 3.3 + 1e-9
     assert result.soc_kwh.min() >= -1e-9
     assert result.soc_kwh.max() <= 5.0 + 1e-9
+    assert result.cost_to_go.shape == (289, 31)
+    assert result.soc_levels_kwh.shape == (31,)
 
 
 def test_bootstrap_ci_is_reproducible():
