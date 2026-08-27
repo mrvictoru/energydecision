@@ -198,7 +198,10 @@ class SolarBatteryEnv(gym.Env):
             raw_extra_features (np.array): Raw [battery_level, deg_cost]. Shape (2,)
             normalized_extra_features (np.array): Normalized [battery_level, deg_cost]. Shape (2,)
         """
-        row_dict = self._get_row(self.current_step)
+        # Gymnasium permits the terminal observation to duplicate the final
+        # valid state.  ``step()`` advances before producing that observation,
+        # so clamp only the lookup rather than indexing one past the frame.
+        row_dict = self._get_row(min(self.current_step, len(self.df) - 1))
         time_str = row_dict.pop('Time', None)
         row_dict.pop('Timestamp', None)
 
@@ -509,7 +512,7 @@ class SolarBatteryEnv(gym.Env):
 
         # ----- Advance Simulation Step -----
         self.current_step += 1
-        truncated = (self.current_step >= self.max_step)
+        truncated = (self.current_step >= min(self.max_step, len(self.df)))
         terminated = bool(self.total_degradation >= 1.0)
 
         components = self._get_observation_components(current_step_actual_deg_cost=current_step_deg_cost)

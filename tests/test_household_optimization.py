@@ -3,6 +3,7 @@ import datetime as dt
 import numpy as np
 import polars as pl
 
+from EnergySimEnv import SolarBatteryEnv
 from household_optimization import bill_for_actions, bootstrap_mean_ci, optimize_dispatch
 from household_replay import Tariff
 
@@ -36,3 +37,19 @@ def test_optimizer_reduces_bill_and_respects_hardware_limits():
 
 def test_bootstrap_ci_is_reproducible():
     assert bootstrap_mean_ci([1.0, 2.0, 3.0], seed=4) == bootstrap_mean_ci([1.0, 2.0, 3.0], seed=4)
+
+
+def test_environment_returns_terminal_observation_at_final_row():
+    frame = _frame().head(2).with_columns([
+        pl.col("SolarGen").alias("FutureSolar"),
+        pl.col("HouseLoad").alias("FutureLoad"),
+        pl.lit(0.30).alias("ImportEnergyPrice"),
+        pl.lit(0.05).alias("ExportEnergyPrice"),
+        pl.col("Timestamp").alias("Time"),
+    ])
+    env = SolarBatteryEnv(frame, max_step=2)
+    env.reset()
+    env.step([0.0])
+    obs, _, _, truncated, _ = env.step([0.0])
+    assert truncated
+    assert obs.shape == env.observation_space.shape

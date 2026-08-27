@@ -134,6 +134,25 @@ optimization gap, and the no-battery baseline under flat and free-window ToU
 tariffs. Do not label a spot-pass-through result until a time-aligned retail
 spot-price series is supplied.
 
+### 8. Evaluate legacy policies on the real OOD surface
+
+The legacy benchmark script evaluates the existing rule, PPO, and cloning-era
+DT checkpoints with a fresh `SolarBatteryEnv` for every contiguous real-data
+segment, alongside a daily perfect-foresight oracle. This isolates the
+renovation gap and reports bootstrap CIs over segments:
+
+```bash
+python3 scripts/evaluate_household_ood_baselines.py \
+  --capacity-kwh 5 --max-flow-kw 3.3
+```
+
+On the current five-segment OOD surface, the legacy PPO saves only $2/year and
+the cloning-era DT loses $6/year against no battery (annualized segment
+bootstrap means); the rule saves $70/year and the oracle indicates $729/year
+is available. These legacy checkpoints therefore do not transfer to modern
+household telemetry. See `eval_output/household/ood_baselines/summary.json`
+for exact CI values and do not conflate this with an H2-trained policy.
+
 ## Main Artifacts
 
 Common household artifact locations:
@@ -158,6 +177,7 @@ Common household artifact locations:
 - `scripts/build_household_synth_corpus.py`: reproducible H1.5 corpus builder
 - `src/household_optimization.py`: deterministic dispatch optimizer and bootstrap CI helper
 - `scripts/evaluate_household_tariffs.py`: H3 replay-gap and tariff evaluation
+- `scripts/evaluate_household_ood_baselines.py`: H1 rule/oracle/PPO/DT real-OOD evaluation
 
 ## Validation And Iteration
 
