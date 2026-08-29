@@ -135,6 +135,25 @@
 | ✅ **H3** | **Replay-gap analysis completed**: deterministic 5-minute optimizer compares recorded VPP actions with re-optimized dispatch per contiguous real day. At 5 kWh / 3.3 kW / 0.80 RTE: observed-to-optimal gap is **$355/yr** with free 11:00–14:00 pricing (95% bootstrap CI $342–$368 over 1,084 complete days); **$214/yr** under flat pricing. Spot pass-through remains pending a time-aligned retail spot-price series. |
 | ✅ **H3** | **Tariff-policy experiments**: flat and realistic free-window ToU sweep implemented in `scripts/evaluate_household_tariffs.py`; prices are re-derived rather than using stored 0.30/0.05 defaults. | Spot pass-through remains pending a time-aligned retail spot-price series. |
 
+### Household follow-on work (H4 — bring household evidence to AEMO standard)
+
+H0–H3 establish a working household pipeline and a positive distillation
+signal, but the evidence is not yet comparable to the AEMO track's
+multi-surface result. The current synthetic corpus is fixed at seven-day
+episodes, the forecast channels use a simple persistence baseline, and the
+PPO comparison is the legacy checkpoint rather than a policy freshly trained
+on the modern synthetic corpus. These are research gaps, not implementation
+failures.
+
+| ID | Next experiment | Acceptance criteria |
+|---|---|---|
+| H4.1 | **Horizon-diverse synthetic corpus** — generate episodes spanning one week, several weeks, roughly six months, and multi-year horizons. Preserve contiguous calendar order within each episode and record horizon, source dates, tariff, battery size, degradation model, and seed in the manifest. | Degradation and calendar aging affect the objective and learned policy; no horizon leakage across train/validation/test; short- and long-horizon results reported separately. |
+| H4.2 | **Forecast ablation and improved forecast generation** — retain the current day-ahead persistence forecast as the honest baseline, then compare it with rolling/seasonal persistence and forecast models trained only on information available before each decision. Evaluate `FutureSolar`/`FutureLoad` observed, shuffled, zeroed, and forecasted conditions. | Forecast channels improve OOD performance over the no-forecast ablation without clairvoyance; forecast provenance and horizon are logged per episode. |
+| H4.3 | **Fresh modern-data SB3 baseline** — train PPO (and, if affordable, SAC/TD3) on the same modern synthetic training corpus and environment configuration used by the DT. Keep the legacy PPO only as a historical transfer baseline. | Fresh SB3 models are evaluated on the identical real OOD and synthetic held-out surfaces with bootstrap CIs and matched battery/tariff/degradation settings. |
+| H4.4 | **AEMO-equivalent household evaluation surfaces** — expand beyond five segments from one household to multiple households, seasons, battery configurations, tariffs, horizons, and stress cases; add paired statistical tests and artifact provenance. | DT improvement survives held-out households and horizon/tariff/battery shifts; publish per-surface results, not only one annualized aggregate. |
+| H4.5 | **Degradation-aware policy study** — compare degradation disabled, cycle-only, calendar-plus-cycle, and realistic battery-life-cost settings across the horizon-diverse corpus. | Report whether the DT learns economically meaningful cycling restraint and whether degradation changes the policy ranking. |
+| H4.6 | **Optional extensions** — add a time-aligned retail spot-price pass-through study and provision the isolated TTM gap/weather-residual adapter only after the statistical baselines are complete. | Spot and TTM claims remain separately gated and do not replace the bootstrap/recomposition baselines. |
+
 ### H1.5 — Synthetic diverse-household generator (detailed plan)
 
 > **Problem:** one real household cannot provide behavioral diversity
