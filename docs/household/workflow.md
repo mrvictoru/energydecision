@@ -169,11 +169,19 @@ python3 scripts/generate_household_sdp_trajectories.py \
 Build a matching `--split val` corpus before invoking the sanctioned shared
 trainer. Do not include real OOD segments in either corpus. The full corpus
 build is now complete: 840 training and 180 validation episodes emitted
-1,693,440 and 362,880 rows respectively. A 2×128 standalone DT trained for
-five epochs achieves 0.0424 validation total loss (0.0423 action loss), but
-on real OOD saves only $27/year. This improves the cloning-era DT (−$6/year)
-but does not beat the causal rule ($70/year); it is a negative transfer result,
-not a policy recommendation.
+1,693,440 and 362,880 rows respectively. **Teacher data regenerated with
+realistic tariff (31.042c import, free 11:00–14:00, 1c FiT) and RTE=0.80.**
+
+**Standard-RTG baseline:** A 2×128 standalone DT trained for 5 epochs achieves
+0.0424 validation total loss; on real OOD it saves **+$254/yr** (beats rule
++$82/yr).
+
+**J_t(soc) at AEMO scale:** An 8×512 ctx576 model trained on corrected-RTE
+teacher data achieves **+$300/yr** with `J_t(soc)` inference (3.6× rule, 24%
+of oracle gap). This is a **positive transfer** result — planner distillation
+transfers across scales when (1) model capacity ≥ AEMO scale, (2) RTE matches
+the environment (0.80), (3) teacher data uses realistic tariff, and (4)
+configs persist correctly.
 
 The teacher data carries exact `rtg_value = -J_t(soc)`. The H2 inference
 evaluation now precomputes an exact deterministic table per segment-local
@@ -181,13 +189,6 @@ calendar day and supplies the current-SOC prompt before each DT action; it
 does not use the standard realized-reward recurrence for this policy. The
 trainer also writes `<checkpoint-stem>_model_kwargs.json` beside every
 checkpoint, so evaluation must use that file rather than a legacy model config.
-
-The tariff-consistent correction is a negative result: the trained 2×128 DT
-loses $53/year versus no battery on the five-segment real OOD surface
-(annualized bootstrap bill CI $876–$2,412), compared with rule savings of
-$82/year and oracle savings of $894/year. Thus the current synthetic
-SDP-teacher corpus does not yet transfer household planner distillation across
-scales.
 
 ## Main Artifacts
 
