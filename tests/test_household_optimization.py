@@ -98,6 +98,24 @@ def test_j_t_soc_provider_varies_by_state_and_agent_uses_it():
     assert model.prompts == [-7.5, -7.5]
 
 
+def test_j_t_soc_provider_respects_roundtrip_efficiency():
+    frame = _frame().with_columns([
+        (pl.col("HouseLoad") / 12.0).alias("HouseLoad"),
+        (pl.col("SolarGen") / 12.0).alias("SolarGen"),
+    ])
+    tariff = Tariff()
+    lossy = build_j_t_soc_prompt_provider(
+        frame, tariff=tariff, capacity_kwh=5.0, max_flow_kw=3.3,
+        roundtrip_eff=0.80,
+    )
+    ideal = build_j_t_soc_prompt_provider(
+        frame, tariff=tariff, capacity_kwh=5.0, max_flow_kw=3.3,
+        roundtrip_eff=1.0,
+    )
+    assert np.isfinite(lossy(2.5, 0))
+    assert lossy(2.5, 0) != ideal(2.5, 0)
+
+
 def test_checkpoint_model_configuration_round_trip(tmp_path):
     kwargs = {
         "state_dim": 12, "act_dim": 1, "n_block": 2, "h_dim": 128,

@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -11,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import pretrain_decision_transformer as pretrain_dt  # noqa: E402
+from transformer_training import TrajectoryDataset  # noqa: E402
 
 
 def _write_dataset(path: Path, *, state_dim: int = 12, act_dim: int = 1) -> None:
@@ -32,6 +34,21 @@ def _write_dataset(path: Path, *, state_dim: int = 12, act_dim: int = 1) -> None
         "reward": [1.0, 0.5, 0.25, -0.5],
     }
     pl.DataFrame(rows).write_parquet(path)
+
+
+def test_merge_trajectory_datasets_preserves_requested_stride():
+    episode = {
+        "states": np.zeros((10, 12), dtype=np.float32),
+        "actions": np.zeros((10, 1), dtype=np.float32),
+        "rtgs": np.zeros(10, dtype=np.float32),
+        "timesteps": np.arange(10, dtype=np.int64),
+        "length": 10,
+    }
+    dataset = TrajectoryDataset._from_episodes(
+        [episode], context_length=2, state_dim=12, act_dim=1, stride=1
+    )
+    merged = pretrain_dt.merge_trajectory_datasets([dataset], stride=3)
+    assert len(merged) == 3
 
 
 def test_parse_args_accepts_legacy_cli_contract():

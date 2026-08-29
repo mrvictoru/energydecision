@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-episodes", type=int, default=None)
     parser.add_argument("--soc-resolution", type=int, default=31)
     parser.add_argument("--action-resolution", type=int, default=21)
+    parser.add_argument("--roundtrip-eff", type=float, default=0.80)
     parser.add_argument("--tariff", choices=("realistic", "legacy_flat"), default="realistic")
     return parser.parse_args()
 
@@ -51,6 +52,7 @@ def parse_args() -> argparse.Namespace:
 def _trajectory_for_episode(
     frame: pl.DataFrame, episode_id: int, capacity: float, flow: float,
     soc_resolution: int, action_resolution: int, tariff: Tariff,
+    roundtrip_eff: float,
 ) -> pl.DataFrame:
     """Roll out per-day deterministic DP actions through the actual env."""
     priced_frame = frame.with_columns([
@@ -71,7 +73,7 @@ def _trajectory_for_episode(
         ])
         solution = optimize_dispatch(
             raw_kw, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow,
-            roundtrip_eff=1.0, initial_soc=env.battery_level / capacity,
+            roundtrip_eff=roundtrip_eff, initial_soc=env.battery_level / capacity,
             soc_resolution=soc_resolution, action_resolution=action_resolution,
         )
         for offset, action_kw in enumerate(solution.actions_kw):
@@ -114,7 +116,8 @@ def main() -> None:
         battery = entry["battery"]
         frames.append(_trajectory_for_episode(
             frame, entry["episode_id"], float(battery["capacity_kwh"]),
-            float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution, tariff,
+            float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution,
+            tariff, args.roundtrip_eff,
         ))
     result = pl.concat(frames)
     args.out.parent.mkdir(parents=True, exist_ok=True)

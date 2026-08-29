@@ -1003,7 +1003,9 @@ def load_trajectory_datasets(
     return datasets
 
 
-def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDataset:
+def merge_trajectory_datasets(
+    datasets: list[TrajectoryDataset], *, stride: int = 1
+) -> TrajectoryDataset:
     if not datasets:
         raise ValueError("datasets must be non-empty")
     first = datasets[0]
@@ -1018,6 +1020,7 @@ def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDa
         first.state_dim,
         first.act_dim,
         first.gamma,
+        stride=stride,
         use_rtg_col=getattr(first, "use_rtg_col", False),
     )
 
@@ -1254,8 +1257,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             action_mode=surface.action_mode,
             label="Validation",
         )
-        train_dataset = merge_trajectory_datasets(datasets)
-        val_dataset = merge_trajectory_datasets(val_datasets)
+        train_dataset = merge_trajectory_datasets(datasets, stride=args.stride)
+        val_dataset = merge_trajectory_datasets(val_datasets, stride=args.stride)
         print("Using explicit validation parquet files; bypassing episode partitioning.")
     else:
         train_dataset, val_dataset = episode_train_val_split(

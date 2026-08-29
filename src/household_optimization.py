@@ -147,6 +147,7 @@ def build_j_t_soc_prompt_provider(
     tariff: Tariff,
     capacity_kwh: float,
     max_flow_kw: float,
+    roundtrip_eff: float = 0.80,
     soc_resolution: int = 31,
     action_resolution: int = 21,
 ) -> Callable[[float, int], float]:
@@ -171,7 +172,7 @@ def build_j_t_soc_prompt_provider(
             tariff=tariff,
             capacity_kwh=capacity_kwh,
             max_flow_kw=max_flow_kw,
-            roundtrip_eff=1.0,
+            roundtrip_eff=roundtrip_eff,
             soc_resolution=soc_resolution,
             action_resolution=action_resolution,
         )

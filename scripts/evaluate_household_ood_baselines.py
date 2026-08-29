@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+import torch
 from stable_baselines3 import PPO
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-flow-kw", type=float, default=3.3)
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--max-vram-fraction", type=float, default=0.90)
     parser.add_argument("--skip-dt", action="store_true")
     parser.add_argument("--skip-ppo", action="store_true")
     return parser.parse_args()
@@ -108,9 +111,19 @@ def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tari
     return float(sum(costs))
 
 
-def _load_dt(path: Path, config: Path) -> DecisionTransformer:
+def _resolve_device(name: str) -> str:
+    if name == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if name == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("--device cuda requested but CUDA is unavailable")
+    return name
+
+
+def _load_dt(path: Path, config: Path, device: str) -> DecisionTransformer:
     model = DecisionTransformer(**json.loads(config.read_text()))
-    model.load_from_checkpoint(str(path), map_location="cpu")
+    model.load_from_checkpoint(str(path), map_location=device)
+    model.to(device)
+    model.eval()
     return model
 
 
@@ -123,6 +136,19 @@ def _parse_additional_dt(spec: str) -> tuple[str, Path, Path, str]:
 
 def main() -> None:
     args = parse_args()
+    device = _resolve_device(args.device)
+    if device == "cuda":
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        if free_bytes < total_bytes * (1.0 - args.max_vram_fraction):
+            raise RuntimeError(
+                f"Insufficient free CUDA memory: {free_bytes / 1024**3:.2f} GiB free "
+                f"of {total_bytes / 1024**3:.2f} GiB; lower --max-vram-fraction or clear the GPU."
+            )
+        print(
+            f"Using CUDA for policy inference: {torch.cuda.get_device_name(0)}; "
+            f"{free_bytes / 1024**3:.1f}/{total_bytes / 1024**3:.1f} GiB free",
+            flush=True,
+        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     tariff = tariff_for_name(args.tariff)
     segments = [
@@ -134,14 +160,14 @@ def main() -> None:
 
     models: dict[str, tuple[object, str]] = {}
     if not args.skip_ppo:
-        models["ppo"] = (PPO.load(str(args.ppo_path), device="cpu"), "standard")
+        models["ppo"] = (PPO.load(str(args.ppo_path), device=device), "standard")
     if not args.skip_dt:
-        models["dt"] = (_load_dt(args.dt_path, args.dt_config), args.dt_rtg_mode)
+        models["dt"] = (_load_dt(args.dt_path, args.dt_config, device), args.dt_rtg_mode)
     for spec in args.additional_dt:
         name, checkpoint, config, rtg_mode = _parse_additional_dt(spec)
         if name in models or name in {"rule", "oracle", "no_battery"}:
             raise ValueError(f"Duplicate or reserved policy name: {name}")
-        models[name] = (_load_dt(checkpoint, config), rtg_mode)
+        models[name] = (_load_dt(checkpoint, config, device), rtg_mode)
 
     bills: dict[str, list[float]] = {"rule": [], "oracle": []}
     for name in models:

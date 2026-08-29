@@ -6,7 +6,9 @@ commit	track	metric	status	description
 b369e54	household	$355/yr	keep	H3 re-optimized 5 kWh/3.3 kW/0.80 RTE dispatch gap under 31.042c import, free 11:00-14:00, 1c FiT; annualized 95% bootstrap CI $342-$368 over 1,084 complete real days
 bd13b6d	household	-$6/yr	keep	H1 cloning-era DT real-OOD result: annualized 5-segment bootstrap mean vs no-battery under legacy 30c/5c tariff; PPO +$2/yr, rule +$70/yr, oracle +$729/yr
 e4804a9	household	+$27/yr	discard	H2 2x128 SDP-teacher DT (840 train/180 val synthetic episodes, J_t(soc) RTG) real-OOD annualized 5-segment bootstrap mean vs no battery; improves cloning DT -$6/yr but loses to rule +$70/yr
-5f7bcf8	household	-$53/yr	discard	H2 fixed 2x128 SDP-teacher DT: checkpoint config persisted, exact J_t(soc) inference prompt, and realistic 31.042c/free-11-14h/1c-FiT teacher/eval tariff; real-OOD five-segment annualized bootstrap mean vs no battery, below rule +$82/yr and oracle +$894/yr
+5f7bcf8	household	-$53/yr	discard	SUPERSEDED: H2 J_t(soc) evaluation used RTE-inconsistent cost-to-go tables; retained only as historical buggy-prompt result
+06e7dba	household	+$254/yr	keep	H2 standard-RTG baseline using h2_realistic_sdp_jtsoc_best.pt under realistic tariff; five-segment real-OOD annualized bootstrap mean vs no battery, beats rule +$82/yr; standard RTG adopted pending corrected-RTE retraining
+06e7dba	household	+$300/yr	keep	H2 corrected-RTE 8x512 ctx576 DT with J_t(soc) inference on realistic tariff; five-segment real-OOD annualized bootstrap mean, beats standard RTG +$217/yr and rule +$81/yr; oracle +$894/yr
 0beb9bc	aemo	1.026434	keep	pilot context sweep after RoPE fix: proxy-baseline on lengthened pilot split, lr=3e-5, batch=128, context=120
 0beb9bc	aemo	0.534541	keep	pilot combined sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=64, context=120
 0beb9bc	aemo	0.361425	keep	pilot combined sweep: proxy-baseline on lengthened pilot split, lr=3e-5, batch=32, context=120
