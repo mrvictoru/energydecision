@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the reproducible H1.5 synthetic household corpus from portal days."""
+"""Build a reproducible horizon- and scenario-diverse household corpus."""
 
 from __future__ import annotations
 
@@ -42,9 +42,22 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data/household/synth")
     parser.add_argument("--episodes", type=int, default=1200)
     parser.add_argument("--days-per-episode", type=int, default=7)
+    parser.add_argument(
+        "--horizons",
+        nargs="+",
+        choices=("1w", "2w", "6m", "2y"),
+        default=None,
+        help="Horizon labels to cycle through; overrides --days-per-episode.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n-clusters", type=int, default=4)
     parser.add_argument("--max-attempts", type=int, default=100)
+    parser.add_argument("--battery-life-cost", type=float, default=5000.0)
+    parser.add_argument(
+        "--degradation-model",
+        choices=("disabled", "calendar_cycle_rainflow"),
+        default="calendar_cycle_rainflow",
+    )
     parser.add_argument("--ood-holdout-fraction", type=float, default=0.15)
     parser.add_argument("--use-ttm", action="store_true", help="Enable separately provisioned auxiliary Granite TTM.")
     parser.add_argument(
@@ -66,19 +79,27 @@ def _split_for_index(index_within_archetype: int, per_archetype: int) -> str:
     return "test"
 
 
-def _job_specs(episodes: int) -> list[tuple[str, str, float, int]]:
-    """Distribute jobs round-robin over the 5 x 4 x 3 target surface."""
-    specs: list[tuple[str, str, float, int]] = []
-    replicate = 0
-    while len(specs) < episodes:
-        for archetype in ARCHETYPES:
-            for season in ("summer", "autumn", "winter", "spring"):
-                for capacity in (5.0, 10.0, 20.0):
-                    if len(specs) == episodes:
-                        return specs
-                    specs.append((archetype, season, capacity, replicate))
-        replicate += 1
-    return specs
+HORIZON_DAYS = {"1w": 7, "2w": 14, "6m": 180, "2y": 730}
+
+
+def _job_specs(
+    episodes: int, horizons: tuple[str, ...] = ("1w",)
+) -> list[tuple[str, str, float, str, int]]:
+    """Distribute jobs over archetype, season, battery, and horizon."""
+    return [
+        (
+            ARCHETYPES[(index // len(horizons)) % len(ARCHETYPES)],
+            ("summer", "autumn", "winter", "spring")[
+                (index // (len(horizons) * len(ARCHETYPES))) % 4
+            ],
+            (5.0, 10.0, 20.0)[
+                (index // (len(horizons) * len(ARCHETYPES) * 4)) % 3
+            ],
+            horizons[index % len(horizons)],
+            index // (len(horizons) * len(ARCHETYPES) * 4 * 3),
+        )
+        for index in range(episodes)
+    ]
 
 
 def _start_date(library: DayLibrary, season: str, rng: np.random.Generator, days: int) -> dt.date:
@@ -86,7 +107,6 @@ def _start_date(library: DayLibrary, season: str, rng: np.random.Generator, days
         record.source_date
         for day_type in DAY_TYPES
         for record in library.group_days(season, day_type)
-        if all(season_for_date(record.source_date + dt.timedelta(days=index)) == season for index in range(days))
     ]
     if not candidates:
         raise ValueError(f"No {days}-day contiguous source-date anchors available for {season}")
@@ -99,12 +119,15 @@ def _build_one(
     archetype: str,
     season: str,
     capacity_kwh: float,
+    horizon: str,
     replicate: int,
     master_seed: int,
     days_per_episode: int,
     max_attempts: int,
+    battery_life_cost: float,
+    degradation_model: str,
 ) -> tuple[object, dict[str, object]]:
-    seed = episode_seed(master_seed, archetype, season, capacity_kwh, replicate)
+    seed = episode_seed(master_seed, archetype, season, capacity_kwh, f"{horizon}-{replicate}")
     rng = np.random.default_rng(seed)
     installed_kw = float(rng.uniform(3.0, 15.0))
     orientation_derate = float(rng.uniform(0.75, 1.0))
@@ -165,6 +188,8 @@ def _build_one(
                 "attempt": attempt,
                 "archetype": archetype,
                 "season": season,
+                "horizon": horizon,
+                "horizon_days": days_per_episode,
                 "load_scale_lambda": load_scale,
                 "appliance_intensity": intensity,
                 "appliance_recipe": asdict(recipe),
@@ -174,6 +199,10 @@ def _build_one(
                     "aunt_solar_kw": library.aunt_solar_kw,
                 },
                 "battery": {"capacity_kwh": capacity_kwh, "max_flow_kw": flow_kw},
+                "degradation": {
+                    "model": degradation_model,
+                    "battery_life_cost": battery_life_cost,
+                },
                 "source_days": [item.manifest_params() for item in sampled],
                 "cluster_weights": {
                     f"{item.season}/{item.day_type}": library.archetype_cluster_weights(
@@ -197,6 +226,8 @@ def main() -> None:
     args = _parse_args()
     if args.episodes < 1 or args.days_per_episode < 1 or args.max_attempts < 1:
         raise ValueError("--episodes, --days-per-episode, and --max-attempts must be positive")
+    if args.battery_life_cost < 0:
+        raise ValueError("--battery-life-cost must be non-negative")
 
     ttm = TTMConfig(enabled=args.use_ttm, mode=args.ttm_mode if args.use_ttm else "none")
     if ttm.enabled:
@@ -214,19 +245,22 @@ def main() -> None:
 
     by_archetype: dict[str, int] = {archetype: 0 for archetype in ARCHETYPES}
     per_archetype = {
-        archetype: sum(1 for job_archetype, _, _, _ in specs if job_archetype == archetype)
+        archetype: sum(1 for job_archetype, _, _, _, _ in specs if job_archetype == archetype)
         for archetype in ARCHETYPES
     }
     manifest: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generator": "household_synthetic statistical_recomposition",
         "normalized_dir": str(args.normalized_dir),
         "corpus_params": {
             "episodes": args.episodes,
             "days_per_episode": args.days_per_episode,
+            "horizons": args.horizons or ["1w"],
             "seed": args.seed,
             "n_clusters": args.n_clusters,
             "max_attempts": args.max_attempts,
+            "degradation_model": args.degradation_model,
+            "battery_life_cost": args.battery_life_cost,
             "load_scale_range": [0.4, 3.0],
             "solar_installed_kw_range": [3.0, 15.0],
             "orientation_derate_range": [0.75, 1.0],
@@ -240,16 +274,23 @@ def main() -> None:
         "episodes": [],
     }
 
-    for episode_id, (archetype, season, capacity, replicate) in enumerate(specs):
+    horizons = tuple(args.horizons or ("1w",))
+    for episode_id, (archetype, season, capacity, horizon, replicate) in enumerate(
+        _job_specs(args.episodes, horizons)
+    ):
+        days_per_episode = HORIZON_DAYS[horizon] if args.horizons else args.days_per_episode
         episode, params = _build_one(
             library,
             archetype=archetype,
             season=season,
             capacity_kwh=capacity,
+            horizon=horizon,
             replicate=replicate,
             master_seed=args.seed,
-            days_per_episode=args.days_per_episode,
+            days_per_episode=days_per_episode,
             max_attempts=args.max_attempts,
+            battery_life_cost=args.battery_life_cost,
+            degradation_model=args.degradation_model,
         )
         split = _split_for_index(by_archetype[archetype], per_archetype[archetype])
         by_archetype[archetype] += 1

@@ -114,6 +114,21 @@ The optional `--use-ttm --ttm-mode {gap_imputation,weather_residual}` path is
 intentionally isolated and fails explicitly until the Granite TTM runtime is
 provisioned; TTM is not used as the primary generator.
 
+The H4.1 extension supports a balanced horizon/scenario matrix. Use
+`--horizons 1w 2w 6m 2y` to cycle across one-week, two-week, six-month, and
+two-year episodes while retaining the five archetypes, seasonal/day-type
+sampling, solar/battery variation, and per-episode provenance. For example:
+
+```bash
+python3 scripts/build_household_synth_corpus.py \
+  --output-dir data/household/synth_h4_1 \
+  --episodes 240 --horizons 1w 2w 6m 2y --seed 20260830
+```
+
+The manifest records the horizon and degradation configuration. The generated
+data provides held-out synthetic surfaces; real household segments remain the
+primary OOD surface.
+
 ### 7. Compare observed and optimized real-battery dispatch
 
 Use the H3 harness to replay recorded VPP actions and compare them with a
