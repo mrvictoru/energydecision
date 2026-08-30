@@ -129,6 +129,24 @@ The manifest records the horizon and degradation configuration. The generated
 data provides held-out synthetic surfaces; real household segments remain the
 primary OOD surface.
 
+### 6a. Train a fresh modern SB3 baseline
+
+The legacy PPO checkpoint is not a modern-data baseline. Train a new PPO
+directly on the H4.1 corpus with parallel CPU environments:
+
+```bash
+python3 scripts/train_household_sb3.py \
+  --corpus-dir data/household/synth_h4_1 \
+  --output-dir models/household/sb3/h4_3 \
+  --timesteps 250000 --n-envs 12 \
+  --capacity-kwh 5 --max-flow-kw 3.3
+```
+
+The H4.3 pilot used the realistic tariff and matched 5 kWh/3.3 kW settings.
+Its fresh PPO saved +$27/year on the five real OOD segments, below the
++$81/year rule baseline; this does not establish PPO as the preferred
+household policy.
+
 ### 7. Compare observed and optimized real-battery dispatch
 
 Use the H3 harness to replay recorded VPP actions and compare them with a
