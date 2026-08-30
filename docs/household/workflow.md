@@ -147,6 +147,24 @@ Its fresh PPO saved +$27/year on the five real OOD segments, below the
 +$81/year rule baseline; this does not establish PPO as the preferred
 household policy.
 
+### 6b. Forecast-feature experiments
+
+`FutureSolar` and `FutureLoad` are part of the 12-dimensional environment
+observation. The current values are an honest 24-hour persistence forecast:
+the same time slot from the preceding day, with a first-day fallback to the
+current value. They are not a learned weather or load forecast. H4.2 compares
+the trained policy with these channels preserved, zeroed, and shuffled before
+considering causal rolling/seasonal forecast retraining. Real OOD segments
+remain fixed across all modes.
+
+The initial inference-only H4.2 ablation uses ten deterministic seven-day
+windows (two per real segment) and the corrected H2 DT with J_t(soc). Annualized
+savings were +$92.28 for persistence, +$92.88 with forecasts zeroed, and
++$95.78 with forecasts shuffled. These small differences show that the current
+DT does not use the persistence channels beneficially. A stronger forecast must
+be generated causally and included during matched policy retraining; replacing
+inputs only at inference is not sufficient.
+
 ### 7. Compare observed and optimized real-battery dispatch
 
 Use the H3 harness to replay recorded VPP actions and compare them with a

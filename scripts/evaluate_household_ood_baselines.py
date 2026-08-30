@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -37,6 +38,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dt-config", type=Path, default=ROOT / "models/household/dt/decision_transformer_model_kwargs.json")
     parser.add_argument("--dt-rtg-mode", choices=("standard", "j_t_soc"), default="standard")
     parser.add_argument(
+        "--forecast-mode",
+        choices=("persistence", "zero", "shuffle"),
+        default="persistence",
+        help="Transform FutureSolar/FutureLoad for forecast ablation.",
+    )
+    parser.add_argument(
         "--additional-dt",
         action="append",
         default=[],
@@ -52,6 +59,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-vram-fraction", type=float, default=0.90)
     parser.add_argument("--skip-dt", action="store_true")
     parser.add_argument("--skip-ppo", action="store_true")
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        default=None,
+        help="Evaluate deterministic complete-day windows instead of entire segments.",
+    )
+    parser.add_argument(
+        "--windows-per-segment",
+        type=int,
+        default=1,
+        help="Evenly spaced windows selected from each segment when --window-days is set.",
+    )
+    parser.add_argument(
+        "--skip-reference-policies",
+        action="store_true",
+        help="Skip invariant rule/oracle rollouts for policy ablations.",
+    )
     return parser.parse_args()
 
 
@@ -119,6 +143,87 @@ def _resolve_device(name: str) -> str:
     return name
 
 
+def _apply_forecast_mode(frame: pl.DataFrame, mode: str, seed: int) -> pl.DataFrame:
+    if mode == "persistence":
+        return frame
+    if mode == "zero":
+        return frame.with_columns([
+            pl.lit(0.0).alias("FutureSolar"),
+            pl.lit(0.0).alias("FutureLoad"),
+        ])
+    rng = np.random.default_rng(seed)
+    return frame.with_columns([
+        pl.Series("FutureSolar", rng.permutation(frame["FutureSolar"].to_numpy())),
+        pl.Series("FutureLoad", rng.permutation(frame["FutureLoad"].to_numpy())),
+    ])
+
+
+def _bounded_windows(
+    segments: list[pl.DataFrame],
+    window_days: int | None,
+    windows_per_segment: int,
+) -> tuple[list[pl.DataFrame], list[dict[str, object]]]:
+    if window_days is None:
+        return segments, [
+            {
+                "source_segment": index,
+                "start": str(segment["Timestamp"][0]),
+                "end": str(segment["Timestamp"][-1]),
+                "days": _duration_days(segment),
+            }
+            for index, segment in enumerate(segments)
+        ]
+    if window_days < 1 or windows_per_segment < 1:
+        raise ValueError("--window-days and --windows-per-segment must be positive")
+    windows: list[pl.DataFrame] = []
+    provenance: list[dict[str, object]] = []
+    for segment_index, segment in enumerate(segments):
+        dated = segment.with_columns(pl.col("Timestamp").dt.date().alias("_window_date"))
+        days = [
+            day.drop("_window_date")
+            for day in dated.partition_by("_window_date", maintain_order=True)
+        ]
+        eligible = []
+        for start in range(max(0, len(days) - window_days + 1)):
+            dates = [day["Timestamp"][0].date() for day in days[start:start + window_days]]
+            if all(
+                dates[index] + dt.timedelta(days=1) == dates[index + 1]
+                for index in range(len(dates) - 1)
+            ):
+                eligible.append(start)
+        if not eligible:
+            continue
+        selected = np.linspace(0, len(eligible) - 1, min(windows_per_segment, len(eligible)))
+        for selected_index in sorted({int(round(value)) for value in selected}):
+            start = eligible[selected_index]
+            window = pl.concat(days[start:start + window_days])
+            windows.append(window)
+            provenance.append({
+                "source_segment": segment_index,
+                "start": str(window["Timestamp"][0]),
+                "end": str(window["Timestamp"][-1]),
+                "days": window_days,
+            })
+    if not windows:
+        raise ValueError("No complete bounded windows fit the requested surface")
+    return windows, provenance
+
+
+def _duration_days(frame: pl.DataFrame) -> float:
+    timestamps = frame["Timestamp"]
+    if len(timestamps) < 2:
+        raise ValueError("Evaluation windows require at least two timestamps")
+    deltas = np.diff(timestamps.to_numpy()).astype("timedelta64[ns]").astype(np.int64)
+    positive = deltas[deltas > 0]
+    if len(positive) == 0:
+        raise ValueError("Evaluation timestamps must increase")
+    step_ns = int(np.median(positive))
+    duration_ns = int(
+        (timestamps[-1] - timestamps[0]).total_seconds() * 1_000_000_000
+    ) + step_ns
+    return duration_ns / (86_400 * 1_000_000_000)
+
+
 def _load_dt(path: Path, config: Path, device: str) -> DecisionTransformer:
     model = DecisionTransformer(**json.loads(config.read_text()))
     model.load_from_checkpoint(str(path), map_location=device)
@@ -151,9 +256,16 @@ def main() -> None:
         )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     tariff = tariff_for_name(args.tariff)
-    segments = [
+    base_segments = [
         apply_tariff(env_view(segment), tariff)
         for segment in split_segments(build_year_dataset(args.normalized_dir))
+    ]
+    segments, window_provenance = _bounded_windows(
+        base_segments, args.window_days, args.windows_per_segment
+    )
+    segments = [
+        _apply_forecast_mode(segment, args.forecast_mode, args.seed + index)
+        for index, segment in enumerate(segments)
     ]
     if not segments:
         raise ValueError("No contiguous real OOD segments found")
@@ -169,14 +281,24 @@ def main() -> None:
             raise ValueError(f"Duplicate or reserved policy name: {name}")
         models[name] = (_load_dt(checkpoint, config, device), rtg_mode)
 
-    bills: dict[str, list[float]] = {"rule": [], "oracle": []}
+    bills: dict[str, list[float]] = {}
+    if not args.skip_reference_policies:
+        bills.update({"rule": [], "oracle": []})
     for name in models:
         bills[name] = []
-    for segment in segments:
-        bills["rule"].append(_run_agent(
-            segment, "rule", None, args.capacity_kwh, args.max_flow_kw, tariff
-        ))
-        bills["oracle"].append(_oracle_bill(segment, args.capacity_kwh, args.max_flow_kw, tariff))
+    for segment_index, segment in enumerate(segments, start=1):
+        print(
+            f"Evaluating window {segment_index}/{len(segments)} "
+            f"({_duration_days(segment):.0f} days, forecast={args.forecast_mode})",
+            flush=True,
+        )
+        if not args.skip_reference_policies:
+            bills["rule"].append(_run_agent(
+                segment, "rule", None, args.capacity_kwh, args.max_flow_kw, tariff
+            ))
+            bills["oracle"].append(
+                _oracle_bill(segment, args.capacity_kwh, args.max_flow_kw, tariff)
+            )
         for name, (model, rtg_mode) in models.items():
             bills[name].append(_run_agent(
                 segment, "rl" if name == "ppo" else "dt", model,
@@ -190,12 +312,16 @@ def main() -> None:
             (grid.clip(lower_bound=0.0) * segment["ImportEnergyPrice"]).sum()
             - ((-grid).clip(lower_bound=0.0) * segment["ExportEnergyPrice"]).sum()
         ))
-    segment_days = [len(segment) / 288.0 for segment in segments]
+    segment_days = [_duration_days(segment) for segment in segments]
     output = {
         "surface": "real normalized telemetry; held-out OOD; each environment instantiated per contiguous segment",
         "hardware": {"capacity_kwh": args.capacity_kwh, "max_flow_kw": args.max_flow_kw},
         "tariff": args.tariff,
+        "forecast_mode": args.forecast_mode,
         "segments": len(segments),
+        "window_days": args.window_days,
+        "windows_per_segment": args.windows_per_segment,
+        "windows": window_provenance,
         "results": {},
     }
     for name, values in {**bills, "no_battery": no_battery}.items():
