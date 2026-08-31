@@ -75,6 +75,7 @@ SEARCHABLE_KNOBS = (
     "rope_max_position",
     "rope_base",
     "batch_size",
+    "stride",
     "epochs",
     "lr",
     "val_split",
@@ -101,6 +102,7 @@ SEARCHABLE_KNOBS = (
 )
 TRAINING_KNOB_TO_ARG_DEST = {
     "batch_size": "batch_size",
+    "stride": "stride",
     "lr": "lr",
     "epochs": "epochs",
     "discount": "discount",
@@ -153,6 +155,7 @@ SAFE_NUMERIC_RANGES: dict[str, tuple[float, float]] = {
     "rope_max_position": (1, 16_384),
     "rope_base": (1.0, 1_000_000.0),
     "batch_size": (1, 4096),
+    "stride": (1, 1_000_000),
     "epochs": (1, 100_000),
     "lr": (1e-8, 1.0),
     "val_split": (0.0, 0.95),
@@ -839,6 +842,7 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     explicit_cli_args = set(getattr(args, "explicit_cli_args", set()))
     training_kwargs = {
         "batch_size": args.batch_size,
+        "stride": args.stride,
         "lr": args.lr,
         "epochs": args.epochs,
         "discount": args.discount,

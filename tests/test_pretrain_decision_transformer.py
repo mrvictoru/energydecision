@@ -91,6 +91,15 @@ def test_parse_args_accepts_legacy_cli_contract():
     assert args.scheduler == "steplr"
 
 
+def test_training_surface_records_window_stride():
+    args = pretrain_dt.parse_args(["--stride", "288"])
+
+    training_kwargs = pretrain_dt.assemble_training_kwargs(args)
+
+    assert training_kwargs["stride"] == 288
+    assert "stride" in pretrain_dt.SEARCHABLE_KNOBS
+
+
 def test_parse_args_accepts_custom_optimizer_and_scheduler_contract():
     args = pretrain_dt.parse_args(
         [

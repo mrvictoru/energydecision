@@ -20,6 +20,7 @@ from EnergySimEnv import SolarBatteryEnv
 from decision import Agent
 from decision_transformer import DecisionTransformer
 from household_ingest import build_year_dataset, env_view, split_segments
+from household_forecast import apply_forecast_sidecar
 from household_optimization import (
     apply_tariff,
     bootstrap_mean_ci,
@@ -38,10 +39,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dt-config", type=Path, default=ROOT / "models/household/dt/decision_transformer_model_kwargs.json")
     parser.add_argument("--dt-rtg-mode", choices=("standard", "j_t_soc"), default="standard")
     parser.add_argument(
+        "--dt-rtg-value",
+        type=float,
+        default=0.0,
+        help="Fixed initial RTG prompt for --dt-rtg-mode standard.",
+    )
+    parser.add_argument(
         "--forecast-mode",
         choices=("persistence", "zero", "shuffle"),
         default="persistence",
         help="Transform FutureSolar/FutureLoad for forecast ablation.",
+    )
+    parser.add_argument(
+        "--forecast-sidecar",
+        type=Path,
+        default=None,
+        help="Timestamp-keyed parquet whose FutureSolar/FutureLoad replace ingested forecasts.",
     )
     parser.add_argument(
         "--additional-dt",
@@ -100,7 +113,7 @@ def tariff_for_name(name: str) -> Tariff:
 
 def _run_agent(
     frame: pl.DataFrame, algorithm: str, model, capacity: float, flow: float,
-    tariff: Tariff, rtg_mode: str = "standard",
+    tariff: Tariff, rtg_mode: str = "standard", rtg_value: float = 0.0,
 ) -> float:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
@@ -114,6 +127,7 @@ def _run_agent(
     )
     logs, _ = Agent(env, algorithm=algorithm, model=model, horizon=288,
                     soc_resolution=31, action_resolution=21,
+                    rtg_value=rtg_value,
                     rtg_prompt_provider=prompt_provider).run_episode()
     return _bill_from_logs(frame, logs)
 
@@ -260,6 +274,12 @@ def main() -> None:
         apply_tariff(env_view(segment), tariff)
         for segment in split_segments(build_year_dataset(args.normalized_dir))
     ]
+    if args.forecast_sidecar is not None:
+        sidecar = pl.read_parquet(args.forecast_sidecar)
+        base_segments = [
+            apply_forecast_sidecar(segment, sidecar)
+            for segment in base_segments
+        ]
     segments, window_provenance = _bounded_windows(
         base_segments, args.window_days, args.windows_per_segment
     )
@@ -287,9 +307,10 @@ def main() -> None:
     for name in models:
         bills[name] = []
     for segment_index, segment in enumerate(segments, start=1):
+        forecast_label = "sidecar" if args.forecast_sidecar is not None else args.forecast_mode
         print(
             f"Evaluating window {segment_index}/{len(segments)} "
-            f"({_duration_days(segment):.0f} days, forecast={args.forecast_mode})",
+            f"({_duration_days(segment):.0f} days, forecast={forecast_label})",
             flush=True,
         )
         if not args.skip_reference_policies:
@@ -303,6 +324,7 @@ def main() -> None:
             bills[name].append(_run_agent(
                 segment, "rl" if name == "ppo" else "dt", model,
                 args.capacity_kwh, args.max_flow_kw, tariff, rtg_mode,
+                args.dt_rtg_value,
             ))
 
     no_battery = []
@@ -318,6 +340,10 @@ def main() -> None:
         "hardware": {"capacity_kwh": args.capacity_kwh, "max_flow_kw": args.max_flow_kw},
         "tariff": args.tariff,
         "forecast_mode": args.forecast_mode,
+        "dt_rtg_value": args.dt_rtg_value,
+        "forecast_sidecar": (
+            str(args.forecast_sidecar.resolve()) if args.forecast_sidecar is not None else None
+        ),
         "segments": len(segments),
         "window_days": args.window_days,
         "windows_per_segment": args.windows_per_segment,

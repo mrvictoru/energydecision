@@ -2,7 +2,11 @@ import datetime as dt
 
 import polars as pl
 
-from scripts.evaluate_household_ood_baselines import _bounded_windows, _duration_days
+from scripts.evaluate_household_ood_baselines import (
+    _bounded_windows,
+    _duration_days,
+    parse_args,
+)
 
 
 def _segment(days: int, start: dt.datetime = dt.datetime(2026, 1, 1)) -> pl.DataFrame:
@@ -42,3 +46,12 @@ def test_bounded_windows_and_duration_support_fifteen_minute_data():
     assert len(windows[0]) == 7 * 96
     assert _duration_days(windows[0]) == 7.0
     assert provenance[0]["days"] == 7
+
+
+def test_fixed_standard_rtg_prompt_is_configurable(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["evaluate_household_ood_baselines.py", "--dt-rtg-value", "-5"],
+    )
+
+    assert parse_args().dt_rtg_value == -5.0

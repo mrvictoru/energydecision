@@ -1,0 +1,5 @@
+# Isolated sidecar dependencies. Do not install these into the main runtime.
+granite-tsfm==0.3.9
+polars==1.44.1
+torch==2.11.0
+transformers==5.16.1

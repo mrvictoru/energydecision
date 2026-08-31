@@ -165,6 +165,96 @@ DT does not use the persistence channels beneficially. A stronger forecast must
 be generated causally and included during matched policy retraining; replacing
 inputs only at inference is not sufficient.
 
+The no-forecast control has now been retrained from the same SDP-teacher corpus
+with both forecast channels set to zero in every training observation
+(`h4_2_no_forecast_8x512_ctx576`). On the same ten windows, evaluated with
+zeroed channels, it saved +$232.32/year (95% CI for annualized bill:
+$597–$1,172; n=10). This is a retrained-policy comparison, not directly
+comparable to the earlier inference-only zeroing result.
+
+Granite TTM-R3 is integrated as an **offline sidecar**, never as a dependency
+of the simulator or main training container. `Containerfile.ttm` provides a
+separate Python 3.12/Torch/CUDA environment, and the wrapper creates the
+`energydecision-ttm` Distrobox with NVIDIA integration:
+
+```bash
+# Precompute a mirrored synthetic corpus with causal one-hour-ahead forecasts.
+bash scripts/run_household_ttm_forecasts.sh \
+  --synth-dir data/household/synth \
+  --output data/household/synth_ttm \
+  --device cuda --batch-size 512
+
+# Precompute a timestamp-keyed real-OOD sidecar.
+bash scripts/run_household_ttm_forecasts.sh \
+  --normalized-dir data/household/real/normalized \
+  --output data/household/real/household_ttm_forecasts.parquet \
+  --device cuda --batch-size 512
+```
+
+The pinned `512-48-dec-512-r3` checkpoint uses 512 historical samples and
+predicts 48 future samples. The environment columns use the 12th prediction
+(one hour ahead at five-minute cadence). Each output records forecast issuance
+and target timestamps, invalid warm-up rows, model revision, and forecast
+quality. The full synthetic build improved solar/load MAE by 34.6%/12.2%;
+the real-OOD sidecar improved them by 39.2%/17.5%.
+
+Matched J_t(soc) DT evaluation on the fixed ten-window surface saved
++$381.76/year with TTM versus +$264.40/year without forecasts. The paired
+TTM advantage was +$117.36/year (bootstrap 95% CI +$64.55–$163.82, 9/10
+windows, one-sided Wilcoxon p=0.0029). This is supporting evidence only:
+J_t(soc) uses future actuals when constructing its inference prompt.
+
+The deployment-style control retrains all policies with
+`--rtg-source constant`, identical architecture/optimizer/seed/data labels,
+and `--stride 288`. Inference updates RTG only from realized rewards. The
+shared fixed prompt is RTG=-2, selected from the training RTG median
+(approximately -1.76), not from OOD policy performance:
+
+```bash
+python3 scripts/pretrain_decision_transformer.py \
+  --surface-preset household_baseline \
+  --data-dir data/household/dt \
+  --patterns h4_2_ttm_sdp_train \
+  --val-data-dir data/household/dt \
+  --val-patterns h4_2_ttm_sdp_val \
+  --split-policy explicit_validation \
+  --context-length 576 --stride 288 \
+  --n-block 8 --h-dim 512 --n-heads 8 --drop-p 0.15 \
+  --batch-size 16 --epochs 5 --lr 3e-5 --seed 42 \
+  --rtg-source constant --return-scale 1.0 \
+  --action-loss-weight 0.999 --state-loss-weight 0.002 \
+  --return-loss-weight 0.0001 --device cuda --amp-mode auto
+
+python3 scripts/evaluate_household_ood_baselines.py \
+  --dt-rtg-mode standard --dt-rtg-value -2 \
+  --forecast-sidecar data/household/real/household_ttm_forecasts.parquet \
+  --tariff realistic --window-days 7 --windows-per-segment 2 \
+  --skip-reference-policies --skip-ppo --device cuda
+```
+
+Change the train/validation patterns and evaluation forecast input for the
+matched persistence and no-forecast controls. On the same ten real-OOD
+windows, annualized savings were:
+
+| Forecast input | Savings vs no battery |
+|---|---:|
+| TTM-R3 | +$258.50/year |
+| 24-hour persistence | +$216.74/year |
+| No forecast | +$155.12/year |
+
+TTM beat persistence by +$41.75/year (paired bootstrap 95% CI
++$16.56–$69.43, 9/10 windows, one-sided Wilcoxon p=0.0068) and no forecast
+by +$103.37/year (95% CI +$78.23–$127.67, 10/10, p=0.0010). Persistence
+also beat no forecast by +$61.62/year (95% CI +$33.96–$90.77, 8/10,
+p=0.0049).
+
+Prompt calibration matters: at the optimistic out-of-distribution RTG=0,
+TTM saved -$4.21/year and no forecast saved +$38.53/year. Therefore use a
+prompt justified from the training distribution and report it with every
+result. The matched RTG=-2 experiment supports retaining offline TTM
+forecasts in the observation pipeline; broader households and prompt
+robustness belong to H4.4.
+
 ### 7. Compare observed and optimized real-battery dispatch
 
 Use the H3 harness to replay recorded VPP actions and compare them with a

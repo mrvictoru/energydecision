@@ -46,21 +46,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--action-resolution", type=int, default=21)
     parser.add_argument("--roundtrip-eff", type=float, default=0.80)
     parser.add_argument("--tariff", choices=("realistic", "legacy_flat"), default="realistic")
+    parser.add_argument(
+        "--forecast-mode",
+        choices=("persistence", "zero"),
+        default="persistence",
+        help="Forecast features stored in observations; zero removes both forecast channels.",
+    )
     return parser.parse_args()
 
 
 def _trajectory_for_episode(
     frame: pl.DataFrame, episode_id: int, capacity: float, flow: float,
     soc_resolution: int, action_resolution: int, tariff: Tariff,
-    roundtrip_eff: float,
+    roundtrip_eff: float, forecast_mode: str,
 ) -> pl.DataFrame:
     """Roll out per-day deterministic DP actions through the actual env."""
     priced_frame = frame.with_columns([
         pl.Series("ImportEnergyPrice", [tariff.import_price(ts) for ts in frame["Timestamp"]]),
         pl.lit(tariff.feed_in_price()).alias("ExportEnergyPrice"),
     ])
+    observation_frame = (
+        priced_frame.with_columns([
+            pl.lit(0.0).alias("FutureSolar"),
+            pl.lit(0.0).alias("FutureLoad"),
+        ])
+        if forecast_mode == "zero" else priced_frame
+    )
     env = SolarBatteryEnv(
-        priced_frame, battery_capacity=capacity, max_battery_flow=flow,
+        observation_frame, battery_capacity=capacity, max_battery_flow=flow,
         init_battery_level=capacity / 2.0, max_step=len(frame),
     )
     observation, _ = env.reset()
@@ -118,6 +131,7 @@ def main() -> None:
             frame, entry["episode_id"], float(battery["capacity_kwh"]),
             float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution,
             tariff, args.roundtrip_eff,
+            args.forecast_mode,
         ))
     result = pl.concat(frames)
     args.out.parent.mkdir(parents=True, exist_ok=True)
