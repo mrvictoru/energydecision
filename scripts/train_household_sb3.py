@@ -30,6 +30,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-flow-kw", type=float, default=5.0)
     parser.add_argument("--battery-life-cost", type=float, default=5000.0)
     parser.add_argument("--seed", type=int, default=20260830)
+    parser.add_argument(
+        "--model-name",
+        default="ppo_h4_3_modern.zip",
+        help="Checkpoint filename written inside --output-dir.",
+    )
     return parser.parse_args()
 
 
@@ -116,7 +121,7 @@ def main() -> None:
     )
     model.learn(total_timesteps=args.timesteps)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    model_path = args.output_dir / "ppo_h4_3_modern.zip"
+    model_path = args.output_dir / args.model_name
     model.save(model_path)
     vec_env.close()
 

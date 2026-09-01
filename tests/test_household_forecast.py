@@ -71,6 +71,19 @@ def test_apply_sidecar_replaces_forecasts_and_requires_full_coverage():
         apply_forecast_sidecar(frame, sidecar.slice(1))
 
 
+def test_apply_sidecar_preserves_column_order():
+    frame = _frame().with_columns([
+        pl.lit(0.31).alias("ImportEnergyPrice"),
+        pl.lit(0.01).alias("ExportEnergyPrice"),
+    ])
+    sidecar = generate_causal_forecasts(
+        frame, _predict, context_length=4, prediction_length=3, lead_steps=1
+    )
+    result = apply_forecast_sidecar(frame, sidecar)
+
+    assert result.columns == frame.columns
+
+
 def test_forecast_quality_uses_future_target_without_leakage():
     frame = _frame()
     sidecar = generate_causal_forecasts(

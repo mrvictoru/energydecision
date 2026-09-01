@@ -255,6 +255,127 @@ result. The matched RTG=-2 experiment supports retaining offline TTM
 forecasts in the observation pipeline; broader households and prompt
 robustness belong to H4.4.
 
+### 6c. H4.4 full-corpus forecast generalization (reproducible pipeline)
+
+H4.2 was trained on the controlled H2 corpus (1,200 fixed seven-day,
+5/10/20 kWh episodes). H4.4 repeats the matched three-way comparison on the
+full horizon/scenario-diverse H4.1 corpus: 240 episodes, one per
+archetype × season × battery-capacity × horizon cell (horizons `1w`, `2w`,
+`6m`, `2y`; 55,860 episode-days), split 165 train / 35 val / 40 test with
+the same 158 real source dates held out for OOD. Build it with:
+
+```bash
+python3 scripts/build_household_synth_corpus.py \
+  --output-dir data/household/synth_h4_1 \
+  --episodes 240 --horizons 1w 2w 6m 2y --seed 20260830
+```
+
+Precompute the causal TTM mirror (offline, isolated `energydecision-ttm`
+Distrobox; 16.1M rows took ~3 h on the 2080 Ti at batch 2048):
+
+```bash
+bash scripts/run_household_ttm_forecasts.sh \
+  --synth-dir data/household/synth_h4_1 \
+  --output data/household/synth_h4_1_ttm \
+  --device cuda --batch-size 2048
+```
+
+Generate matched SDP-teacher trajectories. The teacher optimizes against
+actual solar/load, so action labels, rewards, and `rtg_value` are identical
+across variants; only the stored forecast channels in the observations
+differ:
+
+```bash
+# 24-hour persistence (corpus default channels)
+python3 scripts/generate_household_sdp_trajectories.py \
+  --synth-dir data/household/synth_h4_1 --split train \
+  --forecast-mode persistence \
+  --out data/household/dt/h4_4_persistence_sdp_train.parquet
+# (repeat --split val)
+
+# no forecast (both channels zeroed)
+python3 scripts/generate_household_sdp_trajectories.py \
+  --synth-dir data/household/synth_h4_1 --split train \
+  --forecast-mode zero \
+  --out data/household/dt/h4_4_no_forecast_sdp_train.parquet
+# (repeat --split val)
+
+# TTM (mirror corpus already carries causal one-hour-ahead channels)
+python3 scripts/generate_household_sdp_trajectories.py \
+  --synth-dir data/household/synth_h4_1_ttm --split train \
+  --forecast-mode persistence \
+  --out data/household/dt/h4_4_ttm_sdp_train.parquet
+# (repeat --split val)
+```
+
+Train the three deployment-style standard-RTG DTs with the exact H4.2
+recipe (state 12, act 1, 8×512, ctx 576, drop 0.15, batch 16, lr 3e-5,
+5 epochs, seed 42, `--stride 288`, `--rtg-source constant`,
+`--return-scale 1.0`, loss weights 0.999/0.002/0.0001). The shared
+inference prompt RTG=-2 is again justified from the training RTG median
+(-1.78 on the full corpus, vs -1.76 on H4.2), not from OOD rankings:
+
+```bash
+for variant in ttm persistence no_forecast; do
+python3 scripts/pretrain_decision_transformer.py \
+  --surface-preset household_baseline \
+  --data-dir data/household/dt \
+  --patterns h4_4_${variant}_sdp_train \
+  --val-data-dir data/household/dt \
+  --val-patterns h4_4_${variant}_sdp_val \
+  --split-policy explicit_validation \
+  --context-length 576 --stride 288 \
+  --n-block 8 --h-dim 512 --n-heads 8 --drop-p 0.15 \
+  --batch-size 16 --epochs 5 --lr 3e-5 --seed 42 \
+  --rtg-source constant --return-scale 1.0 \
+  --action-loss-weight 0.999 --state-loss-weight 0.002 \
+  --return-loss-weight 0.0001 --device cuda --amp-mode auto \
+  --save-path models/household/dt/h4_4_${variant}_standard_rtg_8x512_ctx576.pt \
+  --checkpoint-path models/household/dt/h4_4_${variant}_standard_rtg_8x512_ctx576_checkpoint.pt \
+  --loss-csv-path models/household/dt/h4_4_${variant}_standard_rtg_8x512_ctx576_loss.csv
+done
+```
+
+Train the matching full-corpus PPO baseline (not the H4.3 pilot):
+
+```bash
+python3 scripts/train_household_sb3.py \
+  --corpus-dir data/household/synth_h4_1 \
+  --output-dir models/household/sb3/h4_4_full \
+  --timesteps 500000 --n-envs 12 \
+  --capacity-kwh 5 --max-flow-kw 3.3 \
+  --battery-life-cost 5000 --seed 20260830 \
+  --model-name ppo_h4_4_fullcorpus.zip
+```
+
+Evaluate on the fixed ten-window real-OOD surface (TTM from sidecars only;
+TTM is never run live inside the simulator) and on the synthetic test
+split with `--synth-dir` (per-episode battery configs from the manifest,
+`--limit-windows` for a deterministic subsample), then compute paired
+window-level bootstrap CIs, win counts, and one-sided Wilcoxon tests with
+`scripts/household_forecast_stats.py` over the three `summary.json` files.
+
+**H4.4 outcome (2026-09-02).** On the fixed 10-window real-OOD surface, the
+full-corpus matched standard-RTG DTs saved: **TTM +$357.29/yr**, **24-hour
+persistence +$309.35/yr**, **no forecast +$310.90/yr**, with fresh full-corpus
+PPO +$23.66/yr, rule +$58.03/yr, and oracle +$738.96/yr as references. Paired:
+TTM beats persistence by +$47.94/yr (95% CI +$27.99–$67.59, 9/10, Wilcoxon
+p=0.0020) and no-forecast by +$46.39/yr (95% CI +$23.78–$68.91, 9/10,
+p=0.0020). Every arm improved on the H4.2 seven-day-corpus run (TTM +$98.79),
+so the offline-forecast benefit generalizes to the diverse corpus. The
+persistence-vs-no-forecast gap collapsed to −$1.55/yr (p=0.46): with broad
+training data the policy only exploits the genuinely-better TTM channel. On the
+20-window synthetic test surface (mixed 5/10/20 kWh per-episode batteries) the
+three DTs were statistically indistinguishable (TTM−no-forecast −$15.49/yr,
+p=0.86, per-horizon mixed) — the forecast advantage is proven on the held-out
+real household, not yet on the broad multi-battery synthetic surface. A matched
+TTM/no-forecast/persistence sidecar layout bug (the forecast sidecar previously
+reordered the Future columns) was fixed in `src/household_forecast.py`;
+the mirror corpus and TTM trajectories were regenerated so all three arms share
+identical action/reward/RTG labels and observation layout, differing only in
+dims 6–7.
+
+
 ### 7. Compare observed and optimized real-battery dispatch
 
 Use the H3 harness to replay recorded VPP actions and compare them with a
@@ -357,6 +478,9 @@ Common household artifact locations:
 - `scripts/evaluate_household_tariffs.py`: H3 replay-gap and tariff evaluation
 - `scripts/evaluate_household_ood_baselines.py`: H1 rule/oracle/PPO/DT real-OOD evaluation
 - `scripts/generate_household_sdp_trajectories.py`: H2 synthetic SDP-teacher trajectory builder
+- `scripts/train_household_sb3.py`: fresh modern-data SB3 (PPO) baseline trainer over a synthetic corpus
+- `scripts/household_forecast_stats.py`: paired bootstrap/Wilcoxon stats for the H4.2/H4.4 forecast ablation
+- `scripts/generate_household_ttm_forecasts.py` / `src/household_forecast.py`: offline causal TTM-R3 forecast sidecar
 
 ## Validation And Iteration
 

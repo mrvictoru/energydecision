@@ -102,11 +102,17 @@ def forecast_quality(
 
 
 def apply_forecast_sidecar(frame: pl.DataFrame, sidecar: pl.DataFrame) -> pl.DataFrame:
-    """Replace environment forecast columns using a timestamp-keyed sidecar."""
+    """Replace environment forecast columns using a timestamp-keyed sidecar.
+
+    Replaced columns keep their original positions; the observation layout of
+    the environment (``DataFrame.columns`` order) must not depend on which
+    forecast provider produced the values.
+    """
     required = {"Timestamp", *FORECAST_COLUMNS}
     missing = sorted(required - set(sidecar.columns))
     if missing:
         raise ValueError(f"Forecast sidecar missing columns: {missing}")
+    original_order = frame.columns
     replacement = sidecar.select(["Timestamp", *FORECAST_COLUMNS])
     joined = (
         frame.drop([name for name in FORECAST_COLUMNS if name in frame.columns])
@@ -117,4 +123,4 @@ def apply_forecast_sidecar(frame: pl.DataFrame, sidecar: pl.DataFrame) -> pl.Dat
     ).height
     if null_rows:
         raise ValueError(f"Forecast sidecar does not cover {null_rows} environment rows")
-    return joined
+    return joined.select([name for name in original_order if name in joined.columns])

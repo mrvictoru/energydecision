@@ -5,6 +5,7 @@ import polars as pl
 from scripts.evaluate_household_ood_baselines import (
     _bounded_windows,
     _duration_days,
+    _subsample_windows,
     parse_args,
 )
 
@@ -55,3 +56,35 @@ def test_fixed_standard_rtg_prompt_is_configurable(monkeypatch):
     )
 
     assert parse_args().dt_rtg_value == -5.0
+
+
+def test_subsample_windows_keeps_evenly_spaced_aligned_records():
+    segments = [_segment(1) for _ in range(10)]
+    provenance = [{"source_segment": index} for index in range(10)]
+    batteries = [{"capacity_kwh": float(index)} for index in range(10)]
+
+    kept, kept_prov, kept_batt = _subsample_windows(segments, provenance, batteries, 4)
+
+    assert [item["source_segment"] for item in kept_prov] == [0, 3, 6, 9]
+    assert kept_batt == [batteries[i] for i in (0, 3, 6, 9)]
+    assert len(kept) == 4
+
+    same = _subsample_windows(segments, provenance, batteries, None)
+    assert same[1] == provenance
+
+
+def test_synth_surface_flags_are_configurable(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "evaluate_household_ood_baselines.py",
+            "--synth-dir", "data/household/synth_h4_1",
+            "--synth-split", "test",
+            "--limit-windows", "20",
+        ],
+    )
+    args = parse_args()
+
+    assert str(args.synth_dir).endswith("synth_h4_1")
+    assert args.synth_split == "test"
+    assert args.limit_windows == 20

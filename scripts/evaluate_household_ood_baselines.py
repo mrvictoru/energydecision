@@ -89,6 +89,20 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip invariant rule/oracle rollouts for policy ablations.",
     )
+    parser.add_argument(
+        "--synth-dir",
+        type=Path,
+        default=None,
+        help="Evaluate on synthetic corpus episodes (with per-episode battery "
+             "config from the manifest) instead of the real normalized telemetry.",
+    )
+    parser.add_argument("--synth-split", choices=("val", "test"), default="test")
+    parser.add_argument(
+        "--limit-windows",
+        type=int,
+        default=None,
+        help="Deterministically subsample this many evenly spaced evaluation windows.",
+    )
     return parser.parse_args()
 
 
@@ -223,6 +237,27 @@ def _bounded_windows(
     return windows, provenance
 
 
+def _subsample_windows(
+    segments: list[pl.DataFrame],
+    provenance: list[dict[str, object]],
+    batteries: list[dict[str, float]],
+    limit: int | None,
+) -> tuple[list[pl.DataFrame], list[dict[str, object]], list[dict[str, float]]]:
+    if limit is None:
+        return segments, provenance, batteries
+    if limit < 1:
+        raise ValueError("--limit-windows must be positive")
+    selected = sorted({
+        int(round(value))
+        for value in np.linspace(0, len(segments) - 1, min(limit, len(segments)))
+    })
+    return (
+        [segments[index] for index in selected],
+        [provenance[index] for index in selected],
+        [batteries[index] for index in selected],
+    )
+
+
 def _duration_days(frame: pl.DataFrame) -> float:
     timestamps = frame["Timestamp"]
     if len(timestamps) < 2:
@@ -270,25 +305,65 @@ def main() -> None:
         )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     tariff = tariff_for_name(args.tariff)
-    base_segments = [
-        apply_tariff(env_view(segment), tariff)
-        for segment in split_segments(build_year_dataset(args.normalized_dir))
-    ]
-    if args.forecast_sidecar is not None:
-        sidecar = pl.read_parquet(args.forecast_sidecar)
-        base_segments = [
-            apply_forecast_sidecar(segment, sidecar)
-            for segment in base_segments
+    window_batteries: list[dict[str, float]] = []
+    if args.synth_dir is not None:
+        if args.forecast_sidecar is not None:
+            raise ValueError("--forecast-sidecar applies to the real OOD surface only")
+        corpus_manifest = json.loads((args.synth_dir / "manifest.json").read_text())
+        corpus_entries = [
+            entry for entry in corpus_manifest["episodes"]
+            if entry["split"] == args.synth_split
         ]
+        base_segments = [
+            apply_tariff(pl.read_parquet(args.synth_dir / entry["path"]), tariff)
+            for entry in corpus_entries
+        ]
+        corpus_batteries = [
+            {
+                "capacity_kwh": float(entry["battery"]["capacity_kwh"]),
+                "max_flow_kw": float(entry["battery"]["max_flow_kw"]),
+            }
+            for entry in corpus_entries
+        ]
+    else:
+        base_segments = [
+            apply_tariff(env_view(segment), tariff)
+            for segment in split_segments(build_year_dataset(args.normalized_dir))
+        ]
+        corpus_batteries = []
+        if args.forecast_sidecar is not None:
+            sidecar = pl.read_parquet(args.forecast_sidecar)
+            base_segments = [
+                apply_forecast_sidecar(segment, sidecar)
+                for segment in base_segments
+            ]
     segments, window_provenance = _bounded_windows(
         base_segments, args.window_days, args.windows_per_segment
     )
+    window_batteries = [
+        corpus_batteries[provenance["source_segment"]]
+        if corpus_batteries
+        else {
+            "capacity_kwh": args.capacity_kwh,
+            "max_flow_kw": args.max_flow_kw,
+        }
+        for provenance in window_provenance
+    ]
+    segments, window_provenance, window_batteries = _subsample_windows(
+        segments, window_provenance, window_batteries, args.limit_windows
+    )
+    if args.synth_dir is not None:
+        for provenance in window_provenance:
+            entry = corpus_entries[provenance["source_segment"]]
+            provenance["horizon"] = entry.get("horizon")
+            provenance["archetype"] = entry.get("archetype")
+            provenance["episode_path"] = entry["path"]
     segments = [
         _apply_forecast_mode(segment, args.forecast_mode, args.seed + index)
         for index, segment in enumerate(segments)
     ]
     if not segments:
-        raise ValueError("No contiguous real OOD segments found")
+        raise ValueError("No contiguous evaluation segments found")
 
     models: dict[str, tuple[object, str]] = {}
     if not args.skip_ppo:
@@ -308,22 +383,24 @@ def main() -> None:
         bills[name] = []
     for segment_index, segment in enumerate(segments, start=1):
         forecast_label = "sidecar" if args.forecast_sidecar is not None else args.forecast_mode
+        battery = window_batteries[segment_index - 1]
         print(
             f"Evaluating window {segment_index}/{len(segments)} "
-            f"({_duration_days(segment):.0f} days, forecast={forecast_label})",
+            f"({_duration_days(segment):.0f} days, forecast={forecast_label}, "
+            f"capacity={battery['capacity_kwh']}kWh/{battery['max_flow_kw']}kW)",
             flush=True,
         )
         if not args.skip_reference_policies:
             bills["rule"].append(_run_agent(
-                segment, "rule", None, args.capacity_kwh, args.max_flow_kw, tariff
+                segment, "rule", None, battery["capacity_kwh"], battery["max_flow_kw"], tariff
             ))
             bills["oracle"].append(
-                _oracle_bill(segment, args.capacity_kwh, args.max_flow_kw, tariff)
+                _oracle_bill(segment, battery["capacity_kwh"], battery["max_flow_kw"], tariff)
             )
         for name, (model, rtg_mode) in models.items():
             bills[name].append(_run_agent(
                 segment, "rl" if name == "ppo" else "dt", model,
-                args.capacity_kwh, args.max_flow_kw, tariff, rtg_mode,
+                battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
                 args.dt_rtg_value,
             ))
 
@@ -336,8 +413,17 @@ def main() -> None:
         ))
     segment_days = [_duration_days(segment) for segment in segments]
     output = {
-        "surface": "real normalized telemetry; held-out OOD; each environment instantiated per contiguous segment",
-        "hardware": {"capacity_kwh": args.capacity_kwh, "max_flow_kw": args.max_flow_kw},
+        "surface": (
+            f"synthetic corpus {args.synth_dir} split={args.synth_split}; "
+            "per-episode battery configuration; deterministic bounded windows"
+            if args.synth_dir is not None
+            else "real normalized telemetry; held-out OOD; each environment instantiated per contiguous segment"
+        ),
+        "hardware": (
+            {"per_window": window_batteries}
+            if args.synth_dir is not None
+            else {"capacity_kwh": args.capacity_kwh, "max_flow_kw": args.max_flow_kw}
+        ),
         "tariff": args.tariff,
         "forecast_mode": args.forecast_mode,
         "dt_rtg_value": args.dt_rtg_value,
