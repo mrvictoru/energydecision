@@ -284,17 +284,6 @@ class DegradationModel:
         }
 
 
-
-def static_degradation(Id, Ich, SoC_avg, DoD):
-    """Alias for per-cycle degradation used in static estimations."""
-    model = DegradationModel()
-
-    d = model.degradation_per_cycle(T=25.0, Id=Id, Ich=Ich, SOCav=SoC_avg, DOD=DoD)
-    print("Degradation per cycle:", d)
-    print("Equivalent cycle life:", np.inf if d == 0 else 1.0 / d)
-    return d
-
-
 class RainflowCounter:
     def __init__(self, step_duration=1.0, eps=0.1, max_c_rate=1.0): # eps in percent SoC, smaller than 0.1% is ignored
         self.step_duration = step_duration
@@ -393,15 +382,6 @@ class RainflowCounter:
 
         return closed_cycles
 
-
-def rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6):
-    """Return all closed cycles for the provided SoC profile."""
-
-    counter = RainflowCounter(step_duration=step_duration, eps=eps)
-    closed_cycles = []
-    for soc in soc_profile:
-        closed_cycles.extend(counter.update(soc))
-    return closed_cycles
 
 
 # =============================================================================

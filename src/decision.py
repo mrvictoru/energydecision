@@ -1,4 +1,3 @@
-import logging
 import inspect
 import numpy as np
 import torch
@@ -19,7 +18,6 @@ from oracle_algorithm import OracleSolver
 from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES
 
 import concurrent.futures
-from tqdm.notebook import tqdm
 
 DEG_INCIDENT_FIELDS = [
     "episode_id",
@@ -393,10 +391,6 @@ class Agent:
         forecast_list = forecast_df.to_dicts()
         return forecast_list
 
-    def _soc_to_idx(self, soc_kwh):
-        """Maps a continuous SoC value to the index of the nearest discrete level."""
-        return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
-
     # --- Oracle Helper Methods ---
 
 
@@ -487,17 +481,8 @@ class Agent:
             # Use norm_obs if available, else fallback to obs
             current_obs = obs
 
-        #pbar = None
         if display_progress:
             print("Starting Simulation...")
-            """
-            try:
-                from tqdm.notebook import tqdm as tqdm_bar
-            except Exception:
-                from tqdm import tqdm as tqdm_bar
-            # Use DataFrame length as an upper bound for progress
-            pbar = tqdm_bar(total=max_possible_steps, desc="Episode", leave=False)
-            """
         try:
             while not (terminated or truncated):
                 action = self.choose_action(current_obs)
@@ -553,12 +538,9 @@ class Agent:
                     self.env.render()
                 step += 1  # Increment step counter
                 if display_progress is not False:
-                    #pbar.update(1)
                     print(f"Step {step}/{max_possible_steps}", end='\r')
 
         finally:
-            #if pbar is not None:
-                #pbar.close()
             print("Sim Complete")
 
         episode_df = pl.DataFrame(logs)

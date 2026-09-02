@@ -303,7 +303,6 @@ def sample_rtg_values(
     optimum: float,
     spread: float,
     count: int,
-    distribution: str = "gaussian",
     seed: int | None = None,
 ) -> list[float]:
     """Sample ``count`` RTG values around ``optimum`` for group diversity.
@@ -354,7 +353,6 @@ class GRPOTrainer:
         degradation_penalty_weight: float = 1.0,
         mixed_precision: bool = False,
         cpu_rollout_buffer: bool = True,
-        use_critic: bool = False,
     ) -> None:
         self.model = model.to(device)
         self.device = torch.device(device)
@@ -381,10 +379,8 @@ class GRPOTrainer:
         self.grad_clip_norm = float(grad_clip_norm)
         self.degradation_penalty_weight = float(degradation_penalty_weight)
         self._last_prompts: list[GRPOPrompt] = []
-        self._adaptive_rtg_ewma: float | None = None
         self.mixed_precision = bool(mixed_precision)
         self.cpu_rollout_buffer = bool(cpu_rollout_buffer)
-        self.use_critic = bool(use_critic)
         self._amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
     def _sync_reference_model(self) -> None:
@@ -401,32 +397,6 @@ class GRPOTrainer:
         degradation_cost = float(info_dict.get("degradation_cost", 0.0))
         extra_weight = self.degradation_penalty_weight - 1.0
         return float(reward) - extra_weight * degradation_cost
-
-    def _resample_prompts(
-        self,
-        prompts: Sequence[GRPOPrompt],
-        *,
-        optimum: float,
-        spread: float,
-        distribution: str,
-        seed: int | None,
-    ) -> list[GRPOPrompt]:
-        rtg_values = sample_rtg_values(
-            optimum=optimum,
-            spread=spread,
-            count=len(prompts),
-            distribution=distribution,
-            seed=seed,
-        )
-        return [
-            GRPOPrompt(
-                seed=prompt.seed,
-                options=prompt.options,
-                rtg_value=float(rtg_values[idx]),
-                max_steps=prompt.max_steps,
-            )
-            for idx, prompt in enumerate(prompts)
-        ]
 
     @staticmethod
     def _forward_dt(model, states, rtgs, timesteps, actions, attention_mask, amp_context=None):
@@ -559,7 +529,7 @@ class GRPOTrainer:
                     with torch.no_grad():
                         current_dist, ref_dist, value = self._action_distributions(
                             states_t, actions_t, rtgs_t, timesteps_t, mask_t,
-                            need_value=self.use_critic,
+                            need_value=False,
                         )
                         sampled_action = current_dist.rsample()
                         old_log_prob = float(current_dist.log_prob(sampled_action).item())
@@ -615,23 +585,9 @@ class GRPOTrainer:
         # Compute advantages: critic-based (full PPO: returns-to-go minus the
         # DT's return-head value estimate) or group-relative (GRPO).
         step_advantages: list[float] = []
-        if self.use_critic:
-            idx = 0
-            gamma = float(dt_gamma)
-            for step_count in episode_steps:
-                ep_rew = reward_records[idx : idx + step_count]
-                rtg = [0.0] * step_count
-                acc = 0.0
-                for t in range(step_count - 1, -1, -1):
-                    acc = ep_rew[t] + gamma * acc
-                    rtg[t] = acc
-                for t in range(step_count):
-                    step_advantages.append(rtg[t] - value_records[idx + t])
-                idx += step_count
-        else:
-            advantages_per_episode = compute_group_relative_advantages(returns, num_rtgs)
-            for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
-                step_advantages.extend([advantage] * step_count)
+        advantages_per_episode = compute_group_relative_advantages(returns, num_rtgs)
+        for advantage, step_count in zip(advantages_per_episode.tolist(), episode_steps):
+            step_advantages.extend([advantage] * step_count)
 
         batch_device = "cpu" if self.cpu_rollout_buffer else self.device
         batch = GRPORolloutBatch(
@@ -767,20 +723,13 @@ class GRPOTrainer:
         gradient_accumulation_steps: int = 1,
         dt_gamma: float = 0.99,
         sync_reference_every: int = 0,
-        adaptive_rtg: bool = False,
-        adaptive_rtg_spread: float = 3.0,
-        adaptive_rtg_dist: str = "gaussian",
-        adaptive_rtg_ewma_alpha: float = 0.1,
-        adaptive_rtg_seed: int | None = None,
     ) -> list[dict[str, float]]:
         history: list[dict[str, float]] = []
-        prompts_for_iteration = list(prompts)
-        self._last_prompts = list(prompts_for_iteration)
-        self._adaptive_rtg_ewma = None
+        self._last_prompts = list(prompts)
         for iteration in range(max(1, int(iterations))):
             batch = self.collect_rollouts(
                 env_factory,
-                prompts=prompts_for_iteration,
+                prompts=prompts,
                 group_size=group_size,
                 dt_gamma=dt_gamma,
             )
@@ -795,25 +744,7 @@ class GRPOTrainer:
                 self._sync_reference_model()
                 reference_synced = True
 
-            adaptive_rtg_optimum = None
-            if adaptive_rtg:
-                realized_mean_return = float(batch.returns.mean().detach().cpu().item())
-                if self._adaptive_rtg_ewma is None:
-                    self._adaptive_rtg_ewma = realized_mean_return
-                else:
-                    alpha = float(adaptive_rtg_ewma_alpha)
-                    self._adaptive_rtg_ewma = ((1.0 - alpha) * self._adaptive_rtg_ewma) + (alpha * realized_mean_return)
-                adaptive_rtg_optimum = float(self._adaptive_rtg_ewma)
-                prompts_for_iteration = self._resample_prompts(
-                    prompts_for_iteration,
-                    optimum=adaptive_rtg_optimum,
-                    spread=adaptive_rtg_spread,
-                    distribution=adaptive_rtg_dist,
-                    seed=None if adaptive_rtg_seed is None else int(adaptive_rtg_seed) + iteration + 1,
-                )
-            self._last_prompts = list(prompts_for_iteration)
-
-            prompt_rtgs = [float(prompt.rtg_value) for prompt in prompts_for_iteration]
+            prompt_rtgs = [float(prompt.rtg_value) for prompt in prompts]
             metrics.update(
                 {
                     "iteration": iteration + 1,
@@ -827,11 +758,9 @@ class GRPOTrainer:
                     "mean_advantage": float(batch.advantages.mean().detach().cpu().item()),
                     "reference_synced": float(reference_synced),
                     "degradation_penalty_weight": float(self.degradation_penalty_weight),
-                    "adaptive_rtg_enabled": float(adaptive_rtg),
-                    "adaptive_rtg_optimum": float(adaptive_rtg_optimum) if adaptive_rtg_optimum is not None else float("nan"),
-                    "prompt_rtg_min": float(min(prompt_rtgs)),
-                    "prompt_rtg_max": float(max(prompt_rtgs)),
-                    "prompt_rtg_mean": float(sum(prompt_rtgs) / len(prompt_rtgs)),
+                    "prompt_rtg_min": float(min(p.rtg_value for p in prompts)),
+                    "prompt_rtg_max": float(max(p.rtg_value for p in prompts)),
+                    "prompt_rtg_mean": float(sum(p.rtg_value for p in prompts) / len(prompts)),
                 }
             )
             history.append(metrics)
