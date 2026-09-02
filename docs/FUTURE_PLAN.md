@@ -240,7 +240,7 @@ Gate failures loop back to resampling/injection parameters, never hand-fixed.
 | ✅ 2 | Resampler + λ-scaling + injection blocks | G1–G6 harness green |
 | ✅ 3 | Battery/solar assignment + env-view export | env instantiates per episode, 12-D obs |
 | ✅ 4 | Corpus build CLI (`scripts/build_household_synth_corpus.py`) | manifest complete, counts exact |
-| 🟡 5 | Optional TTM imputation module (isolated flag) | `--use-ttm` and explicit modes are documented; the adapter fails explicitly until Granite runtime provisioning and imputation validation are complete |
+| ✅ 5 | TTM integration superseded | The in-generator `--use-ttm`/`--ttm-mode` stub was removed (Sep 2026 cleanup); TTM forecasts are now handled by the offline causal sidecar pipeline (H4.2/H4.4, `src/household_forecast.py` + `scripts/run_household_ttm_forecasts.sh`), never inside the generator or simulator. |
 
 #### Risks
 

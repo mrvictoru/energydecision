@@ -76,13 +76,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--entropy-coeff", type=float, default=0.0, help="Entropy coefficient")
     parser.add_argument("--initial-log-std", type=float, default=-1.0, help="Initial log std")
     parser.add_argument("--no-trainable-log-std", action="store_true", default=False, help="Disable trainable log std")
-    parser.add_argument("--use-critic", action="store_true", default=False, help="Full-PPO critic advantages (returns-to-go minus the DT's return-head value) instead of GRPO group-relative advantages")
     parser.add_argument("--dt-gamma", type=float, default=1.0, help="Discount factor for RTG updates in DT inference (1.0 = undiscounted)")
 
     # RTG sampling
     parser.add_argument("--rtg-count", type=int, default=4, help="Number of RTG values per group")
     parser.add_argument("--rtg-spread", type=float, default=3.0, help="RTG spread")
-    parser.add_argument("--rtg-dist", default="gaussian", choices=["gaussian", "uniform", "lognormal"], help="RTG distribution")
     parser.add_argument("--target-rtg", type=float, default=None, help="Override target RTG (default: model.return_scale)")
 
     # Environment config
@@ -181,7 +179,6 @@ def build_surface_manifest(
             "minibatch_size": args.minibatch_size,
             "rtg_count": args.rtg_count,
             "rtg_spread": args.rtg_spread,
-            "rtg_dist": args.rtg_dist,
             "dt_gamma": getattr(args, "dt_gamma", 1.0),
         },
         "scenario": {
@@ -277,7 +274,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         optimum=target_rtg,
         spread=args.rtg_spread,
         count=args.rtg_count,
-        distribution=args.rtg_dist,
         seed=args.seed,
     )
     print(f"[GRPO] RTG prompts: {[round(v, 2) for v in rtg_values]}")
@@ -302,7 +298,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         entropy_coeff=args.entropy_coeff,
         initial_log_std=args.initial_log_std,
         trainable_log_std=not args.no_trainable_log_std,
-        use_critic=args.use_critic,
     )
 
     history = trainer.train(

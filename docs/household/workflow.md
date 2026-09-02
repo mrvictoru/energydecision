@@ -110,10 +110,6 @@ metrics, split (`train`/`val`/`test`), and the real source dates reserved for
 OOD evaluation. The real household remains the OOD surface of record and must
 not be included in synthetic training data.
 
-The optional `--use-ttm --ttm-mode {gap_imputation,weather_residual}` path is
-intentionally isolated and fails explicitly until the Granite TTM runtime is
-provisioned; TTM is not used as the primary generator.
-
 The H4.1 extension supports a balanced horizon/scenario matrix. Use
 `--horizons 1w 2w 6m 2y` to cycle across one-week, two-week, six-month, and
 two-year episodes while retaining the five archetypes, seasonal/day-type

@@ -115,11 +115,8 @@ python scripts/autoresearch_evaluator.py \
 | `test_dispatch_utils.py` | Dispatch utilities | DISPATCHLOAD parsing, station resolution, replay |
 | `test_environment.py` | Household env | SolarBatteryEnv dynamics, reward, degradation |
 | `test_episode_visualizer.py` | Visualization | Episode plotting, grid energy, SOC trajectories |
-| `test_forecast_dt_evaluator.py` | Forecast DT eval | Forecast DT dispatch, eval integration |
-| `test_forecast_dt.py` | Forecast DT model | TTM forecast tokens, type embeddings, training |
 | `test_grpo_posttraining.py` | GRPO fine-tuning | Online RL fine-tuning, mixed action distribution |
 | `test_launch_aemo_training.py` | Training launcher | Tier defaults, command building, dry-run plan |
-| `test_performance.py` | Performance | Degradation model microbenchmarks |
 | `test_pretrain_aemo_decision_transformer.py` | AEMO DT CLI | Command building, checkpoint epoch parsing |
 | `test_pretrain_decision_transformer.py` | DT training CLI | Legacy CLI contract, surface presets, artifact manifest |
 | `test_prewarm_aemo_cache.py` | Cache warming | Eval config-driven AEMO cache precomputation |
