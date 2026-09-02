@@ -749,13 +749,9 @@ def get_cache_dir(base_dir: str = "data/aemo") -> Path:
     return cache_path
 
 
-def _is_truthy_env(value: Optional[str]) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _is_aemo_cache_only_enabled() -> bool:
     """Return True when dynamic AEMO fetches must use the local cache only."""
-    return _is_truthy_env(os.getenv(AEMO_CACHE_ONLY_ENV_VAR))
+    return str(os.getenv(AEMO_CACHE_ONLY_ENV_VAR) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _build_nemosis_month_stub(table_name: str, year: int, month: int, chunk: int = 1) -> str:

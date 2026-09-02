@@ -2316,38 +2316,13 @@ class AlgorithmActionComparator:
         return float(np.corrcoef(x_f, y_f)[0, 1])
 
     def _auto_bins(self, data: np.ndarray) -> int:
-        """Estimate a sensible bin count for histogramming 'data'.
-
-        Uses Freedman–Diaconis rule (bin width = 2*IQR / n^(1/3)). If the IQR is 0 or
-        yields non-positive width, falls back to Sturges' rule (ceil(log2(n)+1)).
-        Bounds the result to a reasonable range to avoid extreme bin counts.
-        """
+        """Estimate a sensible bin count for histogramming 'data'."""
         finite = data[np.isfinite(data)]
         n = finite.size
         if n <= 1:
             return 10
-        try:
-            q75, q25 = np.percentile(finite, [75, 25])
-            iqr = float(q75 - q25)
-        except Exception:
-            iqr = 0.0
-
-        if iqr > 0:
-            # Freedman–Diaconis bin width
-            bw = 2.0 * iqr / (n ** (1.0 / 3.0))
-            if bw > 0:
-                data_range = float(np.nanmax(finite) - np.nanmin(finite))
-                if data_range <= 0:
-                    bins = int(np.ceil(np.log2(n) + 1))
-                else:
-                    bins = int(max(1, np.ceil(data_range / bw)))
-            else:
-                bins = int(np.ceil(np.log2(n) + 1))
-        else:
-            # Sturges' rule fallback
-            bins = int(np.ceil(np.log2(n) + 1))
-
-        # bound bins to avoid too small/large choices
+        edges = np.histogram_bin_edges(finite, bins="fd")
+        bins = max(1, edges.size - 1)
         bins = max(5, min(bins, 500))
         return int(bins)
 

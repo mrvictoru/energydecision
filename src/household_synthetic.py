@@ -138,39 +138,14 @@ class GateResult:
 
 
 def _kmeans_profiles(profiles: np.ndarray, n_clusters: int, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    """Small dependency-free k-means implementation for 288-point profiles."""
+    """Cluster 288-point load profiles via scipy's k-means."""
     if len(profiles) < 1:
         raise ValueError("Cannot cluster an empty profile set")
-    k = min(n_clusters, len(profiles))
-    # k-means++ initialization avoids a dependency on scikit-learn.
-    centers = [profiles[int(rng.integers(len(profiles)))]]
-    while len(centers) < k:
-        dist_sq = np.min(
-            np.stack([np.sum((profiles - center) ** 2, axis=1) for center in centers]),
-            axis=0,
-        )
-        if dist_sq.sum() <= 0:
-            centers.append(profiles[int(rng.integers(len(profiles)))])
-        else:
-            centers.append(profiles[int(rng.choice(len(profiles), p=dist_sq / dist_sq.sum()))])
-    centers_array = np.asarray(centers)
+    from scipy.cluster.vq import kmeans2
 
-    labels = np.zeros(len(profiles), dtype=int)
-    for _ in range(100):
-        distances = np.sum((profiles[:, None, :] - centers_array[None, :, :]) ** 2, axis=2)
-        updated_labels = np.argmin(distances, axis=1)
-        updated_centers = centers_array.copy()
-        for index in range(k):
-            members = profiles[updated_labels == index]
-            if len(members):
-                updated_centers[index] = members.mean(axis=0)
-        if np.array_equal(labels, updated_labels) and np.allclose(centers_array, updated_centers):
-            labels = updated_labels
-            centers_array = updated_centers
-            break
-        labels = updated_labels
-        centers_array = updated_centers
-    return labels, centers_array
+    k = min(n_clusters, len(profiles))
+    centroids, labels = kmeans2(profiles, k, minit="++", seed=int(rng.integers(2**31)))
+    return labels, centroids
 
 
 def cluster_purity(cluster_labels: Sequence[int], held_out_labels: Sequence[Any]) -> float:
@@ -610,24 +585,3 @@ def episode_seed(master_seed: int, archetype: str, season: str, capacity_kwh: fl
     """Stable seed independent of Python's randomized ``hash()``."""
     text = f"{master_seed}|{archetype}|{season}|{capacity_kwh}|{replicate}".encode()
     return int.from_bytes(hashlib.sha256(text).digest()[:8], "big")
-
-
-@dataclass(frozen=True)
-class TTMConfig:
-    """Flag-gated auxiliary TTM configuration; never used as primary generation."""
-
-    enabled: bool = False
-    model_id: str = "ibm-granite/granite-timeseries-ttm-r2"
-    mode: str = "none"
-
-
-def apply_ttm_auxiliary(frame: pl.DataFrame, config: TTMConfig) -> pl.DataFrame:
-    """Reserve an isolated integration point for opt-in TTM residual/imputation."""
-    if not config.enabled:
-        return frame
-    if config.mode not in {"gap_imputation", "weather_residual"}:
-        raise ValueError("TTM mode must be 'gap_imputation' or 'weather_residual' when enabled")
-    raise RuntimeError(
-        "TTM inference is intentionally isolated from the primary generator and "
-        "requires a separately provisioned Granite TTM runtime; no TTM output was produced."
-    )

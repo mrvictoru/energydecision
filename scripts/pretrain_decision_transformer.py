@@ -200,17 +200,6 @@ MODEL_VARIANTS: dict[str, dict[str, Any]] = {
         "n_heads": 8,
         "drop_p": 0.1,
     },
-    "aemo_multimarket": {
-        "state_dim": 18,
-        "act_dim": 3,
-        "n_block": 4,
-        "h_dim": 128,
-        "context_len": 288,
-        "n_heads": 8,
-        "drop_p": 0.1,
-        "max_timestep": 2016,
-        "rope_enabled": True,
-    },
 }
 SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "legacy": SurfacePreset(
@@ -219,10 +208,6 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "household_baseline": SurfacePreset(
         description="Household-oriented baseline preset using the legacy model defaults.",
         model_variant="baseline",
-    ),
-    "aemo_multimarket": SurfacePreset(
-        description="AEMO multi-market preset aligned with the shared notebook and wrapper defaults.",
-        model_variant="aemo_multimarket",
     ),
     "aemo_proxy": SurfacePreset(
         description=(
