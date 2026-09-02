@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>energydecision — Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch</title>
-<meta name="description" content="A degradation-aware AEMO/NEM benchmark showing a planner-distilled Decision Transformer beating online RL (PPO) and real-world dispatch on all four canonical evaluation surfaces, plus the market-impact gate.">
+<title>energydecision — Offline Decision Transformers for Battery Control: AEMO/NEM Grid-Scale &amp; Household Tracks</title>
+<meta name="description" content="A degradation-aware benchmark showing planner-distilled Decision Transformers beating online RL (PPO) and real-world dispatch — on the utility-scale AEMO/NEM market (4/4 surfaces + impact gate) and on a household solar-battery track with offline causal TTM forecasts.">
 <meta property="og:title" content="energydecision — Offline DT Outperforms Online RL for Battery Dispatch">
-<meta property="og:description" content="Planner-distilled Decision Transformer beats PPO on 4/4 identity surfaces + impact gate in Australia's NEM. Interactive results dashboard.">
+<meta property="og:description" content="Two tracks: the AEMO DT beats PPO on 4/4 identity surfaces + impact gate; the household DT turns offline causal solar/load forecasts into real annual savings. Interactive results dashboard.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://mrvictoru.github.io/energydecision/">
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="10" y="3" width="12" height="5" rx="1" fill="none" stroke="%23383838" stroke-width="2"/><rect x="5" y="8" width="22" height="20" rx="2" fill="%23ffde00" stroke="%23383838" stroke-width="2"/><path d="M16 13 L11 20 H15 L14 25 L20 17 H16 Z" fill="%23383838"/></svg>'>
@@ -405,6 +405,20 @@ footer strong { color: var(--ink); }
   display: grid; place-items: center; color: var(--ink);
 }
 .theme-btn:hover { background: var(--ice); }
+
+/* ---------- Track tabs (AEMO / Household) ---------- */
+.track-tabs-wrap { background: var(--white); border-bottom: 2px solid var(--ink); }
+.track-tabs { display: flex; align-items: center; gap: 12px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
+.track-tab {
+  border: 2px solid var(--ink); background: var(--chalk); color: var(--ink);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 9px 16px; border-radius: var(--radius); cursor: pointer;
+}
+.track-tab[aria-selected="true"] { background: var(--sky); color: #17303f; box-shadow: -4px 4px 0 0 var(--ink); transform: translate(-2px, -2px); }
+.track-tab:hover:not([aria-selected="true"]) { background: var(--ice); }
+.track-note { margin-left: auto; font-size: 11px; color: var(--graphite); text-align: right; }
+@media (max-width: 720px) { .track-note { display: none; } }
 </style>
 </head>
 <body>
@@ -418,14 +432,19 @@ footer strong { color: var(--ink); }
     </a>
     <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Toggle navigation">☰</button>
     <div class="nav-links" id="navLinks">
-      <a href="#results">Results</a>
-      <a href="#policies">Policies</a>
-      <a href="#behavior">Behaviour</a>
-      <a href="#timeline">Timeline</a>
-      <a href="#method">Method</a>
-      <a href="#evidence">Evidence</a>
-      <a href="#artifacts">Artifacts</a>
-      <a href="#limitations">Limits</a>
+      <a href="#results" data-track="aemo">Results</a>
+      <a href="#policies" data-track="aemo">Policies</a>
+      <a href="#behavior" data-track="aemo">Behaviour</a>
+      <a href="#timeline" data-track="aemo">Timeline</a>
+      <a href="#method" data-track="aemo">Method</a>
+      <a href="#evidence" data-track="aemo">Evidence</a>
+      <a href="#artifacts" data-track="aemo">Artifacts</a>
+      <a href="#limitations" data-track="aemo">Limits</a>
+      <a href="#hh-results" data-track="household" hidden>Results</a>
+      <a href="#hh-forecast" data-track="household" hidden>Forecast</a>
+      <a href="#hh-environment" data-track="household" hidden>Environment</a>
+      <a href="#hh-contrast" data-track="household" hidden>Contrast</a>
+      <a href="#hh-limits" data-track="household" hidden>Limits</a>
     </div>
     <button class="theme-btn" id="themeBtn" aria-label="Toggle dark mode">
       <svg id="iconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -434,7 +453,17 @@ footer strong { color: var(--ink); }
   </div>
 </nav>
 
+<!-- ==================== TRACK TABS ==================== -->
+<div class="track-tabs-wrap">
+  <div class="container track-tabs" role="tablist" aria-label="Research track">
+    <button class="track-tab" id="tabAemo" type="button" role="tab" aria-selected="true" aria-controls="track-aemo">⚡ AEMO / NEM · grid-scale</button>
+    <button class="track-tab" id="tabHousehold" type="button" role="tab" aria-selected="false" aria-controls="track-household" tabindex="-1">🏠 Household · solar + battery</button>
+    <span class="track-note">Two tracks, two environments — numbers are not comparable across them.</span>
+  </div>
+</div>
+
 <main id="main">
+<div id="track-aemo" role="tabpanel" aria-labelledby="tabAemo">
 <!-- ==================== HERO ==================== -->
 <header class="hero" id="top">
   <svg class="doodle doodle-cloud-tl" width="180" height="90" viewBox="0 0 180 90" aria-hidden="true">
@@ -973,13 +1002,250 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
     </ul>
   </div>
 </section>
+</div><!-- /track-aemo -->
+
+<!-- ====================================================================
+     HOUSEHOLD TRACK PANEL
+     ==================================================================== -->
+<div id="track-household" role="tabpanel" aria-labelledby="tabHousehold" hidden>
+
+<header class="hero" id="hh-top">
+  <svg class="doodle doodle-tri-r" width="70" height="70" viewBox="0 0 70 70" aria-hidden="true">
+    <polygon points="35,8 62,62 8,62" fill="none" stroke="var(--mint)" stroke-width="3"/>
+  </svg>
+  <div class="container hero-inner">
+    <span class="section-kicker">Household · Solar + Battery · Offline Causal Forecasting</span>
+    <h1>Forecasts pay off at home</h1>
+    <p class="tagline">The same planner-distilled Decision Transformer recipe, rebuilt on modern 5-minute household
+      telemetry under real time-of-use tariffs — plus offline <em>causal</em> Granite TTM-R3 solar/load forecasts that
+      measurably improve control. Household-track money; not comparable to the AEMO $/episode figures.</p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num">$<span data-countup data-end="357" data-decimals="0">0</span>/yr</div>
+        <div class="stat-label">TTM-forecast DT savings vs no battery on the held-out real household (10 × 7-day OOD windows)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">+$<span data-countup data-end="47.94" data-decimals="2">0</span></div>
+        <div class="stat-label">paired TTM advantage over 24-hour persistence per year (95% CI +$27.99–$67.59, 9/10 windows, p=0.0020)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num"><span data-countup data-end="39.2" data-decimals="1" data-suffix="%">0</span></div>
+        <div class="stat-label">one-hour-ahead solar MAE reduction vs persistence on real telemetry (load: 17.5%)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num"><span data-countup data-end="1440" data-decimals="0">0</span></div>
+        <div class="stat-label">synthetic training episodes: 1,200 seven-day + 240 horizon-diverse (1 week → 2 years)</div>
+      </div>
+    </div>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/mrvictoru/energydecision/blob/main/report.md" target="_blank" rel="noopener">Read §8.1.1 of the report →</a>
+      <a class="btn btn-secondary" href="https://github.com/mrvictoru/energydecision/blob/main/docs/household/workflow.md" target="_blank" rel="noopener">Household workflow</a>
+      <button class="btn btn-secondary" type="button" data-goto-track="aemo">See the grid-scale (AEMO) track ↓</button>
+    </div>
+  </div>
+</header>
+
+<!-- ==================== HH ENVIRONMENT ==================== -->
+<section id="hh-environment">
+  <div class="container reveal">
+    <span class="section-kicker">The testbed</span>
+    <h2>One real household, 1,440 synthetic ones</h2>
+    <p class="section-sub"><code>SolarBatteryEnv</code> replays a real solar + home-battery household at 5-minute resolution
+      (319,170 rows, 2023–2026, privacy-gated ingestion), scored against synthetic statistically-recomposed households —
+      five archetypes × four seasons × three battery capacities, one-week to two-year episodes.</p>
+    <div class="env-grid">
+      <div class="env-card" tabindex="0" title="Cyclical time encodings teach the policy time-of-day and day-of-week structure.">
+        <h3>🕐 Time features <span class="dim-badge">4-D</span></h3>
+        <p>hour sin/cos + day-of-week sin/cos, from the 5-minute timestamp.</p>
+      </div>
+      <div class="env-card" tabindex="0" title="Measured solar generation and household load in kWh per step, from real inverter telemetry.">
+        <h3>☀️ Solar &amp; load <span class="dim-badge">2-D</span></h3>
+        <p>Real <code>SolarGen</code> / <code>HouseLoad</code> in kWh per 5-min step, normalized by battery capacity.</p>
+      </div>
+      <div class="env-card" tabindex="0" title="The only forecast surface the environment has: two scalar fields per timestep.">
+        <h3>🔮 Forecast channels <span class="dim-badge">2-D</span></h3>
+        <p><code>FutureSolar</code> and <code>FutureLoad</code> — the two slots where any forecast must land.
+          Baseline is honest 24-hour persistence; the upgrade is the offline TTM sidecar.</p>
+      </div>
+      <div class="env-card" tabindex="0" title="Time-of-use tariff: 31.042c import, free 11:00–14:00 midday window, 1c feed-in.">
+        <h3>💵 ToU prices <span class="dim-badge">2-D</span></h3>
+        <p>Modern Australian tariff economics: import price, feed-in — with a deterministic free midday window
+          that rewards pre-charging and midday autonomy.</p>
+      </div>
+      <div class="env-card" tabindex="0" title="State of charge and accumulated degradation cost — the physical memory of the system.">
+        <h3>🔋 SOC + degradation <span class="dim-badge">2-D</span></h3>
+        <p>Rainflow cycle counting with calendar + cycle aging; matched battery 5 kWh / 3.3 kW, round-trip efficiency 0.80.</p>
+      </div>
+      <div class="env-card" tabindex="0" title="One scalar: normalized battery charge/discharge flow.">
+        <h3>🎮 Action space <span class="dim-badge">1-D</span></h3>
+        <p>Battery flow in [−1, 1] × rated power. No FCAS coupling — the joint-bidding problem of the AEMO track
+          collapses to pure dispatch here, which is exactly why it is a clean transfer test.</p>
+      </div>
+    </div>
+    <div class="reward-flow" role="img" aria-label="Reward formula: negative of grid bill plus degradation cost">
+      reward&nbsp;=&nbsp;<span class="minus">− (grid import cost − export credit)</span>&nbsp;&nbsp;<span class="minus">− degradation cost</span>
+    </div>
+    <p class="footnote">Headline metric: <strong>annualized savings vs running the same house with no battery</strong>,
+      evaluated on ten deterministic 7-day windows from the held-out real household segments — never trained on.</p>
+  </div>
+</section>
+
+<!-- ==================== HH FORECAST SIDECAR ==================== -->
+<section id="hh-forecast">
+  <div class="container reveal">
+    <span class="section-kicker">The forecast sidecar</span>
+    <h2>48 predictions in; one number per channel out</h2>
+    <p class="section-sub">Granite TTM-R3 (<code>512-48-dec-512-r3</code>) reads 512 five-minute steps and emits
+      48 future values per channel. The household environment exposes only <strong>two scalar forecast fields</strong> —
+      <code>FutureSolar</code> and <code>FutureLoad</code> — so the pipeline takes <strong>prediction 12, one hour ahead</strong>,
+      and stores it in a timestamp-keyed parquet sidecar.</p>
+    <div class="env-grid">
+      <div class="env-card" tabindex="0" title="Row t may only use data through row t — no peeking.">
+        <h3>🔒 Causal contract</h3>
+        <ul>
+          <li>The forecast stored on row <em>t</em> is issued using observations through row <em>t</em> and targets row <em>t</em>+12.</li>
+          <li>Warm-up rows without a full 512-step context are flagged invalid and get zero forecasts.</li>
+          <li>Verified by alignment / leakage tests in <code>tests/test_household_forecast.py</code>.</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="TTM never runs inside the simulator or the training container.">
+        <h3>📦 Offline sidecar</h3>
+        <ul>
+          <li>TTM runs once, ahead of time, in an isolated CUDA container (<code>Containerfile.ttm</code>).</li>
+          <li>The simulator and training stack never import TTM — a sidecar join does the swap.</li>
+          <li>Same pipeline for the synthetic corpus and the real household telemetry.</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="The three arms differ ONLY in the two forecast channels.">
+        <h3>⚖️ Matched arms</h3>
+        <ul>
+          <li>SDP-teacher action labels, rewards, and RTG values are byte-identical across the TTM / persistence / no-forecast corpora (verified).</li>
+          <li>Only <code>FutureSolar</code>/<code>FutureLoad</code> change — so performance gaps attribute to the forecast itself.</li>
+          <li>Same architecture (8×512, ctx 576), seed, stride, and shared RTG prompt justified from the training median (never tuned on held-out data).</li>
+        </ul>
+      </div>
+    </div>
+    <p class="footnote">Forecast quality, one-hour-ahead MAE vs persistence — real OOD telemetry: solar <strong>−39.2%</strong>, load <strong>−17.5%</strong>;
+      synthetic corpus: solar −34.7%, load −12.9%. Protocol: <code>docs/household/workflow.md</code> §6b–6c.</p>
+  </div>
+</section>
+
+<!-- ==================== HH RESULTS ==================== -->
+<section id="hh-results">
+  <div class="container reveal">
+    <span class="section-kicker">Headline result</span>
+    <h2>Real forecasts beat fake ones beat none — at every corpus scale</h2>
+    <p class="section-sub">Annualized savings vs no battery on the ten fixed 7-day held-out real-household windows.
+      H4.2 trained the three arms on the controlled seven-day corpus; H4.4 retrained the identical recipe on the full
+      horizon-diverse corpus (240 episodes, 55,860 episode-days). Rule, fresh full-corpus PPO, and the perfect-foresight oracle are context.</p>
+
+    <div class="panel chart-panel">
+      <div class="chart-box tall">
+        <canvas id="hhHeadlineChart" role="img" aria-label="Bar chart of annualized household savings versus no battery for rule, no-forecast DT, persistence DT, TTM DT, PPO, and oracle policies"></canvas>
+      </div>
+      <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline). Exact values are in the table below.</div>
+      <p class="chart-caption">H4.4 full corpus (mint bar = TTM winner) with H4.2 seven-day-corpus values for the three DT arms (pale bars). Savings AUD/year vs no battery.</p>
+    </div>
+
+    <h3 style="margin-top:40px">Exact values &amp; statistical treatment</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th scope="col">Policy</th>
+          <th scope="col" class="num">Savings $/yr (H4.4 full corpus)</th>
+          <th scope="col" class="num">Savings $/yr (H4.2 7-day corpus)</th>
+        </tr></thead>
+        <tbody id="hhTableBody"></tbody>
+        <tfoot><tr><td colspan="3">Rule / fresh full-corpus PPO / oracle evaluated on the same ten windows. Paired statistics below.</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="table-wrap" style="margin-top:28px">
+      <table>
+        <thead><tr>
+          <th scope="col">Paired comparison (savings difference)</th>
+          <th scope="col" class="num">H4.4 Δ $/yr</th>
+          <th scope="col" class="num">95% bootstrap CI</th>
+          <th scope="col" class="num">Wins</th>
+          <th scope="col" class="num">Wilcoxon p</th>
+          <th scope="col" class="num">H4.2 Δ $/yr</th>
+          <th scope="col" class="num">95% bootstrap CI</th>
+          <th scope="col" class="num">Wins</th>
+          <th scope="col" class="num">Wilcoxon p</th>
+        </tr></thead>
+        <tbody id="hhPairedTableBody"></tbody>
+        <tfoot><tr><td colspan="9">Window-level paired bootstrap (2,000 resamples, seed 42); one-sided Wilcoxon signed-rank on 10 windows.
+          On the full corpus, 24-hour persistence ≈ no forecast (p=0.46): with diverse training data the policy stops exploiting the weak channel — only the genuinely better TTM forecast adds value.</td></tr></tfoot>
+      </table>
+    </div>
+
+    <p class="prose" style="margin-top:26px"><strong>Every arm improved on the broader corpus</strong> (TTM +$258.50 → +$357.29/yr),
+      so the offline-forecast benefit generalizes beyond the controlled seven-day training set — and the DT arms leave
+      the freshly trained online-RL baseline far behind (PPO +$23.66/yr), consistent with the household track's
+      distillation-first findings.</p>
+  </div>
+</section>
+
+<!-- ==================== HH CONTRAST ==================== -->
+<section id="hh-contrast">
+  <div class="container reveal">
+    <span class="section-kicker">Two tracks, one lesson</span>
+    <h2>Why forecasts help at home but not at grid scale</h2>
+    <p class="section-sub">The AEMO track's explicit 48-step price-forecast tokens were a documented negative result
+      (§8.2.8). The household track's causal solar/load forecasts are a positive result. The two findings do not conflict —
+      they identify <em>which</em> quantities are learnable in <em>which</em> market.</p>
+    <div class="env-grid">
+      <div class="env-card" tabindex="0" title="Physically predictable: irradiance and occupancy drive solar/load, and the tariff is deterministic.">
+        <h3>🏠 Household: solar / load <span class="tag tag-win">POSITIVE</span></h3>
+        <ul>
+          <li>One-hour-ahead solar and load are physically forecastable — MAE −39.2% / −17.5% over persistence.</li>
+          <li>Tariff is a deterministic schedule, so a better forecast converts directly into cheaper dispatch.</li>
+          <li>Matched-arm evidence: TTM beats both controls, 9/10 windows, p=0.0020.</li>
+        </ul>
+      </div>
+      <div class="env-card" tabindex="0" title="FCAS prices are nearly unpredictable from history; the 210-step context already captures the signal.">
+        <h3>⚡ AEMO: FCAS price tokens <span class="tag tag-flag">NEGATIVE</span></h3>
+        <ul>
+          <li>TTM FCAS-price forecasts carry ~zero correlation (0.01–0.07) — nothing to convert into bidding skill.</li>
+          <li>Explicit forecast tokens (774-token sequence) scored below the implicit-context baseline.</li>
+          <li>Spikes are solved instead by planner distillation + state-dependent prompting (§8.2.10).</li>
+        </ul>
+      </div>
+    </div>
+    <p class="footnote">Rule of thumb from both tracks: forecasts help where the forecast target is the
+      <em>physically predictable quantity</em>, and add nothing where the target is <em>endogenous market behaviour</em>.</p>
+  </div>
+</section>
+
+<!-- ==================== HH LIMITATIONS ==================== -->
+<section id="hh-limits">
+  <div class="container reveal">
+    <span class="section-kicker">Read this before citing</span>
+    <h2>Household-track limitations</h2>
+    <ul class="limit-list">
+      <li><strong>One real household.</strong> The held-out surface of record is a single (privacy-gated) VPP-coordinated
+        home; multi-household OOD validation remains open.</li>
+      <li><strong>Synthetic multi-battery surface is a null result.</strong> On the 20-window synthetic test surface with
+        mixed 5/10/20 kWh batteries the three arms are statistically indistinguishable (TTM − no-forecast −$15.49/yr,
+        p=0.86) — the forecast benefit is proven on the real household, not yet on the broad synthetic surface.</li>
+      <li><strong>Simulator economics.</strong> Savings come from the in-repo simulator under a modeled ToU tariff —
+        not settled retail outcomes; spot pass-through is pending a time-aligned price series.</li>
+      <li><strong>Prompt sensitivity.</strong> The shared RTG=−2 prompt is justified from the training median, but
+        out-of-distribution prompts (RTG=0) collapse the advantage — always report the prompt.</li>
+      <li><strong>Never compare across tracks.</strong> Household savings ($/yr) and AEMO profit ($/episode) answer
+        different questions on different assets.</li>
+    </ul>
+  </div>
+</section>
+
+</div><!-- /track-household -->
 </main>
 
 <footer>
   <div class="container">
     <div>
-      <strong>energydecision</strong> — offline sequence modeling for utility-scale battery control.<br>
-      Results verified 2026-08 · Built with vanilla JS + Chart.js · No trackers.
+      <strong>energydecision</strong> — offline sequence modeling for battery control: utility-scale AEMO/NEM trading and household solar + battery dispatch.<br>
+      AEMO results verified 2026-08 · Household forecast results verified 2026-09 · Built with vanilla JS + Chart.js · No trackers.
     </div>
     <div>
       <a href="https://github.com/mrvictoru/energydecision" target="_blank" rel="noopener">GitHub</a> &nbsp;·&nbsp;
@@ -1112,6 +1378,145 @@ navLinks.addEventListener("click", function (e) {
   $("failedFixesBody").innerHTML = rows;
 })();
 
+/* =====================================================================
+   HOUSEHOLD TRACK — data, tables, tab switching, lazy chart
+   Numbers verified 2026-09: report.md §8.1.1 (H4.2 + H4.4 runs,
+   eval_output/household/h4_4_*). Savings = AUD/year vs no battery on the
+   ten fixed 7-day held-out real-household windows.
+   ===================================================================== */
+var HH_DATA = {
+  labels: ["Rule", "No-forecast DT", "Persistence DT", "TTM-forecast DT", "PPO (fresh, online RL)", "Oracle (foresight)"],
+  h44: [58.03, 310.90, 309.35, 357.29, 23.66, 738.96],
+  h42: [null, 155.12, 216.74, 258.50, null, null],
+  policies: [
+    { name: "Rule (charging heuristic)", h44: "+$58.03", h42: "—" },
+    { name: "DT, no forecast", h44: "+$310.90", h42: "+$155.12" },
+    { name: "DT, 24-hour persistence forecast", h44: "+$309.35", h42: "+$216.74" },
+    { name: "DT, causal TTM-R3 forecast", h44: "+$357.29", h42: "+$258.50" },
+    { name: "Fresh full-corpus PPO (online RL)", h44: "+$23.66", h42: "—" },
+    { name: "Oracle (perfect-foresight DP, reference)", h44: "+$738.96", h42: "—" }
+  ],
+  paired: [
+    { pair: "TTM − persistence",
+      h44: ["+$47.94", "+$27.99 – +$67.59", "9/10", "0.0020"],
+      h42: ["+$41.75", "+$16.56 – +$69.43", "9/10", "0.0068"] },
+    { pair: "TTM − no forecast",
+      h44: ["+$46.39", "+$23.78 – +$68.91", "9/10", "0.0020"],
+      h42: ["+$103.37", "+$78.23 – +$127.67", "10/10", "0.0010"] },
+    { pair: "persistence − no forecast",
+      h44: ["−$1.55", "−$22.40 – +$14.84", "6/10", "0.46"],
+      h42: ["+$61.62", "+$33.96 – +$90.77", "8/10", "0.0049"] }
+  ]
+};
+
+var hhChart = null;
+
+function renderHhChart() {
+  var track = $("track-household");
+  if (!track || track.hidden || typeof Chart === "undefined") return;
+  var canvas = $("hhHeadlineChart");
+  if (!canvas) return;
+  if (hhChart && charts.indexOf(hhChart) !== -1) { hhChart.resize(); return; }
+  var pal = getPal();
+  hhChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: HH_DATA.labels,
+      datasets: [
+        {
+          label: "H4.4 — full horizon-diverse corpus",
+          data: HH_DATA.h44,
+          backgroundColor: HH_DATA.h44.map(function (_, i) { return i === 3 ? pal.mint : pal.sky; }),
+          borderColor: pal.ink, borderWidth: 1
+        },
+        {
+          label: "H4.2 — seven-day corpus",
+          data: HH_DATA.h42,
+          backgroundColor: "rgba(178,145,222,0.5)",
+          borderColor: pal.ink, borderWidth: 1
+        }
+      ]
+    },
+    options: baseOpts()
+  });
+  charts.push(hhChart);
+}
+window.__hhEnsureChart = renderHhChart;
+
+(function initHouseholdTrack() {
+  var tabAemo = $("tabAemo"), tabHh = $("tabHousehold");
+  var trackAemo = $("track-aemo"), trackHh = $("track-household");
+  if (!tabAemo || !tabHh || !trackAemo || !trackHh) return;
+
+  function buildHhTables() {
+    $("hhTableBody").innerHTML = HH_DATA.policies.map(function (p) {
+      return "<tr><td>" + p.name + "</td>" +
+        '<td class="num pos">' + p.h44 + "</td>" +
+        '<td class="num">' + p.h42 + "</td></tr>";
+    }).join("");
+    $("hhPairedTableBody").innerHTML = HH_DATA.paired.map(function (r) {
+      return "<tr><td>" + r.pair + "</td>" +
+        '<td class="num">' + r.h44[0] + "</td><td class='num'>" + r.h44[1] + "</td><td class='num'>" + r.h44[2] + "</td><td class='num'>" + r.h44[3] + "</td>" +
+        '<td class="num">' + r.h42[0] + "</td><td class='num'>" + r.h42[1] + "</td><td class='num'>" + r.h42[2] + "</td><td class='num'>" + r.h42[3] + "</td></tr>";
+    }).join("");
+  }
+  buildHhTables();
+
+  function setTrack(name, opts) {
+    opts = opts || {};
+    var hh = name === "household";
+    tabAemo.setAttribute("aria-selected", hh ? "false" : "true");
+    tabHh.setAttribute("aria-selected", hh ? "true" : "false");
+    tabAemo.tabIndex = hh ? -1 : 0;
+    tabHh.tabIndex = hh ? 0 : -1;
+    trackAemo.hidden = hh;
+    trackHh.hidden = !hh;
+    document.body.setAttribute("data-active-track", name);
+    Array.prototype.forEach.call(document.querySelectorAll(".nav-links a[data-track]"), function (a) {
+      a.hidden = a.getAttribute("data-track") !== name;
+    });
+    try { localStorage.setItem("ed-track", name); } catch (e) {}
+    /* charts built while their track was hidden have a zero-size canvas —
+       re-measure all live charts after the swap (charts[] may not exist yet
+       during the initial parse-time call) */
+    if (typeof charts !== "undefined") {
+      charts.forEach(function (c) { try { c.resize(); } catch (e) {} });
+    }
+    renderHhChart();
+    if (opts.scrollToTop) {
+      window.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" });
+    }
+    if (opts.scrollTo) {
+      var el = document.getElementById(opts.scrollTo);
+      if (el) el.scrollIntoView();
+    }
+  }
+  window.__edSetTrack = setTrack;
+
+  tabAemo.addEventListener("click", function () { setTrack("aemo", { scrollToTop: true }); });
+  tabHh.addEventListener("click", function () { setTrack("household", { scrollToTop: true }); });
+  [tabAemo, tabHh].forEach(function (tab) {
+    tab.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      var other = tab === tabAemo ? tabHh : tabAemo;
+      other.focus();
+      other.click();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-goto-track]"), function (b) {
+    b.addEventListener("click", function () { setTrack(b.getAttribute("data-goto-track"), { scrollToTop: true }); });
+  });
+
+  /* initial track: hash wins over localStorage; default AEMO */
+  var hash = (location.hash || "").replace(/^#/, "");
+  var initial = "aemo";
+  if (hash === "household" || hash.indexOf("hh-") === 0) initial = "household";
+  else if (hash) initial = "aemo";
+  else { try { if (localStorage.getItem("ed-track") === "household") initial = "household"; } catch (e) {} }
+  setTrack(initial, { scrollTo: hash && hash !== "household" ? hash : null });
+})();
+
 /* ===================== timeline stepper ===================== */
 (function buildTimeline() {
   var stepsEl = $("timelineSteps"), detailEl = $("timelineDetail");
@@ -1196,7 +1601,8 @@ navLinks.addEventListener("click", function (e) {
 
 /* ===================== active nav highlight ===================== */
 (function initNavSpy() {
-  var ids = ["results", "policies", "behavior", "timeline", "method", "evidence", "artifacts", "limitations"];
+  var ids = ["results", "policies", "behavior", "timeline", "method", "evidence", "artifacts", "limitations",
+    "hh-environment", "hh-forecast", "hh-results", "hh-contrast", "hh-limits"];
   var links = {};
   Array.prototype.forEach.call(navLinks.querySelectorAll("a"), function (a) {
     links[a.getAttribute("href").slice(1)] = a;
@@ -1631,6 +2037,7 @@ function buildCharts() {
     buildTimelineChart();
     buildAutoMode();
     rebuildBehavior();
+    if (window.__hhEnsureChart) window.__hhEnsureChart();
   }
   window.__edRebuild = rebuild;
 
@@ -1701,6 +2108,7 @@ function buildCharts() {
 
   rebuildBehavior();
   buildProfitChips();
+  if (window.__hhEnsureChart) window.__hhEnsureChart();
 }
 
 if (document.readyState === "loading") {

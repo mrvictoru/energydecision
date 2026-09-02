@@ -4,7 +4,9 @@
 > the website. Everything needed to build it is in this file — you do **not**
 > need access to the repository's code or results to complete the task.
 >
-> **Status of this document:** requirements only. No website exists yet.
+> **Status of this document:** requirements for the built page. The site exists at
+> repo-root `index.html` (AEMO track shipped 2026-08; household track tab added
+> 2026-09 — see §3.14).
 
 ---
 
@@ -249,6 +251,67 @@ Must be present, not buried:
 
 License note (match repo license), "Built with vanilla JS + Chart.js",
 last-updated date (2026-08), links back to repo.
+
+### 3.14 Track tabs — AEMO ↔ Household (added 2026-09)
+
+The page hosts **two research tracks** behind a sticky tab bar directly below the
+nav (`role="tablist"`, `.track-tab` styled like the existing segmented controls):
+
+- **⚡ AEMO / NEM · grid-scale** — all pre-existing content (§3.1–3.12), wrapped in
+  `#track-aemo` (`role="tabpanel"`). Default visible track.
+- **🏠 Household · solar + battery** — `#track-household`, hidden by default.
+
+Switching rules: only one panel visible (`hidden` attribute); nav links carry
+`data-track="aemo|household"` and are shown per active track (household anchors:
+`#hh-environment`, `#hh-forecast`, `#hh-results`, `#hh-contrast`, `#hh-limits`);
+choice persists in `localStorage` (`ed-track`); `#household` or any `#hh-*` URL
+hash opens the household track; a tab switch scrolls to top and `resize()`s live
+charts (canvases built in a hidden panel have zero size). Arrow keys move focus
+between tabs. Without JS the page must render the AEMO track exactly as before.
+Charts: the AEMO `buildCharts()` and the household `renderHhChart()` are both
+guarded behind `typeof Chart !== 'undefined'`; the household bar chart is built
+lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureChart`.
+
+**Household content specification** — all numbers verified 2026-09 from
+`report.md` §8.1.1 / `results.tsv` / `eval_output/household/h4_4_*`
+(embed as the `HH_DATA` JS constant; do not fetch at runtime):
+
+1. **Mini-hero + 4 stat cards:** TTM-forecast DT **+$357/yr** savings vs no
+   battery on the ten fixed 7-day real-OOD windows; paired TTM−persistence
+   **+$47.94/yr** (95% CI +$27.99–$67.59, 9/10, p=0.0020); one-hour-ahead solar
+   MAE **−39.2%** vs persistence (load −17.5%); **1,440** synthetic training
+   episodes (1,200 seven-day + 240 horizon-diverse).
+2. **`#hh-environment`** — `SolarBatteryEnv` 12-D observation cards (4-D time
+   features, 2-D solar/load, 2-D forecast channels `FutureSolar`/`FutureLoad`,
+   2-D ToU prices (31.042c import, free 11:00–14:00, 1c FiT), 2-D SOC +
+   degradation), 1-D action; real household telemetry 2023–2026 (319,170 rows,
+   5-min, privacy-gated); matched battery 5 kWh / 3.3 kW, RTE 0.80. Metric:
+   annualized savings vs no battery.
+3. **`#hh-forecast`** — offline causal sidecar explainer: TTM-R3
+   (`512-48-dec-512-r3`) emits 48 predictions but the environment has only two
+   scalar forecast fields, so **prediction 12 (one hour ahead at 5-min cadence)**
+   is stored in a timestamp-keyed parquet sidecar; causal contract "row *t* uses
+   data through *t*, targets *t+12*"; TTM runs offline in an isolated container
+   and never inside the simulator; the three arms share **byte-identical
+   SDP-teacher action labels** — only the two forecast channels differ.
+4. **`#hh-results`** — one bar chart + two tables. Savings vs no battery
+   (H4.4 full corpus / H4.2 seven-day corpus): Rule +$58.03/—; no-forecast DT
+   +$310.90/+$155.12; persistence DT +$309.35/+$216.74; TTM DT **+$357.29/
+   +$258.50**; fresh full-corpus PPO +$23.66/—; oracle +$738.96/—. Paired
+   table: TTM−persistence +$47.94 [+$27.99,+$67.59] 9/10 p=0.0020 (H4.2:
+   +$41.75, 9/10, p=0.0068); TTM−no-forecast +$46.39 [+$23.78,+$68.91] 9/10
+   p=0.0020 (H4.2: +$103.37, 10/10, p=0.0010); persistence−no-forecast
+   −$1.55 p=0.46 on the full corpus (the persistence edge disappears).
+5. **`#hh-contrast`** — why forecasts help at household scale (physically
+   predictable solar/load under a deterministic tariff) but not as AEMO price
+   tokens (FCAS corr ≈ 0.01–0.07, §8.2.8 negative result). Required framing:
+   the two results are consistent, not in conflict.
+6. **`#hh-limits`** — single real household; synthetic multi-battery test
+   surface is statistically indistinguishable (TTM−no-forecast −$15.49/yr,
+   p=0.86); simulator economics; RTG prompt must be reported (OOD prompts
+   collapse the advantage); **household and AEMO numbers must never be
+   compared directly.**
+7. Footer line names both tracks and their verification dates.
 
 ## 4. Design Requirements
 
