@@ -263,7 +263,7 @@ nav (`role="tablist"`, `.track-tab` styled like the existing segmented controls)
 
 Switching rules: only one panel visible (`hidden` attribute); nav links carry
 `data-track="aemo|household"` and are shown per active track (household anchors:
-`#hh-environment`, `#hh-forecast`, `#hh-results`, `#hh-contrast`, `#hh-limits`);
+`#hh-environment`, `#hh-forecast`, `#hh-behavior`, `#hh-results`, `#hh-contrast`, `#hh-limits`);
 choice persists in `localStorage` (`ed-track`); `#household` or any `#hh-*` URL
 hash opens the household track; a tab switch scrolls to top and `resize()`s live
 charts (canvases built in a hidden panel have zero size). Arrow keys move focus
@@ -294,7 +294,23 @@ lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureCha
    data through *t*, targets *t+12*"; TTM runs offline in an isolated container
    and never inside the simulator; the three arms share **byte-identical
    SDP-teacher action labels** — only the two forecast channels differ.
-4. **`#hh-results`** — one bar chart + two tables. Savings vs no battery
+4. **`#hh-behavior`** — "what one extra forecast hour actually changes": three
+   stacked, shared-axis charts on ONE held-out summer week (1–7 Feb 2024,
+   window 6 of the ten-window surface): (a) solar and load as filled areas
+   (mint / orange) with the import-price line dashed on the right axis so the
+   0¢/kWh free 11:00–14:00 window is visible; (b) battery power per policy
+   (positive = charging) — TTM DT sky, no-forecast DT coral, rule graphite;
+   (c) SOC 0–100% per policy. Policy/price visibility toggles (`polHhTtm`,
+   `polHhNofc`, `polHhRule`, `polHhPrice`) persist across theme rebuilds.
+   Data: `HH_BEHAVIOR` constant, 504 bins (20-min means of native 5-min steps),
+   regenerated with `scripts/dump_household_behavior.py --window 6`
+   (writes `eval_output/household/h4_4_behavior/week.json`). Verified
+   narrative facts for the "what to look for" copy: both DTs swing SOC 0→100%
+   ≈6 times that week and ride ±3.3 kW through the free window into the evening
+   peak; the rule stays within ±0.4 kW, SOC 40–60%, capturing a fraction of the
+   savings; weekly charge/discharge throughput TTM 28.6/38.2 kWh vs no-forecast
+   28.0/37.4 kWh.
+5. **`#hh-results`** — one bar chart + two tables. Savings vs no battery
    (H4.4 full corpus / H4.2 seven-day corpus): Rule +$58.03/—; no-forecast DT
    +$310.90/+$155.12; persistence DT +$309.35/+$216.74; TTM DT **+$357.29/
    +$258.50**; fresh full-corpus PPO +$23.66/—; oracle +$738.96/—. Paired
@@ -302,16 +318,16 @@ lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureCha
    +$41.75, 9/10, p=0.0068); TTM−no-forecast +$46.39 [+$23.78,+$68.91] 9/10
    p=0.0020 (H4.2: +$103.37, 10/10, p=0.0010); persistence−no-forecast
    −$1.55 p=0.46 on the full corpus (the persistence edge disappears).
-5. **`#hh-contrast`** — why forecasts help at household scale (physically
+6. **`#hh-contrast`** — why forecasts help at household scale (physically
    predictable solar/load under a deterministic tariff) but not as AEMO price
    tokens (FCAS corr ≈ 0.01–0.07, §8.2.8 negative result). Required framing:
    the two results are consistent, not in conflict.
-6. **`#hh-limits`** — single real household; synthetic multi-battery test
+7. **`#hh-limits`** — single real household; synthetic multi-battery test
    surface is statistically indistinguishable (TTM−no-forecast −$15.49/yr,
    p=0.86); simulator economics; RTG prompt must be reported (OOD prompts
    collapse the advantage); **household and AEMO numbers must never be
    compared directly.**
-7. Footer line names both tracks and their verification dates.
+8. Footer line names both tracks and their verification dates.
 
 ## 4. Design Requirements
 

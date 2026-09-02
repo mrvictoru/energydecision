@@ -477,6 +477,7 @@ Common household artifact locations:
 - `scripts/train_household_sb3.py`: fresh modern-data SB3 (PPO) baseline trainer over a synthetic corpus
 - `scripts/household_forecast_stats.py`: paired bootstrap/Wilcoxon stats for the H4.2/H4.4 forecast ablation
 - `scripts/generate_household_ttm_forecasts.py` / `src/household_forecast.py`: offline causal TTM-R3 forecast sidecar
+- `scripts/dump_household_behavior.py`: per-step rollouts (solar/load/price/power/SOC) of the matched H4.4 arms on one real-OOD window, feeding the website household behaviour charts
 
 ## Validation And Iteration
 
