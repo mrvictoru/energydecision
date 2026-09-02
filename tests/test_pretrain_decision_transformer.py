@@ -100,29 +100,23 @@ def test_training_surface_records_window_stride():
     assert "stride" in pretrain_dt.SEARCHABLE_KNOBS
 
 
-def test_parse_args_accepts_custom_optimizer_and_scheduler_contract():
+def test_parse_args_accepts_optimizer_and_scheduler_contract():
     args = pretrain_dt.parse_args(
         [
             "--optimizer",
-            "custom",
-            "--optimizer-class-path",
-            "torch.optim:AdamW",
+            "adamw",
             "--optimizer-kwargs-json",
             '{"eps": 1e-7}',
             "--scheduler",
-            "custom",
-            "--scheduler-class-path",
-            "torch.optim.lr_scheduler:StepLR",
+            "steplr",
             "--scheduler-kwargs-json",
             '{"step_size": 3, "gamma": 0.8}',
         ]
     )
 
-    assert args.optimizer == "custom"
-    assert args.optimizer_class_path == "torch.optim:AdamW"
+    assert args.optimizer == "adamw"
     assert args.optimizer_kwargs_json == '{"eps": 1e-7}'
-    assert args.scheduler == "custom"
-    assert args.scheduler_class_path == "torch.optim.lr_scheduler:StepLR"
+    assert args.scheduler == "steplr"
     assert args.scheduler_kwargs_json == '{"step_size": 3, "gamma": 0.8}'
 
 
@@ -194,25 +188,11 @@ def test_resolve_training_surface_respects_explicit_learning_baseline_overrides(
     assert surface.training_kwargs["batch_size"] == 16
 
 
-def test_resolve_training_surface_requires_custom_optimizer_path():
+def test_resolve_training_surface_parses_optimizer_surface_kwargs():
     args = pretrain_dt.parse_args(
         [
             "--optimizer",
-            "custom",
-        ]
-    )
-
-    with pytest.raises(ValueError, match="requires --optimizer-class-path"):
-        pretrain_dt.resolve_training_surface(args, base_kwargs={})
-
-
-def test_resolve_training_surface_parses_custom_optimizer_surface_kwargs():
-    args = pretrain_dt.parse_args(
-        [
-            "--optimizer",
-            "custom",
-            "--optimizer-class-path",
-            "torch.optim:AdamW",
+            "adamw",
             "--optimizer-kwargs-json",
             '{"eps": 1e-7}',
             "--scheduler",
@@ -222,8 +202,7 @@ def test_resolve_training_surface_parses_custom_optimizer_surface_kwargs():
 
     surface = pretrain_dt.resolve_training_surface(args, base_kwargs={})
 
-    assert surface.training_kwargs["optimizer"] == "custom"
-    assert surface.training_kwargs["optimizer_class_path"] == "torch.optim:AdamW"
+    assert surface.training_kwargs["optimizer"] == "adamw"
     assert surface.training_kwargs["optimizer_kwargs"] == {"eps": 1e-7}
     assert surface.training_kwargs["scheduler"] == "none"
 

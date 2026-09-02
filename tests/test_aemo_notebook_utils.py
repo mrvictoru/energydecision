@@ -7,8 +7,6 @@ from datetime import datetime
 import gymnasium as gym
 import polars as pl
 import pytest
-import torch
-from stable_baselines3 import PPO
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -19,7 +17,6 @@ from aemo_notebook_utils import (  # noqa: E402
     fetch_and_preprocess_aemo_data,
     get_sb3_model_class,
     load_episode_logs_from_parquet,
-    fine_tune_ppo_from_dt_on_aemo,
     fetch_and_preprocess_aemo_scenarios,
     fit_aemo_global_stats,
     make_multi_scenario_aemo_env_fns,
@@ -33,7 +30,6 @@ from aemo_notebook_utils import (  # noqa: E402
     should_run_dispatch_for_scenario,
     train_sb3_model_on_aemo,
     validate_aemo_dt_dimensions,
-    warm_start_ppo_from_dt_episodes,
     write_combined_episode_logs,
 )
 from AEMOBatteryEnv import AEMODataPreprocessor  # noqa: E402
@@ -341,65 +337,6 @@ class _TinyBoxEnv(gym.Env):
 
     def step(self, action):
         return self.observation_space.sample(), 0.0, True, False, {}
-
-
-def test_warm_start_ppo_from_dt_episodes_updates_policy():
-    model = PPO("MlpPolicy", _TinyBoxEnv(), n_steps=8, batch_size=4, policy_kwargs={"net_arch": [32, 32]})
-    initial_weights = model.policy.action_net.weight.detach().clone()
-    episodes = [_episode_df(0), _episode_df(20)]
-
-    summary = warm_start_ppo_from_dt_episodes(
-        model=model,
-        episodes=episodes,
-        epochs=2,
-        batch_size=2,
-        learning_rate=1e-3,
-        max_batches=4,
-    )
-
-    assert summary["episode_count"] == 2.0
-    assert summary["sample_count"] == 4.0
-    assert summary["batch_count"] > 0
-    assert not torch.allclose(initial_weights, model.policy.action_net.weight.detach())
-
-
-def test_fine_tune_ppo_from_dt_on_aemo_uses_dt_seed_rollouts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    seed_path = tmp_path / "dt_seed_logs.parquet"
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        "aemo_notebook_utils.run_dt_episodes",
-        lambda **kwargs: [_episode_df(0)],
-    )
-    monkeypatch.setattr(
-        "aemo_notebook_utils.warm_start_ppo_from_dt_episodes",
-        lambda **kwargs: {"actor_loss": 0.1, "value_loss": 0.2, "batch_count": 1.0},
-    )
-
-    def fake_train_sb3_model_on_aemo(**kwargs):
-        captured.update(kwargs)
-        kwargs["model_post_create_fn"]("fake_model")
-        return "trained_model", {"Post_training": {"mean_reward": 2.0, "std_reward": 0.1}}
-
-    monkeypatch.setattr("aemo_notebook_utils.train_sb3_model_on_aemo", fake_train_sb3_model_on_aemo)
-
-    model, eval_result, manifest = fine_tune_ppo_from_dt_on_aemo(
-        processed_data=pl.DataFrame({"x": [1]}),
-        dt_model_path="dt.pt",
-        dt_model_config_path="dt.json",
-        battery_variants=[{"name": "medium", "capacity_mwh": 4.0, "max_power_mw": 2.0, "init_soc_ratio": 0.5}],
-        seed_episodes_per_variant=1,
-        max_step=12,
-        step_duration=0.5,
-        seed_logs_output_path=seed_path,
-    )
-
-    assert model == "trained_model"
-    assert eval_result["Post_training"]["mean_reward"] == 2.0
-    assert captured["algorithm"] == "ppo"
-    assert manifest["seed_episode_count"] == 1
-    assert manifest["warm_start"]["actor_loss"] == 0.1
-    assert seed_path.exists()
 
 
 def test_validate_aemo_dt_dimensions_rejects_bad_state_dim():
