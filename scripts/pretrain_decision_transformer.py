@@ -48,8 +48,8 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
         "action_head_mode",
     }
 )
-APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
-APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none", "custom")
+APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop")
+APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none")
 ACTION_MODE_TO_ACT_DIM = {
     "simple": 1,
     "multi_market": 3,
@@ -91,8 +91,6 @@ SEARCHABLE_KNOBS = (
     "prefetch_factor",
     "optimizer",
     "scheduler",
-    "optimizer_class_path",
-    "scheduler_class_path",
     "optimizer_kwargs",
     "scheduler_kwargs",
     "checkpoint_interval",
@@ -123,8 +121,6 @@ TRAINING_KNOB_TO_ARG_DEST = {
     "prefetch_factor": "prefetch_factor",
     "optimizer": "optimizer",
     "scheduler": "scheduler",
-    "optimizer_class_path": "optimizer_class_path",
-    "scheduler_class_path": "scheduler_class_path",
     "optimizer_kwargs": "optimizer_kwargs_json",
     "scheduler_kwargs": "scheduler_kwargs_json",
 }
@@ -204,17 +200,6 @@ MODEL_VARIANTS: dict[str, dict[str, Any]] = {
         "n_heads": 8,
         "drop_p": 0.1,
     },
-    "aemo_multimarket": {
-        "state_dim": 18,
-        "act_dim": 3,
-        "n_block": 4,
-        "h_dim": 128,
-        "context_len": 288,
-        "n_heads": 8,
-        "drop_p": 0.1,
-        "max_timestep": 2016,
-        "rope_enabled": True,
-    },
 }
 SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "legacy": SurfacePreset(
@@ -223,10 +208,6 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "household_baseline": SurfacePreset(
         description="Household-oriented baseline preset using the legacy model defaults.",
         model_variant="baseline",
-    ),
-    "aemo_multimarket": SurfacePreset(
-        description="AEMO multi-market preset aligned with the shared notebook and wrapper defaults.",
-        model_variant="aemo_multimarket",
     ),
     "aemo_proxy": SurfacePreset(
         description=(
@@ -429,22 +410,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Approved scheduler selection exposed by the training surface.",
     )
     parser.add_argument(
-        "--optimizer-class-path",
-        type=str,
-        default=None,
-        help="Import path for --optimizer=custom in the form package.module:ClassName.",
-    )
-    parser.add_argument(
         "--optimizer-kwargs-json",
         type=str,
         default=None,
         help="Optional JSON object merged into optimizer construction kwargs.",
-    )
-    parser.add_argument(
-        "--scheduler-class-path",
-        type=str,
-        default=None,
-        help="Import path for --scheduler=custom in the form package.module:ClassName.",
     )
     parser.add_argument(
         "--scheduler-kwargs-json",
@@ -869,12 +838,10 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "prefetch_factor": args.prefetch_factor,
         "optimizer": args.optimizer,
         "scheduler": args.scheduler,
-        "optimizer_class_path": args.optimizer_class_path,
         "optimizer_kwargs": parse_json_object_arg(
             args.optimizer_kwargs_json,
             flag_name="--optimizer-kwargs-json",
         ),
-        "scheduler_class_path": args.scheduler_class_path,
         "scheduler_kwargs": parse_json_object_arg(
             args.scheduler_kwargs_json,
             flag_name="--scheduler-kwargs-json",
@@ -885,16 +852,6 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         if arg_dest is not None and arg_dest in explicit_cli_args:
             continue
         training_kwargs[key] = value
-    if training_kwargs["optimizer"] == "custom":
-        if not training_kwargs["optimizer_class_path"]:
-            raise ValueError("--optimizer=custom requires --optimizer-class-path.")
-    elif training_kwargs["optimizer_class_path"] is not None:
-        raise ValueError("--optimizer-class-path requires --optimizer=custom.")
-    if training_kwargs["scheduler"] == "custom":
-        if not training_kwargs["scheduler_class_path"]:
-            raise ValueError("--scheduler=custom requires --scheduler-class-path.")
-    elif training_kwargs["scheduler_class_path"] is not None:
-        raise ValueError("--scheduler-class-path requires --scheduler=custom.")
     for key, value in training_kwargs.items():
         validate_numeric_range(key, value)
     return training_kwargs
@@ -1357,9 +1314,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         return_scale=surface.training_kwargs["return_scale"],
         optimizer_name=surface.training_kwargs["optimizer"],
         scheduler_name=surface.training_kwargs["scheduler"],
-        optimizer_class_path=surface.training_kwargs["optimizer_class_path"],
         optimizer_kwargs=surface.training_kwargs["optimizer_kwargs"],
-        scheduler_class_path=surface.training_kwargs["scheduler_class_path"],
         scheduler_kwargs=surface.training_kwargs["scheduler_kwargs"],
         amp_mode=surface.training_kwargs["amp_mode"],
         num_workers=surface.training_kwargs["num_workers"],

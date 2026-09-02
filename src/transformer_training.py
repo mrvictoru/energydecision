@@ -1,7 +1,8 @@
 import polars as pl
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader, ConcatDataset
+import psutil
+from torch.utils.data import Dataset, DataLoader
 from typing import Optional, Any, Sequence
 import importlib
 import json
@@ -27,8 +28,6 @@ class TrainingResourceMonitor:
         self.pid = os.getpid() if pid is None else int(pid)
         self._last_snapshot: dict[str, str] = {}
         self._last_sample_time = 0.0
-        self._prev_cpu_sample: tuple[int, int] | None = None
-        self._prev_proc_cpu_sample: tuple[float, float] | None = None
         self._nvidia_smi_supported: bool | None = None
 
     def snapshot(self, *, device: str) -> dict[str, str]:
@@ -75,55 +74,16 @@ class TrainingResourceMonitor:
 
     def _sample_cpu_percent(self) -> float | None:
         try:
-            with open("/proc/stat", "r", encoding="utf-8") as fh:
-                first_line = fh.readline().strip()
-        except OSError:
+            return psutil.cpu_percent(interval=None)
+        except (OSError, AttributeError):
             return None
-
-        parts = first_line.split()
-        if len(parts) < 6 or parts[0] != "cpu":
-            return None
-
-        try:
-            values = [int(value) for value in parts[1:]]
-        except ValueError:
-            return None
-
-        total = sum(values)
-        idle = values[3] + (values[4] if len(values) > 4 else 0)
-        current = (total, idle)
-        if self._prev_cpu_sample is None:
-            self._prev_cpu_sample = current
-            return None
-
-        prev_total, prev_idle = self._prev_cpu_sample
-        self._prev_cpu_sample = current
-        total_delta = total - prev_total
-        idle_delta = idle - prev_idle
-        if total_delta <= 0:
-            return None
-        busy_delta = max(0, total_delta - idle_delta)
-        return 100.0 * busy_delta / total_delta
 
     def _sample_ram_usage(self) -> tuple[int, int] | None:
-        meminfo: dict[str, int] = {}
         try:
-            with open("/proc/meminfo", "r", encoding="utf-8") as fh:
-                for line in fh:
-                    key, _, raw_value = line.partition(":")
-                    parts = raw_value.strip().split()
-                    if not parts:
-                        continue
-                    meminfo[key] = int(parts[0]) * 1024
-        except (OSError, ValueError):
+            vm = psutil.virtual_memory()
+            return max(0, int(vm.total - vm.available)), int(vm.total)
+        except (OSError, AttributeError):
             return None
-
-        total = meminfo.get("MemTotal")
-        available = meminfo.get("MemAvailable")
-        if total is None or available is None or total <= 0:
-            return None
-        used = max(0, total - available)
-        return used, total
 
     def _sample_gpu_stats(self, device: str) -> dict[str, float] | None:
         if not device.startswith("cuda") or not torch.cuda.is_available():
@@ -147,55 +107,34 @@ class TrainingResourceMonitor:
         return metrics
 
     def _sample_process_stats(self) -> dict[str, str] | None:
-        status_path = f"/proc/{self.pid}/status"
         try:
-            with open(status_path, "r", encoding="utf-8") as fh:
-                status_rows: dict[str, str] = {}
-                for line in fh:
-                    key, _, raw_value = line.partition(":")
-                    if not key:
-                        continue
-                    status_rows[key] = raw_value.strip()
-        except OSError:
-            return None
-
-        def _parse_kib(key: str) -> int | None:
-            raw_value = status_rows.get(key)
-            if not raw_value:
-                return None
-            parts = raw_value.split()
-            if not parts:
-                return None
+            proc = psutil.Process(self.pid)
+            proc_cpu_percent: float | None = None
             try:
-                return int(float(parts[0])) * 1024
-            except ValueError:
-                return None
+                proc_cpu_percent = proc.cpu_percent(interval=None)
+            except Exception:
+                proc_cpu_percent = None
 
-        rss_bytes = _parse_kib("VmRSS")
-        vms_bytes = _parse_kib("VmSize")
-        threads = status_rows.get("Threads")
-
-        cpu_times = os.times()
-        proc_cpu_seconds = float(cpu_times.user + cpu_times.system)
-        now = time.monotonic()
-        proc_cpu_percent: float | None = None
-        if self._prev_proc_cpu_sample is not None:
-            prev_cpu_seconds, prev_sample_time = self._prev_proc_cpu_sample
-            elapsed_seconds = now - prev_sample_time
-            if elapsed_seconds > 0:
-                proc_cpu_percent = max(0.0, 100.0 * (proc_cpu_seconds - prev_cpu_seconds) / elapsed_seconds)
-        self._prev_proc_cpu_sample = (proc_cpu_seconds, now)
-
-        metrics: dict[str, str] = {}
-        if proc_cpu_percent is not None:
-            metrics["pcpu"] = f"{proc_cpu_percent:.0f}%"
-        if rss_bytes is not None:
-            metrics["prss"] = f"{_bytes_to_gib(rss_bytes):.1f}G"
-        if vms_bytes is not None:
-            metrics["pvms"] = f"{_bytes_to_gib(vms_bytes):.1f}G"
-        if threads is not None:
-            metrics["pth"] = threads
-        return metrics or None
+            metrics: dict[str, str] = {}
+            if proc_cpu_percent is not None:
+                metrics["pcpu"] = f"{proc_cpu_percent:.0f}%"
+            try:
+                mem = proc.memory_info()
+                rss_bytes = int(mem.rss)
+                vms_bytes = int(mem.vms)
+                if rss_bytes > 0:
+                    metrics["prss"] = f"{_bytes_to_gib(rss_bytes):.1f}G"
+                if vms_bytes > 0:
+                    metrics["pvms"] = f"{_bytes_to_gib(vms_bytes):.1f}G"
+            except Exception:
+                pass
+            try:
+                metrics["pth"] = str(proc.num_threads())
+            except Exception:
+                pass
+            return metrics or None
+        except (OSError, AttributeError):
+            return None
 
     def _resolve_cuda_device_index(self, device: str) -> int:
         if ":" not in device:
@@ -495,20 +434,6 @@ class NullLRScheduler:
         _ = state_dict
 
 
-def _load_symbol(path: str) -> Any:
-    module_name, _, attr_name = path.partition(":")
-    if not module_name or not attr_name:
-        if "." not in path:
-            raise ValueError(
-                f"Custom import path {path!r} must be in the form package.module:SymbolName."
-            )
-        module_name, attr_name = path.rsplit(".", 1)
-    module = importlib.import_module(module_name)
-    try:
-        return getattr(module, attr_name)
-    except AttributeError as exc:
-        raise ValueError(f"Custom import path {path!r} does not expose attribute {attr_name!r}.") from exc
-
 
 def _build_optimizer(
     *,
@@ -517,17 +442,9 @@ def _build_optimizer(
     lr: float,
     weight_decay: float,
     optimizer_kwargs: Optional[dict[str, Any]],
-    optimizer_class_path: Optional[str],
 ) -> Any:
     kwargs = dict(optimizer_kwargs or {})
     optimizer_key = optimizer_name.lower()
-    if optimizer_key == "custom":
-        if not optimizer_class_path:
-            raise ValueError("optimizer_name='custom' requires optimizer_class_path.")
-        optimizer_ctor = _load_symbol(optimizer_class_path)
-        kwargs.setdefault("lr", lr)
-        kwargs.setdefault("weight_decay", weight_decay)
-        return optimizer_ctor(model.parameters(), **kwargs)
     if optimizer_key == "adamw":
         return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay, **kwargs)
     if optimizer_key == "adam":
@@ -545,17 +462,11 @@ def _build_scheduler(
     scheduler_name: str,
     epochs: int,
     scheduler_kwargs: Optional[dict[str, Any]],
-    scheduler_class_path: Optional[str],
 ) -> Any:
     kwargs = dict(scheduler_kwargs or {})
     scheduler_key = scheduler_name.lower()
     if scheduler_key == "none":
         return NullLRScheduler()
-    if scheduler_key == "custom":
-        if not scheduler_class_path:
-            raise ValueError("scheduler_name='custom' requires scheduler_class_path.")
-        scheduler_ctor = _load_symbol(scheduler_class_path)
-        return scheduler_ctor(optimizer, **kwargs)
     if scheduler_key == "steplr":
         kwargs.setdefault("step_size", 10)
         kwargs.setdefault("gamma", 0.5)
@@ -575,14 +486,10 @@ def _validate_resume_compatibility(
     checkpoint: dict[str, Any],
     optimizer_name: str,
     scheduler_name: str,
-    optimizer_class_path: Optional[str],
-    scheduler_class_path: Optional[str],
 ) -> None:
     expected_pairs = (
         ("optimizer_name", optimizer_name),
         ("scheduler_name", scheduler_name),
-        ("optimizer_class_path", optimizer_class_path),
-        ("scheduler_class_path", scheduler_class_path),
     )
     for key, expected in expected_pairs:
         if key not in checkpoint:
@@ -592,6 +499,80 @@ def _validate_resume_compatibility(
                 f"Checkpoint {key}={checkpoint.get(key)!r} does not match requested {key}={expected!r}. "
                 "Resume requires the same optimizer/scheduler selection used to create the checkpoint."
             )
+
+
+def _restore_checkpoint_state(
+    checkpoint: dict[str, Any],
+    *,
+    model: torch.nn.Module,
+    optimizer: Any,
+    scheduler: Any,
+    scaler: Any,
+    amp_allowed: bool,
+    checkpoints_per_epoch: int,
+    epochs: int,
+) -> dict[str, Any]:
+    """Restore model/optimizer/scheduler/loss state from a checkpoint.
+
+    Shared by the resume path and the non-finite recovery path.
+    Returns a dict with the restored training state.
+    """
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+    restored = {
+        "log_losses": checkpoint.get("log_losses", []),
+        "train_action_losses": checkpoint.get("train_action_losses", []),
+        "train_state_losses": checkpoint.get("train_state_losses", []),
+        "train_return_losses": checkpoint.get("train_return_losses", []),
+        "val_losses": checkpoint.get("val_losses", []),
+        "val_action_losses": checkpoint.get("val_action_losses", []),
+        "val_state_losses": checkpoint.get("val_state_losses", []),
+        "val_return_losses": checkpoint.get("val_return_losses", []),
+        "loss_history": checkpoint.get("loss_history", []),
+        "best_score": float(checkpoint.get("best_score", float("inf"))),
+        "best_val_loss": float(checkpoint.get("best_val_loss", float("inf"))),
+        "best_train_loss_est": float(checkpoint.get("best_train_loss_est", float("inf"))),
+        "last_epoch_saved": int(checkpoint.get("epoch", 0)),
+        "last_segment_saved": int(checkpoint.get("segment", -1)),
+    }
+    amp_enabled = False
+    first_checkpoint_saved = False
+    if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:
+        scaler.load_state_dict(checkpoint["scaler_state_dict"])
+        if checkpoint.get("amp_enabled", False):
+            amp_enabled = True
+            first_checkpoint_saved = True
+    restored["amp_enabled"] = amp_enabled
+    restored["first_checkpoint_saved"] = first_checkpoint_saved
+
+    start_epoch = int(restored["last_epoch_saved"]) + 1
+    resume_from_segment = 0
+    if checkpoints_per_epoch > 0 and restored["last_segment_saved"] >= 0:
+        if restored["last_segment_saved"] + 1 >= checkpoints_per_epoch:
+            start_epoch = restored["last_epoch_saved"] + 1
+            resume_from_segment = 0
+        else:
+            start_epoch = max(1, restored["last_epoch_saved"])
+            resume_from_segment = restored["last_segment_saved"] + 1
+    restored["start_epoch"] = start_epoch
+    restored["resume_from_segment"] = resume_from_segment
+    restored["exhausted"] = start_epoch > epochs
+    return restored
+
+
+def _checkpoint_return_scale(checkpoint: dict[str, Any], fallback: float) -> float:
+    """Best-effort parse of a checkpoint's stored return_scale."""
+    value = checkpoint.get("return_scale", None)
+    if value is None:
+        return fallback
+    try:
+        value_f = float(value)
+        if math.isfinite(value_f) and abs(value_f) >= 1e-12:
+            return value_f
+    except Exception:
+        pass
+    return fallback
 
 def train_decision_transformer(
     ds: TrajectoryDataset,
@@ -614,9 +595,7 @@ def train_decision_transformer(
     weight_decay: float = 1e-4,
     optimizer_name: str = "adamw",
     scheduler_name: str = "steplr",
-    optimizer_class_path: Optional[str] = None,
     optimizer_kwargs: Optional[dict[str, Any]] = None,
-    scheduler_class_path: Optional[str] = None,
     scheduler_kwargs: Optional[dict[str, Any]] = None,
     return_scale: float = 1.0,
     amp_mode: str = "auto",
@@ -1014,8 +993,6 @@ def train_decision_transformer(
             "scheduler_state_dict": scheduler.state_dict(),
             "optimizer_name": optimizer_name,
             "scheduler_name": scheduler_name,
-            "optimizer_class_path": optimizer_class_path,
-            "scheduler_class_path": scheduler_class_path,
             "optimizer_kwargs": dict(optimizer_kwargs or {}),
             "scheduler_kwargs": dict(scheduler_kwargs or {}),
             "log_losses": log_losses,
@@ -1148,14 +1125,12 @@ def train_decision_transformer(
         lr=lr,
         weight_decay=weight_decay,
         optimizer_kwargs=optimizer_kwargs,
-        optimizer_class_path=optimizer_class_path,
     )
     scheduler = _build_scheduler(
         optimizer=optimizer,
         scheduler_name=scheduler_name,
         epochs=epochs,
         scheduler_kwargs=scheduler_kwargs,
-        scheduler_class_path=scheduler_class_path,
     )
 
     # AMP setup
@@ -1184,60 +1159,46 @@ def train_decision_transformer(
             checkpoint=checkpoint,
             optimizer_name=optimizer_name,
             scheduler_name=scheduler_name,
-            optimizer_class_path=optimizer_class_path,
-            scheduler_class_path=scheduler_class_path,
         )
 
         # Ensure return_scale matches the one used when this checkpoint was created.
-        ckpt_return_scale = checkpoint.get("return_scale", None)
-        if ckpt_return_scale is not None:
-            try:
-                ckpt_return_scale_f = float(ckpt_return_scale)
-                if math.isfinite(ckpt_return_scale_f) and abs(ckpt_return_scale_f) >= 1e-12:
-                    if float(return_scale) != ckpt_return_scale_f:
-                        print(
-                            f"[WARN] Overriding provided return_scale={return_scale} with checkpoint return_scale={ckpt_return_scale_f} for consistency"
-                        )
-                    return_scale = ckpt_return_scale_f
-                    model.return_scale = return_scale
-                else:
-                    print(f"[WARN] Ignoring invalid checkpoint return_scale={ckpt_return_scale}")
-            except Exception:
-                print(f"[WARN] Could not parse checkpoint return_scale={ckpt_return_scale}")
+        ckpt_return_scale = _checkpoint_return_scale(checkpoint, return_scale)
+        if float(return_scale) != ckpt_return_scale:
+            print(
+                f"[WARN] Overriding provided return_scale={return_scale} with checkpoint return_scale={ckpt_return_scale} for consistency"
+            )
+            return_scale = ckpt_return_scale
+            model.return_scale = return_scale
 
-        model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
-        train_action_losses = checkpoint.get("train_action_losses", [])  # type: ignore[assignment]
-        train_state_losses = checkpoint.get("train_state_losses", [])  # type: ignore[assignment]
-        train_return_losses = checkpoint.get("train_return_losses", [])  # type: ignore[assignment]
-        val_losses = checkpoint.get("val_losses", [])  # type: ignore[assignment]
-        val_action_losses = checkpoint.get("val_action_losses", [])  # type: ignore[assignment]
-        val_state_losses = checkpoint.get("val_state_losses", [])  # type: ignore[assignment]
-        val_return_losses = checkpoint.get("val_return_losses", [])  # type: ignore[assignment]
-        loss_history = checkpoint.get("loss_history", [])  # type: ignore[assignment]
-        best_score = float(checkpoint.get("best_score", best_score))
-        best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
-        best_train_loss_est = float(checkpoint.get("best_train_loss_est", best_train_loss_est))
-        last_epoch_saved = checkpoint.get("epoch", 0)
-        last_segment_saved = checkpoint.get("segment", -1)
-        if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:
-            scaler.load_state_dict(checkpoint["scaler_state_dict"])
-            if checkpoint.get("amp_enabled", False):
-                amp_enabled = True
-                first_checkpoint_saved = True
-                print("[INFO] AMP restored from checkpoint and enabled.")
-        if checkpoints_per_epoch > 0 and last_segment_saved >= 0:
-            if last_segment_saved + 1 >= checkpoints_per_epoch:
-                start_epoch = last_epoch_saved + 1
-                resume_from_segment = 0
-            else:
-                start_epoch = max(1, last_epoch_saved)
-                resume_from_segment = last_segment_saved + 1
-        else:
-            start_epoch = last_epoch_saved + 1
-        if start_epoch > epochs:
+        state = _restore_checkpoint_state(
+            checkpoint,
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scaler=scaler,
+            amp_allowed=amp_allowed,
+            checkpoints_per_epoch=checkpoints_per_epoch,
+            epochs=epochs,
+        )
+        log_losses = state["log_losses"]
+        train_action_losses = state["train_action_losses"]
+        train_state_losses = state["train_state_losses"]
+        train_return_losses = state["train_return_losses"]
+        val_losses = state["val_losses"]
+        val_action_losses = state["val_action_losses"]
+        val_state_losses = state["val_state_losses"]
+        val_return_losses = state["val_return_losses"]
+        loss_history = state["loss_history"]
+        best_score = state["best_score"]
+        best_val_loss = state["best_val_loss"]
+        best_train_loss_est = state["best_train_loss_est"]
+        last_epoch_saved = state["last_epoch_saved"]
+        last_segment_saved = state["last_segment_saved"]
+        amp_enabled = state["amp_enabled"]
+        first_checkpoint_saved = state["first_checkpoint_saved"]
+        start_epoch = state["start_epoch"]
+        resume_from_segment = state["resume_from_segment"]
+        if state["exhausted"]:
             print("Checkpoint epoch exceeds requested epochs; training will perform zero additional epochs.")
         else:
             print(f"Resuming from epoch {start_epoch} of {epochs}")
@@ -1434,52 +1395,39 @@ def train_decision_transformer(
             print(f"Non-finite weights detected. Attempting recovery from {checkpoint_path} (attempt {recovery_attempts}).")
             checkpoint = torch.load(checkpoint_path, map_location=device)
 
-            ckpt_return_scale = checkpoint.get("return_scale", None)
-            if ckpt_return_scale is not None:
-                try:
-                    ckpt_return_scale_f = float(ckpt_return_scale)
-                    if math.isfinite(ckpt_return_scale_f) and abs(ckpt_return_scale_f) >= 1e-12:
-                        return_scale = ckpt_return_scale_f
-                        model.return_scale = return_scale
-                except Exception:
-                    pass
+            return_scale = _checkpoint_return_scale(checkpoint, return_scale)
+            model.return_scale = return_scale
 
-            model.load_state_dict(checkpoint["model_state_dict"])
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-            log_losses = checkpoint.get("log_losses", [])  # type: ignore[assignment]
-            train_action_losses = checkpoint.get("train_action_losses", [])  # type: ignore[assignment]
-            train_state_losses = checkpoint.get("train_state_losses", [])  # type: ignore[assignment]
-            train_return_losses = checkpoint.get("train_return_losses", [])  # type: ignore[assignment]
-            val_losses = checkpoint.get("val_losses", [])  # type: ignore[assignment]
-            val_action_losses = checkpoint.get("val_action_losses", [])  # type: ignore[assignment]
-            val_state_losses = checkpoint.get("val_state_losses", [])  # type: ignore[assignment]
-            val_return_losses = checkpoint.get("val_return_losses", [])  # type: ignore[assignment]
-            loss_history = checkpoint.get("loss_history", [])  # type: ignore[assignment]
-            best_score = float(checkpoint.get("best_score", best_score))
-            best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
-            best_train_loss_est = float(checkpoint.get("best_train_loss_est", best_train_loss_est))
-            last_epoch_saved = checkpoint.get("epoch", 0)
-            last_segment_saved = checkpoint.get("segment", -1)
-            if amp_allowed and scaler is not None and "scaler_state_dict" in checkpoint:
-                scaler.load_state_dict(checkpoint["scaler_state_dict"])
-                if checkpoint.get("amp_enabled", False):
-                    amp_enabled = True
-                    first_checkpoint_saved = True
-                    print("[INFO] AMP restored from checkpoint during recovery and enabled.")
+            state = _restore_checkpoint_state(
+                checkpoint,
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                scaler=scaler,
+                amp_allowed=amp_allowed,
+                checkpoints_per_epoch=checkpoints_per_epoch,
+                epochs=epochs,
+            )
+            log_losses = state["log_losses"]
+            train_action_losses = state["train_action_losses"]
+            train_state_losses = state["train_state_losses"]
+            train_return_losses = state["train_return_losses"]
+            val_losses = state["val_losses"]
+            val_action_losses = state["val_action_losses"]
+            val_state_losses = state["val_state_losses"]
+            val_return_losses = state["val_return_losses"]
+            loss_history = state["loss_history"]
+            best_score = state["best_score"]
+            best_val_loss = state["best_val_loss"]
+            best_train_loss_est = state["best_train_loss_est"]
+            last_epoch_saved = state["last_epoch_saved"]
+            last_segment_saved = state["last_segment_saved"]
+            amp_enabled = state["amp_enabled"]
+            first_checkpoint_saved = state["first_checkpoint_saved"]
+            start_epoch = state["start_epoch"]
+            resume_from_segment = state["resume_from_segment"]
 
-            if checkpoints_per_epoch > 0 and last_segment_saved >= 0:
-                if last_segment_saved + 1 >= checkpoints_per_epoch:
-                    start_epoch = last_epoch_saved + 1
-                    resume_from_segment = 0
-                else:
-                    start_epoch = max(1, last_epoch_saved)
-                    resume_from_segment = last_segment_saved + 1
-            else:
-                start_epoch = last_epoch_saved + 1
-                resume_from_segment = 0
-
-            if start_epoch > epochs:
+            if state["exhausted"]:
                 print("Checkpoint epoch exceeds requested epochs; training will perform zero additional epochs.")
                 training_finished = True
             else:
@@ -1521,13 +1469,6 @@ def train_decision_transformer(
             },
         )
     return (model, log_losses, val_losses)
-
-def concat_trajectory_datasets(datasets: list[TrajectoryDataset]) -> ConcatDataset:
-    """
-    Concatenate multiple TrajectoryDataset instances into a single dataset for training.
-    Returns a torch.utils.data.ConcatDataset.
-    """
-    return ConcatDataset(datasets)
 
 
 def episode_train_val_split(

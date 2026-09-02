@@ -242,89 +242,6 @@ def make_env(dataset):
         return env
     return _init
 
-# Helper: plot a 48-hour window from agent logs.
-def plot_48h_from_logs(
-    logs_df,
-    step_duration=0.5,
-    start_step=0,
-    logs_df2=None,
-    label1="Agent 1",
-    label2="Agent 2"
-):
-    """
-    Plots battery, solar, load, grid, and action for a 48-hour window from agent logs.
-    Optionally overlays battery level and agent action from a second logs DataFrame.
-    
-    logs_df: pandas or polars DataFrame with 'raw_observation', 'action', 'info' columns.
-    step_duration: duration of each step in hours (default 0.5).
-    start_step: index to start the 48-hour window (default 0).
-    logs_df2: optional, second logs DataFrame for overlay.
-    label1: legend label for first agent.
-    label2: legend label for second agent.
-    """
-    # Convert to pandas if it's a polars DataFrame
-    if hasattr(logs_df, "to_pandas"):
-        df = logs_df.to_pandas()
-    else:
-        df = logs_df
-
-    steps_per_hour = int(1 / step_duration)
-    steps_48h = 48 * steps_per_hour
-    end_step = start_step + steps_48h
-
-    df_48h = df.iloc[start_step:end_step]
-
-    battery = [obs[-2] for obs in df_48h['raw_observation']]
-    # Raw observation layout in EnergySimEnv:
-    # [hour_sin, hour_cos, day_sin, day_cos,
-    #  SolarGen, HouseLoad, FutureSolar, FutureLoad,
-    #  ImportEnergyPrice, ExportEnergyPrice,
-    #  BatteryLevel, BatteryDegCost]
-    solar = [obs[4] for obs in df_48h['raw_observation']]
-    load = [obs[5] for obs in df_48h['raw_observation']]
-    action = [a[0] for a in df_48h['action']]
-    grid = [info.get('grid_energy', None) for info in df_48h['info']]
-
-    # If overlay logs provided, extract their 48h window
-    if logs_df2 is not None:
-        if hasattr(logs_df2, "to_pandas"):
-            df2 = logs_df2.to_pandas()
-        else:
-            df2 = logs_df2
-        df2_48h = df2.iloc[start_step:end_step]
-        battery2 = [obs[-2] for obs in df2_48h['raw_observation']]
-        action2 = [a[0] for a in df2_48h['action']]
-    else:
-        battery2 = None
-        action2 = None
-
-    plt.figure(figsize=(12, 8))
-    plt.subplot(4, 1, 1)
-    plt.plot(battery, label=f"Battery Level ({label1})", color="tab:blue")
-    if battery2 is not None:
-        plt.plot(battery2, label=f"Battery Level ({label2})", color="tab:orange", linestyle="--")
-    plt.legend()
-
-    plt.subplot(4, 1, 2)
-    plt.plot(solar, label="Solar Generation (kWh)", color="tab:green")
-    plt.plot(load, label="House Load (kWh)", color="tab:red")
-    plt.legend()
-
-    plt.subplot(4, 1, 3)
-    plt.plot(grid, label="Grid Energy (kWh)", color="tab:purple")
-    plt.legend()
-
-    plt.subplot(4, 1, 4)
-    plt.plot(action, label=f"Agent Action ({label1})", color="tab:blue")
-    if action2 is not None:
-        plt.plot(action2, label=f"Agent Action ({label2})", color="tab:orange", linestyle="--")
-    plt.legend()
-    plt.xlabel(f"Step ({step_duration}h intervals)")
-
-    plt.tight_layout()
-    plt.show()
-
-
 # ---------------------------------------------------------------------------
 # EpisodeVisualizer – unified agent-in-action viewer for both environments
 # ---------------------------------------------------------------------------
@@ -2194,50 +2111,6 @@ def evaluate_by_conditions(
         }
     return results
 
-def compute_decision_divergence(
-    logs1: pl.DataFrame,
-    logs2: pl.DataFrame,
-    action_tolerance: float = 0.01
-) -> dict:
-    """
-    Measure how often two algorithms take different actions in same states.
-    """
-    def _extract_action(val: Any) -> float:
-        if isinstance(val, (list, tuple, np.ndarray)):
-            return float(val[0]) if len(val) > 0 else 0.0
-        try:
-            return float(val)
-        except Exception:
-            return 0.0
-
-    actions1 = np.array([_extract_action(a) for a in logs1["action"].to_list()], dtype=float)
-    actions2 = np.array([_extract_action(a) for a in logs2["action"].to_list()], dtype=float)
-
-    min_len = min(actions1.size, actions2.size)
-    if min_len == 0:
-        return {
-            "mean_absolute_diff": float("nan"),
-            "max_diff": float("nan"),
-            "divergence_rate": float("nan"),
-            "correlation": float("nan"),
-        }
-    actions1 = actions1[:min_len]
-    actions2 = actions2[:min_len]
-    
-    # Action difference metrics
-    action_diff = np.abs(actions1 - actions2)
-    
-    try:
-        corr = float(np.corrcoef(actions1, actions2)[0, 1]) if min_len > 1 else float("nan")
-    except Exception:
-        corr = float("nan")
-
-    return {
-        "mean_absolute_diff": float(np.mean(action_diff)),
-        "max_diff": float(np.max(action_diff)),
-        "divergence_rate": float(np.mean(action_diff > action_tolerance)),
-        "correlation": corr,
-    }
 
 # Helper: compare actions taken by different algorithms
 @dataclass
@@ -2443,38 +2316,13 @@ class AlgorithmActionComparator:
         return float(np.corrcoef(x_f, y_f)[0, 1])
 
     def _auto_bins(self, data: np.ndarray) -> int:
-        """Estimate a sensible bin count for histogramming 'data'.
-
-        Uses Freedman–Diaconis rule (bin width = 2*IQR / n^(1/3)). If the IQR is 0 or
-        yields non-positive width, falls back to Sturges' rule (ceil(log2(n)+1)).
-        Bounds the result to a reasonable range to avoid extreme bin counts.
-        """
+        """Estimate a sensible bin count for histogramming 'data'."""
         finite = data[np.isfinite(data)]
         n = finite.size
         if n <= 1:
             return 10
-        try:
-            q75, q25 = np.percentile(finite, [75, 25])
-            iqr = float(q75 - q25)
-        except Exception:
-            iqr = 0.0
-
-        if iqr > 0:
-            # Freedman–Diaconis bin width
-            bw = 2.0 * iqr / (n ** (1.0 / 3.0))
-            if bw > 0:
-                data_range = float(np.nanmax(finite) - np.nanmin(finite))
-                if data_range <= 0:
-                    bins = int(np.ceil(np.log2(n) + 1))
-                else:
-                    bins = int(max(1, np.ceil(data_range / bw)))
-            else:
-                bins = int(np.ceil(np.log2(n) + 1))
-        else:
-            # Sturges' rule fallback
-            bins = int(np.ceil(np.log2(n) + 1))
-
-        # bound bins to avoid too small/large choices
+        edges = np.histogram_bin_edges(finite, bins="fd")
+        bins = max(1, edges.size - 1)
         bins = max(5, min(bins, 500))
         return int(bins)
 
@@ -3689,76 +3537,3 @@ def compare_actions_across_algorithms(
     if not isinstance(result, dict):
         raise TypeError("Expected metrics dictionary when return_figs=False.")
     return result
-
-
-def analyze_temporal_actions(
-    logs_dict: dict[str, pl.DataFrame],
-    step_range: Optional[tuple[int, int]] = None,
-    time_periods: Optional[List[Tuple[int, int]]] = None,
-    annotate_states: bool = True,
-    step_duration: Optional[float] = None,
-    reference: Optional[str] = None,
-    action_tolerance: float = 0.01,
-    save_path: Optional[str] = None,
-    save_format: str = "svg",
-    dpi: int = 200,
-    return_extra_figures: bool = True,
-) -> tuple[plt.Figure, dict] | tuple[plt.Figure, dict, dict[str, plt.Figure]]:
-    """Backwards-compatible wrapper around AlgorithmActionComparator.analyze_temporal.
-
-    Parameters
-    ----------
-    logs_dict: dict[str, pl.DataFrame]
-        Mapping from algorithm name to a single episode DataFrame (Polars) for each algorithm.
-    step_range: Optional[tuple[int,int]]
-        Single (start, end) tuple selecting a contiguous block to analyze when time_periods is not
-        provided. If None, the common minimum length across inputs is used.
-    time_periods: Optional[List[Tuple[int,int]]]
-        If provided, a list of (start, end) windows to analyze. Windows are clamped to episode
-        lengths and concatenated in the given order for plotting and statistics. The returned
-        stats['step_range'] will contain the list of windows.
-    annotate_states: bool
-        Whether to include SOC and grid subplots beneath the action plots.
-    step_duration: Optional[float]
-        Optional step duration (hours) used to label x axes.
-    reference: Optional[str]
-        Algorithm name to use as reference for difference statistics.
-    action_tolerance: float
-        Threshold used to compute divergence_rate vs reference.
-    save_path: Optional[str]
-        Path to save the produced figure (if provided).
-    save_format: str
-        Image format to use when saving figures (e.g. 'svg', 'png', 'pdf'). The file
-        extension of the provided `save_path` will be normalized to this value if it
-        differs. Defaults to 'svg'.
-    dpi: int
-        Dots-per-inch to use when saving raster image formats (png, jpg). Ignored
-        for vector formats like `svg`.
-
-    Returns
-    -------
-    tuple[plt.Figure, dict]
-        Matplotlib figure and computed statistics dictionary. If ``return_extra_figures`` is
-        True the function returns a 3-tuple ``(figure, stats, extra_figures)`` where
-        ``extra_figures`` is a mapping of small diagnostic figures (e.g. per-algorithm
-        difference panels) produced by the temporal analysis.
-    """
-
-    comparator = AlgorithmActionComparator()
-    cfg = TemporalAnalysisConfig(
-        step_range=step_range,
-        time_periods=time_periods,
-        annotate_states=annotate_states,
-        step_duration=step_duration,
-        reference=reference,
-        action_tolerance=action_tolerance,
-        save_path=save_path,
-        save_format=save_format,
-        dpi=dpi,
-    )
-
-    result = comparator.analyze_temporal(logs_dict=logs_dict, config=cfg)
-    if return_extra_figures:
-        return result.figure, result.stats, result.extra_figures
-    return result.figure, result.stats
-

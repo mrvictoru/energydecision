@@ -283,15 +283,6 @@ class SolarBatteryEnv(gym.Env):
 
         return primary_obs, info
 
-    # ... (get_observation_header, _calculate_grid_reward, _calculate_battery_degradation, render) ...
-    # Make sure get_observation_header also reflects the primary observation format
-    def get_observation_header(self):
-        header = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
-        prefix = "Norm_" if self.normalize_obs else "" # Add prefix if primary obs is normalized
-        header.extend([f"{prefix}{col}" for col in self.ordered_df_cols_for_obs])
-        header.extend([f'{prefix}BatteryLevel', f'{prefix}BatteryDegCost'])
-        return header
-
     def _calculate_grid_reward(self, grid_energy, energy_price):
         # If grid energy exceeds limits, add a violation penalty.
         grid_violation_penalty = VIOLATION_PENALTY if abs(grid_energy) > self.max_grid_energy else 0
@@ -522,28 +513,6 @@ class SolarBatteryEnv(gym.Env):
 
         return primary_obs, float(reward), terminated, truncated, reward_info
 
-    def render(self, **kwargs):
+def render(self, **kwargs):
         if self.render_mode == 'human':
             print(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh")
-            """
-        elif self.render_mode == 'file':
-            # Use a filename based on the dataset if possible
-            # Auto-generate dataset name based on meta data columns if available
-            try:
-                customer = self.df.select("Customer").item() if "Customer" in self.df.columns else "unknown"
-                postcode = self.df.select("Postcode").item() if "Postcode" in self.df.columns else "unknown"
-                daterange = self.df.select("DateRange").item() if "DateRange" in self.df.columns else "unknown"
-                dataset_name = f"{customer}_{postcode}_{daterange}"
-            except Exception:
-                dataset_name = kwargs.get('dataset_name', 'default_dataset')
-            filename = kwargs.get('filename', f'render_{dataset_name}.txt')
-            # Store the current observation as well
-            obs = self._next_observation()
-            with open(filename, 'a+') as f:
-                f.write(
-                    f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, "
-                    f"Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, "
-                    f"Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh, "
-                    f"Obs: {obs.tolist()}\n"
-            )
-            """

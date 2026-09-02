@@ -23,8 +23,6 @@ from household_synthetic import (  # noqa: E402
     DAY_TYPES,
     ApplianceRecipe,
     DayLibrary,
-    TTMConfig,
-    apply_ttm_auxiliary,
     assemble_episode,
     day_type_for_date,
     episode_seed,
@@ -59,13 +57,6 @@ def _parse_args() -> argparse.Namespace:
         default="calendar_cycle_rainflow",
     )
     parser.add_argument("--ood-holdout-fraction", type=float, default=0.15)
-    parser.add_argument("--use-ttm", action="store_true", help="Enable separately provisioned auxiliary Granite TTM.")
-    parser.add_argument(
-        "--ttm-mode",
-        choices=("gap_imputation", "weather_residual"),
-        default="weather_residual",
-        help="Auxiliary TTM use; never a primary household generator.",
-    )
     return parser.parse_args()
 
 
@@ -229,12 +220,6 @@ def main() -> None:
     if args.battery_life_cost < 0:
         raise ValueError("--battery-life-cost must be non-negative")
 
-    ttm = TTMConfig(enabled=args.use_ttm, mode=args.ttm_mode if args.use_ttm else "none")
-    if ttm.enabled:
-        # This fails explicitly until the optional model runtime is provisioned;
-        # the corpus builder must never silently substitute a primary generator.
-        apply_ttm_auxiliary(None, ttm)  # type: ignore[arg-type]
-
     full_library = DayLibrary.from_normalized_dir(
         args.normalized_dir, n_clusters=args.n_clusters, random_seed=args.seed
     )
@@ -269,7 +254,6 @@ def main() -> None:
             "battery_flows_kw": list(BATTERY_FLOWS_KW),
             "archetype_recipes": {name: asdict(recipe) for name, recipe in ARCHETYPE_RECIPES.items()},
         },
-        "ttm": {"enabled": ttm.enabled, "model_id": ttm.model_id, "mode": ttm.mode},
         "real_ood_source_dates": sorted(date.isoformat() for date in ood_dates),
         "episodes": [],
     }
