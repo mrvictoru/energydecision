@@ -6,7 +6,8 @@
 >
 > **Status of this document:** requirements for the built page. The site exists at
 > repo-root `index.html` (AEMO track shipped 2026-08; household track tab added
-> 2026-09 — see §3.14).
+> 2026-09 — see §3.14; AEMO behaviour charts clarified 2026-09 — see §3.15;
+> household behaviour zoom/picker 2026-09 — see §3.16).
 
 ---
 
@@ -296,21 +297,23 @@ lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureCha
    SDP-teacher action labels** — only the two forecast channels differ.
 4. **`#hh-behavior`** — "what one extra forecast hour actually changes": three
    stacked, shared-axis charts on ONE held-out summer week (1–7 Feb 2024,
-   window 6 of the ten-window surface): (a) solar and load as filled areas
-   (mint / orange) with the import-price line dashed on the right axis so the
-   0¢/kWh free 11:00–14:00 window is visible; (b) battery power per policy
-   (positive = charging) — TTM DT sky, no-forecast DT coral, rule graphite;
-   (c) SOC 0–100% per policy. Policy/price visibility toggles (`polHhTtm`,
-   `polHhNofc`, `polHhRule`, `polHhPrice`) persist across theme rebuilds.
-   Data: `HH_BEHAVIOR` constant, 504 bins (20-min means of native 5-min steps),
-   regenerated with `scripts/dump_household_behavior.py --window 6`
-   (writes `eval_output/household/h4_4_behavior/week.json`). Verified
-   narrative facts for the "what to look for" copy: both DTs swing SOC 0→100%
-   ≈6 times that week and ride ±3.3 kW through the free window into the evening
-   peak; the rule stays within ±0.4 kW, SOC 40–60%, capturing a fraction of the
-   savings; weekly charge/discharge throughput TTM 28.6/38.2 kWh vs no-forecast
-   28.0/37.4 kWh.
-5. **`#hh-results`** — one bar chart + two tables. Savings vs no battery
+   window 6 of the ten-window surface). Default view is **24 hours** with a
+   start-day picker (Thu 1 Feb … Wed 7 Feb); 48 hours shows that day plus the
+   next (Wed disabled). (a) solar and load as filled areas (mint / orange) with
+   the import-price line dashed on the right axis and a shaded 11:00–14:00 free
+   window; (b) battery power per policy (positive = charging) — TTM DT sky,
+   persistence DT lilac, no-forecast DT coral, rule graphite (rule off by
+   default); (c) SOC 0–100%. Tooltips use kW / ¢/kWh / %, never dollars.
+   Window bill chips reconstruct the slice import bill vs no battery from 10-min
+   means (RTE not reapplied). Data: `HH_BEHAVIOR` constant, **1008 bins
+   (10-min means)**, four policies, regenerated with
+   `scripts/dump_household_behavior.py --window 6` (persist via `--policies persist --merge`).
+   Charts are one representative week; headline savings average ten windows.
+   Copy must say **1,440 training episodes**, not 1,440 households, and
+   **+$47.94 / +$46.39** (not “+$46”).
+5. **`#hh-results`** — one bar chart + two tables. Oracle is **off by default**
+   on the bar chart (clairvoyant DP, +$738.96/yr) so the learned cluster
+   ($24–$357) remains readable; a checkbox reveals it. Savings vs no battery
    (H4.4 full corpus / H4.2 seven-day corpus): Rule +$58.03/—; no-forecast DT
    +$310.90/+$155.12; persistence DT +$309.35/+$216.74; TTM DT **+$357.29/
    +$258.50**; fresh full-corpus PPO +$23.66/—; oracle +$738.96/—. Paired
@@ -328,6 +331,44 @@ lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureCha
    collapse the advantage); **household and AEMO numbers must never be
    compared directly.**
 8. Footer line names both tracks and their verification dates.
+
+### 3.15 AEMO “Actions along time” charts (added 2026-09)
+
+The AEMO `#behavior` section must not imply that dispatch is a normalized
+`[−1, +1]` action. Held-out logs store **actual MW** (`info.battery_dispatch`,
+positive = charging). The y-axis must auto-scale to the visible series.
+
+Explain on-page, with verified July 2024 Dalrymple numbers:
+
+- SOC is inventory, not activity. An 8 MWh / 30 MW stack can empty in ~16 min;
+  the DT often sits full to keep **raise FCAS** headroom.
+- Energy pays only for MWh moved; FCAS regulation pays for reserved MW. July DT:
+  energy **−$777**, FCAS **$27,945**. The real operator replay on this surface is
+  energy-only (FCAS bids ≈ 0).
+- Native steps are 5 min; 2024 charts use 30-min means (cumulative 1 h). A short
+  burst is diluted. Rebuild extras with `scripts/dump_aemo_behavior.py`.
+
+Required canvases: energy MW, FCAS raise/lower bid fractions (0–1), SOC (MWh),
+cumulative energy vs FCAS $, cumulative profit vs wear. Profit chips keep episode
+totals and add energy / FCAS / wear split from `BEHAVIOR_SPLIT`. Payload must stay
+under 500 KB. Do not mix household kW charts into this section.
+
+### 3.16 Household “Actions along time” zoom (added 2026-09)
+
+Household `#hh-behavior` must not dump the full week as the primary view — seven
+sunny/cloudy days on one axis hides the midday charge / evening discharge.
+
+Required UI:
+
+- Segmented **24 hours / 48 hours** control (`hhSpan24`, `hhSpan48`).
+- Start-day chips for 1–7 Feb 2024 (`hhDayNav`). 48-hour mode disables Wed.
+- Persistence DT series (H4.4 `h4_4_persistence_standard_rtg_8x512_ctx576`) in
+  lilac, dumped from the checkpoint — do not invent traces.
+- Free-window band via a Chart.js `beforeDraw` plugin (no extra CDN).
+- Reconstructed window bill chips (`hhBillRow`) labelled as reconstructed.
+- Units: solar/load/battery **kW**, price **¢/kWh**, SOC **%**.
+
+Do not mix AEMO MW / FCAS charts into this section.
 
 ## 4. Design Requirements
 

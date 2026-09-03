@@ -2,12 +2,14 @@
 """Dump per-step rollout data for the household behaviour chart on the website.
 
 Runs the matched full-corpus (H4.4) arms on ONE deterministic 7-day real-OOD
-window — the TTM-forecast DT, the no-forecast DT, and the rule baseline —
-under identical battery/tariff settings, and writes a JSON with 10-minute
-means of solar, load, import price, battery power, and SOC per policy.
+window — TTM-forecast DT, persistence DT, no-forecast DT, and the rule
+baseline — under identical battery/tariff settings, and writes a JSON with
+10-minute means of solar, load, import price, battery power, and SOC per policy.
 
 Usage (from the repository root, GPU Distrobox):
     python3 scripts/dump_household_behavior.py --window 6 \
+        --output eval_output/household/h4_4_behavior/week.json
+    python3 scripts/dump_household_behavior.py --window 6 --policies persist --merge \
         --output eval_output/household/h4_4_behavior/week.json
 """
 from __future__ import annotations
@@ -51,6 +53,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-flow-kw", type=float, default=3.3)
     parser.add_argument("--rtg-value", type=float, default=-2.0)
     parser.add_argument("--bin-steps", type=int, default=2, help="5-min steps per output bin (2 = 10-min).")
+    parser.add_argument(
+        "--policies",
+        default="ttm,nofc,persist,rule",
+        help="Comma-separated arms to dump: ttm, nofc, persist, rule.",
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge dumped arms into an existing --output JSON instead of rewriting it.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -95,42 +107,54 @@ def main() -> None:
     stems = {
         "ttm": "h4_4_ttm_standard_rtg_8x512_ctx576",
         "nofc": "h4_4_no_forecast_standard_rtg_8x512_ctx576",
+        "persist": "h4_4_persistence_standard_rtg_8x512_ctx576",
     }
+    wanted = [p.strip() for p in args.policies.split(",") if p.strip()]
+    unknown = [p for p in wanted if p not in {*stems, "rule"}]
+    if unknown:
+        raise SystemExit(f"unknown --policies: {unknown}")
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    def pack(logs: pl.DataFrame) -> dict[str, list[float]]:
+        info = logs["info"]
+        return {
+            "batt_kw": downsample(
+                np.array([row["battery_flow_energy"] for row in info]) * 12.0,
+                args.bin_steps,
+            ),
+            "soc_pct": downsample(
+                np.array([row["battery_level"] for row in info]) / args.capacity_kwh * 100.0,
+                args.bin_steps,
+            ),
+            "grid_kwh": downsample(
+                np.array([row["grid_energy"] for row in info]),
+                args.bin_steps,
+            ),
+        }
 
     series: dict[str, dict[str, list[float]]] = {}
 
     for arm, stem in stems.items():
+        if arm not in wanted:
+            continue
         if arm == "ttm":
             frame = apply_forecast_sidecar(frame_base, sidecar)
+        elif arm == "persist":
+            frame = _apply_forecast_mode(frame_base, "persistence", 42)
         else:
             frame = _apply_forecast_mode(frame_base, "zero", 42)
         model = load_dt(args.dt_dir / f"{stem}_best.pt", args.dt_dir / f"{stem}_model_kwargs.json", device)
         logs = rollout(frame, "dt", model, args.capacity_kwh, args.max_flow_kw, args.rtg_value)
-        series[arm] = {
-            "batt_kw": downsample(
-                np.array([info["battery_flow_energy"] for info in logs["info"]]) * 12.0,
-                args.bin_steps,
-            ),
-            "soc_pct": downsample(
-                np.array([info["battery_level"] for info in logs["info"]]) / args.capacity_kwh * 100.0,
-                args.bin_steps,
-            ),
-        }
+        series[arm] = pack(logs)
         print(f"[behavior] {arm} done", flush=True)
 
-    logs_rule = rollout(_apply_forecast_mode(frame_base, "persistence", 42),
-                        "rule", None, args.capacity_kwh, args.max_flow_kw, 0.0)
-    series["rule"] = {
-        "batt_kw": downsample(
-            np.array([info["battery_flow_energy"] for info in logs_rule["info"]]) * 12.0, args.bin_steps
-        ),
-        "soc_pct": downsample(
-            np.array([info["battery_level"] for info in logs_rule["info"]]) / args.capacity_kwh * 100.0,
-            args.bin_steps,
-        ),
-    }
-    print("[behavior] rule done", flush=True)
+    if "rule" in wanted:
+        logs_rule = rollout(
+            _apply_forecast_mode(frame_base, "persistence", 42),
+            "rule", None, args.capacity_kwh, args.max_flow_kw, 0.0,
+        )
+        series["rule"] = pack(logs_rule)
+        print("[behavior] rule done", flush=True)
 
     step_kw = 12.0  # kWh per 5-min step -> kW
     n = len(frame_base)
@@ -158,8 +182,14 @@ def main() -> None:
         payload["policies"][arm] = {k: [_round(v) for v in arr] for k, arr in payload["policies"][arm].items()}
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    if args.merge and args.output.exists():
+        existing = json.loads(args.output.read_text())
+        if existing.get("labels") != payload["labels"]:
+            raise SystemExit("refusing --merge: labels do not match existing output")
+        existing.setdefault("policies", {}).update(payload["policies"])
+        payload = existing
     args.output.write_text(json.dumps(payload))
-    print(f"[behavior] wrote {args.output} ({len(payload['labels'])} bins)")
+    print(f"[behavior] wrote {args.output} ({len(payload['labels'])} bins, policies={list(payload['policies'])})")
 
 
 if __name__ == "__main__":
