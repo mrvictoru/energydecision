@@ -620,4 +620,60 @@ class RealWorldBESSDegradationModel:
         return self.k_cyc * arr * dod_factor * c_rate_factor
 
 
+# =============================================================================
+# Specialized Degradation Models for Ablation Studies
+# =============================================================================
+
+class CycleOnlyDegradationModel:
+    """
+    Degradation model with only cycle aging, no calendar aging.
+    Calendar aging (degradation_per_timestep) returns 0.
+    """
+    
+    def __init__(self):
+        from batterydeg import DegradationModel as RealDegradationModel
+        self._real_model = RealDegradationModel()
+    
+    def degradation_per_cycle(
+        self,
+        *,
+        T: float,
+        Id: float,
+        Ich: float,
+        SOCav: float,
+        DOD: float,
+    ) -> float:
+        """Only cycle aging, no calendar aging."""
+        return self._real_model.degradation_per_cycle(
+            T=T, Id=Id, Ich=Ich, SOCav=SOCav, DOD=DOD
+        )
+    
+    def degradation_per_timestep(self, *args, **kwargs) -> float:
+        """No calendar aging per timestep."""
+        return 0.0
+
+
+class DisabledDegradationModel:
+    """
+    Degradation model with all degradation disabled.
+    No cycle aging, no calendar aging.
+    """
+    
+    def degradation_per_cycle(
+        self,
+        *,
+        T: float,
+        Id: float,
+        Ich: float,
+        SOCav: float,
+        DOD: float,
+    ) -> float:
+        """No cycle aging."""
+        return 0.0
+    
+    def degradation_per_timestep(self, *args, **kwargs) -> float:
+        """No calendar aging."""
+        return 0.0
+
+
 

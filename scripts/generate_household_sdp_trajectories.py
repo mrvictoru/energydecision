@@ -52,6 +52,14 @@ def parse_args() -> argparse.Namespace:
         default="persistence",
         help="Forecast features stored in observations; zero removes both forecast channels.",
     )
+    parser.add_argument(
+        "--degradation-mode",
+        choices=("full", "cycle_only", "disabled"),
+        default="full",
+        help="Degradation mode: full (calendar+cycle), cycle_only (no calendar aging), disabled (no degradation)",
+    )
+    parser.add_argument("--battery-life-cost", type=float, default=5000.0,
+                        help="Battery life cost in USD (used for degradation cost in reward)")
     return parser.parse_args()
 
 
@@ -59,6 +67,7 @@ def _trajectory_for_episode(
     frame: pl.DataFrame, episode_id: int, capacity: float, flow: float,
     soc_resolution: int, action_resolution: int, tariff: Tariff,
     roundtrip_eff: float, forecast_mode: str,
+    degradation_mode: str = "full", battery_life_cost: float = 5000.0,
 ) -> pl.DataFrame:
     """Roll out per-day deterministic DP actions through the actual env."""
     priced_frame = frame.with_columns([
@@ -75,6 +84,8 @@ def _trajectory_for_episode(
     env = SolarBatteryEnv(
         observation_frame, battery_capacity=capacity, max_battery_flow=flow,
         init_battery_level=capacity / 2.0, max_step=len(frame),
+        degradation_mode=degradation_mode,
+        battery_life_cost=battery_life_cost,
     )
     observation, _ = env.reset()
     records = []
@@ -132,6 +143,7 @@ def main() -> None:
             float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution,
             tariff, args.roundtrip_eff,
             args.forecast_mode,
+            args.degradation_mode, args.battery_life_cost,
         ))
     result = pl.concat(frames)
     args.out.parent.mkdir(parents=True, exist_ok=True)

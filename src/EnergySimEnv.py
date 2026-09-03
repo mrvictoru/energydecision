@@ -6,7 +6,7 @@ from gymnasium import spaces, error, utils
 import numpy as np
 import polars as pl
 
-from batterydeg import DegradationModel, RainflowCounter
+from batterydeg import DegradationModel, RainflowCounter, CycleOnlyDegradationModel, DisabledDegradationModel
 
 # global variables
 VIOLATION_PENALTY = -8964
@@ -75,6 +75,7 @@ class SolarBatteryEnv(gym.Env):
         base_deg_DoD = 80.0,  # reference DoD for per-kWh wear linearization (%)
         step_duration = 0.5, # duration of each step in hours (default half an hour)
         degradation_temperature = 25.0,
+        degradation_mode: str = "full",  # "full", "cycle_only", "disabled"
     ):
         super(SolarBatteryEnv, self).__init__()
         self.df = df
@@ -107,8 +108,16 @@ class SolarBatteryEnv(gym.Env):
             self.step_duration = step_duration
 
         self.degradation_temperature = float(degradation_temperature)
-        self.degradation_model = DegradationModel()
-
+        self.degradation_mode = degradation_mode
+        
+        # Initialize degradation model based on mode
+        if degradation_mode == "cycle_only":
+            self.degradation_model = CycleOnlyDegradationModel()
+        elif degradation_mode == "disabled":
+            self.degradation_model = DisabledDegradationModel()
+        else:  # "full"
+            self.degradation_model = DegradationModel()
+        
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration, max_c_rate=self.max_battery_flow / self.initial_battery_capacity)
         self._rainflow_num_cycles = 0
 
