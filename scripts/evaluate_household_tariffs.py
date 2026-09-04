@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -36,7 +38,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--roundtrip-eff", type=float, default=0.80)
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=min(8, os.cpu_count() or 4),
+        help="Number of parallel worker processes for day optimization (default: min(8, cpu_count)).",
+    )
     return parser.parse_args()
+
+
+def _evaluate_single_day(
+    args_tuple: tuple[pl.DataFrame, float, float, Tariff, int, float]
+) -> tuple[float, float, float]:
+    day, capacity_kwh, max_flow_kw, tariff, action_sign, roundtrip_eff = args_tuple
+    observed = replay(
+        day, capacity_kwh, max_flow_kw, tariff,
+        action_sign=action_sign, roundtrip_eff=roundtrip_eff,
+    )
+    optimized = optimize_dispatch(
+        day, tariff=tariff, capacity_kwh=capacity_kwh,
+        max_flow_kw=max_flow_kw, roundtrip_eff=roundtrip_eff,
+    )
+    no_battery = float(sum(
+        max(load - solar, 0.0) * (5.0 / 60.0) * tariff.import_price(ts)
+        - max(solar - load, 0.0) * (5.0 / 60.0) * tariff.feed_in_price()
+        for ts, load, solar in zip(day["Timestamp"], day["HouseLoad"], day["SolarGen"])
+    ))
+    return float(observed["bill_aud"]), float(optimized.bill_aud), no_battery
 
 
 def complete_days(segments: list[pl.DataFrame]) -> list[pl.DataFrame]:
@@ -71,35 +99,24 @@ def main() -> None:
         "tariffs": {},
     }
     for name, tariff in TARIFFS.items():
-        observed_bills = []
-        optimized_bills = []
-        no_battery_bills = []
         # Sign fitting needs the full observed SOC trajectory. Per-day fitting
         # is underidentified and can invert the recorded convention.
         action_sign = detect_action_sign(
             pl.concat(days), tariff, args.capacity_kwh, args.max_flow_kw
         )
-        for day in days:
-            observed = replay(
-                day, args.capacity_kwh, args.max_flow_kw, tariff,
-                action_sign=action_sign, roundtrip_eff=args.roundtrip_eff,
-            )
-            optimized = optimize_dispatch(
-                day, tariff=tariff, capacity_kwh=args.capacity_kwh,
-                max_flow_kw=args.max_flow_kw, roundtrip_eff=args.roundtrip_eff,
-            )
-            net = (day["HouseLoad"] - day["SolarGen"]).sum() * (5.0 / 60.0)
-            # Calculate the no-battery day bill with zero actions through replay's
-            # tariff-consistent grid accounting.
-            no_battery = float(sum(
-                max(load - solar, 0.0) * (5.0 / 60.0) * tariff.import_price(ts)
-                - max(solar - load, 0.0) * (5.0 / 60.0) * tariff.feed_in_price()
-                for ts, load, solar in zip(day["Timestamp"], day["HouseLoad"], day["SolarGen"])
-            ))
-            del net
-            observed_bills.append(observed["bill_aud"])
-            optimized_bills.append(optimized.bill_aud)
-            no_battery_bills.append(no_battery)
+        day_tasks = [
+            (day, args.capacity_kwh, args.max_flow_kw, tariff, action_sign, args.roundtrip_eff)
+            for day in days
+        ]
+        if args.workers > 1 and len(days) > 1:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
+                results = list(executor.map(_evaluate_single_day, day_tasks, chunksize=16))
+        else:
+            results = [_evaluate_single_day(task) for task in day_tasks]
+
+        observed_bills = [r[0] for r in results]
+        optimized_bills = [r[1] for r in results]
+        no_battery_bills = [r[2] for r in results]
         gap = [observed - optimized for observed, optimized in zip(observed_bills, optimized_bills)]
         output["tariffs"][name] = {
             "definition": {

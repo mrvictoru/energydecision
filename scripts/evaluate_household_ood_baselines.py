@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime as dt
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from EnergySimEnv import SolarBatteryEnv
-from decision import Agent
+from decision import Agent, _build_dt_inference_context, stable_rtg_update
 from decision_transformer import DecisionTransformer
 from household_ingest import build_year_dataset, env_view, split_segments
 from household_forecast import apply_forecast_sidecar
@@ -103,6 +105,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Deterministically subsample this many evenly spaced evaluation windows.",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=min(8, os.cpu_count() or 4),
+        help="Number of parallel worker processes for CPU-bound evaluations (rule, oracle) (default: min(8, cpu_count)).",
+    )
+    parser.add_argument(
+        "--batch-eval",
+        action="store_true",
+        help="Step active evaluation windows concurrently with batched DT forward passes on GPU.",
+    )
     return parser.parse_args()
 
 
@@ -119,6 +132,16 @@ def _bill_from_logs(frame: pl.DataFrame, logs: pl.DataFrame) -> float:
     return bill
 
 
+def _degradation_cost_from_logs(logs: pl.DataFrame, battery_life_cost: float) -> float:
+    """Accumulate the environment's realized per-step degradation cost."""
+    if "info" not in logs.columns:
+        return 0.0
+    return float(sum(
+        float(info.get("step_degradation", 0.0) or 0.0) * battery_life_cost
+        for info in logs["info"].to_list()
+    ))
+
+
 def tariff_for_name(name: str) -> Tariff:
     if name == "realistic":
         return Tariff(31.042, 1.0, 11, 14)
@@ -128,7 +151,7 @@ def tariff_for_name(name: str) -> Tariff:
 def _run_agent(
     frame: pl.DataFrame, algorithm: str, model, capacity: float, flow: float,
     tariff: Tariff, rtg_mode: str = "standard", rtg_value: float = 0.0,
-) -> float:
+) -> tuple[float, float]:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
         init_battery_level=capacity / 2.0, max_step=len(frame),
@@ -143,7 +166,156 @@ def _run_agent(
                     soc_resolution=31, action_resolution=21,
                     rtg_value=rtg_value,
                     rtg_prompt_provider=prompt_provider).run_episode()
-    return _bill_from_logs(frame, logs)
+    return (
+        _bill_from_logs(frame, logs),
+        _degradation_cost_from_logs(logs, env.battery_life_cost),
+    )
+
+
+class _BatchedEnvState:
+    def __init__(
+        self,
+        idx: int,
+        frame: pl.DataFrame,
+        capacity: float,
+        flow: float,
+        tariff: Tariff,
+        model: DecisionTransformer,
+        rtg_mode: str,
+        rtg_value: float,
+    ) -> None:
+        self.idx = idx
+        self.frame = frame
+        self.env = SolarBatteryEnv(
+            frame,
+            battery_capacity=capacity,
+            max_battery_flow=flow,
+            init_battery_level=capacity / 2.0,
+            max_step=len(frame),
+        )
+        self.prompt_provider = (
+            build_j_t_soc_prompt_provider(
+                frame, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow
+            )
+            if rtg_mode == "j_t_soc"
+            else None
+        )
+        obs, _ = self.env.reset()
+        self.obs = obs
+        self.dt_states_buffer = [obs.copy()]
+        self.dt_actions_buffer = [np.zeros(model.act_dim)]
+        init_rtg = (
+            self.prompt_provider(float(self.env.battery_level), int(self.env.current_step))
+            if self.prompt_provider is not None
+            else rtg_value
+        )
+        self.dt_rtgs_buffer = [float(init_rtg)]
+        self.dt_timesteps_buffer = [self.env.current_step]
+        self.logs: list[dict[str, object]] = []
+
+
+def _run_batched_dt(
+    segments: list[pl.DataFrame],
+    model: DecisionTransformer,
+    window_batteries: list[dict[str, float]],
+    tariff: Tariff,
+    rtg_mode: str = "standard",
+    rtg_value: float = 0.0,
+    device: str = "cuda",
+) -> tuple[list[float], list[float]]:
+    model.eval()
+    dev = next(model.parameters()).device
+    active = [
+        _BatchedEnvState(
+            idx=i,
+            frame=segments[i],
+            capacity=window_batteries[i]["capacity_kwh"],
+            flow=window_batteries[i]["max_flow_kw"],
+            tariff=tariff,
+            model=model,
+            rtg_mode=rtg_mode,
+            rtg_value=rtg_value,
+        )
+        for i in range(len(segments))
+    ]
+    results: list[float] = [0.0] * len(segments)
+    degradation_costs: list[float] = [0.0] * len(segments)
+
+    step = 0
+    while active:
+        for item in active:
+            if item.prompt_provider is not None:
+                item.dt_rtgs_buffer[-1] = float(
+                    item.prompt_provider(float(item.env.battery_level), int(item.env.current_step))
+                )
+
+        s_list, a_list, r_list, t_list, m_list = [], [], [], [], []
+        for item in active:
+            s, a, r, t, m = _build_dt_inference_context(
+                model, item.dt_states_buffer, item.dt_actions_buffer,
+                item.dt_rtgs_buffer, item.dt_timesteps_buffer,
+            )
+            s_list.append(s)
+            a_list.append(a)
+            r_list.append(r)
+            t_list.append(t)
+            m_list.append(m)
+
+        b_s = torch.tensor(np.stack(s_list), dtype=torch.float32, device=dev)
+        b_a = torch.tensor(np.stack(a_list), dtype=torch.float32, device=dev)
+        b_r = torch.tensor(np.stack(r_list), dtype=torch.float32, device=dev).unsqueeze(-1)
+        b_t = torch.tensor(np.stack(t_list), dtype=torch.long, device=dev)
+        b_m = torch.tensor(np.stack(m_list), dtype=torch.bool, device=dev)
+
+        with torch.no_grad():
+            preds = model.get_action(b_s, b_a, b_r, b_t, attention_mask=b_m)
+        if preds.dim() == 1:
+            preds = preds.unsqueeze(0)
+        preds = torch.nan_to_num(preds, nan=0.0, posinf=0.0, neginf=0.0).detach().cpu().numpy()
+        preds = np.nan_to_num(preds, nan=0.0, posinf=0.0, neginf=0.0)
+        if preds.ndim == 1:
+            preds = preds.reshape(-1, model.act_dim)
+
+        still_active = []
+        for i, item in enumerate(active):
+            act = preds[i].tolist()
+            if not isinstance(act, list):
+                act = [act]
+            next_obs, reward, term, trunc, info = item.env.step(act)
+            item.logs.append({
+                "step": step,
+                "norm_observation": item.obs.tolist(),
+                "raw_observation": item.env.get_raw_obs().tolist(),
+                "action": act,
+                "reward": reward,
+                "info": info,
+            })
+
+            item.dt_actions_buffer[-1] = np.array(act, dtype=np.float32)
+            next_rtg = stable_rtg_update(item.dt_rtgs_buffer[-1], reward, dt_gamma=0.99, initial_rtg=rtg_value)
+            item.dt_states_buffer.append(next_obs.copy())
+            item.dt_actions_buffer.append(np.zeros(model.act_dim))
+            item.dt_rtgs_buffer.append(next_rtg)
+            item.dt_timesteps_buffer.append(item.env.current_step)
+            if len(item.dt_states_buffer) > model.context_len:
+                item.dt_states_buffer = item.dt_states_buffer[-model.context_len:]
+                item.dt_actions_buffer = item.dt_actions_buffer[-model.context_len:]
+                item.dt_rtgs_buffer = item.dt_rtgs_buffer[-model.context_len:]
+                item.dt_timesteps_buffer = item.dt_timesteps_buffer[-model.context_len:]
+            item.obs = next_obs
+
+            if term or trunc:
+                ep_df = pl.DataFrame(item.logs)
+                results[item.idx] = _bill_from_logs(item.frame, ep_df)
+                degradation_costs[item.idx] = _degradation_cost_from_logs(
+                    ep_df, item.env.battery_life_cost
+                )
+            else:
+                still_active.append(item)
+        active = still_active
+        step += 1
+
+    return results, degradation_costs
 
 
 def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tariff) -> float:
@@ -161,6 +333,16 @@ def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tari
                 max_flow_kw=flow, roundtrip_eff=1.0,
             ).bill_aud)
     return float(sum(costs))
+
+
+def _oracle_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> float:
+    frame, capacity, flow, tariff = args
+    return _oracle_bill(frame, capacity, flow, tariff)
+
+
+def _rule_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> tuple[float, float]:
+    frame, capacity, flow, tariff = args
+    return _run_agent(frame, "rule", None, capacity, flow, tariff)
 
 
 def _resolve_device(name: str) -> str:
@@ -377,32 +559,66 @@ def main() -> None:
         models[name] = (_load_dt(checkpoint, config, device), rtg_mode)
 
     bills: dict[str, list[float]] = {}
+    degradation_costs: dict[str, list[float]] = {}
     if not args.skip_reference_policies:
         bills.update({"rule": [], "oracle": []})
-    for name in models:
-        bills[name] = []
-    for segment_index, segment in enumerate(segments, start=1):
-        forecast_label = "sidecar" if args.forecast_sidecar is not None else args.forecast_mode
-        battery = window_batteries[segment_index - 1]
         print(
-            f"Evaluating window {segment_index}/{len(segments)} "
-            f"({_duration_days(segment):.0f} days, forecast={forecast_label}, "
-            f"capacity={battery['capacity_kwh']}kWh/{battery['max_flow_kw']}kW)",
+            f"Evaluating reference policies across {len(segments)} windows (workers={args.workers})...",
             flush=True,
         )
-        if not args.skip_reference_policies:
-            bills["rule"].append(_run_agent(
-                segment, "rule", None, battery["capacity_kwh"], battery["max_flow_kw"], tariff
-            ))
-            bills["oracle"].append(
-                _oracle_bill(segment, battery["capacity_kwh"], battery["max_flow_kw"], tariff)
+        if args.workers > 1 and len(segments) > 1:
+            ref_args = [
+                (segment, window_batteries[idx]["capacity_kwh"], window_batteries[idx]["max_flow_kw"], tariff)
+                for idx, segment in enumerate(segments)
+            ]
+            with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
+                bills["oracle"] = list(executor.map(_oracle_worker, ref_args))
+                rule_results = list(executor.map(_rule_worker, ref_args))
+                bills["rule"] = [result[0] for result in rule_results]
+                degradation_costs["rule"] = [result[1] for result in rule_results]
+        else:
+            for idx, segment in enumerate(segments):
+                battery = window_batteries[idx]
+                rule_bill, rule_deg_cost = _run_agent(
+                    segment, "rule", None, battery["capacity_kwh"], battery["max_flow_kw"], tariff
+                )
+                bills["rule"].append(rule_bill)
+                degradation_costs.setdefault("rule", []).append(rule_deg_cost)
+                bills["oracle"].append(
+                    _oracle_bill(segment, battery["capacity_kwh"], battery["max_flow_kw"], tariff)
+                )
+
+    for name, (model, rtg_mode) in models.items():
+        bills[name] = []
+        degradation_costs[name] = []
+        is_dt = isinstance(model, DecisionTransformer)
+        if is_dt and args.batch_eval and len(segments) > 1:
+            print(
+                f"Evaluating policy '{name}' across {len(segments)} windows with batched DT stepping...",
+                flush=True,
             )
-        for name, (model, rtg_mode) in models.items():
-            bills[name].append(_run_agent(
-                segment, "rl" if name == "ppo" else "dt", model,
-                battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
-                args.dt_rtg_value,
-            ))
+            bills[name], degradation_costs[name] = _run_batched_dt(
+                segments, model, window_batteries, tariff,
+                rtg_mode=rtg_mode, rtg_value=args.dt_rtg_value, device=device,
+            )
+        else:
+            print(f"Evaluating policy '{name}' across {len(segments)} windows...", flush=True)
+            for segment_index, segment in enumerate(segments, start=1):
+                forecast_label = "sidecar" if args.forecast_sidecar is not None else args.forecast_mode
+                battery = window_batteries[segment_index - 1]
+                print(
+                    f"  [{name}] Window {segment_index}/{len(segments)} "
+                    f"({_duration_days(segment):.0f} days, forecast={forecast_label}, "
+                    f"capacity={battery['capacity_kwh']}kWh/{battery['max_flow_kw']}kW)",
+                    flush=True,
+                )
+                bill, deg_cost = _run_agent(
+                    segment, "rl" if name == "ppo" else "dt", model,
+                    battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
+                    args.dt_rtg_value,
+                )
+                bills[name].append(bill)
+                degradation_costs[name].append(deg_cost)
 
     no_battery = []
     for segment in segments:
@@ -438,10 +654,31 @@ def main() -> None:
     }
     for name, values in {**bills, "no_battery": no_battery}.items():
         annualized = [bill / days * 365.0 for bill, days in zip(values, segment_days)]
-        output["results"][name] = {
+        result = {
             "bill_aud_per_year": bootstrap_mean_ci(annualized, n_bootstrap=args.bootstrap, seed=args.seed),
             "segment_bills_aud": values,
         }
+        if name in degradation_costs:
+            deg_values = degradation_costs[name]
+            net_bills = [bill + deg for bill, deg in zip(values, deg_values)]
+            net_annualized = [
+                net_bill / days * 365.0
+                for net_bill, days in zip(net_bills, segment_days)
+            ]
+            net_savings = [
+                (base_bill - net_bill) / days * 365.0
+                for base_bill, net_bill, days in zip(no_battery, net_bills, segment_days)
+            ]
+            result.update({
+                "segment_deg_cost_aud": deg_values,
+                "net_bill_aud": net_bills,
+                "net_bill_aud_per_year": bootstrap_mean_ci(
+                    net_annualized, n_bootstrap=args.bootstrap, seed=args.seed
+                ),
+                "net_savings_vs_no_battery_aud_per_year": float(np.mean(net_savings)),
+                "net_savings_segment_aud_per_year": net_savings,
+            })
+        output["results"][name] = result
     base = np.asarray(output["results"]["no_battery"]["bill_aud_per_year"]["mean"])
     for name in bills:
         output["results"][name]["savings_vs_no_battery_aud_per_year"] = float(

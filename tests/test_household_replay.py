@@ -62,3 +62,10 @@ def test_scaling_capacity_does_not_crash():
     r2 = replay(df, NOMINAL_CAP, NOMINAL_FLOW, tariff, 2.0, sign)
     assert r2["capacity_kwh"] == 14.0
     assert r2["bill_aud"] == r2["bill_aud"]
+
+
+def test_evaluate_household_tariffs_workers_flag(monkeypatch):
+    from scripts.evaluate_household_tariffs import parse_args
+    monkeypatch.setattr("sys.argv", ["evaluate_household_tariffs.py", "--workers", "8"])
+    args = parse_args()
+    assert args.workers == 8

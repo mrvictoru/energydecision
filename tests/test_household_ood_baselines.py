@@ -4,6 +4,7 @@ import polars as pl
 
 from scripts.evaluate_household_ood_baselines import (
     _bounded_windows,
+    _degradation_cost_from_logs,
     _duration_days,
     _subsample_windows,
     parse_args,
@@ -88,3 +89,28 @@ def test_synth_surface_flags_are_configurable(monkeypatch):
     assert str(args.synth_dir).endswith("synth_h4_1")
     assert args.synth_split == "test"
     assert args.limit_windows == 20
+
+
+def test_workers_and_batch_eval_flags_are_configurable(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "evaluate_household_ood_baselines.py",
+            "--workers", "6",
+            "--batch-eval",
+        ],
+    )
+    args = parse_args()
+    assert args.workers == 6
+    assert args.batch_eval is True
+
+
+def test_degradation_cost_uses_step_degradation_and_battery_cost():
+    logs = pl.DataFrame({
+        "info": [
+            {"step_degradation": 0.001},
+            {"step_degradation": 0.002},
+            {"step_degradation": 0.0},
+        ],
+    })
+    assert _degradation_cost_from_logs(logs, 5000.0) == 15.0
