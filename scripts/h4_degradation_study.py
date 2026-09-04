@@ -17,6 +17,7 @@ import argparse
 import itertools
 import json
 import os
+import shutil
 import sys
 import subprocess
 from dataclasses import dataclass, asdict
@@ -99,25 +100,25 @@ def generate_sdp_trajectories(config: dict, corpus_dir: Path, output_dir: Path) 
     train_out = output_dir / "sdp_teacher_train.parquet"
     val_out = output_dir / "sdp_teacher_val.parquet"
     
-    # Generate train split
-    subprocess.run([
+    if not train_out.exists():
+        subprocess.run([
         "python3", "scripts/generate_household_sdp_trajectories.py",
         "--synth-dir", str(corpus_dir),
         "--split", "train",
         "--out", str(train_out),
         "--degradation-mode", config["degradation_mode"],
         "--battery-life-cost", str(config["battery_life_cost"]),
-    ], check=True, cwd=ROOT)
+        ], check=True, cwd=ROOT)
     
-    # Generate val split
-    subprocess.run([
+    if not val_out.exists():
+        subprocess.run([
         "python3", "scripts/generate_household_sdp_trajectories.py",
         "--synth-dir", str(corpus_dir),
         "--split", "val",
         "--out", str(val_out),
         "--degradation-mode", config["degradation_mode"],
         "--battery-life-cost", str(config["battery_life_cost"]),
-    ], check=True, cwd=ROOT)
+        ], check=True, cwd=ROOT)
     
     return train_out, val_out
 
@@ -397,7 +398,18 @@ def main():
             seed_dir = sdp_output_dir / f"seed_{seed}"
             model_path = seed_dir / f"dt_{config['name']}_best.pt"
             if args.train:
-                model_path = train_dt_model(config, train_out, val_out, seed_dir, seed)
+                existing_seed42 = sdp_output_dir / f"dt_{config['name']}_best.pt"
+                existing_kwargs = sdp_output_dir / f"dt_{config['name']}_model_kwargs.json"
+                if seed == 42 and not model_path.exists() and existing_seed42.exists():
+                    seed_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(existing_seed42, model_path)
+                    if existing_kwargs.exists():
+                        shutil.copy2(
+                            existing_kwargs,
+                            seed_dir / f"dt_{config['name']}_model_kwargs.json",
+                        )
+                else:
+                    model_path = train_dt_model(config, train_out, val_out, seed_dir, seed)
             elif not model_path.exists() and seed == 42:
                 # Backward-compatible access to the original single-seed artifact.
                 model_path = sdp_output_dir / f"dt_{config['name']}_best.pt"
