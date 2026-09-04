@@ -24,26 +24,10 @@ from typing import Optional
 from datetime import datetime
 
 import numpy as np
-import polars as pl
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-
-from EnergySimEnv import SolarBatteryEnv
-from decision_transformer import DecisionTransformer
-from transformer_training import (
-    train_decision_transformer,
-    TrajectoryDataset,
-    merge_trajectory_datasets,
-    load_trajectory_datasets,
-)
-from generate_household_sdp_trajectories import main as generate_sdp_trajectories
-from generate_household_sdp_trajectories import parse_args as gen_parse_args
-from pretrain_decision_transformer import main as train_dt
-from pretrain_decision_transformer import parse_args as train_parse_args
-from evaluate_household_ood_baselines import main as evaluate_baselines
-from evaluate_household_ood_baselines import parse_args as eval_parse_args
 
 
 @dataclass
@@ -147,10 +131,10 @@ def train_dt_model(config: dict, train_path: Path, val_path: Path, output_dir: P
     cmd = [
         "python3", "scripts/pretrain_decision_transformer.py",
         "--surface-preset", "household_baseline",
-        "--data-dir", str(config["train_dir"]),
-        "--patterns", config["train_pattern"],
-        "--val-data-dir", str(config["val_dir"]),
-        "--val-patterns", config["val_pattern"],
+        "--data-dir", str(train_path.parent),
+        "--patterns", train_path.name,
+        "--val-data-dir", str(val_path.parent),
+        "--val-patterns", val_path.name,
         "--split-policy", "explicit_validation",
         "--context-length", "576",
         "--stride", "288",
@@ -177,23 +161,22 @@ def train_dt_model(config: dict, train_path: Path, val_path: Path, output_dir: P
     print(f"[H4.5] Training command: {' '.join(cmd)}")
     subprocess.run(cmd, check=True, cwd=ROOT)
     
-    return Path(config["save_path"])
+    return output_dir / f"dt_{config['name']}.pt"
 
 
 def evaluate_model(model_path: str, config: dict, corpus_dir: Path) -> dict:
     """Evaluate a trained model on the test split."""
     print(f"[H4.5] Evaluating model: {config['name']}")
     
-    # Run the household OOD evaluation
-    eval_output_dir = Path(f"eval_output/household/h4_5_degradation/{config['name']}")
+    eval_output_dir = Path("eval_output/household/h4_5_degradation") / config["name"]
     eval_output_dir.mkdir(parents=True, exist_ok=True)
     
     subprocess.run([
         "python3", "scripts/evaluate_household_ood_baselines.py",
         "--normalized-dir", "data/household/real/normalized",
         "--output-dir", str(eval_output_dir),
-        "--dt-path", config["model_path"],
-        "--dt-config", config["model_config_path"],
+        "--dt-path", str(model_path),
+        "--dt-config", str(model_path.with_name(model_path.stem + "_model_kwargs.json")),
         "--dt-rtg-mode", "standard",
         "--dt-rtg-value", "-2",
         "--forecast-mode", "persistence",
@@ -250,14 +233,16 @@ def main():
             print(f"Unknown config: {args.config}")
             return 1
     
+    if not args.train and not args.eval:
+        parser.error("at least one of --train or --eval is required")
+
     # Build corpus if needed
-    corpus_dir = Path("data/household/synth_h4_1")
-    if not (Path("data/household/synth_h4_1/manifest.json").exists()):
+    corpus_dir = args.corpus_dir
+    if not (corpus_dir / "manifest.json").exists():
         print("[H4.5] Building H4.1 corpus...")
-        import subprocess
         subprocess.run([
             "python3", "scripts/build_household_synth_corpus.py",
-            "--output-dir", "data/household/synth_h4_1",
+            "--output-dir", str(corpus_dir),
             "--episodes", "240",
             "--horizons", "1w", "2w", "6m", "2y",
             "--seed", "20260830"
@@ -266,7 +251,8 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    results = {}
+    summary_path = output_dir / "summary.json"
+    results = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     
     for config in configs:
         print(f"\n{'='*60}")
@@ -274,27 +260,26 @@ def main():
         print(f"{'='*60}")
         
         # Generate SDP trajectories
-        sdp_output_dir = Path(f"data/household/dt/h4_5_{config['name']}")
+        sdp_output_dir = output_dir / config["name"]
         train_out, val_out = generate_sdp_trajectories({
+            "name": config["name"],
             "degradation_mode": config["degradation_mode"],
             "battery_life_cost": config["battery_life_cost"],
-        }, Path("data/household/synth_h4_1"), Path(f"data/household/dt/h4_5_{config['name']}"))
+        }, corpus_dir, sdp_output_dir)
         
-        # Train DT model
-        model_path = train_dt_model(config, Path(config["train_dir"]), Path(config["val_dir"]), Path(config["model_dir"]))
-        
-        # Evaluate
-        eval_results = evaluate_model(model_path, config, Path("data/household/synth_h4_1"))
+        model_path = sdp_output_dir / f"dt_{config['name']}.pt"
+        if args.train:
+            model_path = train_dt_model(config, train_out, val_out, sdp_output_dir)
+
+        eval_results = evaluate_model(model_path, config, corpus_dir) if args.eval else {}
         
         results[config["name"]] = {
             "config": config,
-            "model_path": config["model_path"],
+            "model_path": str(model_path),
             "eval_results": eval_results
         }
     
     # Save summary
-    output_dir = Path("results/h4_5_degradation")
-    output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "summary.json", "w") as f:
         json.dump(results, f, indent=2)
     

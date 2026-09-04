@@ -549,6 +549,46 @@ demonstrated on the held-out **real** household (surface of record) but not
 yet on the broad synthetic multi-battery surface. The fresh full-corpus PPO
 (+$23.66/yr) again trails every DT, consistent with H4.3.
 
+**H4.5 degradation-aware policy study.** Five matched SDP-teacher/DT runs
+used the H4.1 horizon-diverse corpus while holding the DT architecture,
+optimizer, seed, and training schedule fixed. The teacher conditions were
+degradation disabled, cycle-only, full realistic degradation with a A$5,000
+battery-life cost, full degradation with A$10,000, and full degradation with
+A$1,000. Each resulting DT was evaluated on the same ten seven-day real-OOD
+windows under the realistic tariff.
+
+| Training condition | DT annualized bill | Savings vs no battery |
+|---|---:|---:|
+| Degradation disabled | A$714.63 | **A$395.33/yr** |
+| Cycle-only | A$789.00 | **A$320.96/yr** |
+| Full realistic (A$5,000) | A$780.90 | **A$329.06/yr** |
+| Full, high cost (A$10,000) | A$897.09 | **A$212.87/yr** |
+| Full, low cost (A$1,000) | A$910.54 | **A$199.43/yr** |
+
+> **Read these savings carefully.** The reported "savings vs no battery" is the
+> **grid-bill reduction only** — degradation wear is **excluded** from the
+> dollar figure. All five policies were evaluated under the *same* default
+> full/$5,000 environment, so the ranking answers "how a policy trained under
+> regime X performs in the real default world," not "how much each regime saves
+> net of its own wear." A disabled-trained policy cycles hardest and therefore
+> shows the largest grid-bill shift, but would incur large un-metered wear in
+> a full evaluation. Net-of-wear savings require logging per-cycle
+> equivalent-full-cycle counts, which this evaluator does not yet record.
+
+The disabled control obtains the greatest short-window savings, while all
+degradation-aware conditions trade away some immediate tariff value,
+consistent with an economically more conservative objective. Full versus
+cycle-only differs by only A$8.10/year, indicating that calendar aging is
+secondary on these seven-day windows. The A$1,000 and A$10,000 conditions are
+not ordered monotonically, so this study does not establish a dose-response
+curve; additional seeds and longer evaluation horizons are required.
+Moreover, the current H4.5 evaluator reports bills and bootstrap intervals
+but does not record equivalent-full-cycles, throughput, or capacity fade.
+Consequently, it demonstrates degradation-sensitive policy outcomes, not yet
+a direct causal measurement of “economically meaningful cycling restraint.”
+The full artifacts are in `results/h4_5_degradation/` and
+`eval_output/household/h4_5_degradation/`.
+
 ### 8.2 Utility-Scale AEMO Battery Trading (Primary Focus)
 
 The AEMO environment evaluates grid-scale battery trading in Australia's National Electricity Market (NEM), with energy spot pricing and optional Frequency Control Ancillary Services (FCAS). The action space is 3D (`multi_market`, legacy) or 9D (`full_fcas`, recommended): energy dispatch plus per-service FCAS bids for all 8 services. Two evaluation surfaces are reported below. The headline evidence comes from the **dispatch-matched same-asset benchmark**, where all policies run on the identical battery (Dalrymple North 8 MWh / 30 MW, 3.75 C) with RTG calibration — this is the fairest comparison available.

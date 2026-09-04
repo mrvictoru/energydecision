@@ -195,6 +195,10 @@ system_logs/
 # eval_output/final/ if they need to be tracked in git.
 /eval_output/
 
+# study/results outputs (large parquet/pt/json) — ignored by default.
+/results/
+**/results/
+
 # experiment-tracking log (un-tracked; see AGENTS.md)
 /results.tsv
 

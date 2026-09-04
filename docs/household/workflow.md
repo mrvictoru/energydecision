@@ -480,6 +480,38 @@ Common household artifact locations:
 - `scripts/dump_household_behavior.py`: per-step rollouts (solar/load/price/power/SOC) of the matched H4.4 arms on one real-OOD window, feeding the website household behaviour charts
 - `scripts/h4_degradation_study.py`: degradation-aware policy study (H4.5) — trains and evaluates DTs across multiple degradation modes (disabled, cycle-only, full, high/low battery-life-cost)
 
+### 6d. H4.5 degradation-aware policy study
+
+Run the five matched teacher/DT conditions from the repository root in the GPU
+Distrobox:
+
+```bash
+python3 scripts/h4_degradation_study.py \
+  --config all --train --eval \
+  --output-dir results/h4_5_degradation
+```
+
+The study uses the H4.1 horizon-diverse corpus and holds the DT architecture,
+optimizer, seed, and training schedule fixed while changing the teacher's
+degradation mode and battery-life cost. Per-configuration models and
+trajectories are written under `results/h4_5_degradation/`; real-OOD
+evaluation summaries are written under
+`eval_output/household/h4_5_degradation/`.
+
+**H4.5 outcome (2026-09-04).** Annualized savings versus no battery on the
+fixed ten-window real-OOD surface were A$395.33 (disabled), A$320.96
+(cycle-only), A$329.06 (full realistic, A$5,000), A$212.87 (high cost,
+A$10,000), and A$199.43 (low cost, A$1,000). Degradation-aware policies
+therefore changed the outcome relative to the disabled control, but the
+cost sweep was not monotonic. Full versus cycle-only differed by only A$8.10
+per year. Read the dollar figures as **grid-bill reduction only** (wear cost
+excluded); all five policies were scored under the same default full/$5,000
+environment, so the ranking reflects cross-regime policy behaviour in the
+real world, not net-of-wear economics. These results are short-window
+economic evidence, not a direct measurement of cycling restraint: the current
+evaluator does not record throughput/capacity-fade metrics or the
+TTM/no-forecast forecast controls.
+
 ## Validation And Iteration
 
 For code changes that affect the household track, use pytest as the main validation path:
