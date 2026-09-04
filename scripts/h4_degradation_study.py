@@ -408,10 +408,10 @@ def main():
                 if (
                     seed == 42
                     and existing_seed42.exists()
-                    and (not model_path.exists() or not seed_kwargs.exists())
                 ):
                     seed_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(existing_seed42, model_path)
+                    if not model_path.exists():
+                        shutil.copy2(existing_seed42, model_path)
                     if existing_kwargs.exists():
                         shutil.copy2(existing_kwargs, seed_kwargs)
                 else:
