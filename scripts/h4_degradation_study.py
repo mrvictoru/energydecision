@@ -192,7 +192,11 @@ def evaluate_model(
         "--normalized-dir", "data/household/real/normalized",
         "--output-dir", str(eval_output_dir),
         "--dt-path", str(model_path),
-        "--dt-config", str(model_path.with_name(model_path.stem + "_model_kwargs.json")),
+        "--dt-config", str(
+            model_path.with_name(
+                model_path.stem.removesuffix("_best") + "_model_kwargs.json"
+            )
+        ),
         "--dt-rtg-mode", "standard",
         "--dt-rtg-value", "-2",
         "--forecast-mode", "persistence",
@@ -400,14 +404,16 @@ def main():
             if args.train:
                 existing_seed42 = sdp_output_dir / f"dt_{config['name']}_best.pt"
                 existing_kwargs = sdp_output_dir / f"dt_{config['name']}_model_kwargs.json"
-                if seed == 42 and not model_path.exists() and existing_seed42.exists():
+                seed_kwargs = seed_dir / f"dt_{config['name']}_model_kwargs.json"
+                if (
+                    seed == 42
+                    and existing_seed42.exists()
+                    and (not model_path.exists() or not seed_kwargs.exists())
+                ):
                     seed_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(existing_seed42, model_path)
                     if existing_kwargs.exists():
-                        shutil.copy2(
-                            existing_kwargs,
-                            seed_dir / f"dt_{config['name']}_model_kwargs.json",
-                        )
+                        shutil.copy2(existing_kwargs, seed_kwargs)
                 else:
                     model_path = train_dt_model(config, train_out, val_out, seed_dir, seed)
             elif not model_path.exists() and seed == 42:
