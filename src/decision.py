@@ -1,11 +1,10 @@
-import logging
 import inspect
 import numpy as np
 import torch
 import polars as pl
 import warnings
 from pathlib import Path
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Callable, Dict, List, Tuple
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
 from batterydeg import DegradationModel, RainflowCounter
@@ -19,7 +18,6 @@ from oracle_algorithm import OracleSolver
 from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES
 
 import concurrent.futures
-from tqdm.notebook import tqdm
 
 DEG_INCIDENT_FIELDS = [
     "episode_id",
@@ -136,7 +134,8 @@ class Agent:
                  horizon=72, soc_resolution=20, action_resolution=41,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99,
-                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None):
+                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None,
+                 rtg_prompt_provider: Optional[Callable[[float, int], float]] = None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp', 'sdp', or 'oracle'.
@@ -152,6 +151,7 @@ class Agent:
         self.rule_presistence = False  # Preset for rule-based action persistence
         self.reset_seed = reset_seed
         self.reset_options = reset_options
+        self.rtg_prompt_provider = rtg_prompt_provider
 
         if self.algorithm in ('sdp', 'mrdp', 'oracle'):
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
@@ -264,6 +264,13 @@ class Agent:
                 raise ValueError("Decision Transformer selected but no model provided.")
             self.model.eval()
             device = next(self.model.parameters()).device
+            if self.rtg_prompt_provider is not None:
+                prompt = self.rtg_prompt_provider(
+                    float(self.env.battery_level), int(self.env.current_step)
+                )
+                if not np.isfinite(prompt):
+                    raise ValueError("rtg_prompt_provider returned a non-finite value")
+                self.dt_rtgs_buffer[-1] = float(prompt)
             
             states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
                 self.model, self.dt_states_buffer, self.dt_actions_buffer,
@@ -384,10 +391,6 @@ class Agent:
         forecast_list = forecast_df.to_dicts()
         return forecast_list
 
-    def _soc_to_idx(self, soc_kwh):
-        """Maps a continuous SoC value to the index of the nearest discrete level."""
-        return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
-
     # --- Oracle Helper Methods ---
 
 
@@ -458,7 +461,13 @@ class Agent:
         if self.algorithm == 'dt':
             self.dt_states_buffer = [obs.copy()]
             self.dt_actions_buffer = [np.zeros(self.model.act_dim)]  # Placeholder action for first step
-            self.dt_rtgs_buffer = [self.rtg_value]
+            initial_rtg = (
+                self.rtg_prompt_provider(float(self.env.battery_level), int(self.env.current_step))
+                if self.rtg_prompt_provider is not None else self.rtg_value
+            )
+            if not np.isfinite(initial_rtg):
+                raise ValueError("rtg_prompt_provider returned a non-finite value")
+            self.dt_rtgs_buffer = [float(initial_rtg)]
             self.dt_timesteps_buffer = [self.env.current_step]
 
         logs = []
@@ -472,17 +481,8 @@ class Agent:
             # Use norm_obs if available, else fallback to obs
             current_obs = obs
 
-        #pbar = None
         if display_progress:
             print("Starting Simulation...")
-            """
-            try:
-                from tqdm.notebook import tqdm as tqdm_bar
-            except Exception:
-                from tqdm import tqdm as tqdm_bar
-            # Use DataFrame length as an upper bound for progress
-            pbar = tqdm_bar(total=max_possible_steps, desc="Episode", leave=False)
-            """
         try:
             while not (terminated or truncated):
                 action = self.choose_action(current_obs)
@@ -538,12 +538,9 @@ class Agent:
                     self.env.render()
                 step += 1  # Increment step counter
                 if display_progress is not False:
-                    #pbar.update(1)
                     print(f"Step {step}/{max_possible_steps}", end='\r')
 
         finally:
-            #if pbar is not None:
-                #pbar.close()
             print("Sim Complete")
 
         episode_df = pl.DataFrame(logs)
@@ -585,7 +582,6 @@ class AEMOAgent:
                  fcas_raise_threshold: float | None = None,
                  fcas_lower_threshold: float | None = None,
                  fcas_pctile: float = 0.80,
-                 forecast_npz_path: str | None = None,
                  deg_cost_per_mwh: float = 50.0,
                  executor: str = "lp"):
         self.env = env
@@ -665,10 +661,6 @@ class AEMOAgent:
         self.fcas_pctile = float(fcas_pctile)
         self._fcas_norm_max = self._compute_fcas_norm_max()
         self._init_fcas_thresholds()
-
-        # Forecast DT config
-        self.forecast_npz_path = forecast_npz_path
-        self._forecast_map: np.ndarray | None = None
 
     def _env_has_non_identity_impact(self) -> bool:
         impact = getattr(self.env, "_impact", None)
@@ -885,61 +877,6 @@ class AEMOAgent:
         if idx < 0 or idx >= len(self.dispatch_actions):
             return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(self.env.action_space.shape[0], dtype=np.float32)
         return self.dispatch_actions[idx]
-
-    # ── Forecast DT helpers ─────────────────────────────────────────────
-
-    def _ensure_forecast_map(self) -> None:
-        if self._forecast_map is not None:
-            return
-        if self.forecast_npz_path:
-            try:
-                fc = np.load(str(self.forecast_npz_path))
-                self._forecast_map = fc["forecast_map"]
-                self._forecast_timestamps = fc["timestamps"]
-            except Exception:
-                self._forecast_map = np.array([], dtype=np.float32)
-                self._forecast_timestamps = np.array([], dtype=np.float32)
-        else:
-            self._forecast_map = np.array([], dtype=np.float32)
-            self._forecast_timestamps = np.array([], dtype=np.float32)
-
-    def _forecast_npz_offset(self) -> int:
-        fts = getattr(self, '_forecast_timestamps', np.array([], dtype=np.float32))
-        if len(fts) == 0:
-            return 0
-        df = getattr(self.env, 'aemo_data', None)
-        if df is None or 'SETTLEMENTDATE' not in df.columns:
-            return 0
-        first_row = df.row(0)
-        col_idx = df.columns.index('SETTLEMENTDATE')
-        raw_ts = first_row[col_idx]
-        if hasattr(raw_ts, 'timestamp'):
-            target = int(raw_ts.timestamp())
-        elif isinstance(raw_ts, (int, float)):
-            target = int(raw_ts)
-        else:
-            try:
-                target = int(raw_ts)
-            except (ValueError, TypeError):
-                return 0
-        idx = int(np.searchsorted(fts, target))
-        if idx >= len(fts):
-            return 0
-        return idx
-
-    def _build_forecast_window(self, episode_step: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        F = int(self.model.forecast_len)
-        f_states = np.zeros((F, self.model.state_dim), dtype=np.float32)
-        if self._forecast_map is not None and len(self._forecast_map) > 0:
-            offset = self._forecast_npz_offset()
-            fmap = self._forecast_map
-            for fi in range(F):
-                g_idx = offset + episode_step + fi
-                if 0 <= g_idx < len(fmap):
-                    f_states[fi, 5:11] = fmap[g_idx, 0, :6]
-        f_rtgs = np.zeros((F, 1), dtype=np.float32)
-        f_timesteps = np.zeros(F, dtype=np.int64)
-        return f_states, f_rtgs, f_timesteps
 
     def _compute_fcas_norm_max(self) -> float:
         if not hasattr(self.env, 'aemo_data') or self.env.aemo_data is None:
@@ -1487,34 +1424,10 @@ class AEMOAgent:
             timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
             attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
 
-            is_forecast = hasattr(self.model, 'forecast_len') and self.model.forecast_len > 0
-            if is_forecast:
-                self._ensure_forecast_map()
-                # Training sliding window: history at start_idx..start_idx+T-1,
-                # forecast at start_idx+T..start_idx+T+F-1. At inference the
-                # right-aligned buffer means start_idx = max(0, buffer_len-T),
-                # so the forecast must be at max(T, buffer_len), not pinned
-                # at context_len (which leaves a stale forecast for 88% of
-                # a 1728-step episode).
-                context_len = self.model.context_len
-                buffer_len = len(self.dt_states_buffer)
-                episode_start = int(getattr(self.env, 'episode_start_idx', 0))
-                forecast_ep_step = episode_start + max(context_len, buffer_len)
-                f_states, f_rtgs, f_timesteps = self._build_forecast_window(forecast_ep_step)
-                f_states = torch.tensor(f_states, dtype=torch.float32, device=device).unsqueeze(0)
-                f_rtgs = torch.tensor(f_rtgs, dtype=torch.float32, device=device).unsqueeze(0)
-                f_timesteps = torch.tensor(f_timesteps, dtype=torch.long, device=device).unsqueeze(0)
-                with torch.no_grad():
-                    action = self.model.get_action(
-                        states, actions, rtgs, timesteps, attention_mask=attention_mask,
-                        forecast_states=f_states, forecast_rtgs=f_rtgs,
-                        forecast_timesteps=f_timesteps,
-                    )
-            else:
-                with torch.no_grad():
-                    action = self.model.get_action(
-                        states, actions, rtgs, timesteps, attention_mask=attention_mask,
-                    )
+            with torch.no_grad():
+                action = self.model.get_action(
+                    states, actions, rtgs, timesteps, attention_mask=attention_mask,
+                )
             action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
             action = action.detach().cpu().numpy()
             action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)

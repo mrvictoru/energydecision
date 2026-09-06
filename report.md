@@ -461,6 +461,134 @@ The household environment (1D action, Ausgrid Solar Home data) was the original 
 
 > **NOTE:** These household results establish the DT's effectiveness on a simpler 1D-action problem. The repository's primary contribution is the more challenging AEMO utility-scale environment (Section 8.2), where the action space is 9D (energy + FCAS bidding) and market dynamics are significantly more complex.
 
+### 8.1.1 Modern-Data Household Track: Offline Causal Forecasts Help (H0–H4)
+
+The household track was rebuilt on modern telemetry (a real solar+battery
+household, 5-min resolution, 2023–2026, under a realistic ToU tariff with a
+free 11:00–14:00 window) plus a statistically-recomposed synthetic corpus of
+1,200 seven-day episodes and — for the H4.4 generalization study — a
+horizon-diverse corpus of 240 episodes spanning 1 week to 2 years across
+five archetypes, four seasons, and three battery capacities. Full protocol:
+`docs/household/workflow.md`; ledger: `results.tsv`.
+
+**Forecast sidecar architecture.** `Granite-TTM-R3`
+(`512-48-dec-512-r3`) emits **48 future values** per channel, but the
+household environment exposes only two scalar forecast fields —
+`FutureSolar` and `FutureLoad`. The pipeline therefore takes **prediction
+12 (one hour ahead at the 5-minute cadence)** and stores it in a
+timestamp-keyed parquet **sidecar**; `src/household_forecast.py` guarantees
+the causal contract "the forecast on row *t* is issued using observations
+through row *t* only and targets row *t+12*." TTM runs offline in an
+isolated CUDA Distrobox (`Containerfile.ttm`) and is never a dependency of
+the simulator or the training container; warm-up rows without full context
+are marked invalid. On held-out real telemetry the one-hour-ahead sidecar
+improves solar/load MAE by **39.2%/17.5%** over current-value persistence;
+on the synthetic corpus, by **34.7%/12.9%**.
+
+**H4.2 matched three-way comparison (standard RTG, 10 fixed 7-day real-OOD
+windows, 5 kWh/3.3 kW, shared prompt RTG = −2 justified from the training
+RTG median, never from OOD rankings):**
+
+| Forecast input | Savings vs no battery | TTM vs | Paired bootstrap 95% CI | Wins | Wilcoxon p |
+|---|---:|---|---|---:|---|
+| TTM-R3 | **+$258.50/yr** | persistence: +$41.75/yr | +$16.56–$69.43 | 9/10 | 0.0068 |
+| 24-h persistence | +$216.74/yr | no forecast: +$61.62/yr | +$33.96–$90.77 | 8/10 | 0.0049 |
+| No forecast | +$155.12/yr | TTM vs no forecast: +$103.37/yr | +$78.23–$127.67 | 10/10 | 0.0010 |
+
+All three policies share the identical SDP-teacher action labels,
+architecture (8×512, ctx 576), optimizer, seed, and stride — only the
+observation forecast channels differ. This is a **positive forecast-result
+at household scale**, and it stands in deliberate contrast to the AEMO
+explicit-forecast-token negative result (§8.2.8): in the NEM, 48-step TTM
+price tokens added nothing over the DT's implicit context because FCAS
+prices are nearly unpredictable from history (corr ≈ 0.01–0.07); at
+household scale, one-hour-ahead **solar/load** point forecasts — the
+physically predictable quantities under a deterministic tariff — do carry
+actionable signal. The two results are not in conflict; they identify
+*which* forecast channels are learnable in *which* market.
+
+**H4.4 full-corpus generalization.** The three-way comparison was repeated on
+the full horizon-diverse H4.1 corpus (240 episodes, 55,860 episode-days across
+`1w`/`2w`/`6m`/`2y` horizons, 5 archetypes × 4 seasons × 3 battery capacities;
+165/35/40 train/val/test split, same 158-date real OOD holdout). Matched
+SDP-teacher corpora were verified to share identical action/reward/RTG labels
+and observation layout — only the two forecast channels differ (`dims 6–7`).
+The three standard-RTG DTs (8×512, ctx 576, `--stride 288`, shared prompt
+RTG = −2 from the full-corpus training RTG median of −1.78) and a fresh
+500k-step full-corpus PPO were then evaluated on the same fixed 10-window
+real-OOD surface plus a 20-window synthetic-test surface with per-episode
+battery configurations:
+
+| Forecast input | Real-OOD savings (full corpus) | H4.2 (7-day corpus) |
+|---|---:|---:|
+| TTM-R3 | **+$357.29/yr** | +$258.50/yr |
+| 24-h persistence | +$309.35/yr | +$216.74/yr |
+| No forecast | +$310.90/yr | +$155.12/yr |
+| Rule | +$58.03/yr | — |
+| Fresh full-corpus PPO | +$23.66/yr | — |
+| Oracle (reference) | +$738.96/yr | — |
+
+Paired window-level statistics on real OOD: TTM beats persistence by
+**+$47.94/yr** (95% CI +$27.99–$67.59, 9/10 windows, Wilcoxon p=0.0020) and
+no-forecast by **+$46.39/yr** (95% CI +$23.78–$68.91, 9/10, p=0.0020). Both
+the TTM and the no-forecast savings grow on the broader corpus (TTM +$98.79
+over H4.2), confirming the offline-forecast benefit generalizes beyond the
+controlled 7-day training set. Notably, the **persistence ≈ no-forecast** gap
+collapses (−$1.55/yr, CI −$22.4–$14.8, p=0.46): with diverse training data the
+policy stops exploiting the weak 24-hour persistence channel, so only the
+*genuinely better* TTM forecast adds value — a cleaner causal read than H4.2.
+
+On the synthetic test surface (mixed 5/10/20 kWh, per-episode battery), the
+three DT variants are **statistically indistinguishable** in aggregate (TTM
++$1,049.62 vs no-forecast +$1,065.11; TTM−no_forecast −$15.49/yr, CI
+−$133.5–$127.6, p=0.86) — the forecast advantage does not survive the added
+battery-capacity and horizon heterogeneity at this window count, and the
+per-horizon breakdown is mixed (TTM favors `1w`/`6m`, disfavors `2w`/`2y`).
+This is reported as an explicit limitation: the household forecast benefit is
+demonstrated on the held-out **real** household (surface of record) but not
+yet on the broad synthetic multi-battery surface. The fresh full-corpus PPO
+(+$23.66/yr) again trails every DT, consistent with H4.3.
+
+**H4.5 degradation-aware policy study.** Five matched SDP-teacher/DT runs
+used the H4.1 horizon-diverse corpus while holding the DT architecture,
+optimizer, seed, and training schedule fixed. The teacher conditions were
+degradation disabled, cycle-only, full realistic degradation with a A$5,000
+battery-life cost, full degradation with A$10,000, and full degradation with
+A$1,000. Each resulting DT was evaluated on the same ten seven-day real-OOD
+windows under the realistic tariff.
+
+| Training condition | DT annualized bill | Savings vs no battery |
+|---|---:|---:|
+| Degradation disabled | A$714.63 | **A$395.33/yr** |
+| Cycle-only | A$789.00 | **A$320.96/yr** |
+| Full realistic (A$5,000) | A$780.90 | **A$329.06/yr** |
+| Full, high cost (A$10,000) | A$897.09 | **A$212.87/yr** |
+| Full, low cost (A$1,000) | A$910.54 | **A$199.43/yr** |
+
+> **Read these savings carefully.** The reported "savings vs no battery" is the
+> **grid-bill reduction only** — degradation wear is **excluded** from the
+> dollar figure. All five policies were evaluated under the *same* default
+> full/$5,000 environment, so the ranking answers "how a policy trained under
+> regime X performs in the real default world," not "how much each regime saves
+> net of its own wear." A disabled-trained policy cycles hardest and therefore
+> shows the largest grid-bill shift, but would incur large un-metered wear in
+> a full evaluation. Net-of-wear savings require logging per-cycle
+> equivalent-full-cycle counts, which this evaluator does not yet record.
+
+The disabled control obtains the greatest short-window savings, while all
+degradation-aware conditions trade away some immediate tariff value,
+consistent with an economically more conservative objective. Full versus
+cycle-only differs by only A$8.10/year, indicating that calendar aging is
+secondary on these seven-day windows. The A$1,000 and A$10,000 conditions are
+not ordered monotonically, so this study does not establish a dose-response
+curve; additional seeds and longer evaluation horizons are required.
+Moreover, the current H4.5 evaluator reports bills and bootstrap intervals
+but does not record equivalent-full-cycles, throughput, or capacity fade.
+Consequently, it demonstrates degradation-sensitive policy outcomes, not yet
+a direct causal measurement of “economically meaningful cycling restraint.”
+The full artifacts are in `results/h4_5_degradation/` and
+`eval_output/household/h4_5_degradation/`.
+
 ### 8.2 Utility-Scale AEMO Battery Trading (Primary Focus)
 
 The AEMO environment evaluates grid-scale battery trading in Australia's National Electricity Market (NEM), with energy spot pricing and optional Frequency Control Ancillary Services (FCAS). The action space is 3D (`multi_market`, legacy) or 9D (`full_fcas`, recommended): energy dispatch plus per-service FCAS bids for all 8 services. Two evaluation surfaces are reported below. The headline evidence comes from the **dispatch-matched same-asset benchmark**, where all policies run on the identical battery (Dalrymple North 8 MWh / 30 MW, 3.75 C) with RTG calibration — this is the fairest comparison available.
@@ -752,7 +880,7 @@ The TTM predicts demand well (0.85 correlation) but FCAS prices are essentially 
 
 **Implementation quality**: The integration was thoroughly validated (18 tests pass), the forecast position correctly slides with `max(T, buffer_len)`, the npz alignment uses timestamp-based indexing, and the normalization matches the environment exactly. There is no implementation bug — the architecture itself does not improve over the implicit-context baseline on this task.
 
-**Conclusion**: This is a well-implemented negative result. The forecast token architecture, while theoretically motivated and correctly built, does not outperform the modern v2 Decision Transformer on the standard tier. The findings are preserved as a reference: (1) always normalize forecast data to the observation space, (2) calibrate RTG broadly (0–100), (3) explicit price forecasts may not add value when the base context window is already informative. The forecast DT code, evaluator integration, and measurement tools remain in the repository as infrastructure for future forecast-conditioned approaches.
+**Conclusion**: This is a well-implemented negative result. The forecast token architecture, while theoretically motivated and correctly built, does not outperform the modern v2 Decision Transformer on the standard tier. The findings are preserved as a reference: (1) always normalize forecast data to the observation space, (2) calibrate RTG broadly (0–100), (3) explicit price forecasts may not add value when the base context window is already informative. The forecast DT module and its evaluator wiring were removed in the September 2026 repository cleanup (the negative result and its leaderboard figures remain in this section); the household-scale forecast result in §8.1.1 shows where causal offline forecasts *do* add signal — on physically-predictable solar/load channels, not on FCAS prices.
 
 **Standard tier leaderboard (Oct 2024, 5 regions × 144h, medium_1c, full_fcas)**:
 

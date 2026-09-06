@@ -126,17 +126,135 @@
 
 | Phase | Task | Notes |
 |---|---|---|
-| **H0** | **Data pipeline**: ingestion script normalizing portal CSVs → `transform_polars_df` schema (`Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, Time`); validate gaps / DST transitions / meter resets / resolution changes; merge script + manifest for ~52 files/year | Unglamorous, critical first step |
-| **H0** | **Privacy guardrails**: anonymize identifiers; raw data stays local-only (`.gitignore`); consent documented; only derived stats or one synthetic household published | Non-negotiable before any commit of data |
-| **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on modern data; define surfaces — train 2019–2022, OOD 2023–2025; seasonal splits; tariff-regime splits (e.g., if plan changed over time) | Establishes whether old results hold |
-| **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → smoke/standard/comprehensive eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
-| **H3** | **Replay-gap analysis**: quantify actual vs optimal operation per year; decompose into timing errors vs capacity misallocation | The headline result unique to this track |
-| **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through (e.g. Amber-style plans) — same hardware, different tariffs → policy-relevant economics | Reuses everything built in H1–H2 |
+| ✅ **H0** | **Data pipeline**: SMA 'Energy balance - Day' parser (`src/household_ingest.py`) — 12-h dotted clock, [W]/[kW] variants auto-scaled, battery SOC/power channels preserved; year dataset builder (`build_year_dataset`): merge/dedupe/convert kW→kWh + day-ahead persistence `FutureSolar`/`FutureLoad`; privacy-anonymized manifest. **First real year ingested: 365/365 days, 105,108 rows, zero gaps** (2025-08-25 → 2026-08-24, VPP household). Env smoke-tested end-to-end on the full year (12-D obs, 5-min steps inferred correctly). | Done |
+| ✅ **H0** | **Privacy guardrails**: raw + normalized telemetry gitignored under `data/household/real/`; only the anonymized manifest (`sma_<date>` identities, sha256 checksums) is committed; privacy leak test enforced. Protocol: `docs/household/real_data_protocol.md`. Data source is a **VPP-coordinated** battery (grid-charging schedule) — noted for H3 interpretation. | Done |
+| ✅ **H0** | **Gap & disconnection guards**: raw exports contain month-scale holes (renovation disconnection) and offline periods log as hard zeros, not NaN. Defenses: `find_gap_boundaries`/`split_segments` (>90-min timestamp jumps → contiguous episodes with `SegmentID`, DST-passing threshold); seam-row kW→kWh conversion capped at nominal step; `drop_dead_runs` removes sustained all-zero stretches (HouseLoad AND SolarGen == 0 for ≥2h); per-file `exact_zero_rows` (sustained) and `suspect_zero_rows` (isolated ≤10-min all-zero runs flanked by normal data, interpolated as dropped samples) manifest stats. Ingest CLI supports `--start-date`/`--end-date` range filtering. Env must always run per-segment. Corpus: 1,153 days (2023-02-24 → 2026-08-24), 319,170 rows, 5 segments; 105 isolated zero-rows across 101 files interpolated. | Done |
+| ✅ **H1** | **Re-established legacy benchmark**: existing rule, perfect-foresight oracle, SB3 PPO, and cloning-era DT evaluated on five gap-separated real OOD segments at 5 kWh / 3.3 kW under the legacy flat 30c/5c tariff. Annualized bootstrap results: no battery $1,254 (95% CI $700–$1,894), rule $1,185 (saves $70), PPO $1,252 (saves $2), DT $1,260 (loses $6), oracle $525 (saves $729). | Confirms the Ausgrid-era PPO/DT policies do not generalize to modern telemetry; H2 retraining is required |
+| ✅ **H1.5** | **Synthetic diverse-household generator** — see detailed plan below | Core generator, G1–G6 gates, env-view export, OOD holdout, and reproducible corpus CLI implemented; optional Granite TTM adapter remains separately provisioned |
+| ✅ **H2** | **SDP-teacher distillation transfer test completed — POSITIVE TRANSFER**: checkpoint-specific configs now persist alongside weights (`h2_*_model_kwargs.json`); 840/180 synthetic teacher episodes regenerated under realistic tariff (31.042c import, free 11:00–14:00, 1c FiT) with correct RTE=0.80; inference precomputes exact segment-local `-J_t(soc)` prompt per calendar day. **Standard-RTG baseline on 2×128 ctx60 achieves +$254/yr** (beats rule +$82, 28% of oracle gap). **J_t(soc) on 8×512 ctx576 with corrected RTE=0.80 achieves +$300/yr** (3.6× rule, 24% of oracle gap). Both models beat rule and demonstrate successful planner-distillation transfer at household scale. | Distillation transfers across scales when: (1) config persists correctly, (2) RTE matches env (0.80), (3) model capacity ≥ AEMO-scale (8×512/ctx576), (4) teacher data uses realistic tariff. J_t(soc) inference works but requires sufficient model capacity; standard-RTG remains a strong baseline.
+| ✅ **H3** | **Replay-gap analysis completed**: deterministic 5-minute optimizer compares recorded VPP actions with re-optimized dispatch per contiguous real day. At 5 kWh / 3.3 kW / 0.80 RTE: observed-to-optimal gap is **$355/yr** with free 11:00–14:00 pricing (95% bootstrap CI $342–$368 over 1,084 complete days); **$214/yr** under flat pricing. Spot pass-through remains pending a time-aligned retail spot-price series. |
+| ✅ **H3** | **Tariff-policy experiments**: flat and realistic free-window ToU sweep implemented in `scripts/evaluate_household_tariffs.py`; prices are re-derived rather than using stored 0.30/0.05 defaults. | Spot pass-through remains pending a time-aligned retail spot-price series. |
+
+### Household follow-on work (H4 — bring household evidence to AEMO standard)
+
+H0–H3 establish a working household pipeline and a positive distillation
+signal, but the evidence is not yet comparable to the AEMO track's
+multi-surface result. The current synthetic corpus is fixed at seven-day
+episodes, the forecast channels use a simple persistence baseline, and the
+PPO comparison is the legacy checkpoint rather than a policy freshly trained
+on the modern synthetic corpus. These are research gaps, not implementation
+failures.
+
+| ID | Next experiment | Acceptance criteria |
+|---|---|---|
+| ✅ H4.1 | **Horizon- and scenario-diverse synthetic corpus** — generate episodes spanning one week, several weeks, roughly six months, and multi-year horizons across the existing five archetypes, seasons/day-types, appliance recipes, solar sizing/orientation, and battery configurations. Preserve contiguous calendar order within each episode and record horizon, source dates, tariff, battery size, degradation model, and seed in the manifest. The first H4.1 build also supplies the held-out synthetic surfaces for H4.4 evaluation. | Degradation and calendar aging affect the objective and learned policy; no horizon/scenario leakage across train/validation/test; short- and long-horizon results reported separately. **Done (2026-09-01):** full build at `data/household/synth_h4_1` — 240 episodes (5 archetypes × 4 seasons × 3 capacities × horizons 1w/2w/6m/2y; 55,860 episode-days), schema-v2 manifest with per-episode horizon, degradation (`calendar_cycle_rainflow`, life cost $5,000), solar, appliance and provenance params; splits 165/35/40 with the same 158 real source dates held out for OOD. Note: 23/40 train 2y episodes terminate early (`total_degradation >= 1.0`) — degradation exhaustion is a genuine long-horizon signal, identically present in all forecast variants. |
+| ✅ **H4.2** | **Forecast ablation and improved forecast generation** — inference-only substitution showed no value from the old forecast fields, so three matched 8×512/context-576 policies were retrained. Granite TTM-R3 runs offline in an isolated CUDA Distrobox and improved real-OOD solar/load MAE by **39.2%/17.5%** over current-value persistence. Under causal standard RTG at the shared training-median prompt (RTG=−2), annualized savings were **TTM +$258.50**, **24-hour persistence +$216.74**, and **no forecast +$155.12**. TTM beat persistence by **+$41.75/yr** (95% CI **+$16.56–$69.43**, 9/10 wins, p=0.0068) and no forecast by **+$103.37/yr** (95% CI **+$78.23–$127.67**, 10/10 wins, p=0.0010). The oracle-assisted J_t(soc) comparison independently favored TTM by +$117.36/year. | Matched standard-RTG controls establish that forecast features are useful and TTM adds value beyond 24-hour persistence. Keep the offline TTM channels in the household observation pipeline. RTG prompt sensitivity and the current single-household OOD surface remain explicit H4.4 limitations. |
+| ✅ **H4.3** | **Fresh modern-data SB3 baseline** — fresh PPO was trained for 250k steps on the H4.1 train split with 12 parallel CPU environments and evaluated at the matched 5 kWh/3.3 kW configuration. On the five real OOD segments it saves **+$27/yr**, below the rule **+$81/yr** and H2 DT **+$300/yr**; the legacy PPO remains only a historical transfer baseline. | Initial fresh-PPO comparison complete; retraining SB3 alone does not solve household transfer. Longer/multi-seed PPO and optional SAC/TD3 remain follow-ups after forecast and degradation studies. |
+| ✅ **H4.4** | **AEMO-equivalent household evaluation surfaces** — full-corpus (H4.1) matched three-way forecast comparison plus fresh full-corpus PPO, evaluated on the fixed 10-window real-OOD surface and a 20-window synthetic-test surface with per-episode battery configs. | **Done (2026-09-02).** Matched standard-RTG DTs (8×512/ctx576, shared RTG=−2 from training median −1.78) on real OOD: **TTM +$357.29/yr, 24h-persistence +$309.35/yr, no-forecast +$310.90/yr, fresh full-corpus PPO +$23.66/yr, rule +$58.03/yr, oracle +$738.96/yr**. TTM beats persistence by **+$47.94/yr** (95% CI +$27.99–$67.59, 9/10, Wilcoxon p=0.0020) and no-forecast by **+$46.39/yr** (95% CI +$23.78–$68.91, 9/10, p=0.0020). Persistence≈no-forecast now collapses (−$1.55, p=0.46): with diverse data only the genuinely better TTM channel helps. All savings are higher than the H4.2 7-day-corpus run (TTM +$98.79), confirming the offline-forecast benefit generalizes beyond the controlled corpus. **Limitation:** on the synthetic multi-battery test surface the three DTs are statistically indistinguishable (TTM−no_forecast −$15.49/yr, p=0.86; per-horizon mixed) — the forecast advantage is proven on the held-out real household, not yet on the broad synthetic surface. Commands in `workflow.md` §6c; artifacts `eval_output/household/h4_4_*`, `models/household/dt/h4_4_*`. |
+| ✅ **H4.5** | **Degradation-aware policy study** — compare degradation disabled, cycle-only, calendar-plus-cycle, and realistic battery-life-cost settings across the horizon-diverse corpus. | **Done (2026-09-04).** Five matched SDP-teacher/DT runs completed. On the fixed 10-window real-OOD evaluation, annualized savings versus no battery were: degradation disabled **A$395.33**, cycle-only **A$320.96**, full realistic (**A$5,000**) **A$329.06**, high cost (**A$10,000**) **A$212.87**, and low cost (**A$1,000**) **A$199.43**. Degradation-aware settings produced lower savings than the disabled control, consistent with a more conservative economic trade-off; the A$1,000 and A$10,000 runs were not monotonic, so a dose-response claim requires more seeds and longer evaluation. Full versus cycle-only differed by only **A$8.10/year**, suggesting calendar aging is secondary on these short evaluation windows. **Caveat:** "savings" is grid-bill reduction only (wear cost excluded), and all policies were scored under the same default full/$5,000 env — so this measures cross-regime policy behaviour in the real world, not net-of-wear economics. The evaluator does not log cycle throughput/capacity fade or run TTM/no-forecast controls, so direct "cycling restraint" and forecast-ranking claims remain open. Artifacts: `results/h4_5_degradation/` and `eval_output/household/h4_5_degradation/`. |
+| 🔵 **H4.6** | **Optional extensions** — add a time-aligned retail spot-price pass-through study and provision the isolated TTM gap/weather-residual adapter only after the statistical baselines are complete. | Spot and TTM claims remain separately gated and do not replace the bootstrap/recomposition baselines. |
+
+### H1.5 — Synthetic diverse-household generator (detailed plan)
+
+> **Problem:** one real household cannot provide behavioral diversity
+> (occupancy patterns, appliance stocks, solar/battery sizing). Policies
+> trained only on it will not generalize. Goal: a controllable corpus of
+> synthetic households recomposed from REAL components, validated against
+> real statistics.
+
+#### Architecture: statistical recomposition (primary), TTM as auxiliary
+
+Generative LLM/diffusion approaches (TimeGAN, Diffusion-TS) are rejected:
+finicky to train, weak control over semantics, no guarantee samples stay
+physically consistent. Bootstrap-from-real keeps every sample traceable.
+
+```
+synthetic household = archetype(load profile)
+                    × season/day-type resampling weights
+                    × injected appliance blocks (EV / AC / pool)
+                  + residual noise (TTM-imputed or bootstrap)
+with roof = f(solar scaling factor), battery = g(capacity, flow)
+```
+
+1. **Archetypes** (occupancy/behavior classes, each parameterized from the
+   real data's daily-profile clusters):
+   - `retiree-low`: flat low load, early peak, minimal evening spike
+   - `family-ev`: double peak + 7–14 kWh overnight/evening EV charge,
+     random weekdays-only or daily
+   - `ac-heavy`: summer afternoon duty-cycled AC blocks (2–5 kW),
+     temperature-driven frequency
+   - `wfh-daytime`: elevated daytime baseline, midday peaks
+   - `shift-worker`: inverted schedule (overnight activity)
+2. **Day resampling**: for target (season × weekday/weekend × archetype),
+   bootstrap whole days from the real corpus's matching cluster, then scale
+   by household-size factor λ ∈ [0.4, 3.0]. Whole-day resampling preserves
+   realistic intra-day autocorrelation (row-wise i.i.d. noise destroys it).
+3. **Appliance injection**: add stochastic blocks ON TOP of resampled days
+   (EV start time ~ N(18h, 45m) truncated, duration from battery-size draw;
+   AC duty cycle Markov chain conditioned on hour & season). Injection is
+   additive on HouseLoad; never negative-clipped silently.
+4. **Solar synthesis**: reuse the real solar shape scaled by installed kW
+   (3–15 kW) × orientation derate (0.75–1.0); optionally swap in TTM
+   weather-residual variation so different years feel like different weather.
+5. **Battery assignment**: capacity ∈ {5, 7, 10, 13.5, 20} kWh, flow ∈
+   {3.3, 5, 7} kW — env already parameterizes this.
+6. **TTM role (auxiliary, optional)**: `ibm-granite/granite-timeseries-ttm-r2`
+   (few-M params, CPU-fine) for (a) plausible imputation of the Feb–Jun 2024
+   renovation gap (labeled SYNTHETIC if used in training), (b) weather-driven
+   residual generation on top of bootstrapped profiles. TTM is NOT the
+   primary generator — it reproduces its context window; it does not invent
+   new households.
+
+#### Validation gate (all gates must pass before a synthetic day is accepted)
+
+| Gate | Statistic | Tolerance vs real corpus |
+|---|---|---|
+| G1 | Daily energy distribution (per archetype×season) | KS test p > 0.05 against matching real cluster |
+| G2 | Peak timing histogram (morning/evening modes) | ±1 h mode shift |
+| G3 | Ramp-rate distribution (95th pct 5-min ΔkW) | within ±20% |
+| G4 | Autocorrelation (lag 1–12 steps) | within ±0.1 |
+| G5 | Zero-energy rows | 0 (no fake idle days) |
+| G6 | Physical sanity | HouseLoad ≥ 0, SolarGen ≥ 0, no NaN |
+
+Gate failures loop back to resampling/injection parameters, never hand-fixed.
+
+#### Corpus target & surfaces
+
+- 5 archetypes × 4 seasons × 3 battery sizes × 20 seeds ≈ **1,200 episodes**
+  (episode = one segment-week; matches AEMO-track corpus scale)
+- Splits: train 70% (archetype-balanced), val 15%, test 15% + held-out
+  OOD surface = the REAL household segments (never trained on)
+- Output: `data/household/synth/<archetype>/<seed>_ep<id>.parquet` +
+  `manifest.json` (params per episode for reproducibility)
+- CLI: `python3 scripts/build_household_synth_corpus.py` (defaults to 1,200
+  seven-day episodes, seed 42, and a 15% real-source OOD holdout)
+- The manifest records every generation knob, source date/cluster, gate
+  metric, split, battery capacity/flow, and whether TTM was used. Generated
+  parquets are env-view-compatible (`SolarBatteryEnv` observes 12 features).
+
+#### Implementation phases
+
+| Step | Deliverable | Test |
+|---|---|---|
+| ✅ 1 | `src/household_synthetic.py`: day clustering (season×daytype k-means on normalized profiles) | cluster purity > 0.8 on held-out labels |
+| ✅ 2 | Resampler + λ-scaling + injection blocks | G1–G6 harness green |
+| ✅ 3 | Battery/solar assignment + env-view export | env instantiates per episode, 12-D obs |
+| ✅ 4 | Corpus build CLI (`scripts/build_household_synth_corpus.py`) | manifest complete, counts exact |
+| ✅ 5 | TTM integration superseded | The in-generator `--use-ttm`/`--ttm-mode` stub was removed (Sep 2026 cleanup); TTM forecasts are now handled by the offline causal sidecar pipeline (H4.2/H4.4, `src/household_forecast.py` + `scripts/run_household_ttm_forecasts.sh`), never inside the generator or simulator. |
+
+#### Risks
+
+- Archetype parameters are guesses until more real households exist — keep
+  every knob explicit and versioned in the manifest.
+- Over-trusting synthetic diversity: the OOD surface of record stays the
+  real household; synthetic is for training breadth only.
+- EV/AC injection may dominate small-λ archetypes (appliance block bigger
+  than base load) — cap injection at ≤60% of daily energy.
 
 ### Quick wins
 
-- QH1: Ingestion script skeleton (`scripts/ingest_household_portal_csv.py`) + `.gitignore` entry for `data/household/real/`
-- QH2: One-week pilot: normalize a single file end-to-end into an env episode and render a plot
+- ✅ QH1: Ingestion script (`scripts/ingest_household_portal_csv.py` + `src/household_ingest.py`) — normalization to env schema, gap/DST/duplicate/negative-value validation, sha256 manifest (share-safe, privacy-tested). PR `feature/household-modern-data`.
+- ⬜ QH2: One-week pilot — blocked on first real portal download; will finalize column hints + units (kW vs kWh) against a real sample (see `docs/household/real_data_protocol.md` "Known format unknowns").
 
 ---
 

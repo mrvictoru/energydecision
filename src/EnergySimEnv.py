@@ -6,7 +6,7 @@ from gymnasium import spaces, error, utils
 import numpy as np
 import polars as pl
 
-from batterydeg import DegradationModel, RainflowCounter
+from batterydeg import DegradationModel, RainflowCounter, CycleOnlyDegradationModel, DisabledDegradationModel
 
 # global variables
 VIOLATION_PENALTY = -8964
@@ -75,6 +75,7 @@ class SolarBatteryEnv(gym.Env):
         base_deg_DoD = 80.0,  # reference DoD for per-kWh wear linearization (%)
         step_duration = 0.5, # duration of each step in hours (default half an hour)
         degradation_temperature = 25.0,
+        degradation_mode: str = "full",  # "full", "cycle_only", "disabled"
     ):
         super(SolarBatteryEnv, self).__init__()
         self.df = df
@@ -107,8 +108,16 @@ class SolarBatteryEnv(gym.Env):
             self.step_duration = step_duration
 
         self.degradation_temperature = float(degradation_temperature)
-        self.degradation_model = DegradationModel()
-
+        self.degradation_mode = degradation_mode
+        
+        # Initialize degradation model based on mode
+        if degradation_mode == "cycle_only":
+            self.degradation_model = CycleOnlyDegradationModel()
+        elif degradation_mode == "disabled":
+            self.degradation_model = DisabledDegradationModel()
+        else:  # "full"
+            self.degradation_model = DegradationModel()
+        
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration, max_c_rate=self.max_battery_flow / self.initial_battery_capacity)
         self._rainflow_num_cycles = 0
 
@@ -198,7 +207,10 @@ class SolarBatteryEnv(gym.Env):
             raw_extra_features (np.array): Raw [battery_level, deg_cost]. Shape (2,)
             normalized_extra_features (np.array): Normalized [battery_level, deg_cost]. Shape (2,)
         """
-        row_dict = self._get_row(self.current_step)
+        # Gymnasium permits the terminal observation to duplicate the final
+        # valid state.  ``step()`` advances before producing that observation,
+        # so clamp only the lookup rather than indexing one past the frame.
+        row_dict = self._get_row(min(self.current_step, len(self.df) - 1))
         time_str = row_dict.pop('Time', None)
         row_dict.pop('Timestamp', None)
 
@@ -279,15 +291,6 @@ class SolarBatteryEnv(gym.Env):
         primary_obs = np.concatenate((ctf, ndfv, nef))
 
         return primary_obs, info
-
-    # ... (get_observation_header, _calculate_grid_reward, _calculate_battery_degradation, render) ...
-    # Make sure get_observation_header also reflects the primary observation format
-    def get_observation_header(self):
-        header = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
-        prefix = "Norm_" if self.normalize_obs else "" # Add prefix if primary obs is normalized
-        header.extend([f"{prefix}{col}" for col in self.ordered_df_cols_for_obs])
-        header.extend([f'{prefix}BatteryLevel', f'{prefix}BatteryDegCost'])
-        return header
 
     def _calculate_grid_reward(self, grid_energy, energy_price):
         # If grid energy exceeds limits, add a violation penalty.
@@ -509,7 +512,7 @@ class SolarBatteryEnv(gym.Env):
 
         # ----- Advance Simulation Step -----
         self.current_step += 1
-        truncated = (self.current_step >= self.max_step)
+        truncated = (self.current_step >= min(self.max_step, len(self.df)))
         terminated = bool(self.total_degradation >= 1.0)
 
         components = self._get_observation_components(current_step_actual_deg_cost=current_step_deg_cost)
@@ -519,28 +522,6 @@ class SolarBatteryEnv(gym.Env):
 
         return primary_obs, float(reward), terminated, truncated, reward_info
 
-    def render(self, **kwargs):
+def render(self, **kwargs):
         if self.render_mode == 'human':
             print(f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh")
-            """
-        elif self.render_mode == 'file':
-            # Use a filename based on the dataset if possible
-            # Auto-generate dataset name based on meta data columns if available
-            try:
-                customer = self.df.select("Customer").item() if "Customer" in self.df.columns else "unknown"
-                postcode = self.df.select("Postcode").item() if "Postcode" in self.df.columns else "unknown"
-                daterange = self.df.select("DateRange").item() if "DateRange" in self.df.columns else "unknown"
-                dataset_name = f"{customer}_{postcode}_{daterange}"
-            except Exception:
-                dataset_name = kwargs.get('dataset_name', 'default_dataset')
-            filename = kwargs.get('filename', f'render_{dataset_name}.txt')
-            # Store the current observation as well
-            obs = self._next_observation()
-            with open(filename, 'a+') as f:
-                f.write(
-                    f"Step: {self.current_step}, Battery: {self.battery_level:.2f} kWh, "
-                    f"Solar: {self.df['SolarGen'][self.current_step]:.2f} kWh, "
-                    f"Load: {self.df['HouseLoad'][self.current_step]:.2f} kWh, "
-                    f"Obs: {obs.tolist()}\n"
-            )
-            """

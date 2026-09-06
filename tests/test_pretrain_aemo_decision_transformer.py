@@ -19,9 +19,7 @@ def _args(tmp_path: Path) -> Namespace:
         model_variant=None,
         optimizer=None,
         scheduler=None,
-        optimizer_class_path=None,
         optimizer_kwargs_json=None,
-        scheduler_class_path=None,
         scheduler_kwargs_json=None,
         context_length=None,
         state_dim=None,
@@ -192,11 +190,9 @@ def test_build_training_command_forwards_direct_trainer_knobs(tmp_path: Path):
 
 def test_build_training_command_forwards_optimizer_surface_flags(tmp_path: Path):
     args = _args(tmp_path)
-    args.optimizer = "custom"
-    args.optimizer_class_path = "torch.optim:AdamW"
+    args.optimizer = "adamw"
     args.optimizer_kwargs_json = '{"eps": 1e-7}'
-    args.scheduler = "custom"
-    args.scheduler_class_path = "torch.optim.lr_scheduler:StepLR"
+    args.scheduler = "steplr"
     args.scheduler_kwargs_json = '{"step_size": 3, "gamma": 0.8}'
     root = tmp_path / "repo"
     root.mkdir()
@@ -208,11 +204,9 @@ def test_build_training_command_forwards_optimizer_surface_flags(tmp_path: Path)
         epochs_per_stage=1,
     )[0]
 
-    assert command[command.index("--optimizer") + 1] == "custom"
-    assert command[command.index("--optimizer-class-path") + 1] == "torch.optim:AdamW"
+    assert command[command.index("--optimizer") + 1] == "adamw"
     assert command[command.index("--optimizer-kwargs-json") + 1] == '{"eps": 1e-7}'
-    assert command[command.index("--scheduler") + 1] == "custom"
-    assert command[command.index("--scheduler-class-path") + 1] == "torch.optim.lr_scheduler:StepLR"
+    assert command[command.index("--scheduler") + 1] == "steplr"
     assert command[command.index("--scheduler-kwargs-json") + 1] == '{"step_size": 3, "gamma": 0.8}'
 
 

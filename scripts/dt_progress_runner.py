@@ -246,18 +246,18 @@ class SystemMonitor:
             self._gpu_name = name
         elif self._gpu_name:
             metrics["gpu_name"] = self._gpu_name
-        for key, parser in [
+        # nvidia-smi column order (csv,noheader,nounits): name, temp, power,
+        # fan, clocks.sm, clocks.mem, utilization, mem.used, mem.total.
+        metric_specs = [
             ("gpu_temp_c", _safe_int),
             ("gpu_power_w", _safe_float),
             ("gpu_fan_pct", _safe_int),
             ("gpu_core_mhz", _safe_int),
             ("gpu_mem_mhz", _safe_int),
             ("gpu_util_pct", _safe_int),
-        ]:
-            val = parser(parts[[
-                "gpu_temp_c", "gpu_power_w", "gpu_fan_pct",
-                "gpu_core_mhz", "gpu_mem_mhz", "gpu_util_pct",
-            ].index(key) + 1])
+        ]
+        for index, (key, parser) in enumerate(metric_specs, start=1):
+            val = parser(parts[index])
             if val is not None:
                 metrics[key] = round(val, 1) if isinstance(val, float) else val
         vram_used = _safe_float(parts[7])
@@ -522,6 +522,33 @@ def _parse_last_tqdm_line(log_tail: list[str]) -> dict[str, Any] | None:
     return None
 
 
+def _tqdm_progress_text(parsed: dict[str, Any]) -> str:
+    epoch = parsed.get("epoch", "?")
+    epochs = parsed.get("epochs", "?")
+    segment = parsed.get("seg", "?")
+    batch = parsed.get("batch", 0)
+    total = parsed.get("total_batches", 0)
+    pct = parsed.get("progress_pct", 0)
+    elapsed = parsed.get("elapsed", "?")
+    remaining = parsed.get("remaining", "?")
+    rate = parsed.get("batch_per_s", 0)
+    return (
+        f"epoch {epoch}/{epochs} seg {segment}  |  batch {batch}/{total}  |  "
+        f"{pct:.1f}%  |  {elapsed}<{remaining}  |  {parsed.get('rate_display', f'{rate:.2f} batch/s')}"
+    )
+
+
+def _tqdm_train_text(parsed: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("loss", "avg", "ema"):
+        val = parsed.get(key)
+        if val is not None:
+            parts.append(f"{key}={val:.4f}")
+    if parsed.get("lr") is not None:
+        parts.append(f"lr={parsed['lr']:.2e}")
+    return "  ".join(parts) if parts else "n/a"
+
+
 def build_dashboard_state(
     *,
     snapshot: dict[str, Any] | None,
@@ -643,32 +670,11 @@ def build_dashboard_state(
     if snapshot is None:
         if parsed is not None:
             status = "running"
-            epoch = parsed.get("epoch", "?")
-            epochs = parsed.get("epochs", "?")
-            segment = parsed.get("seg", "?")
-            batch = parsed.get("batch", 0)
-            total = parsed.get("total_batches", 0)
             within_epoch_pct = parsed.get("progress_pct", 0)
             if isinstance(within_epoch_pct, (int, float)):
                 progress = max(0.0, min(100.0, float(within_epoch_pct)))
-            loss_val = parsed.get("loss")
-            avg_val = parsed.get("avg")
-            ema_val = parsed.get("ema")
-            lr_val = parsed.get("lr")
-            elapsed = parsed.get("elapsed", "?")
-            remaining = parsed.get("remaining", "?")
-            rate = parsed.get("batch_per_s", 0)
-            progress_text = f"epoch {epoch}/{epochs} seg {segment}  |  batch {batch}/{total}  |  {within_epoch_pct:.1f}%  |  {elapsed}<{remaining}  |  {parsed.get('rate_display', f'{rate:.2f} batch/s')}"
-            train_parts: list[str] = []
-            if loss_val is not None:
-                train_parts.append(f"loss={loss_val:.4f}")
-            if avg_val is not None:
-                train_parts.append(f"avg={avg_val:.4f}")
-            if ema_val is not None:
-                train_parts.append(f"ema={ema_val:.4f}")
-            if lr_val is not None:
-                train_parts.append(f"lr={lr_val:.2e}")
-            train_text = "  ".join(train_parts) if train_parts else "n/a"
+            progress_text = _tqdm_progress_text(parsed)
+            train_text = _tqdm_train_text(parsed)
         else:
             status = "waiting for training output"
             progress = None
@@ -726,28 +732,12 @@ def build_dashboard_state(
         val_loss_history = list(val_loss_history) + [float(val_loss)]
 
     if parsed is not None:
-        p_epoch = parsed.get("epoch", "?")
-        p_epochs = parsed.get("epochs", "?")
-        p_seg = parsed.get("seg", "?")
-        p_batch = parsed.get("batch", 0)
-        p_total = parsed.get("total_batches", 0)
         p_progress = parsed.get("progress_pct", 0)
-        p_elapsed = parsed.get("elapsed", "?")
-        p_remaining = parsed.get("remaining", "?")
-        p_rate = parsed.get("batch_per_s", 0)
-        progress_text = f"epoch {p_epoch}/{p_epochs} seg {p_seg}  |  batch {p_batch}/{p_total}  |  {p_progress:.1f}%  |  {p_elapsed}<{p_remaining}  |  {parsed.get('rate_display', f'{p_rate:.2f} batch/s')}"
+        progress_text = _tqdm_progress_text(parsed)
         if isinstance(p_progress, (int, float)):
             progress = max(0.0, min(100.0, float(p_progress)))
-        train_parts = []
-        if parsed.get("loss") is not None:
-            train_parts.append(f"loss={parsed['loss']:.4f}")
-        if parsed.get("avg") is not None:
-            train_parts.append(f"avg={parsed['avg']:.4f}")
-        if parsed.get("ema") is not None:
-            train_parts.append(f"ema={parsed['ema']:.4f}")
-        if parsed.get("lr") is not None:
-            train_parts.append(f"lr={parsed['lr']:.2e}")
-        train_text = "  ".join(train_parts) if train_parts else format_row(
+        parsed_train = _tqdm_train_text(parsed)
+        train_text = parsed_train if parsed_train != "n/a" else format_row(
             current_train,
             ["train_total_avg", "train_action_avg", "train_state_avg", "train_return_avg", "train_total_ema"],
         )

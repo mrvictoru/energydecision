@@ -68,8 +68,8 @@ python3 scripts/run_grpo_multi_region.py \
 ```
 
 > `--dt-gamma 1.0` is the recommended default (matches the legacy PR#30 recipe).
-> `--adaptive-rtg` is omitted for the first comparison — it is counterproductive
-> when realised returns are negative. Discounted RTG (`0.99`–`0.995`) is now safe
+> Adaptive RTG resampling was removed in the September 2026 cleanup (it measured
+> +8% worse in the experiments below). Discounted RTG (`0.99`–`0.995`) is now safe
 > to try via the `stable_rtg_update` clamp, but validate against a `gamma=1.0`
 > baseline first.
 
@@ -87,7 +87,6 @@ The example figures in this guide are historical reference points, not guarantee
 | `--kl-coeff` | 0.02 | Higher values prevent policy drift but slow learning |
 | `--group-size` | 4 | Episodes per advantage group. 8 gives lower variance |
 | `--sync-reference-every` | 0 (off) | Sync policy → reference every N iterations (enables >5 iters) |
-| `--adaptive-rtg` | off | Resample RTG prompts from EWMA of realised returns |
 | `--deg-penalty-weight` | 1.0 | Extra degradation penalty (1.5 reduces deg by 67%) |
 | `--dt-gamma` | 1.0 | RTG discount factor. 1.0 (undiscounted) recommended; `0.99`–`0.995` now safe via `stable_rtg_update` clamp. `0.95` caused RTG overflow on long horizons before the clamp fix |
 | `--rtg-count` | 4 | Number of RTG values to sample for group diversity |

@@ -177,6 +177,12 @@ cython_debug/
 data/
 **/data/
 
+# real household telemetry lives under data/household/real/ and is fully covered by
+# the data/ ignores above (privacy: NEVER commit raw or normalized telemetry — see
+# docs/household/real_data_protocol.md). Its share-safe ingest manifest (checksums +
+# validation stats only, no metering values) is tracked at the repo root as
+# household_ingest_manifest.json — do NOT move it under data/.
+
 # models (checkpoints on HF, not in git)
 models/
 **/models/
@@ -188,6 +194,10 @@ system_logs/
 # all evaluation artifacts — ignored by default. copy curated results to
 # eval_output/final/ if they need to be tracked in git.
 /eval_output/
+
+# study/results outputs (large parquet/pt/json) — ignored by default.
+/results/
+**/results/
 
 # experiment-tracking log (un-tracked; see AGENTS.md)
 /results.tsv
