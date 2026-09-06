@@ -506,36 +506,43 @@ H4.4 TTM-forecast savings — this study isolates the degradation regime, not
 the forecast input. The evaluator now records both the original
 **grid-bill-only** metric and the primary **net-of-wear** metric using each
 rollout's actual `info["step_degradation"]` and the default battery-life cost
-of A$5,000.
+of A$5,000, plus cycling-mechanism metrics (EFC/day, rainflow cycles/day,
+capacity fade/day) accumulated from the same per-step logs.
 
-| Training condition | Grid-bill savings vs no battery | Net-of-wear savings vs no battery |
-|---|---:|---:|
-| Degradation disabled | +A$367.1/yr | **−A$341.1/yr** |
-| Cycle-only | +A$292.8/yr | **−A$531.3/yr** |
-| Full realistic (A$5,000) | +A$359.8/yr | **−A$438.4/yr** |
-| Full, high cost (A$10,000) | +A$326.8/yr | **−A$468.5/yr** |
-| Full, low cost (A$1,000) | +A$322.4/yr | **−A$558.7/yr** |
+| Training condition | Grid-bill savings vs no battery | Net-of-wear savings vs no battery | EFC/day | Cycles/day | Capacity fade/day |
+|---|---:|---:|---:|---:|---:|
+| Degradation disabled | +A$364.9/yr | **−A$401.1/yr** | 1.02 | 5.06 | 0.042% |
+| Cycle-only | +A$310.3/yr | **−A$494.9/yr** | 1.10 | 4.72 | 0.044% |
+| Full realistic (A$5,000) | +A$369.7/yr | **−A$469.5/yr** | 1.08 | 4.30 | 0.046% |
+| Full, high cost (A$10,000) | +A$321.7/yr | **−A$459.8/yr** | 1.09 | 4.26 | 0.043% |
+| Full, low cost (A$1,000) | +A$270.8/yr | **−A$647.0/yr** | 1.12 | 4.75 | 0.050% |
 
-The headline finding is that the disabled policy still looks best on the
-energy-only metric, but it is also the most aggressive cycler and therefore
-incurs the largest wear penalty. Once wear is charged, the ranking is no
-longer positive; all five conditions are negative net-of-wear against the no-battery
-benchmark. This is the key evidence that degradation-aware policy behaviour is
-not a cosmetic training detail: the policy that cycles hardest loses the most
-value when battery wear enters the ledger.
+The unambiguous headline: **every condition is negative net-of-wear** once
+battery degradation is priced into the ledger — on these short seven-day
+windows the battery does not pay for its own wear under any training regime.
+The sign (all net-negative) is consistent across seeds; the *specific* ranking
+is not robust (the A$1,000 vs A$10,000 conditions remain non-monotonic, and
+their pairwise intervals overlap). The earlier expectation that the
+degradation-disabled policy would be the hardest cycler is **not** supported
+by the mechanism data: EFC/day is flat across conditions (1.02–1.12) and
+disabled is actually the *lowest* (1.02), while cycle counts overlap within-seed
+(2.8–6.2 across all conditions). So the honest reading is about the economics —
+short-window arbitrage is not a valid objective once wear is charged — rather
+than "one regime cycles more than another."
 
-Pairwise comparisons across the ten windows show the grid-bill ranking is
-statistically meaningful (for example, disabled vs cycle-only:
-**+A$74.4/yr**, 95% CI **A$41.6–A$106.9**, p=0.00195), while the net-of-wear
-differences are economically material but noisier because the windows are short
-and wear is confounded by policy variance. The earlier A$1,000 vs A$10,000
-inversion does not survive the multi-seed aggregate; it collapses into
-non-monotonic noise rather than a stable dose-response relationship.
+Pairwise comparisons across the ten windows: grid-bill differences are
+statistically clear in several cases (e.g., full_realistic vs low_cost
+**+A$98.9/yr**, 95% CI **A$67.6–A$131.9**, p=0.0010; disabled vs cycle_only
+**+A$54.6/yr**, 95% CI **A$20.8–A$87.1**, p=0.0137), while net-of-wear
+differences remain economically large but noisier because wear is a short-window
+quantity (intervals span both signs). The A$1,000 vs A$10,000 inversion does
+not survive the multi-seed aggregate — it collapses into non-monotonic noise
+rather than a stable dose-response relationship.
 
 In short, the earlier pilot should be treated as a historical grid-bill-only
 sanity check. The final, definitive result is the three-seed net-of-wear study:
-**wear matters, the no-degradation policy is over-optimistic on grid-bill-only economics,
-and the cost-sweep does not establish a clean ordering across seeds.**
+**wear matters and every regime is net-negative on short windows; the
+cost-sweep does not establish a clean ordering across seeds.**
 
 ## Validation And Iteration
 

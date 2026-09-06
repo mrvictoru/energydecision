@@ -232,6 +232,18 @@ def _seed_metric(eval_results: dict, metric: str) -> np.ndarray:
         return (no_battery - bill) / days * 365.0
     if metric == "net_savings":
         return np.asarray(result["net_savings_segment_aud_per_year"], dtype=float)
+    if metric == "efc_per_day":
+        return np.asarray(result["segment_efc"], dtype=float) / np.asarray(
+            [window["days"] for window in summary["windows"]], dtype=float
+        )
+    if metric == "cycles_per_day":
+        return np.asarray(result["segment_cycles"], dtype=float) / np.asarray(
+            [window["days"] for window in summary["windows"]], dtype=float
+        )
+    if metric == "capacity_fade_per_day":
+        return np.asarray(result["segment_capacity_fade"], dtype=float) / np.asarray(
+            [window["days"] for window in summary["windows"]], dtype=float
+        )
     raise ValueError(f"Unsupported H4.5 metric: {metric}")
 
 
@@ -266,6 +278,9 @@ def add_aggregates(results: dict, seeds: list[int], stats_seed: int = 42) -> dic
     metric_values: dict[str, dict[str, np.ndarray]] = {
         "grid_savings": {},
         "net_savings": {},
+        "efc_per_day": {},
+        "cycles_per_day": {},
+        "capacity_fade_per_day": {},
     }
     for config_name, config_result in results.items():
         for metric in metric_values:
@@ -275,6 +290,8 @@ def add_aggregates(results: dict, seeds: list[int], stats_seed: int = 42) -> dic
             ]
             metric_values[metric][config_name] = np.vstack(seed_arrays).mean(axis=0)
 
+        savings_metrics = {"grid_savings", "net_savings"}
+        cycle_metrics = {"efc_per_day", "cycles_per_day", "capacity_fade_per_day"}
         config_result["aggregate"] = {
             "seeds": seeds,
             "per_window_mean": {
@@ -286,7 +303,11 @@ def add_aggregates(results: dict, seeds: list[int], stats_seed: int = 42) -> dic
             },
             "mean_annualized_savings_aud_per_year": {
                 metric: float(metric_values[metric][config_name].mean())
-                for metric in metric_values
+                for metric in savings_metrics
+            },
+            "mean_cycle_metrics_per_day": {
+                metric: float(metric_values[metric][config_name].mean())
+                for metric in cycle_metrics
             },
             "seed_means": {
                 metric: [

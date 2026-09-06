@@ -561,41 +561,52 @@ degradation regime* (H4.5). The evaluator now reports both the legacy
 **grid-bill-only** metric and **net-of-wear** savings, where the latter adds
 the actual per-step wear cost `step_degradation * battery_life_cost` from the
 environment. This lets us test whether a policy that appears best on raw bill
-reduction is actually winning once battery degradation is priced in.
+reduction is actually winning once battery degradation is priced in. The
+evaluator also records cycling-mechanism metrics (equivalent full cycles per
+day, rainflow cycle count per day, and capacity fade) accumulated from the
+same per-step logs.
 
-| Training condition | Grid-bill savings vs no battery | Net-of-wear savings vs no battery |
-|---|---:|---:|
-| Degradation disabled | +A$367.1/yr | **−A$341.1/yr** |
-| Cycle-only | +A$292.8/yr | **−A$531.3/yr** |
-| Full realistic (A$5,000) | +A$359.8/yr | **−A$438.4/yr** |
-| Full, high cost (A$10,000) | +A$326.8/yr | **−A$468.5/yr** |
-| Full, low cost (A$1,000) | +A$322.4/yr | **−A$558.7/yr** |
+| Training condition | Grid-bill savings vs no battery | Net-of-wear savings vs no battery | EFC/day | Cycles/day | Capacity fade/day |
+|---|---:|---:|---:|---:|---:|
+| Degradation disabled | +A$364.9/yr | **−A$401.1/yr** | 1.02 | 5.06 | 0.042% |
+| Cycle-only | +A$310.3/yr | **−A$494.9/yr** | 1.10 | 4.72 | 0.044% |
+| Full realistic (A$5,000) | +A$369.7/yr | **−A$469.5/yr** | 1.08 | 4.30 | 0.046% |
+| Full, high cost (A$10,000) | +A$321.7/yr | **−A$459.8/yr** | 1.09 | 4.26 | 0.043% |
+| Full, low cost (A$1,000) | +A$270.8/yr | **−A$647.0/yr** | 1.12 | 4.75 | 0.050% |
 
-The key outcome is straightforward: the aggressive no-degradation policy still
-wins the energy-only comparison, but it is also the hardest cycler and does the
-worst once wear is charged. Net-of-wear turns the original pilot upside down:
-all conditions are negative versus the no-battery counterfactual once battery
-wear enters the financial ledger. This is exactly the degradation-usefulness
-hypothesis in action. The result also rejects a clean monotone dose-response
-for the A$1,000 vs A$10,000 conditions; across the three seeds the ordering is
-not stable and the pairwise differences collapse into overlapping uncertainty.
+The unambiguous headline: **every condition is negative net-of-wear** once
+battery degradation is priced into the ledger, so on these short seven-day
+windows the battery operation does not pay for its own wear under any
+training regime. The sign (all net-negative) is consistent across seeds; the
+*specific* ordering is not robust — the A$1,000 vs A$10,000 conditions remain
+non-monotonic and their pairwise differences overlap in uncertainty, so no
+dose-response curve can be claimed.
 
-The paired comparisons across the ten windows support the same conclusion. On
-**grid-bill** savings, the differences are statistically clear (for example,
-**degradation_disabled vs cycle_only**: +A$74.4/yr, 95% CI A$41.6–A$106.9,
-p=0.00195), while **net-of-wear** differences remain economically important but
-less precise because the ten windows are short and wear is a noisier quantity
-(e.g., **degradation_disabled vs cycle_only**: +A$190.2/yr, 95% CI −A$33.5–A$398.4,
-p=0.0967). The more realistic interpretation is therefore not “one cost value
-beats another” but “wear costs matter enough that short-term arbitrage alone is
-not a valid economic objective.”
+One earlier hypothesis is **not** supported by the mechanism data: the
+degradation-disabled policy was expected to be the hardest cycler, but its
+equivalent-full-cycles-per-day (1.02) is actually the *lowest* of the five
+conditions (full/high/low all sit at 1.08–1.12), and its rainflow cycle count
+(5.06/day) overlaps the others' within-seed spread (2.8–6.2 across all
+conditions). The net-of-wear penalty is therefore not simply "more cycling =
+more wear": the degradation-aware policies also cycle near-saturating
+throughput yet still fail to clear their own wear cost. What the data does
+support is the weaker but robust statement: **short-window arbitrage alone is
+not a valid economic objective once battery wear is charged.**
 
-This study supersedes the earlier single-seed pilot. The earlier result should be
-read as a historical grid-bill-only sanity check; the current multi-seed,
-net-of-wear result is the definitive H4.5 evidence, and it supports the
-conclusion that degradation-aware policy behaviour is economically meaningful,
-while the A$1,000/A$10,000 sweep did not survive as a stable ordering across
-seeds.
+The paired comparisons across the ten windows are consistent with this. On
+**grid-bill** savings the between-condition differences are statistically
+clear in several pairwise cases (e.g., full_realistic vs low_degradation_cost:
++A$98.9/yr, 95% CI +A$67.6–A$131.9, p=0.0010; degradation_disabled vs
+cycle_only: +A$54.6/yr, 95% CI +A$20.8–A$87.1, p=0.0137), while **net-of-wear**
+differences remain economically large but noisier because wear is a short-window
+quantity (the window-level bootstrap intervals span both signs). The definitive
+conclusion is that degradation-aware policy behaviour is economically
+meaningful — not that a specific degradation cost produces a cleanly separable
+policy.
+
+This study supersedes the earlier single-seed pilot. The earlier result should
+be read as a historical grid-bill-only sanity check; the current multi-seed,
+net-of-wear result is the definitive H4.5 evidence.
 
 The full artifacts are in `results/h4_5_degradation/` and
 `eval_output/household/h4_5_degradation/`.

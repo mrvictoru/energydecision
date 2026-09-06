@@ -142,6 +142,36 @@ def _degradation_cost_from_logs(logs: pl.DataFrame, battery_life_cost: float) ->
     ))
 
 
+def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[str, float]:
+    """Extract cycling-mechanism metrics from per-step env info.
+
+    Returns discharge throughput (kWh), equivalent full cycles
+    (discharge throughput / capacity), rainflow cycle count, and final
+    capacity fade (total_degradation, 0..1).
+    """
+    if "info" not in logs.columns:
+        return {"discharge_kwh": 0.0, "efc": 0.0, "cycles": 0.0, "capacity_fade": 0.0}
+    infos = logs["info"].to_list()
+    discharge = 0.0
+    cycles = 0.0
+    final_fade = 0.0
+    for info in infos:
+        flow_energy = float(info.get("battery_flow_energy", 0.0) or 0.0)
+        if flow_energy < 0.0:
+            discharge += -flow_energy
+        cycles += float(info.get("new_cycles_in_step", 0) or 0)
+        fade = info.get("total_degradation", 0.0)
+        if fade is not None:
+            final_fade = float(fade)
+    capacity = max(1e-9, float(capacity_kwh))
+    return {
+        "discharge_kwh": float(discharge),
+        "efc": float(discharge / capacity),
+        "cycles": float(cycles),
+        "capacity_fade": float(final_fade),
+    }
+
+
 def tariff_for_name(name: str) -> Tariff:
     if name == "realistic":
         return Tariff(31.042, 1.0, 11, 14)
@@ -151,7 +181,7 @@ def tariff_for_name(name: str) -> Tariff:
 def _run_agent(
     frame: pl.DataFrame, algorithm: str, model, capacity: float, flow: float,
     tariff: Tariff, rtg_mode: str = "standard", rtg_value: float = 0.0,
-) -> tuple[float, float]:
+) -> tuple[float, float, dict[str, float]]:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
         init_battery_level=capacity / 2.0, max_step=len(frame),
@@ -169,6 +199,7 @@ def _run_agent(
     return (
         _bill_from_logs(frame, logs),
         _degradation_cost_from_logs(logs, env.battery_life_cost),
+        _cycle_metrics_from_logs(logs, capacity),
     )
 
 
@@ -186,6 +217,7 @@ class _BatchedEnvState:
     ) -> None:
         self.idx = idx
         self.frame = frame
+        self.capacity_kwh = float(capacity)
         self.env = SolarBatteryEnv(
             frame,
             battery_capacity=capacity,
@@ -222,7 +254,7 @@ def _run_batched_dt(
     rtg_mode: str = "standard",
     rtg_value: float = 0.0,
     device: str = "cuda",
-) -> tuple[list[float], list[float]]:
+) -> tuple[list[float], list[float], list[dict[str, float]]]:
     model.eval()
     dev = next(model.parameters()).device
     active = [
@@ -240,6 +272,10 @@ def _run_batched_dt(
     ]
     results: list[float] = [0.0] * len(segments)
     degradation_costs: list[float] = [0.0] * len(segments)
+    cycle_metrics: list[dict[str, float]] = [
+        {"discharge_kwh": 0.0, "efc": 0.0, "cycles": 0.0, "capacity_fade": 0.0}
+        for _ in range(len(segments))
+    ]
 
     step = 0
     while active:
@@ -310,12 +346,15 @@ def _run_batched_dt(
                 degradation_costs[item.idx] = _degradation_cost_from_logs(
                     ep_df, item.env.battery_life_cost
                 )
+                cycle_metrics[item.idx] = _cycle_metrics_from_logs(
+                    ep_df, item.capacity_kwh
+                )
             else:
                 still_active.append(item)
         active = still_active
         step += 1
 
-    return results, degradation_costs
+    return results, degradation_costs, cycle_metrics
 
 
 def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tariff) -> float:
@@ -340,7 +379,7 @@ def _oracle_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> float:
     return _oracle_bill(frame, capacity, flow, tariff)
 
 
-def _rule_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> tuple[float, float]:
+def _rule_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> tuple[float, float, dict[str, float]]:
     frame, capacity, flow, tariff = args
     return _run_agent(frame, "rule", None, capacity, flow, tariff)
 
@@ -560,6 +599,7 @@ def main() -> None:
 
     bills: dict[str, list[float]] = {}
     degradation_costs: dict[str, list[float]] = {}
+    cycle_metrics: dict[str, list[dict[str, float]]] = {}
     if not args.skip_reference_policies:
         bills.update({"rule": [], "oracle": []})
         print(
@@ -576,14 +616,16 @@ def main() -> None:
                 rule_results = list(executor.map(_rule_worker, ref_args))
                 bills["rule"] = [result[0] for result in rule_results]
                 degradation_costs["rule"] = [result[1] for result in rule_results]
+                cycle_metrics["rule"] = [result[2] for result in rule_results]
         else:
             for idx, segment in enumerate(segments):
                 battery = window_batteries[idx]
-                rule_bill, rule_deg_cost = _run_agent(
+                rule_bill, rule_deg_cost, rule_cycle = _run_agent(
                     segment, "rule", None, battery["capacity_kwh"], battery["max_flow_kw"], tariff
                 )
                 bills["rule"].append(rule_bill)
                 degradation_costs.setdefault("rule", []).append(rule_deg_cost)
+                cycle_metrics.setdefault("rule", []).append(rule_cycle)
                 bills["oracle"].append(
                     _oracle_bill(segment, battery["capacity_kwh"], battery["max_flow_kw"], tariff)
                 )
@@ -591,13 +633,14 @@ def main() -> None:
     for name, (model, rtg_mode) in models.items():
         bills[name] = []
         degradation_costs[name] = []
+        cycle_metrics[name] = []
         is_dt = isinstance(model, DecisionTransformer)
         if is_dt and args.batch_eval and len(segments) > 1:
             print(
                 f"Evaluating policy '{name}' across {len(segments)} windows with batched DT stepping...",
                 flush=True,
             )
-            bills[name], degradation_costs[name] = _run_batched_dt(
+            bills[name], degradation_costs[name], cycle_metrics[name] = _run_batched_dt(
                 segments, model, window_batteries, tariff,
                 rtg_mode=rtg_mode, rtg_value=args.dt_rtg_value, device=device,
             )
@@ -612,13 +655,14 @@ def main() -> None:
                     f"capacity={battery['capacity_kwh']}kWh/{battery['max_flow_kw']}kW)",
                     flush=True,
                 )
-                bill, deg_cost = _run_agent(
+                bill, deg_cost, cycle = _run_agent(
                     segment, "rl" if name == "ppo" else "dt", model,
                     battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
                     args.dt_rtg_value,
                 )
                 bills[name].append(bill)
                 degradation_costs[name].append(deg_cost)
+                cycle_metrics[name].append(cycle)
 
     no_battery = []
     for segment in segments:
@@ -677,6 +721,23 @@ def main() -> None:
                 ),
                 "net_savings_vs_no_battery_aud_per_year": float(np.mean(net_savings)),
                 "net_savings_segment_aud_per_year": net_savings,
+            })
+        if name in cycle_metrics and cycle_metrics[name]:
+            cm = cycle_metrics[name]
+            result.update({
+                "segment_discharge_kwh": [m["discharge_kwh"] for m in cm],
+                "segment_efc": [m["efc"] for m in cm],
+                "segment_cycles": [m["cycles"] for m in cm],
+                "segment_capacity_fade": [m["capacity_fade"] for m in cm],
+                "mean_discharge_kwh_per_day": float(
+                    np.mean([m["discharge_kwh"] / days for m, days in zip(cm, segment_days)])
+                ),
+                "mean_efc_per_day": float(
+                    np.mean([m["efc"] / days for m, days in zip(cm, segment_days)])
+                ),
+                "mean_cycles_per_day": float(
+                    np.mean([m["cycles"] / days for m, days in zip(cm, segment_days)])
+                ),
             })
         output["results"][name] = result
     base = np.asarray(output["results"]["no_battery"]["bill_aud_per_year"]["mean"])
