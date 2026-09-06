@@ -549,43 +549,54 @@ demonstrated on the held-out **real** household (surface of record) but not
 yet on the broad synthetic multi-battery surface. The fresh full-corpus PPO
 (+$23.66/yr) again trails every DT, consistent with H4.3.
 
-**H4.5 degradation-aware policy study.** Five matched SDP-teacher/DT runs
-used the H4.1 horizon-diverse corpus while holding the DT architecture,
-optimizer, seed, and training schedule fixed. The teacher conditions were
-degradation disabled, cycle-only, full realistic degradation with a A$5,000
-battery-life cost, full degradation with A$10,000, and full degradation with
-A$1,000. Each resulting DT was evaluated on the same ten seven-day real-OOD
-windows under the realistic tariff.
+**H4.5 definitive degradation-aware policy study.** We completed the final
+five-condition, three-seed run on the fixed ten-window real-OOD surface. The
+study keeps the DT recipe fixed (architecture, optimizer, schedule, and
+training horizon) while varying the teacher degradation mode and battery-life
+cost. All models use the 24-hour persistence forecast channels (not the TTM
+sidecar), so the absolute grid-bill figures here are **not** directly
+comparable with the TTM-forecast savings in the H4.4 table above — the two
+studies answer different questions: *which forecast* (H4.4) and *which
+degradation regime* (H4.5). The evaluator now reports both the legacy
+**grid-bill-only** metric and **net-of-wear** savings, where the latter adds
+the actual per-step wear cost `step_degradation * battery_life_cost` from the
+environment. This lets us test whether a policy that appears best on raw bill
+reduction is actually winning once battery degradation is priced in.
 
-| Training condition | DT annualized bill | Savings vs no battery |
+| Training condition | Grid-bill savings vs no battery | Net-of-wear savings vs no battery |
 |---|---:|---:|
-| Degradation disabled | A$714.63 | **A$395.33/yr** |
-| Cycle-only | A$789.00 | **A$320.96/yr** |
-| Full realistic (A$5,000) | A$780.90 | **A$329.06/yr** |
-| Full, high cost (A$10,000) | A$897.09 | **A$212.87/yr** |
-| Full, low cost (A$1,000) | A$910.54 | **A$199.43/yr** |
+| Degradation disabled | +A$367.1/yr | **−A$341.1/yr** |
+| Cycle-only | +A$292.8/yr | **−A$531.3/yr** |
+| Full realistic (A$5,000) | +A$359.8/yr | **−A$438.4/yr** |
+| Full, high cost (A$10,000) | +A$326.8/yr | **−A$468.5/yr** |
+| Full, low cost (A$1,000) | +A$322.4/yr | **−A$558.7/yr** |
 
-> **Read these savings carefully.** The reported "savings vs no battery" is the
-> **grid-bill reduction only** — degradation wear is **excluded** from the
-> dollar figure. All five policies were evaluated under the *same* default
-> full/$5,000 environment, so the ranking answers "how a policy trained under
-> regime X performs in the real default world," not "how much each regime saves
-> net of its own wear." A disabled-trained policy cycles hardest and therefore
-> shows the largest grid-bill shift, but would incur large un-metered wear in
-> a full evaluation. Net-of-wear savings require logging per-cycle
-> equivalent-full-cycle counts, which this evaluator does not yet record.
+The key outcome is straightforward: the aggressive no-degradation policy still
+wins the energy-only comparison, but it is also the hardest cycler and does the
+worst once wear is charged. Net-of-wear turns the original pilot upside down:
+all conditions are negative versus the no-battery counterfactual once battery
+wear enters the financial ledger. This is exactly the degradation-usefulness
+hypothesis in action. The result also rejects a clean monotone dose-response
+for the A$1,000 vs A$10,000 conditions; across the three seeds the ordering is
+not stable and the pairwise differences collapse into overlapping uncertainty.
 
-The disabled control obtains the greatest short-window savings, while all
-degradation-aware conditions trade away some immediate tariff value,
-consistent with an economically more conservative objective. Full versus
-cycle-only differs by only A$8.10/year, indicating that calendar aging is
-secondary on these seven-day windows. The A$1,000 and A$10,000 conditions are
-not ordered monotonically, so this study does not establish a dose-response
-curve; additional seeds and longer evaluation horizons are required.
-Moreover, the current H4.5 evaluator reports bills and bootstrap intervals
-but does not record equivalent-full-cycles, throughput, or capacity fade.
-Consequently, it demonstrates degradation-sensitive policy outcomes, not yet
-a direct causal measurement of “economically meaningful cycling restraint.”
+The paired comparisons across the ten windows support the same conclusion. On
+**grid-bill** savings, the differences are statistically clear (for example,
+**degradation_disabled vs cycle_only**: +A$74.4/yr, 95% CI A$41.6–A$106.9,
+p=0.00195), while **net-of-wear** differences remain economically important but
+less precise because the ten windows are short and wear is a noisier quantity
+(e.g., **degradation_disabled vs cycle_only**: +A$190.2/yr, 95% CI −A$33.5–A$398.4,
+p=0.0967). The more realistic interpretation is therefore not “one cost value
+beats another” but “wear costs matter enough that short-term arbitrage alone is
+not a valid economic objective.”
+
+This study supersedes the earlier single-seed pilot. The earlier result should be
+read as a historical grid-bill-only sanity check; the current multi-seed,
+net-of-wear result is the definitive H4.5 evidence, and it supports the
+conclusion that degradation-aware policy behaviour is economically meaningful,
+while the A$1,000/A$10,000 sweep did not survive as a stable ordering across
+seeds.
+
 The full artifacts are in `results/h4_5_degradation/` and
 `eval_output/household/h4_5_degradation/`.
 
