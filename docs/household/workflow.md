@@ -42,6 +42,15 @@ contiguous real-normalized windows. Results are stored in
 `eval_output/household/h4_9_pilot_30d/summary.json`; this is a pilot rather
 than a final seasonal claim because the surface has only four windows.
 
+The longer-horizon extensions use the same checkpoints and no retraining:
+
+- `eval_output/household/h4_9_pilot_90d/summary.json`: three 90-day
+  contiguous real-normalized windows.
+- `eval_output/household/h4_9_pilot_1y_synth/summary.json`: ten one-year
+  windows from held-out two-year H4.1 test episodes. These episodes preserve
+  their configured 20 kWh battery sizes and are therefore a synthetic
+  stress-test surface, not a direct 5 kWh real-home comparison.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
