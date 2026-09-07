@@ -6,6 +6,7 @@ import argparse
 import concurrent.futures
 import datetime as dt
 import json
+import multiprocessing as mp
 import os
 import sys
 from pathlib import Path
@@ -13,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import torch
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC, TD3
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -37,6 +38,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--normalized-dir", type=Path, default=ROOT / "data/household/real/normalized")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "eval_output/household/ood_baselines")
     parser.add_argument("--ppo-path", type=Path, default=ROOT / "models/household/sb3/ppo_model.zip")
+    parser.add_argument("--sac-path", type=Path, default=None)
+    parser.add_argument("--td3-path", type=Path, default=None)
     parser.add_argument("--dt-path", type=Path, default=ROOT / "models/household/dt/dt_model_new_best.pt")
     parser.add_argument("--dt-config", type=Path, default=ROOT / "models/household/dt/decision_transformer_model_kwargs.json")
     parser.add_argument("--dt-rtg-mode", choices=("standard", "j_t_soc"), default="standard")
@@ -589,6 +592,10 @@ def main() -> None:
     models: dict[str, tuple[object, str]] = {}
     if not args.skip_ppo:
         models["ppo"] = (PPO.load(str(args.ppo_path), device=device), "standard")
+        if args.sac_path is not None:
+            models["sac"] = (SAC.load(str(args.sac_path), device=device), "standard")
+        if args.td3_path is not None:
+            models["td3"] = (TD3.load(str(args.td3_path), device=device), "standard")
     if not args.skip_dt:
         models["dt"] = (_load_dt(args.dt_path, args.dt_config, device), args.dt_rtg_mode)
     for spec in args.additional_dt:
@@ -611,7 +618,13 @@ def main() -> None:
                 (segment, window_batteries[idx]["capacity_kwh"], window_batteries[idx]["max_flow_kw"], tariff)
                 for idx, segment in enumerate(segments)
             ]
-            with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
+            # Spawn workers after CUDA/device setup; fork can inherit an
+            # unusable CUDA runtime and leave reference rollouts hung.
+            context = mp.get_context("spawn")
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=min(args.workers, len(ref_args)),
+                mp_context=context,
+            ) as executor:
                 bills["oracle"] = list(executor.map(_oracle_worker, ref_args))
                 rule_results = list(executor.map(_rule_worker, ref_args))
                 bills["rule"] = [result[0] for result in rule_results]
@@ -656,7 +669,7 @@ def main() -> None:
                     flush=True,
                 )
                 bill, deg_cost, cycle = _run_agent(
-                    segment, "rl" if name == "ppo" else "dt", model,
+                    segment, "rl" if name in {"ppo", "sac", "td3"} else "dt", model,
                     battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
                     args.dt_rtg_value,
                 )

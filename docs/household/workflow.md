@@ -19,6 +19,29 @@ If you only need environment mechanics, read [environment.md](environment.md). I
 - Canonical DT training: `scripts/pretrain_decision_transformer.py`
 - Household evaluation: `notebooks/test_eval.ipynb`
 
+### H4.9 Long-Horizon Pilot
+
+The completed 30-day pilot is reproducible with:
+
+```bash
+python3 scripts/evaluate_household_ood_baselines.py \
+  --normalized-dir data/household/real/normalized \
+  --output-dir eval_output/household/h4_9_pilot_30d \
+  --dt-path models/household/dt/h4_4_persistence_standard_rtg_8x512_ctx576_best.pt \
+  --dt-config models/household/dt/h4_4_persistence_standard_rtg_8x512_ctx576_model_kwargs.json \
+  --ppo-path models/household/sb3/h4_4_full/ppo_h4_4_fullcorpus.zip \
+  --sac-path models/household/sb3/sac_model.zip \
+  --td3-path models/household/sb3/td3_model.zip \
+  --tariff realistic --forecast-mode persistence \
+  --window-days 30 --windows-per-segment 1 \
+  --workers 12 --batch-eval --device cuda
+```
+
+It compares DT, PPO, SAC, TD3, rule, oracle, and no-battery policies on four
+contiguous real-normalized windows. Results are stored in
+`eval_output/household/h4_9_pilot_30d/summary.json`; this is a pilot rather
+than a final seasonal claim because the surface has only four windows.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
