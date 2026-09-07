@@ -74,6 +74,14 @@
 
 ---
 
+| 🔵 **H4.8** | **Cycle-throughput / capacity-fade telemetry** — already implemented in evaluator (`_cycle_metrics_from_logs`, `segment_efc`, `segment_cycles`, `segment_capacity_fade`, `mean_efc_per_day`, etc.). | Use the new per-window cycle metrics to strengthen H4.5 claims with direct mechanism evidence. | ✅ Implemented (eval script + `h4_degradation_study.py` aggregation). |
+|  |  |  |
+| **H4.8** | **Production hardening — deployment readiness checklist** | **Prerequisites for any closed-loop deployment:** (1) Hard SOC limits in `EnergySimEnv.step()` with `SafetyViolation` exception; (2) 30-day shadow-mode eval with realistic price/solar noise on a real household; (3) Multi-seed PPO/SAC/TD3 baselines (5 seeds × 3 algos); (4) Sim-to-real gap analysis: shadow mode on 1 real home for 14 days; (5) H4.6 spot-price pass-through + TTM gap adapter (after baselines). | **Hard constraints:** no retraining for (1)-(4); shadow-mode deploy on 1 real home for 14 days before any closed-loop trial. |
+|  |  |  |
+| **H4.9** | **Long-horizon evaluation** — 30-day / 90-day / 1-year evaluation horizons with realistic seasonal price/solar profiles. 7-day windows are too short for degradation economics to converge. | Critical for economic viability claims; 7-day windows are too short for degradation economics to converge. |
+| **H4.10** | **Multi-seed PPO/SAC/TD3 baselines** — 5 seeds × 3 algorithms (PPO, SAC, TD3) on the H4.1 corpus. Current PPO baseline is 250k steps / 1 seed — too weak to claim "DT beats RL". | Needed before claiming "DT beats RL" on household track; 5 seeds × 3 algos × 1M steps ≈ 2 weeks GPU. |
+| **H4.11** | **Sim-to-real shadow mode** — 14-day shadow deployment on 1 real household (log actions, don't control). Validate sim-to-real gap on price/solar forecast errors, model mismatch, degradation model mismatch. | Single highest-impact sim-to-real step; gate before any closed-loop trial. |
+|  |  |  |
 ## 5. Engineering / Rigor / Reproducibility
 
 | ID | Task | Priority |
@@ -155,6 +163,10 @@ failures.
 
 > **Diary (2026-09-06):** We completed the definitive H4.5 multi-seed rerun. The earlier pilot was useful as a sanity check, but it was not the source of truth because it measured only grid-bill reduction and used a single seed. The final scorecard treats the net-of-wear metric as primary and the grid-bill-only metric as secondary, and also records EFC/cycle-count/capacity-fade per day. The key operational takeaway is that **every regime is net-negative once wear is charged** — short-window arbitrage does not pay for its own battery wear. The expected "no-degradation policy is the hardest cycler" story did not hold in the mechanism data (EFC is flat; disabled is the lowest), so the honest conclusion is about the economics (wear makes arbitrage negative) rather than about one regime cycling more than another. The $1k/$10k cost sweep does not show a robust monotone effect across seeds.
 | 🔵 **H4.6** | **Optional extensions** — add a time-aligned retail spot-price pass-through study and provision the isolated TTM gap/weather-residual adapter only after the statistical baselines are complete. | Spot and TTM claims remain separately gated and do not replace the bootstrap/recomposition baselines. |
+|  |  |  |  |
+| **H4.7** | **Production hardening** — close the sim-to-real gap for household deployment. | **Prerequisites:** (1) Hard SOC limits in `EnergySimEnv.step()` with `SafetyViolation` exception; (2) 30-day shadow-mode eval with realistic price/solar noise on a real household; (3) Multi-seed PPO/SAC/TD3 baselines (5 seeds × 3 algos); (4) Sim-to-real gap analysis: shadow mode on 1 real home for 14 days; (5) H4.6 spot-price pass-through + TTM gap adapter (after baselines). | Hard constraints: no retraining for (1)-(4); shadow-mode deploy on 1 real home for 14 days before any closed-loop trial. |
+|  |  |  |
+| **H4.8** | **Cycle-throughput / capacity-fade telemetry** — already implemented in evaluator (`_cycle_metrics_from_logs`, `segment_efc`, `segment_cycles`, `segment_capacity_fade`, `mean_efc_per_day`, etc.). | Use the new per-window cycle metrics to strengthen H4.5 claims with direct mechanism evidence. | ✅ Implemented (eval script + `h4_degradation_study.py` aggregation). |
 
 ### H1.5 — Synthetic diverse-household generator (detailed plan)
 
