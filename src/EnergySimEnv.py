@@ -3,6 +3,7 @@ import gymnasium as gym
 from gymnasium.envs.registration import register
 from gymnasium import spaces, error, utils
 
+import logging
 import numpy as np
 import polars as pl
 
@@ -29,6 +30,12 @@ DEG_INCIDENT_FIELDS = [
     "CL",
     "step_degradation",
 ]
+
+
+class SafetyViolation(Exception):
+    """Raised when battery SOC would exceed hard limits."""
+    pass
+
 
 class SolarBatteryEnv(gym.Env):
     """
@@ -76,8 +83,19 @@ class SolarBatteryEnv(gym.Env):
         step_duration = 0.5, # duration of each step in hours (default half an hour)
         degradation_temperature = 25.0,
         degradation_mode: str = "full",  # "full", "cycle_only", "disabled"
+        soc_min: float = 0.0,
+        soc_max: float = 1.0,
+        enforce_soc_limits: bool = True,
+        soc_limit_penalty: float = 0.25,
     ):
         super(SolarBatteryEnv, self).__init__()
+        if not np.isfinite(soc_min) or not np.isfinite(soc_max):
+            raise ValueError("soc_min and soc_max must be finite")
+        if not 0.0 <= soc_min <= soc_max <= 1.0:
+            raise ValueError("SOC limits must satisfy 0.0 <= soc_min <= soc_max <= 1.0")
+        if not np.isfinite(soc_limit_penalty) or soc_limit_penalty < 0.0:
+            raise ValueError("soc_limit_penalty must be finite and non-negative")
+
         self.df = df
         self.current_step = 0
         self.max_step = max_step
@@ -109,6 +127,10 @@ class SolarBatteryEnv(gym.Env):
 
         self.degradation_temperature = float(degradation_temperature)
         self.degradation_mode = degradation_mode
+        self.soc_min = float(soc_min)
+        self.soc_max = float(soc_max)
+        self.enforce_soc_limits = bool(enforce_soc_limits)
+        self.soc_limit_penalty = float(soc_limit_penalty)
         
         # Initialize degradation model based on mode
         if degradation_mode == "cycle_only":
@@ -315,7 +337,10 @@ class SolarBatteryEnv(gym.Env):
         new_cycles_in_step: int = 0,
         rainflow_cumulative_deg: float = 0.0,
         deg_incident: bool = False,
-        deg_error: str = ""
+        deg_error: str = "",
+        soc_limit_clipped: bool = False,
+        requested_battery_flow_energy: float = 0.0,
+        safety_penalty: float = 0.0,
     ) -> dict:
         """Build a compact reward/info dict with key debugging signals about degradation and cycles."""
         return {
@@ -333,7 +358,10 @@ class SolarBatteryEnv(gym.Env):
             "capacity_kwh": float(capacity_kwh),
             "current_step": int(current_step),
             "deg_incident": deg_incident,
-            "deg_error": deg_error
+            "deg_error": deg_error,
+            "soc_limit_clipped": bool(soc_limit_clipped),
+            "requested_battery_flow_energy": float(requested_battery_flow_energy),
+            "safety_penalty": float(safety_penalty),
         }
 
     def _safe_degradation_per_cycle(self, Id: float, Ich: float, soc: float, DoD: float):
@@ -367,8 +395,33 @@ class SolarBatteryEnv(gym.Env):
         else:  # Charging action: ensure battery does not exceed its capacity
             battery_flow_energy = min(battery_flow_energy, self.battery_capacity - self.battery_level)
 
-        # ----- Update Battery Level & Check Constraints -----
+        # ----- Apply configured hard SOC limits -----
         new_battery_level = self.battery_level + battery_flow_energy
+        requested_battery_flow_energy = battery_flow_energy
+        soc_limit_clipped = False
+        if self.enforce_soc_limits:
+            min_battery_level = self.soc_min * self.battery_capacity
+            max_battery_level = self.soc_max * self.battery_capacity
+            if new_battery_level < min_battery_level:
+                soc_limit_clipped = True
+                logging.warning(
+                    "Clipping battery discharge to SOC minimum: proposed SOC %.3f, minimum %.3f",
+                    new_battery_level / self.battery_capacity,
+                    self.soc_min,
+                )
+                new_battery_level = min_battery_level
+                battery_flow_energy = new_battery_level - self.battery_level
+            elif new_battery_level > max_battery_level:
+                soc_limit_clipped = True
+                logging.warning(
+                    "Clipping battery charge to SOC maximum: proposed SOC %.3f, maximum %.3f",
+                    new_battery_level / self.battery_capacity,
+                    self.soc_max,
+                )
+                new_battery_level = max_battery_level
+                battery_flow_energy = new_battery_level - self.battery_level
+
+        # ----- Update Battery Level & Check Constraints -----
         soc_after = float(np.clip((new_battery_level / self.battery_capacity) * 100.0, 0.0, 100.0))
 
         # ----- Retrieve Current Data -----
@@ -414,6 +467,9 @@ class SolarBatteryEnv(gym.Env):
                 step_degradation=0.0,
                 total_degradation=self.total_degradation,
                 capacity_kwh=self.battery_capacity,
+                soc_limit_clipped=soc_limit_clipped,
+                requested_battery_flow_energy=requested_battery_flow_energy,
+                safety_penalty=self.soc_limit_penalty if soc_limit_clipped else 0.0,
             )
 
             return primary_obs, np.float64(VIOLATION_PENALTY), True, False, reward_info
@@ -447,6 +503,9 @@ class SolarBatteryEnv(gym.Env):
                 total_degradation=self.total_degradation,
                 capacity_kwh=self.battery_capacity,
                 deg_error=deg_error,
+                soc_limit_clipped=soc_limit_clipped,
+                requested_battery_flow_energy=requested_battery_flow_energy,
+                safety_penalty=self.soc_limit_penalty if soc_limit_clipped else 0.0,
             )
 
             components = self._get_observation_components()
@@ -472,6 +531,8 @@ class SolarBatteryEnv(gym.Env):
 
         # Final reward: trade-off energy cost vs degradation cost
         reward = grid_reward - current_step_deg_cost
+        safety_penalty = self.soc_limit_penalty if soc_limit_clipped else 0.0
+        reward -= safety_penalty
         # check if step degradation is abnormally large
 
         if step_degradation > 0.05:  # realistic explosion threshold
@@ -507,7 +568,10 @@ class SolarBatteryEnv(gym.Env):
             current_step=self.current_step,
             new_cycles_in_step=len(new_cycles),
             rainflow_cumulative_deg=self._rainflow_deg_cumulative,
-            deg_incident=len(self.deg_incidents) > 0
+            deg_incident=len(self.deg_incidents) > 0,
+            soc_limit_clipped=soc_limit_clipped,
+            requested_battery_flow_energy=requested_battery_flow_energy,
+            safety_penalty=safety_penalty,
         )
 
         # ----- Advance Simulation Step -----

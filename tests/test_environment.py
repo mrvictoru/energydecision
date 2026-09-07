@@ -13,6 +13,7 @@ import numpy as np
 import polars as pl
 import sys
 import os
+import logging
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -93,6 +94,102 @@ class TestSolarBatteryEnv:
         
         assert env.battery_level >= 0, "Battery level should not go negative"
         assert env.battery_level <= env.battery_capacity, "Battery level should not exceed capacity"
+
+    def test_soc_max_clips_overcharge_and_logs_warning(self, small_env_df, caplog):
+        """Charging beyond the configured maximum should be clipped."""
+        env = SolarBatteryEnv(
+            small_env_df,
+            battery_capacity=4.0,
+            max_battery_flow=4.0,
+            init_battery_level=3.0,
+            soc_max=0.75,
+            max_step=2,
+        )
+        env.reset()
+
+        with caplog.at_level(logging.WARNING):
+            _, _, _, _, info = env.step(np.array([1.0]))
+
+        assert np.isclose(env.battery_level, 3.0)
+        assert np.isclose(info["battery_flow_energy"], 0.0)
+        assert info["soc_limit_clipped"] is True
+        assert np.isclose(
+            info["requested_battery_flow_energy"],
+            env.battery_capacity - env.init_battery_level,
+        )
+        assert np.isclose(info["safety_penalty"], env.soc_limit_penalty)
+        assert "SOC maximum" in caplog.text
+
+    def test_soc_min_clips_overdischarge_and_logs_warning(self, small_env_df, caplog):
+        """Discharging beyond the configured minimum should be clipped."""
+        env = SolarBatteryEnv(
+            small_env_df,
+            battery_capacity=4.0,
+            max_battery_flow=4.0,
+            init_battery_level=1.0,
+            soc_min=0.25,
+            max_step=2,
+        )
+        env.reset()
+
+        with caplog.at_level(logging.WARNING):
+            _, _, _, _, info = env.step(np.array([-1.0]))
+
+        assert np.isclose(env.battery_level, 1.0)
+        assert np.isclose(info["battery_flow_energy"], 0.0)
+        assert info["soc_limit_clipped"] is True
+        assert np.isclose(
+            info["requested_battery_flow_energy"],
+            -env.init_battery_level,
+        )
+        assert np.isclose(info["safety_penalty"], env.soc_limit_penalty)
+        assert "SOC minimum" in caplog.text
+
+    def test_soc_limits_can_be_disabled(self, small_env_df, caplog):
+        """Disabling enforcement should preserve the prior physical-limit behavior."""
+        env = SolarBatteryEnv(
+            small_env_df,
+            battery_capacity=4.0,
+            max_battery_flow=4.0,
+            init_battery_level=3.0,
+            soc_max=0.5,
+            enforce_soc_limits=False,
+            max_step=2,
+        )
+        env.reset()
+
+        with caplog.at_level(logging.WARNING):
+            _, _, _, _, info = env.step(np.array([1.0]))
+
+        assert np.isclose(env.battery_level, 4.0)
+        assert np.isclose(info["battery_flow_energy"], 1.0)
+        assert info["soc_limit_clipped"] is False
+        assert np.isclose(info["requested_battery_flow_energy"], 1.0)
+        assert np.isclose(info["safety_penalty"], 0.0)
+        assert "SOC maximum" not in caplog.text
+
+    def test_soc_limit_penalty_reduces_reward(self, small_env_df):
+        """Clipped actions should receive the configured learning penalty."""
+        common_kwargs = {
+            "battery_capacity": 4.0,
+            "max_battery_flow": 4.0,
+            "init_battery_level": 3.0,
+            "soc_max": 0.75,
+            "max_step": 2,
+        }
+        unpenalized_env = SolarBatteryEnv(
+            small_env_df, soc_limit_penalty=0.0, **common_kwargs
+        )
+        penalized_env = SolarBatteryEnv(
+            small_env_df, soc_limit_penalty=2.0, **common_kwargs
+        )
+        unpenalized_env.reset()
+        penalized_env.reset()
+
+        _, unpenalized_reward, _, _, _ = unpenalized_env.step(np.array([1.0]))
+        _, penalized_reward, _, _, _ = penalized_env.step(np.array([1.0]))
+
+        assert np.isclose(unpenalized_reward - penalized_reward, 2.0)
 
     def test_observation_shape(self, env):
         """Test that observations have the expected shape."""
