@@ -67,6 +67,14 @@ about A$1,620 (about A$23/year below the no-battery baseline). Results are in
 is in `efc_0_30/`. This is an inference-time diagnostic, not a retrained
 policy.
 
+The budget sweep (`efc_0_10` through `efc_0_30`) selected 0.10 EFC/day.
+Applying that normalized budget to the 90-day real windows produced positive
+net savings for the larger configurations: approximately A$5.6/year at
+10 kWh/5 kW, A$23.2 at 15 kWh/7 kW, and A$49.3 at 20 kWh/7 kW. The 5 kWh/3.3
+kW case remained approximately A$10.5/year below no-battery, so the result
+supports versatility but still requires broader seasonal and matched-capacity
+validation.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
