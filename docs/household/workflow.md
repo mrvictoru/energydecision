@@ -51,6 +51,14 @@ The longer-horizon extensions use the same checkpoints and no retraining:
   their configured 20 kWh battery sizes and are therefore a synthetic
   stress-test surface, not a direct 5 kWh real-home comparison.
 
+The first no-retraining diagnostic sweep is in
+`eval_output/household/h4_9_rtg_sweep/`. It evaluates DT RTG prompts
+`-4, -2, -1, 0, +1` on the same 90-day real windows under 1%–99% SOC
+operating bounds. RTG `-4` was the best prompt, but it still over-cycled at
+about 1.12 EFC/day and remained negative after degradation costs, so the next
+diagnostic is constrained action projection rather than prompt calibration
+alone.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
