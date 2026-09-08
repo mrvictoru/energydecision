@@ -59,6 +59,14 @@ about 1.12 EFC/day and remained negative after degradation costs, so the next
 diagnostic is constrained action projection rather than prompt calibration
 alone.
 
+The constrained inference prototype is implemented with
+`--dt-max-efc-per-day`. On the same 90-day windows, a 0.20 EFC/day budget
+reduced DT cycling to 0.145 EFC/day and produced an annualized net bill of
+about A$1,620 (about A$23/year below the no-battery baseline). Results are in
+`eval_output/household/h4_9_projection/efc_0_20/`; the 0.30 EFC/day comparison
+is in `efc_0_30/`. This is an inference-time diagnostic, not a retrained
+policy.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data

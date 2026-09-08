@@ -135,7 +135,8 @@ class Agent:
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99,
                  reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None,
-                 rtg_prompt_provider: Optional[Callable[[float, int], float]] = None):
+                 rtg_prompt_provider: Optional[Callable[[float, int], float]] = None,
+                 action_projector: Optional[Callable[[Any, Any], Any]] = None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp', 'sdp', or 'oracle'.
@@ -152,6 +153,7 @@ class Agent:
         self.reset_seed = reset_seed
         self.reset_options = reset_options
         self.rtg_prompt_provider = rtg_prompt_provider
+        self.action_projector = action_projector
 
         if self.algorithm in ('sdp', 'mrdp', 'oracle'):
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
@@ -486,7 +488,19 @@ class Agent:
         try:
             while not (terminated or truncated):
                 action = self.choose_action(current_obs)
+                if self.action_projector is not None:
+                    action = self.action_projector(action, self.env)
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
+                if self.action_projector is not None and hasattr(
+                    self.action_projector, "last_projected"
+                ):
+                    info = dict(info)
+                    info["action_projected"] = bool(
+                        self.action_projector.last_projected
+                    )
+                    info["projected_action_scale"] = float(
+                        self.action_projector.last_scale
+                    )
 
                 logs.append({
                     'step': step,

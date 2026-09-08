@@ -73,6 +73,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-flow-kw", type=float, default=3.3)
     parser.add_argument("--soc-min", type=float, default=0.01)
     parser.add_argument("--soc-max", type=float, default=0.99)
+    parser.add_argument(
+        "--dt-max-efc-per-day",
+        type=float,
+        default=None,
+        help="Project DT actions to this maximum absolute battery throughput per day.",
+    )
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -160,7 +166,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
             "capacity_fade": 0.0, "soc_clipped_steps": 0.0,
             "soc_upper_clipped_steps": 0.0, "soc_lower_clipped_steps": 0.0,
             "safety_penalty": 0.0, "requested_flow_kwh": 0.0,
-            "applied_flow_kwh": 0.0,
+            "applied_flow_kwh": 0.0, "action_projected_steps": 0.0,
         }
     infos = logs["info"].to_list()
     discharge = 0.0
@@ -172,11 +178,13 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
     safety_penalty = 0.0
     requested_flow = 0.0
     applied_flow = 0.0
+    projected_steps = 0
     for info in infos:
         flow_energy = float(info.get("battery_flow_energy", 0.0) or 0.0)
         requested = float(info.get("requested_battery_flow_energy", flow_energy) or 0.0)
         requested_flow += requested
         applied_flow += flow_energy
+        projected_steps += int(bool(info.get("action_projected", False)))
         if info.get("soc_limit_clipped", False):
             clipped_steps += 1
             safety_penalty += float(info.get("safety_penalty", 0.0) or 0.0)
@@ -202,6 +210,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
         "safety_penalty": float(safety_penalty),
         "requested_flow_kwh": float(requested_flow),
         "applied_flow_kwh": float(applied_flow),
+        "action_projected_steps": float(projected_steps),
     }
 
 
@@ -211,10 +220,42 @@ def tariff_for_name(name: str) -> Tariff:
     return Tariff(30.0, 5.0, 24, 24)
 
 
+class DailyThroughputProjector:
+    """Scale DT actions to keep absolute battery throughput within a daily EFC budget."""
+
+    def __init__(self, max_efc_per_day: float) -> None:
+        if not np.isfinite(max_efc_per_day) or max_efc_per_day <= 0.0:
+            raise ValueError("max_efc_per_day must be finite and positive")
+        self.max_efc_per_day = float(max_efc_per_day)
+        self.day_index = -1
+        self.throughput_kwh = 0.0
+        self.last_projected = False
+        self.last_scale = 1.0
+
+    def __call__(self, action, env):
+        day_index = int(env.current_step // max(1, round(24.0 / env.step_duration)))
+        if day_index != self.day_index:
+            self.day_index = day_index
+            self.throughput_kwh = 0.0
+        values = np.asarray(action, dtype=np.float32).reshape(-1)
+        if values.size == 0:
+            raise ValueError("DT action projector received an empty action")
+        projected = values.copy()
+        requested_kwh = abs(float(values[0])) * env.max_battery_flow * env.step_duration
+        budget_kwh = max(0.0, self.max_efc_per_day * env.battery_capacity - self.throughput_kwh)
+        scale = min(1.0, budget_kwh / requested_kwh) if requested_kwh > 0.0 else 1.0
+        projected[0] *= scale
+        self.last_scale = float(scale)
+        self.last_projected = scale < 1.0
+        self.throughput_kwh += requested_kwh * scale
+        return projected.tolist()
+
+
 def _run_agent(
     frame: pl.DataFrame, algorithm: str, model, capacity: float, flow: float,
     tariff: Tariff, rtg_mode: str = "standard", rtg_value: float = 0.0,
     soc_min: float = 0.01, soc_max: float = 0.99,
+    dt_max_efc_per_day: float | None = None,
 ) -> tuple[float, float, dict[str, float]]:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
@@ -227,10 +268,16 @@ def _run_agent(
         )
         if algorithm == "dt" and rtg_mode == "j_t_soc" else None
     )
+    projector = (
+        DailyThroughputProjector(dt_max_efc_per_day)
+        if algorithm == "dt" and dt_max_efc_per_day is not None
+        else None
+    )
     logs, _ = Agent(env, algorithm=algorithm, model=model, horizon=288,
                     soc_resolution=31, action_resolution=21,
                     rtg_value=rtg_value,
-                    rtg_prompt_provider=prompt_provider).run_episode()
+                    rtg_prompt_provider=prompt_provider,
+                    action_projector=projector).run_episode()
     return (
         _bill_from_logs(frame, logs),
         _degradation_cost_from_logs(logs, env.battery_life_cost),
@@ -705,7 +752,10 @@ def main() -> None:
         degradation_costs[name] = []
         cycle_metrics[name] = []
         is_dt = isinstance(model, DecisionTransformer)
-        if is_dt and args.batch_eval and len(segments) > 1:
+        if (
+            is_dt and args.batch_eval and len(segments) > 1
+            and args.dt_max_efc_per_day is None
+        ):
             print(
                 f"Evaluating policy '{name}' across {len(segments)} windows with batched DT stepping...",
                 flush=True,
@@ -730,6 +780,7 @@ def main() -> None:
                     segment, "rl" if name in {"ppo", "sac", "td3"} else "dt", model,
                     battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
                     args.dt_rtg_value, args.soc_min, args.soc_max,
+                    args.dt_max_efc_per_day,
                 )
                 bills[name].append(bill)
                 degradation_costs[name].append(deg_cost)
@@ -760,6 +811,7 @@ def main() -> None:
         "soc_min": args.soc_min,
         "soc_max": args.soc_max,
         "enforce_soc_limits": True,
+        "dt_max_efc_per_day": args.dt_max_efc_per_day,
         "dt_rtg_value": args.dt_rtg_value,
         "forecast_sidecar": (
             str(args.forecast_sidecar.resolve()) if args.forecast_sidecar is not None else None
@@ -825,6 +877,9 @@ def main() -> None:
                     for m, days in zip(cm, segment_days)
                 ])),
                 "total_safety_penalty": float(sum(m["safety_penalty"] for m in cm)),
+                "segment_action_projected_steps": [
+                    m["action_projected_steps"] for m in cm
+                ],
             })
         output["results"][name] = result
     base = np.asarray(output["results"]["no_battery"]["bill_aud_per_year"]["mean"])
