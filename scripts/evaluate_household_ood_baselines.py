@@ -71,6 +71,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tariff", choices=("legacy_flat", "realistic"), default="legacy_flat")
     parser.add_argument("--capacity-kwh", type=float, default=5.0)
     parser.add_argument("--max-flow-kw", type=float, default=3.3)
+    parser.add_argument("--soc-min", type=float, default=0.01)
+    parser.add_argument("--soc-max", type=float, default=0.99)
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -153,13 +155,35 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
     capacity fade (total_degradation, 0..1).
     """
     if "info" not in logs.columns:
-        return {"discharge_kwh": 0.0, "efc": 0.0, "cycles": 0.0, "capacity_fade": 0.0}
+        return {
+            "discharge_kwh": 0.0, "efc": 0.0, "cycles": 0.0,
+            "capacity_fade": 0.0, "soc_clipped_steps": 0.0,
+            "soc_upper_clipped_steps": 0.0, "soc_lower_clipped_steps": 0.0,
+            "safety_penalty": 0.0, "requested_flow_kwh": 0.0,
+            "applied_flow_kwh": 0.0,
+        }
     infos = logs["info"].to_list()
     discharge = 0.0
     cycles = 0.0
     final_fade = 0.0
+    clipped_steps = 0
+    upper_clipped_steps = 0
+    lower_clipped_steps = 0
+    safety_penalty = 0.0
+    requested_flow = 0.0
+    applied_flow = 0.0
     for info in infos:
         flow_energy = float(info.get("battery_flow_energy", 0.0) or 0.0)
+        requested = float(info.get("requested_battery_flow_energy", flow_energy) or 0.0)
+        requested_flow += requested
+        applied_flow += flow_energy
+        if info.get("soc_limit_clipped", False):
+            clipped_steps += 1
+            safety_penalty += float(info.get("safety_penalty", 0.0) or 0.0)
+            if requested > flow_energy:
+                upper_clipped_steps += 1
+            elif requested < flow_energy:
+                lower_clipped_steps += 1
         if flow_energy < 0.0:
             discharge += -flow_energy
         cycles += float(info.get("new_cycles_in_step", 0) or 0)
@@ -172,6 +196,12 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
         "efc": float(discharge / capacity),
         "cycles": float(cycles),
         "capacity_fade": float(final_fade),
+        "soc_clipped_steps": float(clipped_steps),
+        "soc_upper_clipped_steps": float(upper_clipped_steps),
+        "soc_lower_clipped_steps": float(lower_clipped_steps),
+        "safety_penalty": float(safety_penalty),
+        "requested_flow_kwh": float(requested_flow),
+        "applied_flow_kwh": float(applied_flow),
     }
 
 
@@ -184,10 +214,12 @@ def tariff_for_name(name: str) -> Tariff:
 def _run_agent(
     frame: pl.DataFrame, algorithm: str, model, capacity: float, flow: float,
     tariff: Tariff, rtg_mode: str = "standard", rtg_value: float = 0.0,
+    soc_min: float = 0.01, soc_max: float = 0.99,
 ) -> tuple[float, float, dict[str, float]]:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
         init_battery_level=capacity / 2.0, max_step=len(frame),
+        soc_min=soc_min, soc_max=soc_max,
     )
     prompt_provider = (
         build_j_t_soc_prompt_provider(
@@ -217,6 +249,8 @@ class _BatchedEnvState:
         model: DecisionTransformer,
         rtg_mode: str,
         rtg_value: float,
+        soc_min: float,
+        soc_max: float,
     ) -> None:
         self.idx = idx
         self.frame = frame
@@ -227,6 +261,8 @@ class _BatchedEnvState:
             max_battery_flow=flow,
             init_battery_level=capacity / 2.0,
             max_step=len(frame),
+            soc_min=soc_min,
+            soc_max=soc_max,
         )
         self.prompt_provider = (
             build_j_t_soc_prompt_provider(
@@ -256,6 +292,8 @@ def _run_batched_dt(
     tariff: Tariff,
     rtg_mode: str = "standard",
     rtg_value: float = 0.0,
+    soc_min: float = 0.01,
+    soc_max: float = 0.99,
     device: str = "cuda",
 ) -> tuple[list[float], list[float], list[dict[str, float]]]:
     model.eval()
@@ -270,13 +308,21 @@ def _run_batched_dt(
             model=model,
             rtg_mode=rtg_mode,
             rtg_value=rtg_value,
+            soc_min=soc_min,
+            soc_max=soc_max,
         )
         for i in range(len(segments))
     ]
     results: list[float] = [0.0] * len(segments)
     degradation_costs: list[float] = [0.0] * len(segments)
     cycle_metrics: list[dict[str, float]] = [
-        {"discharge_kwh": 0.0, "efc": 0.0, "cycles": 0.0, "capacity_fade": 0.0}
+        {
+            "discharge_kwh": 0.0, "efc": 0.0, "cycles": 0.0,
+            "capacity_fade": 0.0, "soc_clipped_steps": 0.0,
+            "soc_upper_clipped_steps": 0.0, "soc_lower_clipped_steps": 0.0,
+            "safety_penalty": 0.0, "requested_flow_kwh": 0.0,
+            "applied_flow_kwh": 0.0,
+        }
         for _ in range(len(segments))
     ]
 
@@ -377,14 +423,19 @@ def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tari
     return float(sum(costs))
 
 
-def _oracle_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> float:
-    frame, capacity, flow, tariff = args
+def _oracle_worker(
+    args: tuple[pl.DataFrame, float, float, Tariff, float, float],
+) -> float:
+    frame, capacity, flow, tariff, _, _ = args
     return _oracle_bill(frame, capacity, flow, tariff)
 
 
-def _rule_worker(args: tuple[pl.DataFrame, float, float, Tariff]) -> tuple[float, float, dict[str, float]]:
-    frame, capacity, flow, tariff = args
-    return _run_agent(frame, "rule", None, capacity, flow, tariff)
+def _rule_worker(
+    args: tuple[pl.DataFrame, float, float, Tariff, float, float],
+) -> tuple[float, float, dict[str, float]]:
+    frame, capacity, flow, tariff, soc_min, soc_max = args
+    return _run_agent(frame, "rule", None, capacity, flow, tariff,
+                      soc_min=soc_min, soc_max=soc_max)
 
 
 def _resolve_device(name: str) -> str:
@@ -615,7 +666,11 @@ def main() -> None:
         )
         if args.workers > 1 and len(segments) > 1:
             ref_args = [
-                (segment, window_batteries[idx]["capacity_kwh"], window_batteries[idx]["max_flow_kw"], tariff)
+                (
+                    segment, window_batteries[idx]["capacity_kwh"],
+                    window_batteries[idx]["max_flow_kw"], tariff,
+                    args.soc_min, args.soc_max,
+                )
                 for idx, segment in enumerate(segments)
             ]
             # Spawn workers after CUDA/device setup; fork can inherit an
@@ -634,7 +689,9 @@ def main() -> None:
             for idx, segment in enumerate(segments):
                 battery = window_batteries[idx]
                 rule_bill, rule_deg_cost, rule_cycle = _run_agent(
-                    segment, "rule", None, battery["capacity_kwh"], battery["max_flow_kw"], tariff
+                    segment, "rule", None, battery["capacity_kwh"],
+                    battery["max_flow_kw"], tariff,
+                    soc_min=args.soc_min, soc_max=args.soc_max,
                 )
                 bills["rule"].append(rule_bill)
                 degradation_costs.setdefault("rule", []).append(rule_deg_cost)
@@ -655,7 +712,8 @@ def main() -> None:
             )
             bills[name], degradation_costs[name], cycle_metrics[name] = _run_batched_dt(
                 segments, model, window_batteries, tariff,
-                rtg_mode=rtg_mode, rtg_value=args.dt_rtg_value, device=device,
+                rtg_mode=rtg_mode, rtg_value=args.dt_rtg_value,
+                soc_min=args.soc_min, soc_max=args.soc_max, device=device,
             )
         else:
             print(f"Evaluating policy '{name}' across {len(segments)} windows...", flush=True)
@@ -671,7 +729,7 @@ def main() -> None:
                 bill, deg_cost, cycle = _run_agent(
                     segment, "rl" if name in {"ppo", "sac", "td3"} else "dt", model,
                     battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
-                    args.dt_rtg_value,
+                    args.dt_rtg_value, args.soc_min, args.soc_max,
                 )
                 bills[name].append(bill)
                 degradation_costs[name].append(deg_cost)
@@ -699,6 +757,9 @@ def main() -> None:
         ),
         "tariff": args.tariff,
         "forecast_mode": args.forecast_mode,
+        "soc_min": args.soc_min,
+        "soc_max": args.soc_max,
+        "enforce_soc_limits": True,
         "dt_rtg_value": args.dt_rtg_value,
         "forecast_sidecar": (
             str(args.forecast_sidecar.resolve()) if args.forecast_sidecar is not None else None
@@ -751,6 +812,19 @@ def main() -> None:
                 "mean_cycles_per_day": float(
                     np.mean([m["cycles"] / days for m, days in zip(cm, segment_days)])
                 ),
+                "segment_soc_clipped_steps": [m["soc_clipped_steps"] for m in cm],
+                "segment_soc_upper_clipped_steps": [
+                    m["soc_upper_clipped_steps"] for m in cm
+                ],
+                "segment_soc_lower_clipped_steps": [
+                    m["soc_lower_clipped_steps"] for m in cm
+                ],
+                "segment_safety_penalty": [m["safety_penalty"] for m in cm],
+                "mean_soc_clipped_steps_per_day": float(np.mean([
+                    m["soc_clipped_steps"] / days
+                    for m, days in zip(cm, segment_days)
+                ])),
+                "total_safety_penalty": float(sum(m["safety_penalty"] for m in cm)),
             })
         output["results"][name] = result
     base = np.asarray(output["results"]["no_battery"]["bill_aud_per_year"]["mean"])
