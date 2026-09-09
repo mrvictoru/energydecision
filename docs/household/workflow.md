@@ -75,6 +75,30 @@ kW case remained approximately A$10.5/year below no-battery, so the result
 supports versatility but still requires broader seasonal and matched-capacity
 validation.
 
+Matched-capacity synthetic validation is now available through the explicit
+override options:
+
+```bash
+python3 scripts/evaluate_household_ood_baselines.py \
+  --synth-dir data/household/synth_h4_1 --synth-split test \
+  --output-dir eval_output/household/h4_9_validation/synth_6m_20kwh_7kw \
+  --override-capacity-kwh 20 --override-max-flow-kw 7 \
+  --dt-path models/household/dt/h4_4_persistence_standard_rtg_8x512_ctx576_best.pt \
+  --dt-config models/household/dt/h4_4_persistence_standard_rtg_8x512_ctx576_model_kwargs.json \
+  --skip-ppo --skip-reference-policies --dt-rtg-mode standard \
+  --dt-rtg-value -4 --forecast-mode persistence --tariff realistic \
+  --window-days 180 --windows-per-segment 1 --limit-windows 10 \
+  --device cuda --soc-min 0.01 --soc-max 0.99 \
+  --dt-max-efc-per-day 0.10
+```
+
+The held-out 180-day comparison uses the same ten windows for every matched
+configuration. At 0.10 EFC/day, annualized net savings versus no battery were
+approximately −A$3.5 (5 kWh/3.3 kW), +A$4.1 (10 kWh/5 kW), +A$14.6
+(15 kWh/7 kW), and +A$34.6 (20 kWh/7 kW), with mean throughput near 0.0506
+EFC/day. Results are stored in
+`eval_output/household/h4_9_validation/synth_6m_{5kwh_3_3kw,10kwh_5kw,15kwh_7kw,20kwh_7kw}/summary.json`.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data

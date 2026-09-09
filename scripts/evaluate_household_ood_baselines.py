@@ -71,6 +71,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tariff", choices=("legacy_flat", "realistic"), default="legacy_flat")
     parser.add_argument("--capacity-kwh", type=float, default=5.0)
     parser.add_argument("--max-flow-kw", type=float, default=3.3)
+    parser.add_argument(
+        "--override-capacity-kwh",
+        type=float,
+        default=None,
+        help="Override per-episode synthetic battery capacity for matched comparisons.",
+    )
+    parser.add_argument(
+        "--override-max-flow-kw",
+        type=float,
+        default=None,
+        help="Override per-episode synthetic battery power for matched comparisons.",
+    )
     parser.add_argument("--soc-min", type=float, default=0.01)
     parser.add_argument("--soc-max", type=float, default=0.99)
     parser.add_argument(
@@ -671,6 +683,17 @@ def main() -> None:
         }
         for provenance in window_provenance
     ]
+    if args.synth_dir is not None:
+        if args.override_capacity_kwh is not None:
+            if args.override_capacity_kwh <= 0.0:
+                raise ValueError("--override-capacity-kwh must be positive")
+            for battery in window_batteries:
+                battery["capacity_kwh"] = args.override_capacity_kwh
+        if args.override_max_flow_kw is not None:
+            if args.override_max_flow_kw <= 0.0:
+                raise ValueError("--override-max-flow-kw must be positive")
+            for battery in window_batteries:
+                battery["max_flow_kw"] = args.override_max_flow_kw
     segments, window_provenance, window_batteries = _subsample_windows(
         segments, window_provenance, window_batteries, args.limit_windows
     )
@@ -805,6 +828,14 @@ def main() -> None:
             {"per_window": window_batteries}
             if args.synth_dir is not None
             else {"capacity_kwh": args.capacity_kwh, "max_flow_kw": args.max_flow_kw}
+        ),
+        "synthetic_battery_overrides": (
+            {
+                "capacity_kwh": args.override_capacity_kwh,
+                "max_flow_kw": args.override_max_flow_kw,
+            }
+            if args.synth_dir is not None
+            else None
         ),
         "tariff": args.tariff,
         "forecast_mode": args.forecast_mode,
