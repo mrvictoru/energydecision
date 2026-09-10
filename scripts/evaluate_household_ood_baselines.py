@@ -299,7 +299,12 @@ class DailyThroughputProjector:
         self.last_soc_projected = False
 
     def __call__(self, action, env):
-        day_index = int(env.current_step // max(1, round(24.0 / env.step_duration)))
+        timestamp = env.df["Timestamp"][env.current_step]
+        day_index = (
+            timestamp.date()
+            if hasattr(timestamp, "date")
+            else int(env.current_step // max(1, round(24.0 / env.step_duration)))
+        )
         if day_index != self.day_index:
             self.day_index = day_index
             self.throughput_kwh = 0.0

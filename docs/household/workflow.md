@@ -126,6 +126,19 @@ This supports retaining directional budgeting for the next seasonal
 validation, while recognizing that these are still 30-day synthetic-window
 results.
 
+The first real-data directional run exposed an accounting artifact: resetting
+the budget by row count treated irregular or missing timestamps as if every
+day
+had the same number of samples. The projector now resets from the environment
+timestamp date when available, with the row-count method retained only for
+integer-timestamp test fixtures. The corrected 12-window, 30-day real
+validation (`eval_output/household/h4_9_validation/real_30d_directional_calendar/summary.json`)
+held discharge throughput to `0.04999 EFC/day`, produced zero SOC clips, and
+delivered approximately `+A$2.7/year` net savings versus no battery. This is
+below the earlier combined-budget real result (`+A$3.8/year`), so directional
+budgeting remains safe and viable but is not yet an economic replacement for
+the combined projector on this surface.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
