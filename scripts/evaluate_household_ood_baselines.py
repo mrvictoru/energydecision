@@ -91,6 +91,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Project DT actions to this maximum absolute battery throughput per day.",
     )
+    parser.add_argument(
+        "--dt-max-charge-efc-per-day",
+        type=float,
+        default=None,
+        help="Optional separate daily EFC budget for charging actions.",
+    )
+    parser.add_argument(
+        "--dt-max-discharge-efc-per-day",
+        type=float,
+        default=None,
+        help="Optional separate daily EFC budget for discharging actions.",
+    )
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -239,12 +251,49 @@ def tariff_for_name(name: str) -> Tariff:
 class DailyThroughputProjector:
     """Project DT actions onto SOC and daily-throughput feasibility constraints."""
 
-    def __init__(self, max_efc_per_day: float) -> None:
-        if not np.isfinite(max_efc_per_day) or max_efc_per_day <= 0.0:
-            raise ValueError("max_efc_per_day must be finite and positive")
-        self.max_efc_per_day = float(max_efc_per_day)
+    def __init__(
+        self,
+        max_efc_per_day: float | None = None,
+        max_charge_efc_per_day: float | None = None,
+        max_discharge_efc_per_day: float | None = None,
+    ) -> None:
+        budgets = (
+            max_efc_per_day,
+            max_charge_efc_per_day,
+            max_discharge_efc_per_day,
+        )
+        if all(value is None for value in budgets):
+            raise ValueError("at least one EFC budget must be configured")
+        if (
+            max_efc_per_day is None
+            and (max_charge_efc_per_day is None or max_discharge_efc_per_day is None)
+        ):
+            raise ValueError(
+                "separate charge and discharge EFC budgets must both be configured"
+            )
+        if any(
+            value is not None
+            and (not np.isfinite(value) or value <= 0.0)
+            for value in budgets
+        ):
+            raise ValueError("EFC budgets must be finite and positive")
+        self.max_efc_per_day = (
+            float(max_efc_per_day) if max_efc_per_day is not None else None
+        )
+        self.max_charge_efc_per_day = (
+            float(max_charge_efc_per_day)
+            if max_charge_efc_per_day is not None
+            else self.max_efc_per_day
+        )
+        self.max_discharge_efc_per_day = (
+            float(max_discharge_efc_per_day)
+            if max_discharge_efc_per_day is not None
+            else self.max_efc_per_day
+        )
         self.day_index = -1
         self.throughput_kwh = 0.0
+        self.charge_throughput_kwh = 0.0
+        self.discharge_throughput_kwh = 0.0
         self.last_projected = False
         self.last_scale = 1.0
         self.last_soc_projected = False
@@ -254,6 +303,8 @@ class DailyThroughputProjector:
         if day_index != self.day_index:
             self.day_index = day_index
             self.throughput_kwh = 0.0
+            self.charge_throughput_kwh = 0.0
+            self.discharge_throughput_kwh = 0.0
         values = np.asarray(action, dtype=np.float32).reshape(-1)
         if values.size == 0:
             raise ValueError("DT action projector received an empty action")
@@ -274,9 +325,19 @@ class DailyThroughputProjector:
                 self.last_soc_projected = True
             scale = min(scale, soc_scale)
 
+        max_efc = (
+            self.max_charge_efc_per_day
+            if values[0] >= 0.0
+            else self.max_discharge_efc_per_day
+        )
+        used_kwh = (
+            self.charge_throughput_kwh
+            if values[0] >= 0.0
+            else self.discharge_throughput_kwh
+        )
         budget_kwh = max(
             0.0,
-            self.max_efc_per_day * env.battery_capacity - self.throughput_kwh,
+            max_efc * env.battery_capacity - used_kwh,
         )
         if requested_kwh > 0.0:
             scale = min(scale, budget_kwh / requested_kwh)
@@ -284,6 +345,10 @@ class DailyThroughputProjector:
         self.last_scale = float(scale)
         self.last_projected = scale < 1.0
         self.throughput_kwh += requested_kwh * scale
+        if values[0] >= 0.0:
+            self.charge_throughput_kwh += requested_kwh * scale
+        else:
+            self.discharge_throughput_kwh += requested_kwh * scale
         return projected.tolist()
 
 
@@ -292,6 +357,8 @@ def _run_agent(
     tariff: Tariff, rtg_mode: str = "standard", rtg_value: float = 0.0,
     soc_min: float = 0.01, soc_max: float = 0.99,
     dt_max_efc_per_day: float | None = None,
+    dt_max_charge_efc_per_day: float | None = None,
+    dt_max_discharge_efc_per_day: float | None = None,
 ) -> tuple[float, float, dict[str, float]]:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
@@ -305,8 +372,19 @@ def _run_agent(
         if algorithm == "dt" and rtg_mode == "j_t_soc" else None
     )
     projector = (
-        DailyThroughputProjector(dt_max_efc_per_day)
-        if algorithm == "dt" and dt_max_efc_per_day is not None
+        DailyThroughputProjector(
+            dt_max_efc_per_day,
+            dt_max_charge_efc_per_day,
+            dt_max_discharge_efc_per_day,
+        )
+        if algorithm == "dt" and any(
+            value is not None
+            for value in (
+                dt_max_efc_per_day,
+                dt_max_charge_efc_per_day,
+                dt_max_discharge_efc_per_day,
+            )
+        )
         else None
     )
     logs, _ = Agent(env, algorithm=algorithm, model=model, horizon=288,
@@ -802,6 +880,8 @@ def main() -> None:
         if (
             is_dt and args.batch_eval and len(segments) > 1
             and args.dt_max_efc_per_day is None
+            and args.dt_max_charge_efc_per_day is None
+            and args.dt_max_discharge_efc_per_day is None
         ):
             print(
                 f"Evaluating policy '{name}' across {len(segments)} windows with batched DT stepping...",
@@ -828,6 +908,8 @@ def main() -> None:
                     battery["capacity_kwh"], battery["max_flow_kw"], tariff, rtg_mode,
                     args.dt_rtg_value, args.soc_min, args.soc_max,
                     args.dt_max_efc_per_day,
+                    args.dt_max_charge_efc_per_day,
+                    args.dt_max_discharge_efc_per_day,
                 )
                 bills[name].append(bill)
                 degradation_costs[name].append(deg_cost)
@@ -867,6 +949,8 @@ def main() -> None:
         "soc_max": args.soc_max,
         "enforce_soc_limits": True,
         "dt_max_efc_per_day": args.dt_max_efc_per_day,
+        "dt_max_charge_efc_per_day": args.dt_max_charge_efc_per_day,
+        "dt_max_discharge_efc_per_day": args.dt_max_discharge_efc_per_day,
         "dt_rtg_value": args.dt_rtg_value,
         "forecast_sidecar": (
             str(args.forecast_sidecar.resolve()) if args.forecast_sidecar is not None else None

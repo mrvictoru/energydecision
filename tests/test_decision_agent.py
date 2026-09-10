@@ -245,6 +245,26 @@ class TestActionProjector:
         _, _, _, _, info = env.step(projected)
         assert info["soc_limit_clipped"] is False
 
+    def test_separate_directional_budgets_do_not_share_throughput(self):
+        env = SolarBatteryEnv(
+            _build_test_dataframe(),
+            battery_capacity=4.0,
+            max_battery_flow=2.0,
+            init_battery_level=2.0,
+            max_step=4,
+        )
+        env.reset()
+        projector = DailyThroughputProjector(
+            max_charge_efc_per_day=0.1,
+            max_discharge_efc_per_day=0.1,
+        )
+
+        charge = projector([1.0], env)
+        discharge = projector([-1.0], env)
+
+        assert charge[0] == pytest.approx(0.2)
+        assert discharge[0] == pytest.approx(-0.2)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

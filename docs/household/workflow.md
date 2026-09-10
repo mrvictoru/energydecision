@@ -104,6 +104,18 @@ using the environment's current battery level and configured 1%–99% bounds
 before applying the daily budget. This prevents the environment from doing a
 second safety clip and records `action_soc_projected_steps` in each summary.
 
+For the next ablation, separate directional budgets can be enabled without
+changing the default combined-budget behavior:
+
+```bash
+--dt-max-charge-efc-per-day 0.10 \
+--dt-max-discharge-efc-per-day 0.10
+```
+
+These budgets are tracked independently, so charging cannot consume the
+discharge allowance (or vice versa). Use both options together when
+`--dt-max-efc-per-day` is omitted.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
