@@ -99,6 +99,11 @@ approximately −A$3.5 (5 kWh/3.3 kW), +A$4.1 (10 kWh/5 kW), +A$14.6
 EFC/day. Results are stored in
 `eval_output/household/h4_9_validation/synth_6m_{5kwh_3_3kw,10kwh_5kw,15kwh_7kw,20kwh_7kw}/summary.json`.
 
+The throughput projector now also performs an exact SOC-feasibility projection
+using the environment's current battery level and configured 1%–99% bounds
+before applying the daily budget. This prevents the environment from doing a
+second safety clip and records `action_soc_projected_steps` in each summary.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data

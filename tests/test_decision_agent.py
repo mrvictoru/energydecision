@@ -15,9 +15,11 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 from EnergySimEnv import SolarBatteryEnv
 from decision import Agent
+from evaluate_household_ood_baselines import DailyThroughputProjector
 
 
 def _build_test_dataframe(num_steps: int = 4) -> pl.DataFrame:
@@ -199,6 +201,49 @@ class TestOracleAgent:
         # Oracle action should be close to one of the candidates
         min_distance = min(abs(oracle_action - act) for act in candidate_actions)
         assert min_distance < 0.01, "Oracle action should be close to a candidate action"
+
+
+class TestActionProjector:
+    def test_soc_feasibility_projection_prevents_lower_limit_clip(self):
+        env = SolarBatteryEnv(
+            _build_test_dataframe(),
+            battery_capacity=4.0,
+            max_battery_flow=2.0,
+            init_battery_level=1.5,
+            max_step=4,
+            soc_min=0.25,
+            soc_max=0.75,
+        )
+        env.reset()
+        projector = DailyThroughputProjector(max_efc_per_day=1.0)
+
+        projected = projector([-1.0], env)
+
+        assert projected[0] == pytest.approx(-0.25)
+        assert projector.last_projected is True
+        assert projector.last_soc_projected is True
+        _, _, _, _, info = env.step(projected)
+        assert info["soc_limit_clipped"] is False
+
+    def test_soc_feasibility_projection_prevents_upper_limit_clip(self):
+        env = SolarBatteryEnv(
+            _build_test_dataframe(),
+            battery_capacity=4.0,
+            max_battery_flow=2.0,
+            init_battery_level=2.5,
+            max_step=4,
+            soc_min=0.25,
+            soc_max=0.75,
+        )
+        env.reset()
+        projector = DailyThroughputProjector(max_efc_per_day=1.0)
+
+        projected = projector([1.0], env)
+
+        assert projected[0] == pytest.approx(0.25)
+        assert projector.last_soc_projected is True
+        _, _, _, _, info = env.step(projected)
+        assert info["soc_limit_clipped"] is False
 
 
 if __name__ == "__main__":

@@ -501,6 +501,10 @@ class Agent:
                     info["projected_action_scale"] = float(
                         self.action_projector.last_scale
                     )
+                    if hasattr(self.action_projector, "last_soc_projected"):
+                        info["action_soc_projected"] = bool(
+                            self.action_projector.last_soc_projected
+                        )
 
                 logs.append({
                     'step': step,

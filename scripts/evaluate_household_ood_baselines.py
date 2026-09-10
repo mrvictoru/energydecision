@@ -179,6 +179,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
             "soc_upper_clipped_steps": 0.0, "soc_lower_clipped_steps": 0.0,
             "safety_penalty": 0.0, "requested_flow_kwh": 0.0,
             "applied_flow_kwh": 0.0, "action_projected_steps": 0.0,
+            "action_soc_projected_steps": 0.0,
         }
     infos = logs["info"].to_list()
     discharge = 0.0
@@ -191,12 +192,14 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
     requested_flow = 0.0
     applied_flow = 0.0
     projected_steps = 0
+    soc_projected_steps = 0
     for info in infos:
         flow_energy = float(info.get("battery_flow_energy", 0.0) or 0.0)
         requested = float(info.get("requested_battery_flow_energy", flow_energy) or 0.0)
         requested_flow += requested
         applied_flow += flow_energy
         projected_steps += int(bool(info.get("action_projected", False)))
+        soc_projected_steps += int(bool(info.get("action_soc_projected", False)))
         if info.get("soc_limit_clipped", False):
             clipped_steps += 1
             safety_penalty += float(info.get("safety_penalty", 0.0) or 0.0)
@@ -223,6 +226,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
         "requested_flow_kwh": float(requested_flow),
         "applied_flow_kwh": float(applied_flow),
         "action_projected_steps": float(projected_steps),
+        "action_soc_projected_steps": float(soc_projected_steps),
     }
 
 
@@ -233,7 +237,7 @@ def tariff_for_name(name: str) -> Tariff:
 
 
 class DailyThroughputProjector:
-    """Scale DT actions to keep absolute battery throughput within a daily EFC budget."""
+    """Project DT actions onto SOC and daily-throughput feasibility constraints."""
 
     def __init__(self, max_efc_per_day: float) -> None:
         if not np.isfinite(max_efc_per_day) or max_efc_per_day <= 0.0:
@@ -243,6 +247,7 @@ class DailyThroughputProjector:
         self.throughput_kwh = 0.0
         self.last_projected = False
         self.last_scale = 1.0
+        self.last_soc_projected = False
 
     def __call__(self, action, env):
         day_index = int(env.current_step // max(1, round(24.0 / env.step_duration)))
@@ -254,8 +259,27 @@ class DailyThroughputProjector:
             raise ValueError("DT action projector received an empty action")
         projected = values.copy()
         requested_kwh = abs(float(values[0])) * env.max_battery_flow * env.step_duration
-        budget_kwh = max(0.0, self.max_efc_per_day * env.battery_capacity - self.throughput_kwh)
-        scale = min(1.0, budget_kwh / requested_kwh) if requested_kwh > 0.0 else 1.0
+        scale = 1.0
+        self.last_soc_projected = False
+        if requested_kwh > 0.0 and getattr(env, "enforce_soc_limits", False):
+            min_level = float(env.soc_min) * float(env.battery_capacity)
+            max_level = float(env.soc_max) * float(env.battery_capacity)
+            current_level = float(env.battery_level)
+            if values[0] < 0.0:
+                feasible_kwh = max(0.0, current_level - min_level)
+            else:
+                feasible_kwh = max(0.0, max_level - current_level)
+            soc_scale = min(1.0, feasible_kwh / requested_kwh)
+            if soc_scale < 1.0:
+                self.last_soc_projected = True
+            scale = min(scale, soc_scale)
+
+        budget_kwh = max(
+            0.0,
+            self.max_efc_per_day * env.battery_capacity - self.throughput_kwh,
+        )
+        if requested_kwh > 0.0:
+            scale = min(scale, budget_kwh / requested_kwh)
         projected[0] *= scale
         self.last_scale = float(scale)
         self.last_projected = scale < 1.0
@@ -910,6 +934,9 @@ def main() -> None:
                 "total_safety_penalty": float(sum(m["safety_penalty"] for m in cm)),
                 "segment_action_projected_steps": [
                     m["action_projected_steps"] for m in cm
+                ],
+                "segment_action_soc_projected_steps": [
+                    m["action_soc_projected_steps"] for m in cm
                 ],
             })
         output["results"][name] = result
