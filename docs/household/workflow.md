@@ -116,6 +116,16 @@ These budgets are tracked independently, so charging cannot consume the
 discharge allowance (or vice versa). Use both options together when
 `--dt-max-efc-per-day` is omitted.
 
+The fair directional ablation used `0.05` EFC/day for each direction, keeping
+the maximum combined budget equal to the earlier `0.10` EFC/day experiment.
+Across the same ten 30-day held-out windows, net savings were approximately
+`+A$0.9/year` for 5 kWh/3.3 kW and `+A$60.1/year` for 20 kWh/7 kW, with zero
+SOC clips and observed discharge EFC near `0.05/day`. The corresponding
+combined-budget runs produced approximately `+A$0.2/year` and `+A$41.4/year`.
+This supports retaining directional budgeting for the next seasonal
+validation, while recognizing that these are still 30-day synthetic-window
+results.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
