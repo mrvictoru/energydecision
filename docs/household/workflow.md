@@ -139,6 +139,24 @@ below the earlier combined-budget real result (`+A$3.8/year`), so directional
 budgeting remains safe and viable but is not yet an economic replacement for
 the combined projector on this surface.
 
+The fair directional policy was then evaluated on the same ten held-out
+180-day matched-capacity windows used by the combined-budget study. Net
+savings versus no battery were approximately:
+
+| Capacity / power | Combined `0.10` EFC/day | Directional `0.05` + `0.05` EFC/day |
+|---|---:|---:|
+| 5 kWh / 3.3 kW | −A$3.5/year | −A$0.9/year |
+| 10 kWh / 5 kW | +A$4.1/year | +A$22.2/year |
+| 15 kWh / 7 kW | +A$14.6/year | +A$42.5/year |
+| 20 kWh / 7 kW | +A$34.6/year | +A$61.4/year |
+
+The directional runs held mean EFC between `0.049945` and `0.049947/day`
+for every capacity, with zero environment SOC clips and zero safety penalty.
+This is the first longer-horizon result supporting directional budgeting as
+the preferred inference-time configuration for the matched-capacity synthetic
+surface. It still does not remove the real-data need for shadow-mode
+validation, and it does not justify retraining yet.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
