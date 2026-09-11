@@ -28,6 +28,37 @@
 
 ---
 
+## 0.1 Household DT Validation Status
+
+This table consolidates the household-track evidence behind the deployment
+readiness decision. "Successful" means the specific validation objective was
+met; it does not necessarily mean that the DT is production-ready.
+
+| Validation area | Status | What has been established | Still required |
+|---|---|---|---|
+| Hard SOC limits | ✅ Successful | Unsafe SOC states are clipped, logged, and exposed through step metadata. | Shadow-mode confirmation with real telemetry. |
+| SOC safety penalty | ✅ Implementation validated | The penalty is applied consistently and can provide a training signal. | Demonstrate through retraining that the policy learns to avoid unsafe requests. |
+| Raw long-horizon evaluation | ✅ Diagnostic success | Exposed the original DT's over-cycling and degradation-adjusted economic weakness. | Use the finding to assess improved policies, not the raw DT alone. |
+| RTG prompt sweep | 🟡 Partial | `RTG=-4` was the best tested prompt, but prompting alone did not solve over-cycling. | No further prompt-only work unless later evidence requires it. |
+| Combined throughput projection | 🟡 Partial | Bounded wear and improved larger-capacity cases without retraining. | Keep as comparator; 5 kWh real economics remain marginal. |
+| SOC-aware action projection | ✅ Successful | Actions are made SOC-feasible before `env.step()`, eliminating environment SOC clips in tested runs. | Confirm projection behavior in shadow mode. |
+| Directional throughput budgeting | 🟡 Promising | Independent `0.05` charge / `0.05` discharge limits improved all four 180-day synthetic capacity cases. | Validate longer real-data behavior. |
+| Calendar-day budget accounting | ✅ Successful | Irregular and missing timestamps no longer distort daily throughput resets. | Continue monitoring with real telemetry. |
+| Real-data directional evaluation | 🟡 Partial | Twelve 30-day windows achieved zero SOC clips and approximately `0.04999 EFC/day`, but economics were weaker than the combined real comparator. | Run longer real seasonal windows. |
+| Matched-capacity synthetic evaluation | ✅ Successful on tested surface | Directional net savings were approximately −A$0.9, +A$22.2, +A$42.5, and +A$61.4/year for 5/10/15/20 kWh systems. | Confirm transfer to real households. |
+| Hardware versatility | 🟡 Partially validated | Inference-time controls operate across 5–20 kWh and 3.3–7 kW configurations. | Validate model mismatch and real hardware constraints. |
+| Price-aware gating | ⬜ Not run | No evidence yet on whether tariff-spread gating improves net economics. | Run an inference-time ablation before retraining. |
+| Multi-seed RL baselines | ⬜ Not run | Current single-seed baselines are insufficient for a strong DT-versus-RL claim. | Run multi-seed PPO/SAC/TD3 comparisons. |
+| Real-household shadow mode | ⬜ Not run | Sim-to-real transfer remains untested under deployment-like telemetry. | Run approximately 14 days without closed-loop control. |
+| Retraining benefit | ⬜ Deferred | Inference-time controls have not yet justified a training change. | Retrain only after shadow or gating results identify a specific gap. |
+
+The current evidence supports **safe inference-time experimentation**, not
+closed-loop deployment. The next gates are longer real-data validation,
+price-aware gating, and shadow mode; stronger RL baselines are needed for
+comparative claims, but are not a safety prerequisite.
+
+---
+
 ## 1. Sim-to-Real Readiness (Priority 1 — PhD Flagship)
 
 | ID | Task | Target | Notes |
