@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC, TD3
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +30,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-flow-kw", type=float, default=5.0)
     parser.add_argument("--battery-life-cost", type=float, default=5000.0)
     parser.add_argument("--seed", type=int, default=20260830)
+    parser.add_argument(
+        "--algorithm",
+        choices=("ppo", "sac", "td3"),
+        default="ppo",
+        help="SB3 algorithm to train with the shared household setup.",
+    )
     parser.add_argument(
         "--model-name",
         default="ppo_h4_3_modern.zip",
@@ -72,7 +78,7 @@ def _make_env(frame: pl.DataFrame, capacity: float, flow: float, life_cost: floa
     return factory
 
 
-def _episode_return(model: PPO, frame: pl.DataFrame, capacity: float, flow: float, life_cost: float) -> float:
+def _episode_return(model, frame: pl.DataFrame, capacity: float, flow: float, life_cost: float) -> float:
     env = _make_env(frame, capacity, flow, life_cost)()
     obs, _ = env.reset()
     total = 0.0
@@ -103,22 +109,44 @@ def main() -> None:
         for index in range(n_envs)
     ]
     vec_env = SubprocVecEnv(env_fns, start_method="forkserver")
-    model = PPO(
-        "MlpPolicy",
-        vec_env,
+    common_kwargs = dict(
+        policy="MlpPolicy",
+        env=vec_env,
         learning_rate=3e-4,
-        n_steps=1024,
-        batch_size=256,
-        n_epochs=10,
         gamma=0.995,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        ent_coef=0.0,
         policy_kwargs={"net_arch": [256, 256]},
         device="cpu",
         seed=args.seed,
         verbose=1,
     )
+    if args.algorithm == "ppo":
+        model = PPO(
+            **common_kwargs,
+            n_steps=1024,
+            batch_size=256,
+            n_epochs=10,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            ent_coef=0.0,
+        )
+    elif args.algorithm == "sac":
+        model = SAC(
+            **common_kwargs,
+            buffer_size=100_000,
+            learning_starts=5_000,
+            batch_size=256,
+            train_freq=1,
+            gradient_steps=1,
+        )
+    else:
+        model = TD3(
+            **common_kwargs,
+            buffer_size=100_000,
+            learning_starts=5_000,
+            batch_size=256,
+            train_freq=(1, "step"),
+            gradient_steps=1,
+        )
     model.learn(total_timesteps=args.timesteps)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     model_path = args.output_dir / args.model_name
@@ -138,7 +166,7 @@ def main() -> None:
         "corpus_manifest_schema": manifest["schema_version"],
         "corpus_dir": str(args.corpus_dir),
         "model_path": str(model_path),
-        "algorithm": "PPO",
+        "algorithm": args.algorithm.upper(),
         "training_split": "train",
         "timesteps": args.timesteps,
         "n_envs": n_envs,

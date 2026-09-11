@@ -178,6 +178,25 @@ discharge throughput was `0.049992 EFC/day`, with zero SOC clips and zero
 safety penalty across all windows. The result supports the gate as the
 current inference-time candidate, subject to shadow-mode validation.
 
+### Multi-seed SB3 baseline status
+
+The generalized `scripts/train_household_sb3.py` entrypoint now supports PPO,
+SAC, and TD3 with the same H4.1 corpus, 5 kWh / 3.3 kW hardware, tariff,
+network, and 250k-timestep budget. Three seeds (`42`, `7`, and `20260830`)
+were trained for each algorithm under
+`models/household/sb3/multiseed/`. Held-out synthetic test mean rewards were:
+
+| Algorithm | Mean test reward | Across-seed SD | Interpretation |
+|---|---:|---:|---|
+| PPO | −A$1,763.5 | 18.8 | Stable across seeds |
+| SAC | −A$1,765.3 | 5.0 | Most stable, similar mean to PPO |
+| TD3 | −A$1,876.8 | 247.3 | One seed-collapse outlier |
+
+These are training-corpus validation rewards, not a final DT-versus-RL
+deployment comparison. The nine checkpoints still need evaluation through the
+same real OOD, SOC, throughput, degradation, and price-gating surfaces before
+comparative claims are made.
+
 The offline deployment-proxy shadow run
 (`eval_output/household/h4_9_validation/offline_shadow_14d_gate_030_010/summary.json`)
 replayed the selected configuration over five contiguous 14-day real-data
