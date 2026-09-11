@@ -103,6 +103,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional separate daily EFC budget for discharging actions.",
     )
+    parser.add_argument(
+        "--dt-min-discharge-price",
+        type=float,
+        default=None,
+        help="Gate DT discharge below this current import price ($/kWh).",
+    )
+    parser.add_argument(
+        "--dt-max-charge-price",
+        type=float,
+        default=None,
+        help="Gate grid charging above this import price ($/kWh); solar-surplus charging remains allowed.",
+    )
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -192,6 +204,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
             "safety_penalty": 0.0, "requested_flow_kwh": 0.0,
             "applied_flow_kwh": 0.0, "action_projected_steps": 0.0,
             "action_soc_projected_steps": 0.0,
+            "price_gated_steps": 0.0,
         }
     infos = logs["info"].to_list()
     discharge = 0.0
@@ -205,6 +218,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
     applied_flow = 0.0
     projected_steps = 0
     soc_projected_steps = 0
+    price_gated_steps = 0
     for info in infos:
         flow_energy = float(info.get("battery_flow_energy", 0.0) or 0.0)
         requested = float(info.get("requested_battery_flow_energy", flow_energy) or 0.0)
@@ -212,6 +226,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
         applied_flow += flow_energy
         projected_steps += int(bool(info.get("action_projected", False)))
         soc_projected_steps += int(bool(info.get("action_soc_projected", False)))
+        price_gated_steps += int(bool(info.get("action_price_gated", False)))
         if info.get("soc_limit_clipped", False):
             clipped_steps += 1
             safety_penalty += float(info.get("safety_penalty", 0.0) or 0.0)
@@ -239,6 +254,7 @@ def _cycle_metrics_from_logs(logs: pl.DataFrame, capacity_kwh: float) -> dict[st
         "applied_flow_kwh": float(applied_flow),
         "action_projected_steps": float(projected_steps),
         "action_soc_projected_steps": float(soc_projected_steps),
+        "price_gated_steps": float(price_gated_steps),
     }
 
 
@@ -256,16 +272,21 @@ class DailyThroughputProjector:
         max_efc_per_day: float | None = None,
         max_charge_efc_per_day: float | None = None,
         max_discharge_efc_per_day: float | None = None,
+        min_discharge_price: float | None = None,
+        max_charge_price: float | None = None,
     ) -> None:
         budgets = (
             max_efc_per_day,
             max_charge_efc_per_day,
             max_discharge_efc_per_day,
         )
-        if all(value is None for value in budgets):
-            raise ValueError("at least one EFC budget must be configured")
+        if all(value is None for value in budgets) and (
+            min_discharge_price is None and max_charge_price is None
+        ):
+            raise ValueError("configure an EFC budget or a price gate")
         if (
             max_efc_per_day is None
+            and any(value is not None for value in budgets)
             and (max_charge_efc_per_day is None or max_discharge_efc_per_day is None)
         ):
             raise ValueError(
@@ -277,18 +298,38 @@ class DailyThroughputProjector:
             for value in budgets
         ):
             raise ValueError("EFC budgets must be finite and positive")
+        if any(
+            value is not None
+            and (not np.isfinite(value) or value < 0.0)
+            for value in (min_discharge_price, max_charge_price)
+        ):
+            raise ValueError("price thresholds must be finite and non-negative")
         self.max_efc_per_day = (
             float(max_efc_per_day) if max_efc_per_day is not None else None
         )
         self.max_charge_efc_per_day = (
             float(max_charge_efc_per_day)
             if max_charge_efc_per_day is not None
-            else self.max_efc_per_day
+            else (
+                self.max_efc_per_day
+                if self.max_efc_per_day is not None
+                else float("inf")
+            )
         )
         self.max_discharge_efc_per_day = (
             float(max_discharge_efc_per_day)
             if max_discharge_efc_per_day is not None
-            else self.max_efc_per_day
+            else (
+                self.max_efc_per_day
+                if self.max_efc_per_day is not None
+                else float("inf")
+            )
+        )
+        self.min_discharge_price = (
+            float(min_discharge_price) if min_discharge_price is not None else None
+        )
+        self.max_charge_price = (
+            float(max_charge_price) if max_charge_price is not None else None
         )
         self.day_index = -1
         self.throughput_kwh = 0.0
@@ -297,6 +338,7 @@ class DailyThroughputProjector:
         self.last_projected = False
         self.last_scale = 1.0
         self.last_soc_projected = False
+        self.last_price_gated = False
 
     def __call__(self, action, env):
         timestamp = env.df["Timestamp"][env.current_step]
@@ -314,6 +356,24 @@ class DailyThroughputProjector:
         if values.size == 0:
             raise ValueError("DT action projector received an empty action")
         projected = values.copy()
+        self.last_price_gated = False
+        row = env.df.row(env.current_step, named=True)
+        import_price = float(row["ImportEnergyPrice"])
+        solar_surplus = float(row["SolarGen"]) > float(row["HouseLoad"])
+        if values[0] < 0.0 and (
+            self.min_discharge_price is not None
+            and import_price < self.min_discharge_price
+        ):
+            projected[0] = 0.0
+            self.last_price_gated = True
+        elif values[0] > 0.0 and (
+            self.max_charge_price is not None
+            and import_price > self.max_charge_price
+            and not solar_surplus
+        ):
+            projected[0] = 0.0
+            self.last_price_gated = True
+        values = projected
         requested_kwh = abs(float(values[0])) * env.max_battery_flow * env.step_duration
         scale = 1.0
         self.last_soc_projected = False
@@ -348,7 +408,9 @@ class DailyThroughputProjector:
             scale = min(scale, budget_kwh / requested_kwh)
         projected[0] *= scale
         self.last_scale = float(scale)
-        self.last_projected = scale < 1.0
+        if self.last_price_gated:
+            self.last_scale = 0.0
+        self.last_projected = scale < 1.0 or self.last_price_gated
         self.throughput_kwh += requested_kwh * scale
         if values[0] >= 0.0:
             self.charge_throughput_kwh += requested_kwh * scale
@@ -364,6 +426,8 @@ def _run_agent(
     dt_max_efc_per_day: float | None = None,
     dt_max_charge_efc_per_day: float | None = None,
     dt_max_discharge_efc_per_day: float | None = None,
+    dt_min_discharge_price: float | None = None,
+    dt_max_charge_price: float | None = None,
 ) -> tuple[float, float, dict[str, float]]:
     env = SolarBatteryEnv(
         frame, battery_capacity=capacity, max_battery_flow=flow,
@@ -381,6 +445,8 @@ def _run_agent(
             dt_max_efc_per_day,
             dt_max_charge_efc_per_day,
             dt_max_discharge_efc_per_day,
+            dt_min_discharge_price,
+            dt_max_charge_price,
         )
         if algorithm == "dt" and any(
             value is not None
@@ -388,6 +454,8 @@ def _run_agent(
                 dt_max_efc_per_day,
                 dt_max_charge_efc_per_day,
                 dt_max_discharge_efc_per_day,
+                dt_min_discharge_price,
+                dt_max_charge_price,
             )
         )
         else None
@@ -887,6 +955,8 @@ def main() -> None:
             and args.dt_max_efc_per_day is None
             and args.dt_max_charge_efc_per_day is None
             and args.dt_max_discharge_efc_per_day is None
+            and args.dt_min_discharge_price is None
+            and args.dt_max_charge_price is None
         ):
             print(
                 f"Evaluating policy '{name}' across {len(segments)} windows with batched DT stepping...",
@@ -915,6 +985,8 @@ def main() -> None:
                     args.dt_max_efc_per_day,
                     args.dt_max_charge_efc_per_day,
                     args.dt_max_discharge_efc_per_day,
+                    args.dt_min_discharge_price,
+                    args.dt_max_charge_price,
                 )
                 bills[name].append(bill)
                 degradation_costs[name].append(deg_cost)
@@ -956,6 +1028,8 @@ def main() -> None:
         "dt_max_efc_per_day": args.dt_max_efc_per_day,
         "dt_max_charge_efc_per_day": args.dt_max_charge_efc_per_day,
         "dt_max_discharge_efc_per_day": args.dt_max_discharge_efc_per_day,
+        "dt_min_discharge_price": args.dt_min_discharge_price,
+        "dt_max_charge_price": args.dt_max_charge_price,
         "dt_rtg_value": args.dt_rtg_value,
         "forecast_sidecar": (
             str(args.forecast_sidecar.resolve()) if args.forecast_sidecar is not None else None
@@ -1026,6 +1100,9 @@ def main() -> None:
                 ],
                 "segment_action_soc_projected_steps": [
                     m["action_soc_projected_steps"] for m in cm
+                ],
+                "segment_price_gated_steps": [
+                    m["price_gated_steps"] for m in cm
                 ],
             })
         output["results"][name] = result

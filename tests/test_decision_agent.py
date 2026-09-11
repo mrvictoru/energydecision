@@ -265,6 +265,46 @@ class TestActionProjector:
         assert charge[0] == pytest.approx(0.2)
         assert discharge[0] == pytest.approx(-0.2)
 
+    def test_price_gate_blocks_low_value_discharge_and_grid_charge(self):
+        env = SolarBatteryEnv(
+            _build_test_dataframe(),
+            battery_capacity=4.0,
+            max_battery_flow=2.0,
+            init_battery_level=2.0,
+            max_step=4,
+        )
+        env.reset()
+        projector = DailyThroughputProjector(
+            max_charge_efc_per_day=0.1,
+            max_discharge_efc_per_day=0.1,
+            min_discharge_price=0.30,
+            max_charge_price=0.20,
+        )
+
+        assert projector([-1.0], env)[0] == pytest.approx(0.0)
+        assert projector.last_price_gated is True
+        assert projector([1.0], env)[0] == pytest.approx(0.0)
+        assert projector.last_price_gated is True
+
+    def test_price_gate_allows_solar_surplus_charge(self):
+        env = SolarBatteryEnv(
+            _build_test_dataframe(),
+            battery_capacity=4.0,
+            max_battery_flow=2.0,
+            init_battery_level=2.0,
+            max_step=4,
+        )
+        env.reset()
+        env.current_step = 1
+        projector = DailyThroughputProjector(
+            max_charge_efc_per_day=0.1,
+            max_discharge_efc_per_day=0.1,
+            max_charge_price=0.20,
+        )
+
+        assert projector([1.0], env)[0] == pytest.approx(0.2)
+        assert projector.last_price_gated is False
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

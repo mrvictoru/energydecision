@@ -149,6 +149,17 @@ projector is safe over the longer real horizon, but the three-window sample
 does not yet establish a robust economic advantage over the combined
 projector or across all household seasons.
 
+The first price-aware gating ablation used
+`--dt-min-discharge-price 0.30` and `--dt-max-charge-price 0.10` ($/kWh).
+It gated low-price discharge and grid charging above $0.10/kWh while still
+allowing solar-surplus charging. On the same three 90-day real windows, net
+savings increased to approximately `+A$3.7/year` from `+A$1.1/year` without
+gating. Mean discharge throughput remained `0.049974 EFC/day`, SOC clips and
+safety penalty remained zero, and the gate suppressed approximately 1,900
+actions per window. This is promising but not conclusive: it is one threshold
+pair on three windows, so the next validation is a small threshold sweep and
+broader seasonal coverage before treating the gate as a deployment default.
+
 The fair directional policy was then evaluated on the same ten held-out
 180-day matched-capacity windows used by the combined-budget study. Net
 savings versus no battery were approximately:

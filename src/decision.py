@@ -505,6 +505,10 @@ class Agent:
                         info["action_soc_projected"] = bool(
                             self.action_projector.last_soc_projected
                         )
+                    if hasattr(self.action_projector, "last_price_gated"):
+                        info["action_price_gated"] = bool(
+                            self.action_projector.last_price_gated
+                        )
 
                 logs.append({
                     'step': step,
