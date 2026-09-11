@@ -178,6 +178,17 @@ discharge throughput was `0.049992 EFC/day`, with zero SOC clips and zero
 safety penalty across all windows. The result supports the gate as the
 current inference-time candidate, subject to shadow-mode validation.
 
+The offline deployment-proxy shadow run
+(`eval_output/household/h4_9_validation/offline_shadow_14d_gate_030_010/summary.json`)
+replayed the selected configuration over five contiguous 14-day real-data
+windows without controlling a battery. It maintained `0.049997 EFC/day`,
+zero SOC clips, and zero safety penalty, with approximately `+A$6.08/year`
+annualized net savings versus no battery. This validates the logging and
+inference-time safety path on deployment-like telemetry, but it is not a
+live sim-to-real shadow test: the repository has no device-control or
+telemetry-stream interface. A real household shadow run remains required
+before closed-loop control.
+
 The fair directional policy was then evaluated on the same ten held-out
 180-day matched-capacity windows used by the combined-budget study. Net
 savings versus no battery were approximately:
