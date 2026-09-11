@@ -139,6 +139,16 @@ below the earlier combined-budget real result (`+A$3.8/year`), so directional
 budgeting remains safe and viable but is not yet an economic replacement for
 the combined projector on this surface.
 
+The longer three-window real validation used the same directional limits over
+90 days:
+`eval_output/household/h4_9_validation/real_90d_directional_calendar/summary.json`.
+It held mean throughput to `0.049974 EFC/day`, produced zero SOC clips and
+zero safety penalty, and delivered approximately `+A$1.1/year` net savings
+versus no battery. This is a positive but small result: the directional
+projector is safe over the longer real horizon, but the three-window sample
+does not yet establish a robust economic advantage over the combined
+projector or across all household seasons.
+
 The fair directional policy was then evaluated on the same ten held-out
 180-day matched-capacity windows used by the combined-budget study. Net
 savings versus no battery were approximately:
