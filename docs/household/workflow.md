@@ -160,6 +160,24 @@ actions per window. This is promising but not conclusive: it is one threshold
 pair on three windows, so the next validation is a small threshold sweep and
 broader seasonal coverage before treating the gate as a deployment default.
 
+A focused threshold sweep on the same three 90-day windows tested discharge
+thresholds of `$0.25`, `$0.30`, and `$0.35/kWh` against grid-charge thresholds
+of `$0.05`, `$0.10`, and `$0.15/kWh`. All combinations through a `$0.30`
+discharge threshold produced the same approximately `+A$3.7/year` result
+because this tariff has only free-window and standard-price import levels.
+The `$0.35` threshold blocked all discharge, produced no useful throughput,
+and was economically negative, so it was rejected.
+
+The selected `$0.30/$0.10` gate was then evaluated on all twelve real
+30-day windows:
+`eval_output/household/h4_9_validation/real_30d_directional_price_gate_030_010/summary.json`.
+It produced approximately `+A$4.44/year` net savings, compared with
+`+A$2.69/year` for directional budgeting without gating and approximately
+`+A$3.82/year` for the earlier combined-budget real comparator. Mean
+discharge throughput was `0.049992 EFC/day`, with zero SOC clips and zero
+safety penalty across all windows. The result supports the gate as the
+current inference-time candidate, subject to shadow-mode validation.
+
 The fair directional policy was then evaluated on the same ten held-out
 180-day matched-capacity windows used by the combined-budget study. Net
 savings versus no battery were approximately:
