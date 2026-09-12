@@ -54,8 +54,6 @@ We position this work at the intersection of three literatures: battery optimal 
 
 **Planner distillation.** Distilling a planning policy into a reactive student is classical: DAgger [9] formalizes iterative policy aggregation with expert correction, and "learning to plan" work (e.g., value/policy distillation from search, AlphaZero-style training) shows a distilled network can retain most of a search-based teacher's strength at a fraction of inference cost. Our Stage A→B pipeline is this recipe applied to battery dispatch: an SDP teacher (backward induction under a seasonal forecast) generates trajectories, a standalone DT imitates them, and we quantify retention per surface (51–91% of the solver-in-the-loop policy, §8.2.10 Stage B) — with the twist that the *honest* (non-clairvoyant) teacher generalizes better OOD than the perfect-foresight LP it replaced. The state-dependent RTG prompt built from the teacher's cost-to-go ($-J_t(s_t)$, §4.3) connects to prompting studies in the DT literature, which have treated the RTG as a hand-set scalar; to our knowledge pricing it from a planner's value function — and *gating that pricing by the battery's market power* (§8.2.10 impact investigation) — has not previously been reported.
 
-**Reinforcement learning for battery control.** Subramanya et al. [6] survey RL-for-battery-storage across optimization objective, user impact, losses/degradation, and application context, and explicitly call for benchmark environments with a standard interface to enable cross-paper comparability. Their critique — that bespoke environments, private data, and divergent reward/constraint formulations block fair comparison — is the direct motivation for the unified, degradation-aware benchmark in this report.
-
 **Positioning.** Our contribution relative to these lines is threefold: (1) a *modernized* DT applied to the practically under-studied setting of **multi-market BESS dispatch with co-optimized 8-service FCAS bidding**, where we show empirically that GRPO online fine-tuning adds no value on a strong backbone (§8.2.5); (2) evidence that the DT-vs-PPO gap on broad/OOD surfaces is a *data-provenance* problem solved by changing the teacher, not the architecture or loss (§8.2.1a → §8.2.10); and (3) a market-impact validation gate showing that value-based prompts must be gated by market power — a robustness dimension absent from prior DT and battery-RL evaluations. While we are not aware of a directly comparable published result on full 9-dimensional FCAS co-optimization via offline sequence models, the benchmark, baselines, and evaluation protocol here are designed so that such comparisons can be made under identical dynamics and metrics.
 
 ## 3. System Model and Environments
@@ -128,7 +126,7 @@ Repo-backed ways of producing these logs include:
 - optional AMP (enabled on CUDA after the first checkpoint is saved),
 - multi-loss objective with weighted MSE terms for action/state/return predictions.
 
-The CLI entrypoint `src/pretrain_decision_transformer.py` assembles datasets from a directory of Parquet logs (matching filename patterns), splits validation data, and trains/checkpoints the model.
+The CLI entrypoint `scripts/pretrain_decision_transformer.py` assembles datasets from a directory of Parquet logs (matching filename patterns), splits validation data, and trains/checkpoints the model.
 
 **Online DT inference with RTG conditioning (`src/decision.py`).**
 During episode rollouts, the DT agent maintains rolling buffers of past $(s,a,\text{rtg},t)$.
@@ -146,7 +144,7 @@ This makes DT evaluation explicitly a **prompting** problem: different `rtg_valu
 
 **Evaluation-side risk metrics (implemented):** tail-risk metrics (VaR@5% and CVaR@5%) are computed from episode returns in `src/helper.py::evaluate_experiment_logs` and appear in evaluation tables and `eval_output/household/risk_metrics.csv`. Bootstrap confidence intervals (`bootstrap_confidence_intervals`) and paired statistical comparisons (`paired_comparison` with Wilcoxon signed-rank) are also available. Risk-aware training extensions (future work): add CVaR-style objectives/constraints and multi-objective scalarization for reward vs degradation into the training loop.
 
-### 4.2 Modern v2 Architecture (backbone of the shipped Stage C model)
+### 4.2 Modern v2 Backbone and the Shipped Stage C Model
 
 The headline results in Section 8 are produced by the **modern v2 Decision Transformer**
 ([`mrvictoru/energydecision-dt-v2`](https://huggingface.co/mrvictoru/energydecision-dt-v2)), an
@@ -159,13 +157,17 @@ but the decisive gains come from the following):
 - **RMSNorm pre-norm** throughout, replacing LayerNorm.
 - **SwiGLU** feed-forward (768 → 2304 → 768) with dropout 0.15.
 - **Weight tying:** the input embedding and output prediction layers for state/action/return share weights (`pred_act`, `pred_state`, `pred_return` are linear projections of the tied embeddings).
-- **Learned timestep embedding** (RoPE disabled; `rope_enabled=false`), context length 210.
-- Trained with `discount=0.95`, `return_scale=2.0`, and near-action-only loss weights
-  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly.
+- **Learned timestep embedding** in the historical modern v2 checkpoint (RoPE disabled; `rope_enabled=false`), context length 210. The **shipped Stage C** checkpoint (§8.2.10) reuses the same 8×768 backbone but with **RoPE enabled** (`rope_max_position=630`, `max_timestep=2016`) and a **mixed action head**; the two checkpoints do not share a config.
+- Trained with `discount=0.95`, `return_scale=1.0` (modern v2, as recorded in the checkpoint `.meta.json`), and near-action-only loss weights
+  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly. Stage C instead uses an auto-calibrated `return_scale=25988.190625` for its J_t(soc) targets.
 
-Canonical hyperparameters are shipped at
-`configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`. The architecture
-is verified from the uploaded checkpoint's embedded `config`, not from documentation.
+Canonical modern-v2 hyperparameters are shipped at
+`configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`, but the
+shipped Stage C architecture is defined by its own artifact sidecars
+(`models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus_loss_surface_manifest.json` and the
+checkpoint `.meta.json`), not by the modern-v2 config and not by an embedded
+config: the main checkpoint is a pure `state_dict`, so use the sidecar/manifest
+rather than inferring architecture from documentation.
 
 ### 4.3 Problem Formulation: MDP, Teacher, and State-Dependent Prompting
 
@@ -342,7 +344,7 @@ Splits and seeds:
 Workflows:
 - DT (primary):
 	- Create trajectory logs (Parquet) from rule-based, SDP/MRDP, SB3 policies, oracle policies, and (for AEMO) dispatch replay episodes.
-	- Train DT with `src/pretrain_decision_transformer.py` (wraps `TrajectoryDataset` + `train_decision_transformer`).
+	- Train DT with `scripts/pretrain_decision_transformer.py` (wraps `TrajectoryDataset` + `train_decision_transformer`).
 	- Evaluate DT using `Agent(algorithm='dt', rtg_value=...)` to study RTG-conditioning sensitivity.
 - RL: `DummyVecEnv` for training, `SubprocVecEnv` for evaluation; train with `train_model(..., default_model=True)` or enable Optuna tuning.
 - SDP/MRDP: configure horizons/resolutions; evaluate single or parallel episodes via `run_episodes_parallel`.
@@ -452,12 +454,14 @@ This section presents the empirical evaluation of the Decision Transformer (DT) 
 
 | Environment | Best DT Result | Key Advantage |
 |-------------|---------------|---------------|
-| Household (SolarBatteryEnv) | **Best mean return** (-2408), beats Oracle | 1D action, degradation-aware cycling |
+| Household — legacy Ausgrid (SolarBatteryEnv) | **Best mean return** (-2408) vs Oracle on the legacy benchmark | 1D action, degradation-aware cycling; the modern 2019+ rebuild reverses the Oracle ordering (§8.1.1, §8.1.2) |
 | AEMO utility-scale (AEMOBatteryTradingEnv) | **Best profit/ep on all 4 identity surfaces + impact gate** ($11.6k standard / $35.3k dispatch-matched / $34.8k expanded / $25.9k 2025 OOD vs PPO $2.4k / $22.5k / $19.5k / $6.5k), via SDP-teacher distillation + J_t(soc) prompting under `rtg_mode="auto"` | 9D full-fcas bidding, planner-distilled training data, state-dependent RTG, modern architecture (GQA/RMSNorm) |
 
-### 8.1 Household Solar-Battery Control (Historical Benchmark)
+### 8.1 Household Solar-Battery Control (Legacy Ausgrid Benchmark)
 
 The household environment (1D action, Ausgrid Solar Home data) was the original testbed that established the DT's effectiveness on a simpler control problem; it is retained as a validation domain rather than the primary contribution. The DT achieves the best mean return (−$2,408) among all baselines including the perfect-foresight Oracle (−$2,483), a difference that is statistically significant (Wilcoxon p = 0.005). Critically, the RTG prompt provides **zero-shot control of the degradation/return trade-off**: moderate prompts yield 0.005/ep degradation versus 0.114/ep for near-zero prompts (a 22× reduction) without any retraining, and tail-risk (CVaR ≈ −9,705) is competitive with or better than SDP, A2C, and PPO. The full metric table, RTG-sensitivity analysis, and pairwise Wilcoxon tests are provided in [eval_output/household/](eval_output/household/) (see Appendix B for the per-algorithm table).
+
+> **Scope.** The "DT beats the perfect-foresight Oracle" statement above holds only for this legacy 2010–2013 Ausgrid benchmark. On the modern 2019+ real-telemetry rebuild the ordering reverses: the daily perfect-foresight oracle saves **+$738.96/yr** versus the best DT's **+$357.29/yr** (§8.1.1). Do not generalise the legacy claim to the modern track.
 
 > **NOTE:** These household results establish the DT's effectiveness on a simpler 1D-action problem. The repository's primary contribution is the more challenging AEMO utility-scale environment (Section 8.2), where the action space is 9D (energy + FCAS bidding) and market dynamics are significantly more complex.
 
@@ -611,13 +615,110 @@ net-of-wear result is the definitive H4.5 evidence.
 The full artifacts are in `results/h4_5_degradation/` and
 `eval_output/household/h4_5_degradation/`.
 
+### 8.1.2 Modern-Data Deployment Validation (H4.7–H4.11, in progress)
+
+The H4.4/H4.5 studies established forecast and degradation economics on seven-day
+windows. H4.7–H4.11 extend the household evidence toward deployment on long
+horizons, where degradation economics actually converge, using **inference-time
+safety controls only (no retraining)**. The track is still in progress: live
+shadow mode and a time-aligned spot-price pass-through remain open, so the
+results below are deployment-readiness evidence, not a final claim.
+
+**Safety wrapper (H4.7).** `SolarBatteryEnv.step()` now enforces validated
+`soc_min`/`soc_max` hard limits, clipping to bounds, logging a warning, exposing
+clipping metadata in `info`, and applying an A$0.25 `soc_limit_penalty`. A
+`SafetyViolation` type and an `enforce_soc_limits=False` opt-out are provided.
+
+**Long-horizon over-cycling (H4.9).** On raw real-normalized OOD windows the
+unconstrained DT earns the lowest gross energy bill but over-cycles (about
+1.14 EFC/day at 90 days), so its degradation-adjusted net bill is *worse* than
+both PPO and no-battery. A one-year held-out synthetic test is positive for the
+DT (about +A$503/yr) but uses 20 kWh episode batteries and is not directly
+comparable to the 5 kWh real surface. An RTG sweep (`-4,-2,-1,0,+1`) selected
+`RTG=-4` but prompting alone did not solve the over-cycling.
+
+**Inference-time throughput budgeting and SOC-aware projection.** A daily
+equivalent-full-cycle budget (`--dt-max-efc-per-day`) selected 0.10 EFC/day.
+Combined with exact SOC-feasible action projection (reported as
+`action_soc_projected_steps`), it removed all environment SOC clips. On ten
+held-out 180-day matched-capacity synthetic windows, combined 0.10 EFC/day net
+savings were about −A$3.5, +A$4.1, +A$14.6, and +A$34.6/yr for 5/10/15/20 kWh.
+Independent directional budgets (0.05 charge + 0.05 discharge EFC/day) improved
+these to about −A$0.9, +A$22.2, +A$42.5, and +A$61.4/yr at ~0.04995 EFC/day with
+zero clips. On real data, directional budgets gave +A$2.7/yr over twelve 30-day
+windows and +A$1.1/yr over three 90-day windows; a calendar-day budget reset
+fixed an earlier timestamp-accounting artifact.
+
+**Price-aware gating.** Gating discharge below $0.30/kWh and grid-charge above
+$0.10/kWh raised the three 90-day real windows to +A$3.7/yr and the twelve
+30-day real windows to +A$4.44/yr (versus +A$2.69/yr directional-only and
++A$3.82/yr combined), at 0.049992 EFC/day with zero clips or safety penalty. A
+$0.35/kWh discharge threshold was rejected because it blocked all discharge.
+
+**Multi-seed RL baselines and fair comparison (H4.10).** Three seeds each of
+PPO, SAC, and TD3 were trained for 250k steps on the H4.1 corpus. Raw policies
+are strongly seed-sensitive, and TD3 turns the SOC clamp into a behavioural
+failure mode (millions of clipped requests and large safety penalties). Under a
+fair shared wrapper (1–99% SOC, 0.05 directional EFC budgets, $0.30/$0.10 gate)
+on three matched 180-day windows, the DT (`rtg=-4`) achieved +A$2.98/yr with
+0.04995 EFC/day and zero clips/safety penalty, while PPO/SAC were mixed across
+seeds and TD3 was mostly under-active. This is a reduced-sample
+safety-and-viability comparison, not a full DT-superiority claim.
+
+**Offline shadow proxy (H4.11).** Five contiguous 14-day real-data windows
+replayed the selected gate with 0.049997 EFC/day, zero clips and zero safety
+penalty, and about +A$6.08/yr annualised. This validates the logging and
+inference-time safety path on deployment-like telemetry but is **not** a live
+shadow test: the repository has no device-control or telemetry-stream interface.
+A live 14-day household shadow run and a time-aligned retail spot-price
+pass-through (H4.6) remain the gating next steps before any closed-loop trial.
+
+**Status.** Inference-time controls are validated for safe experimentation;
+comparative DT-vs-RL claims on real OOD windows and a live shadow remain open.
+See `docs/FUTURE_PLAN.md` §0.1 and `docs/household/workflow.md`.
+
 ### 8.2 Utility-Scale AEMO Battery Trading (Primary Focus)
 
-The AEMO environment evaluates grid-scale battery trading in Australia's National Electricity Market (NEM), with energy spot pricing and optional Frequency Control Ancillary Services (FCAS). The action space is 3D (`multi_market`, legacy) or 9D (`full_fcas`, recommended): energy dispatch plus per-service FCAS bids for all 8 services. Two evaluation surfaces are reported below. The headline evidence comes from the **dispatch-matched same-asset benchmark**, where all policies run on the identical battery (Dalrymple North 8 MWh / 30 MW, 3.75 C) with RTG calibration — this is the fairest comparison available.
+The AEMO environment evaluates grid-scale battery trading in Australia's National Electricity Market (NEM), with energy spot pricing and optional Frequency Control Ancillary Services (FCAS). The action space is 3D (`multi_market`, legacy) or 9D (`full_fcas`, recommended): energy dispatch plus per-service FCAS bids for all 8 services. **The current recommended result is summarised in §8.2.0; the remainder of §8.2 is the chronological evidence ladder that produced it, and several subsections are deliberately retained negative/superseded results.**
+
+#### 8.2.0 Headline Result and How to Read This Section
+
+**Current recommended policy (shipped):** the standalone Stage C Decision Transformer (`models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus.pt`) run with **`rtg_mode="auto"`** — SDP-teacher distillation plus state-dependent `J_t(soc)` prompting, falling back to constant RTG under market impact. It is the only verified setting that beats PPO on all four identity surfaces *and* passes the market-impact gate.
+
+| Surface | Stage C DT (`auto`) | PPO | Ratio |
+|---|---:|---:|---:|
+| Standard Oct | **$11,573** | $2,353 | 4.9× |
+| Dispatch-matched | **$35,320** | $22,530 | 1.57× |
+| Expanded broad-2024 | **$34,761** | $19,504 | 1.78× |
+| 2025 OOD | **$25,862** | $6,498 | 3.98× |
+| Impact gate (piecewise merit-order) | 2.5–3.1× PPO | — | PASS |
+
+All six DT-vs-PPO paired-difference 95% CIs exclude zero (bootstrap + paired Wilcoxon, §8.2.10). Full derivation and the impact-mode failure analysis: **§8.2.10**.
+
+**How to read this section.** The subsections are ordered chronologically, because the failed attempts and negative results are themselves evidence. The status of each:
+
+| Subsection | Role |
+|---|---|
+| §8.2.0 | **Current headline** (this table) |
+| §8.2.1 | Same-asset dispatch-matched methodology + modern-v2 result — historical headline, **superseded by §8.2.10** |
+| §8.2.1a | "PPO is the broad-year/OOD leader" diagnosis — **superseded by §8.2.10** |
+| §8.2.2 | RTG calibration — current as evidence that prompts are architecture-dependent |
+| §8.2.3 | FCAS-rich offline DT — supporting history |
+| §8.2.4 | Realistic-battery v2 dataset — supporting history |
+| §8.2.5 | GRPO autoresearch — negative/legacy result |
+| §8.2.6 | Practical usefulness and limits — partly superseded by §8.2.10 |
+| §8.2.7 | Improvement trajectory — historical, extended by §8.2.10 |
+| §8.2.8 | Forecast DT — negative result (current) |
+| §8.2.9–8.2.9.3 | Market-impact evaluation, impact-aware retraining, Oracle ceiling (current) |
+| §8.2.10 | **Current result**: teacher distillation + `J_t(soc)` + `auto` mode |
+
+**One-line story.** Stages 1–5 cloned logged market behaviour and hit a data ceiling (FCAS spike bidding is absent from the data). §8.2.10 breaks it by distilling an *honest* SDP planner instead of cloning, then recovers the energy-arbitrage gap with a state-dependent `J_t(soc)` prompt. GRPO and explicit forecast tokens did not help.
 
 ---
 
-#### 8.2.1 Fair Same-Asset Dispatch-Matched Benchmark (Headline)
+#### 8.2.1 Fair Same-Asset Dispatch-Matched Benchmark (historical headline)
+
+> **Status: superseded as the headline by §8.2.10.** The same-asset dispatch-matched methodology below remains valid and is reused throughout, but the top-line results are now the Stage C distilled DT in §8.2.10.
 
 The earliest dispatch-replay comparisons were biased because the replay policy was evaluated on the dispatch station's native battery size (e.g. 250 MWh for Torrens Island) while the DT ran on a much smaller template battery (typically 10 MWh). The corrected benchmark removes that confounder by evaluating all policies on the **same dispatch-matched battery asset** — derived from Dalrymple North (8 MWh / 30 MW, 3.75 C) — with the same `full_fcas` 9-action formulation and 5-minute resolution.
 
@@ -661,6 +762,8 @@ A second surface — `eval_tier_standard` — evaluates cross-region generalizat
 ---
 
 #### 8.2.1a Surface-Dependence and Out-of-Distribution Robustness (Aug 2026)
+
+> **Status: superseded by §8.2.10.** The "PPO is the broad-year / OOD leader" conclusion below held only while the DT was a pure behaviour-cloner; teacher distillation reverses it. This subsection is retained because it is the diagnosis that motivated the §8.2.10 campaign.
 
 The dispatch-matched / standard headline surfaces above are narrow and
 favourable to the DT. Evaluated on the **broad expanded 2024 surface**
@@ -783,7 +886,7 @@ All 5 SB3 source models (PPO, TD3, A2C, DDPG, SAC) were retrained on these 4 bat
 
 Key observations:
 - The v2 baseline ($1,714/ep) is **2× more profitable** than the old HF model ($874/ep), purely from training on realistic battery configurations.
-- GRPO post-training adds +$171/ep (+10%) profit and +$1,290 (+47%) FCAS, confirming online RL fine-tuning transfers to realistic battery setups.
+- GRPO post-training adds +$171/ep (+10%) profit and +$1,290 (+47%) FCAS **for this legacy 8×384 v2 checkpoint only**. It does not generalise: on the 8×768 modern v2 model GRPO fails to improve the pretrained policy (§8.2.7 and the abstract), and the legacy apparent gain is shown there to be a narrow overfit.
 - The v2 baseline and GRPO-tuned DT both exceed PPO in absolute profit, though dispatch replay Dalrymple North ($4,660/ep) maintains a lead in this multi-station setting.
 
 ---
@@ -806,6 +909,8 @@ A hyperparameter sweep of 21 GRPO experiments was conducted to find the optimal 
 ---
 
 #### 8.2.6 Practical Usefulness and Remaining Limits
+
+> **Status: partly superseded by §8.2.10.** This assessment covers the modern-v2 behaviour-cloning model. The shipped Stage C distilled DT changes several of the "remaining limitations" — notably degradation parity and the FCAS-cloning ceiling — while the strengths remain broadly valid.
 
 The transformer model (modern v2 pretrained Decision Transformer) has credibility as a practical utility-scale battery control policy, but its strengths and weaknesses should be stated clearly.
 
@@ -1510,7 +1615,7 @@ This repository introduces a unified framework for learning and planning in batt
 
 **Key empirical findings:**
 
-- **Household environment:** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation.
+- **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: offline causal TTM forecasts add +$47.94/yr over persistence on real OOD, but the DT still trails a perfect-foresight oracle (+$357 vs +$739/yr) and over-cycles on long horizons; inference-time throughput budgeting and price-aware gating are the current mitigations (§8.1.1, §8.1.2).
 - **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is now the standalone DT with **surface-aware `rtg_mode="auto"`**. On identity surfaces this reproduces the best `j_t_soc` results — standard **$11,573/ep**, dispatch-matched **$35,320/ep**, expanded broad-2024 **$34,761/ep**, and **2025 OOD $25,862/ep** — all ahead of PPO. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on the canonical grid-scale batteries, avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
 - **AEMO utility-scale (the ceiling was real, then broken):** A systematic attempt to close the DT-vs-PPO gap *within* behaviour cloning — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, architecture changes — all failed to exceed the offline data's FCAS bidding. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver at inference), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
@@ -1555,7 +1660,7 @@ RL
 - Rollout and save: `flatten_episode_data(run_sb3_model_on_vec_env(ppo_model, SubprocVecEnv(test_env_fns))).write_parquet("data/household/logs/ppo_test_episode_logs.parquet")`.
 
 DT
-- Train (CLI): `python -m src.pretrain_decision_transformer --data-dir data/household/logs --model-config models/household/dt/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
+- Train (CLI): `python scripts/pretrain_decision_transformer.py --data-dir data/household/logs --model-config models/household/dt/decision_transformer_model_kwargs.json --epochs 2 --batch-size 6 --lr 2e-5 --return-scale 1.0`.
 - Dataset (Python): `TrajectoryDataset(data_path=..., context_length=..., state_dim=..., act_dim=..., discount_factor=0.99)` → train with `train_decision_transformer` and evaluate via `Agent(algorithm='dt', rtg_value=...)`.
 
 ---
@@ -1577,6 +1682,7 @@ Appendix B: Household Per-Algorithm Metrics (§8.1)
 Appendix C: Implementation Notes and Known Mismatches
 
 - **Dataset/forecast column mismatch:** the dataset schema emitted by `transform_polars_df` includes `FutureSolar`/`FutureLoad`, but the planning-agent forecast extraction in `src/decision.py` looks for `FutureGen`/`FutureLoad`. As written, SDP/MRDP fall back to `SolarGen`/`HouseLoad` unless the dataframe columns match `FutureGen`. This is a known code-level inconsistency and does not affect the AEMO (utility-scale) results, which use AEMO-native columns.
+- **Tracked modelling caveats:** a consolidated list of untracked code-level inconsistencies (household calendar-aging/efficiency/rainflow C-rate, the impact-aware J_t(soc) sign, the dangling `aggregate_fcas_market_depth`, and the pure-`state_dict` checkpoint config) is maintained in [`docs/known_issues.md`](docs/known_issues.md).
 - **Statistical confidence on headline AEMO figures:** bootstrap confidence intervals and paired Wilcoxon tests (`src/helper.py`) are applied to the market-impact headline tables (§8.2.9.1), the expanded dispatch-matched/standard runs (§8.2.9.3), and — as of 2026-08-23 — the §8.2.10 Stage C headlines via `scripts/stagec_statistical_significance.py` (results: `eval_output/stagec_statistical_significance.json`). All six DT-vs-PPO paired-difference CIs exclude zero.
 - **Preferred-policy artifacts (§8.2.10):** plan + session diary `docs/aemo_dt_preferred_policy_plan.md`; shipped checkpoint `models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus.pt` (use `rtg_mode="auto"`) — **also hosted on Hugging Face** as [`mrvictoru/energydecision-dt-v2-sdp`](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp) (with the `.meta.json` config sidecar); training corpus `data/aemo_dt_sdp/dt_trajectories_jtsoc_combined.parquet` — hosted on HF as [`mrvictoru/AEMO_simulated_trade_sdp`](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp); SDP executor `src/aemo_sdp_executor.py`; teacher-trajectory generator `scripts/generate_sdp_dt_trajectories.py`; teacher corpora `data/aemo_dt_sdp/`; impact gate runner `scripts/impact_gate.py`; evaluation outputs under `eval_output/stageb_fullcorpus_mixed_*`, `eval_output/stagec_*`, and `eval_output/exp0_*`.
 - **Figure embedding:** figure paths reference repository-relative SVGs; for PDF export these should be embedded.
