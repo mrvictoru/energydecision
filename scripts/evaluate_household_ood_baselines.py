@@ -888,10 +888,10 @@ def main() -> None:
     models: dict[str, tuple[object, str]] = {}
     if not args.skip_ppo:
         models["ppo"] = (PPO.load(str(args.ppo_path), device=device), "standard")
-        if args.sac_path is not None:
-            models["sac"] = (SAC.load(str(args.sac_path), device=device), "standard")
-        if args.td3_path is not None:
-            models["td3"] = (TD3.load(str(args.td3_path), device=device), "standard")
+    if args.sac_path is not None:
+        models["sac"] = (SAC.load(str(args.sac_path), device=device), "standard")
+    if args.td3_path is not None:
+        models["td3"] = (TD3.load(str(args.td3_path), device=device), "standard")
     if not args.skip_dt:
         models["dt"] = (_load_dt(args.dt_path, args.dt_config, device), args.dt_rtg_mode)
     for spec in args.additional_dt:

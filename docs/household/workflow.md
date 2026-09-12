@@ -197,6 +197,37 @@ deployment comparison. The nine checkpoints still need evaluation through the
 same real OOD, SOC, throughput, degradation, and price-gating surfaces before
 comparative claims are made.
 
+The first shared long-horizon deployment surface is now complete for all nine
+checkpoints. It uses 20 held-out synthetic-test episodes, each bounded to 180
+complete days, realistic tariffs, persistence forecasts, 1%-99% SOC limits,
+and matched 5 kWh / 3.3 kW hardware. These are raw SB3 policies: no
+DT-specific throughput or price wrapper was applied.
+
+| Algorithm | Seed | Net savings vs no battery (A$/yr) | EFC/day | Mean capacity fade | SOC clips | Safety penalty |
+|---|---:|---:|---:|---:|---:|---:|
+| PPO | 42 | -42.44 | 0.241 | 0.792% | 114,743 | 28,685.75 |
+| PPO | 7 | -12.22 | 0.127 | 0.384% | 0 | 0 |
+| PPO | 20260830 | -54.40 | 0.210 | 0.607% | 1,192 | 298.00 |
+| SAC | 42 | -30.18 | 0.354 | 0.822% | 0 | 0 |
+| SAC | 7 | -44.55 | 0.489 | 1.025% | 0 | 0 |
+| SAC | 20260830 | -43.72 | 0.335 | 0.675% | 4 | 1.00 |
+| TD3 | 42 | -661.79 | 0.580 | 6.690% | 749,217 | 187,304.25 |
+| TD3 | 7 | -0.11 | 0.004 | 0.013% | 1,034,081 | 258,520.25 |
+| TD3 | 20260830 | -8.88 | 0.012 | 0.089% | 1,032,843 | 258,210.75 |
+
+The main conclusion is safety and deployment viability, not an RL ranking:
+all three algorithms show substantial seed sensitivity, and the TD3 policies
+turn the hard SOC clamp into a behavioral failure mode (millions of clipped
+requests and large safety penalties). PPO and SAC avoid that failure more
+often, but still produce negative net-of-wear economics on this raw-policy
+surface. This is not a fair comparison to the constrained DT candidate yet;
+the next comparison must apply the same inference-time SOC, throughput, and
+price controls to every policy.
+
+The evaluator now loads SAC and TD3 independently of `--skip-ppo`, so
+algorithm-specific runs cannot silently degrade into a no-battery result.
+Artifacts are under `eval_output/household/h4_10_multiseed/*_180d_valid/`.
+
 The offline deployment-proxy shadow run
 (`eval_output/household/h4_9_validation/offline_shadow_14d_gate_030_010/summary.json`)
 replayed the selected configuration over five contiguous 14-day real-data
