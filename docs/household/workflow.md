@@ -220,9 +220,8 @@ all three algorithms show substantial seed sensitivity, and the TD3 policies
 turn the hard SOC clamp into a behavioral failure mode (millions of clipped
 requests and large safety penalties). PPO and SAC avoid that failure more
 often, but still produce negative net-of-wear economics on this raw-policy
-surface. This is not a fair comparison to the constrained DT candidate yet;
-the next comparison must apply the same inference-time SOC, throughput, and
-price controls to every policy.
+surface. This raw-policy result is retained as a diagnostic baseline; the fair
+shared-wrapper comparison is documented below.
 
 The evaluator now loads SAC and TD3 independently of `--skip-ppo`, so
 algorithm-specific runs cannot silently degrade into a no-battery result.
@@ -256,6 +255,39 @@ This is the first longer-horizon result supporting directional budgeting as
 the preferred inference-time configuration for the matched-capacity synthetic
 surface. It still does not remove the real-data need for shadow-mode
 validation, and it does not justify retraining yet.
+
+### Fair DT versus SB3 deployment comparison
+
+The first fair comparison applies identical inference-time controls to the DT
+and all nine SB3 checkpoints: realistic tariffs, persistence forecasts,
+1%–99% SOC bounds, matched 5 kWh / 3.3 kW hardware, independent 0.05
+charge/discharge EFC/day budgets, and `$0.30` discharge / `$0.10` grid-charge
+price gates. The DT was evaluated on three deterministic 180-day windows; the
+SB3 rows below are aggregated on those exact same windows from the completed
+20-window runs. This is a reduced-sample comparison, not a full-surface
+ranking.
+
+| Policy | Net savings vs no battery (A$/yr) | EFC/day | Mean capacity fade | SOC clips | Safety penalty |
+|---|---:|---:|---:|---:|---:|
+| DT (`rtg=-4`) | **+2.98** | 0.04995 | 0.2185% | 0 | 0 |
+| PPO seed 42 | -6.87 | 0.04612 | 0.2747% | 58 | 14.5 |
+| PPO seed 7 | +1.71 | 0.04721 | 0.2305% | 0 | 0 |
+| PPO seed 20260830 | -0.52 | 0.04709 | 0.2016% | 0 | 0 |
+| SAC seed 42 | +1.39 | 0.04913 | 0.2245% | 0 | 0 |
+| SAC seed 7 | -0.85 | 0.04981 | 0.2251% | 0 | 0 |
+| SAC seed 20260830 | -4.12 | 0.04820 | 0.2077% | 0 | 0 |
+| TD3 seed 42 | -1.77 | 0.02725 | 0.1196% | 2 | 0.5 |
+| TD3 seed 7 | +0.83 | 0.00336 | 0.0052% | 7 | 1.75 |
+| TD3 seed 20260830 | +0.91 | 0.00272 | 0.0000% | 3 | 0.75 |
+
+The controls reduced unsafe interventions to near zero for every policy, but
+the projection layer intervened frequently as expected under the tight
+directional budgets. On this small matched surface, DT had the highest mean
+economic result and exactly reached the intended throughput budget, while
+PPO/SAC were mixed across seeds and TD3 was mostly under-active. The result
+supports the safety wrapper and establishes a fair household comparison
+protocol; it is not sufficient to claim DT superiority across all seasons or
+hardware configurations.
 
 ## Standard Household Workflow
 

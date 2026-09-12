@@ -448,7 +448,7 @@ def _run_agent(
             dt_min_discharge_price,
             dt_max_charge_price,
         )
-        if algorithm == "dt" and any(
+        if algorithm in {"dt", "rl"} and any(
             value is not None
             for value in (
                 dt_max_efc_per_day,
