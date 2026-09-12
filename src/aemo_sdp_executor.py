@@ -356,7 +356,11 @@ def compute_cost_to_go_table(
                     "TOTALDEMAND": float(forecast_step.get("TOTALDEMAND", 0.0) or 0.0),
                 }
                 for ui, energy in enumerate(unique_vals):
-                    dispatch_mw = -float(energy) / max(float(env.step_duration), 1e-9)
+                    # Env convention: positive dispatch = charging (matches
+                    # AEMOBatteryTradingEnv's actual_power), and energy > 0 =
+                    # charging here. Keep the signs aligned so the cost-to-go
+                    # table prices charging/discharging like the environment.
+                    dispatch_mw = float(energy) / max(float(env.step_duration), 1e-9)
                     realized_rrp = impact_model.realized_energy_price(
                         base_rrp,
                         dispatch_mw,

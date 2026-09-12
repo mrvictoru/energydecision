@@ -30,7 +30,7 @@ class MarketImpactModel(ABC):
     def realized_energy_price(
         self,
         base_price: float,
-        battery_dispatch_mw: float,   # +discharge, -charge  (from env actual_power)
+        battery_dispatch_mw: float,   # +charge, -discharge (env actual_power convention)
         energy_price: float,          # RRP ()/MWh
         market_state: dict,
     ) -> float: ...
@@ -136,9 +136,9 @@ class PiecewiseMeritOrderImpact(MarketImpactModel):
         costs, cum_mw = supply
         total_demand = market_state.get('TOTALDEMAND', 0.0) or 0.0
 
-        # Battery net effect on demand:
-        #   battery_dispatch_mw > 0 (discharging) → adds supply → reduces effective demand
-        #   battery_dispatch_mw < 0 (charging)    → adds demand → increases effective demand
+        # Battery net effect on demand (env convention: positive = charging):
+        #   battery_dispatch_mw > 0 (charging)    → adds demand → raises the clearing price
+        #   battery_dispatch_mw < 0 (discharging) → adds supply → lowers the clearing price
         effective_demand = total_demand + battery_dispatch_mw
 
         # Clamp to the supply curve range.

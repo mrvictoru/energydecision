@@ -127,7 +127,13 @@ documentation-only correction.
   falling back to constant RTG, not by H1 being correct.
 - **Suggested fix:** align the sign in `compute_cost_to_go_table` with the env,
   fix the comments, and re-run the impact gate to test whether explicit
-  `j_t_soc` becomes viable. Status: `OPEN`.
+  `j_t_soc` becomes viable.
+- **Resolved (2026-09-13):** sign corrected in `src/aemo_sdp_executor.py:359`
+  (and the misleading `src/market_impact.py` comments fixed) so the cost-to-go
+  table uses the env's positive=charging convention; regression coverage added
+  in `tests/test_market_impact.py`. Re-running the impact gate with explicit
+  `j_t_soc` remains recommended before relying on H1. **Full test-suite
+  verification pending.**
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -150,7 +156,12 @@ documentation-only correction.
 - **Impact:** the importing scripts raise `ImportError` if run directly; impact-gate
   supply/depth data must come from the cache.
 - **Suggested fix:** implement `aggregate_fcas_market_depth` or update the
-  importers/comments to the live function. Status: `OPEN`.
+  importers/comments to the live function.
+- **Resolved (2026-09-13):** added `aggregate_fcas_market_depth(region, start,
+  end, demand_series=None)` to `src/aemo_data.py` as the demand-proportional
+  heuristic, so the Phase 3 scripts' imports resolve;
+  `scripts/precompute_supply_curves.py` keeps its local fast path. Tested in
+  `tests/test_market_impact.py`.
 
 ### B4. Env and SDP planner use different degradation models
 
@@ -215,4 +226,20 @@ documentation-only correction.
 
 ## Resolved
 
-_(none yet)_
+- **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full-suite
+  verification pending.
+- **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
+
+### Fixes applied on 2026-09-13 (pending full-suite verification)
+
+- `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
+  `+energy/step_duration` to the impact model, matching the env's
+  positive=charging convention (was negated).
+- `src/market_impact.py` — corrected the dispatch-sign comments/docstring.
+- `src/aemo_data.py` — added `aggregate_fcas_market_depth` (demand-heuristic
+  FCAS depth proxy).
+- `tests/test_market_impact.py` — new: impact-sign monotonicity, identity
+  price-taking, depth schema/values, and a cost-to-go dispatch-sign regression.
+
+**Still to do:** run `python3 -m pytest tests/ -v` inside `energydecision-gpu`
+and re-run the impact gate with explicit `j_t_soc`.

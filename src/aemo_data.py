@@ -2485,6 +2485,54 @@ def aggregate_residual_supply(
     )
 
 
+# Demand-proportional FCAS market-depth proxy (min MW, ratio of TOTALDEMAND).
+# This is the fast heuristic consumed by the market-impact model; it mirrors the
+# local fast path in scripts/precompute_supply_curves.py and avoids the very slow
+# multi-year DISPATCHLOAD aggregation.
+_FCAS_DEPTH_HEURISTIC: dict[str, tuple[float, float]] = {
+    'RAISE6SEC': (50.0, 0.10), 'RAISE60SEC': (30.0, 0.05), 'RAISE5MIN': (15.0, 0.02),
+    'RAISEREG': (30.0, 0.03),
+    'LOWER6SEC': (50.0, 0.10), 'LOWER60SEC': (30.0, 0.05), 'LOWER5MIN': (15.0, 0.02),
+    'LOWERREG': (30.0, 0.03),
+}
+
+
+def aggregate_fcas_market_depth(
+    region: str,
+    start_date: datetime,
+    end_date: datetime,
+    demand_series: Optional[pl.DataFrame] = None,
+    cache_dir: str = "data/aemo",
+) -> pl.DataFrame:
+    """Heuristic FCAS market-depth proxy, proportional to regional demand.
+
+    Returns a frame with ``SETTLEMENTDATE`` and one ``FCAS_DEPTH_<SERVICE>_MW``
+    column per FCAS service — the schema consumed by
+    ``PiecewiseMeritOrderImpact``. Supply a processed frame via
+    ``demand_series`` (containing ``SETTLEMENTDATE`` and ``TOTALDEMAND``) to
+    avoid any network fetch; otherwise demand is fetched via
+    :func:`fetch_aemo_dispatch_price`.
+    """
+    if demand_series is None:
+        demand_series = fetch_aemo_dispatch_price(
+            start_date, end_date, region=region, cache_dir=cache_dir
+        )
+    missing = {'SETTLEMENTDATE', 'TOTALDEMAND'} - set(demand_series.columns)
+    if missing:
+        raise ValueError(
+            f"demand_series is missing required columns: {sorted(missing)}"
+        )
+
+    dem = demand_series.select('SETTLEMENTDATE', 'TOTALDEMAND')
+    exprs = [pl.col('SETTLEMENTDATE')]
+    for service, (min_mw, ratio) in _FCAS_DEPTH_HEURISTIC.items():
+        exprs.append(
+            pl.max_horizontal(pl.lit(min_mw), pl.col('TOTALDEMAND') * ratio)
+            .alias(f'FCAS_DEPTH_{service}_MW')
+        )
+    return dem.select(exprs)
+
+
 # Marginal-cost tier labels for NEM fuel types (AUD/MWh, approximate order).
 # These determine the position in the merit-order supply curve.
 FUEL_MARGINAL_COST_TIERS: dict[str, float] = {
