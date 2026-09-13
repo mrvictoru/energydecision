@@ -237,7 +237,16 @@ documentation-only correction.
   **Implication:** the reported "price-taking J_t(soc) fails under impact"
   conclusion was dominated by this bug, so the shipped `rtg_mode="auto"` gating
   should be re-derived on the canonical impact benchmark before it is final.
-  Status: `RESOLVED`.
+- **All-scenario follow-up (2026-09-13, `jtsoc_sign_verification_all.json`):**
+  across 3 scenarios × 3 batteries, explicit j_t_soc no longer collapses
+  anywhere. It wins the three SA1 Oct cells (incl. hornsdale +$238.8k vs
+  +$115.6k), ties SA1 Nov small / VIC1 small+hornsdale, and loses SA1 Nov
+  hornsdale/torrens and VIC1 torrens where it over-trades energy (SA1 Nov
+  torrens energy −$68k). Constant is marginally ahead in total (901.6k vs
+  879.5k over 9 cells, ~2.5%). So `auto` (constant fallback under impact)
+  remains defensible, but the "catastrophic collapse" justification is invalid;
+  a surface/battery/season-aware mode selection may beat both. Status:
+  `RESOLVED` (report narrative still to be revised).
 
 ---
 
