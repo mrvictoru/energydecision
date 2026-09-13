@@ -131,9 +131,10 @@ documentation-only correction.
 - **Resolved (2026-09-13):** sign corrected in `src/aemo_sdp_executor.py:359`
   (and the misleading `src/market_impact.py` comments fixed) so the cost-to-go
   table uses the env's positive=charging convention; regression coverage added
-  in `tests/test_market_impact.py`. Re-running the impact gate with explicit
-  `j_t_soc` remains recommended before relying on H1. Full suite green
-  (367 passed, 2026-09-13).
+  in `tests/test_market_impact.py`, and end-to-end by
+  `scripts/verify_jtsoc_impact_sign.py` (SA1 Oct, piecewise merit-order): with
+  the corrected sign and checkpoint `return_scale`, explicit j_t_soc beats
+  constant on all three batteries. Full suite green (367 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -206,6 +207,37 @@ documentation-only correction.
 - **Location:** `src/AEMOBatteryEnv.py:1033` (`normalized_reward = reward/1000`).
 - **Impact:** raw dollars live only in `info`; a common source of confusion when
   comparing logged rewards to profits. Documented but easy to miss.
+
+### B8. `phase3_impact_eval.py` does not apply the checkpoint's `return_scale`
+
+- **Location:** `scripts/phase3_impact_eval.py:182-186` loads the checkpoint with
+  `torch.load(...)` and passes the resulting **dict** to
+  `DecisionTransformer.load_from_checkpoint`, which only reads the
+  `<ckpt>.meta.json` sidecar when given a **path**
+  (`src/decision_transformer.py:539-551`). The modern model therefore keeps its
+  constructor default `return_scale=1.0` (`src/decision_transformer.py:435`),
+  while the requested `return_scale` is not consulted because it lives outside
+  the filtered constructor kwargs.
+- **Impact:** for the shipped Stage C model the correct value is
+  **25988.190625**; any impact-eval run of Stage C through this script (notably
+  the explicit `j_t_soc`/`auto` investigation in
+  `docs/aemo_dt_preferred_policy_plan.md`) used `1.0`, i.e. an RTG prompt
+  ~26,000× too large. This may partly explain the reported hornsdale/torrens
+  collapse and must be re-checked before those numbers are used.
+- **Suggested fix:** after `load_from_checkpoint`, read the sidecar
+  (`<ckpt>.meta.json`) and set `dt_model.return_scale` (or pass the checkpoint
+  path to `load_from_checkpoint`). A focused verification harness
+  (`scripts/verify_jtsoc_impact_sign.py`) loads the sidecar correctly and keeps
+  an explicit `--return-scale` override for comparison.
+- **Resolved (2026-09-13):** `phase3_impact_eval.py` now applies the sidecar
+  `return_scale`. Verified on SA1 Oct (piecewise impact): with
+  `return_scale=1.0` the j_t_soc collapse reproduces (hornsdale −$46k, torrens
+  −$326k); with the correct `25988.19` explicit j_t_soc is positive and beats
+  constant on all three batteries (+$33.7k / +$238.8k / +$134.6k).
+  **Implication:** the reported "price-taking J_t(soc) fails under impact"
+  conclusion was dominated by this bug, so the shipped `rtg_mode="auto"` gating
+  should be re-derived on the canonical impact benchmark before it is final.
+  Status: `RESOLVED`.
 
 ---
 
@@ -284,6 +316,8 @@ limitations instead.
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
 - **B4** (env vs planner degradation model) — documented 2026-09-13.
 - **B6** (checkpoint architecture not embedded) — documented 2026-09-13.
+- **B8** (`phase3_impact_eval.py` ignored checkpoint `return_scale`) — fixed and
+  verified 2026-09-13; this reverses the reported j_t_soc impact collapse.
 
 ### Fixes applied on 2026-09-13 (verified: 367 tests pass)
 
@@ -302,6 +336,11 @@ limitations instead.
 - `src/transformer_training.py` — noted the `state_dict`-only checkpoint
   contract at the save site (B6).
 - `tests/test_aemo_fcas_order.py` — new: env FCAS order + Oracle remap tests.
+- `scripts/phase3_impact_eval.py` — apply the checkpoint `.meta.json`
+  `return_scale` (fixes B8).
+- `scripts/verify_jtsoc_impact_sign.py` + `configs/aemo_decision_transformer_model_kwargs_sdp_jtsoc_fullcorpus.json`
+  — new focused harness proving explicit j_t_soc is impact-viable when
+  `return_scale` is correct.
 
 **Still to do:** re-run the impact gate with explicit `j_t_soc` (B1 follow-up)
 to confirm H1 is now consistent with the env.

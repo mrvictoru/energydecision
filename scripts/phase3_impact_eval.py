@@ -181,9 +181,20 @@ if __name__ == "__main__":
     dt_model = DecisionTransformer(**model_init_kwargs)
     state = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
     dt_model.load_from_checkpoint(state)
-    dt_model.to(DEVICE)
-    if not hasattr(dt_model, 'return_scale') or dt_model.return_scale is None:
+    # Apply the checkpoint's inference metadata explicitly. load_from_checkpoint
+    # only reads the <ckpt>.meta.json sidecar when given a path, not a state dict,
+    # so without this the model keeps its constructor default return_scale=1.0.
+    _meta_path = Path(str(checkpoint_path) + ".meta.json")
+    if _meta_path.exists():
+        try:
+            _meta = json.loads(_meta_path.read_text())
+            if _meta.get("return_scale") is not None:
+                dt_model.return_scale = float(_meta["return_scale"])
+        except Exception:
+            pass
+    elif not hasattr(dt_model, 'return_scale') or dt_model.return_scale is None:
         dt_model.return_scale = float(model_kwargs.get('return_scale', 1.0))
+    dt_model.to(DEVICE)
     dt_model.eval()
     if FP16:
         dt_model = dt_model.half()
