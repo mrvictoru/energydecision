@@ -49,7 +49,13 @@ class OracleResult:
 
 
 # ---------------------------------------------------------------------------
-# FCAS service index constants (order matches the env's full_fcas action layout)
+# FCAS service index constants.
+#
+# NOTE: this grouped raise/lower order is the Oracle's *internal* order and does
+# NOT match the environment's interleaved full_fcas action order
+# (AEMOBatteryTradingEnv._fcas_services:
+#   RAISEREG, LOWERREG, RAISE6SEC, LOWER6SEC, RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN).
+# Use ``oracle_fcas_bids_to_env_order`` to map bid arrays into the env layout.
 # ---------------------------------------------------------------------------
 
 FCAS_SERVICES_RAISE = ['RAISE6SEC', 'RAISE60SEC', 'RAISE5MIN', 'RAISEREG']
@@ -58,6 +64,43 @@ FCAS_SERVICES = FCAS_SERVICES_RAISE + FCAS_SERVICES_LOWER
 N_FCAS = len(FCAS_SERVICES)          # 8
 N_FCAS_RAISE = len(FCAS_SERVICES_RAISE)  # 4
 N_FCAS_LOWER = len(FCAS_SERVICES_LOWER)  # 4
+
+_ORACLE_RAISE_INDEX = {svc: i for i, svc in enumerate(FCAS_SERVICES_RAISE)}
+_ORACLE_LOWER_INDEX = {svc: i for i, svc in enumerate(FCAS_SERVICES_LOWER)}
+
+
+def oracle_fcas_bids_to_env_order(
+    optimal_raise_bids,
+    optimal_lower_bids,
+    env_fcas_order,
+    max_flow: float,
+) -> np.ndarray:
+    """Map Oracle grouped raise/lower bids into the environment's full_fcas order.
+
+    The Oracle solves raise and lower services as separate grouped vectors
+    (``FCAS_SERVICES_RAISE`` / ``FCAS_SERVICES_LOWER``), while the env lays out
+    all 8 services interleaved (``AEMOBatteryTradingEnv._fcas_services``).
+
+    Args:
+        optimal_raise_bids: array-like ``(T, 4)`` raise bids in MW.
+        optimal_lower_bids: array-like ``(T, 4)`` lower bids in MW.
+        env_fcas_order: iterable of the 8 service names in env action order.
+        max_flow: battery MW rating used to normalise bids into [0, 1].
+
+    Returns:
+        ``np.ndarray`` of shape ``(T, 8)`` with bids in ``env_fcas_order``,
+        clipped to [0, 1].
+    """
+    raise_bids = np.asarray(optimal_raise_bids, dtype=float)
+    lower_bids = np.asarray(optimal_lower_bids, dtype=float)
+    out = np.zeros((raise_bids.shape[0], N_FCAS), dtype=float)
+    for i, svc in enumerate(env_fcas_order):
+        if svc.startswith('RAISE'):
+            src, idx = raise_bids, _ORACLE_RAISE_INDEX[svc]
+        else:
+            src, idx = lower_bids, _ORACLE_LOWER_INDEX[svc]
+        out[:, i] = np.clip(src[:, idx] / max_flow, 0.0, 1.0)
+    return out
 
 
 # ---------------------------------------------------------------------------

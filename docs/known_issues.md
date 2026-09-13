@@ -141,8 +141,10 @@ documentation-only correction.
   raise/lower; the Oracle groups raise then lower (`src/aemo_oracle_algo.py:55`).
 - **Detail:** `src/decision.py` remaps the Oracle output, but any direct consumer
   of the oracle bid arrays must apply the same mapping.
-- **Suggested fix:** centralise the ordering in one constant and add a test.
-  Status: `WORKAROUND`.
+- **Resolved (2026-09-13):** mapping centralised in
+  `oracle_fcas_bids_to_env_order` (`src/aemo_oracle_algo.py`) and used by both
+  `decision.py` call sites; the misleading "order matches the env" comment was
+  corrected. Regression tests in `tests/test_aemo_fcas_order.py`.
 
 ### B3. `aggregate_fcas_market_depth` is referenced but undefined
 
@@ -171,8 +173,9 @@ documentation-only correction.
 - **Impact:** the teacher's planned wear cost differs from the env's realized wear.
   Partly documented in `report.md` §8.2.10 (the sub-3% DoD note) but not framed as
   a model mismatch.
-- **Suggested fix:** use one model in both, or document the mismatch and its
-  direction. Status: `INTENTIONAL` / needs documenting.
+- **Documented (2026-09-13):** the mismatch is now stated in the
+  `sdp_energy_dispatch` docstring (`src/aemo_sdp_executor.py`) and this file.
+  Using one model in both remains a follow-up. Status: `DOCUMENTED`.
 
 ### B5. Muenzel model returns zero degradation for DoD ≤ 3%
 
@@ -193,8 +196,10 @@ documentation-only correction.
 - **Impact:** the published `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`
   is the **wrong** config for Stage C. Any loader that assumes an embedded config
   will fail or load the wrong architecture.
-- **Suggested fix:** docs are corrected in `report.md` §4.2; consider writing the
-  architecture into future checkpoints. Status: `OPEN` (docs) / `WORKAROUND`.
+- **Documented (2026-09-13):** `report.md` §4.2 corrected and a note added at the
+  `torch.save` site in `src/transformer_training.py`; loaders must use the
+  sidecars. Writing the architecture into future checkpoints remains a follow-up.
+  Status: `DOCUMENTED`.
 
 ### B7. The env step reward is scaled by 1/1000
 
@@ -227,10 +232,13 @@ documentation-only correction.
 ## Resolved
 
 - **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite
-  green (364 passed).
+  green (367 passed).
+- **B2** (Oracle vs env FCAS ordering) — fixed 2026-09-13.
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
+- **B4** (env vs planner degradation model) — documented 2026-09-13.
+- **B6** (checkpoint architecture not embedded) — documented 2026-09-13.
 
-### Fixes applied on 2026-09-13 (verified: 364 tests pass)
+### Fixes applied on 2026-09-13 (verified: 367 tests pass)
 
 - `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
   `+energy/step_duration` to the impact model, matching the env's
@@ -240,6 +248,13 @@ documentation-only correction.
   FCAS depth proxy).
 - `tests/test_market_impact.py` — new: impact-sign monotonicity, identity
   price-taking, depth schema/values, and a cost-to-go dispatch-sign regression.
+- `src/aemo_oracle_algo.py` / `src/decision.py` — centralised the Oracle→env
+  FCAS bid remap in `oracle_fcas_bids_to_env_order` (B2).
+- `src/aemo_sdp_executor.py` — documented the planner-vs-env degradation-model
+  mismatch in the `sdp_energy_dispatch` docstring (B4).
+- `src/transformer_training.py` — noted the `state_dict`-only checkpoint
+  contract at the save site (B6).
+- `tests/test_aemo_fcas_order.py` — new: env FCAS order + Oracle remap tests.
 
 **Still to do:** re-run the impact gate with explicit `j_t_soc` (B1 follow-up)
 to confirm H1 is now consistent with the env.

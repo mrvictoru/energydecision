@@ -15,7 +15,7 @@ from grpo_posttraining import stable_rtg_update
 from sdp_algorithm import SDPSolver
 from mrdp_algorithm import MRDPSolver
 from oracle_algorithm import OracleSolver
-from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES
+from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES, oracle_fcas_bids_to_env_order
 
 import concurrent.futures
 
@@ -1010,26 +1010,19 @@ class AEMOAgent:
             # Pack per-interval actions NORMALISED to env's action space [-1,1] and [0,1].
             # Env interprets: dispatch_mw = action[0] * max_flow (positive = charge, negative = discharge).
             # Oracle's dispatch convention is the opposite: positive = discharge, negative = charge.
-            # So we negate when mapping to env's convention.
-            # FCAS bid order must match the env's self._fcas_services order:
-            #   ['RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
-            #    'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN']
-            env_fcas_order = self.env._fcas_services if hasattr(self.env, '_fcas_services') else None
+            # So we negate when mapping to env's convention. FCAS bids are remapped from
+            # the Oracle's grouped raise/lower order into the env's action order by
+            # ``oracle_fcas_bids_to_env_order``.
+            env_fcas_order = getattr(self.env, '_fcas_services', None)
             actions = np.zeros((T, 1 + 8))
             actions[:, 0] = np.clip(-self._oracle_result.optimal_dispatch / max_flow, -1.0, 1.0)
             if env_fcas_order is not None:
-                # Map Oracle's RAISE bids (indexed 0-3: 6SEC, 60SEC, 5MIN, REG) and
-                # LOWER bids (0-3: 6SEC, 60SEC, 5MIN, REG) into env's order.
-                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
-                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
-                for i, svc in enumerate(env_fcas_order):
-                    if svc.startswith('RAISE'):
-                        acts = self._oracle_result.optimal_raise_bids
-                        oidx = ORAISE.get(svc, 0)
-                    else:  # LOWER
-                        acts = self._oracle_result.optimal_lower_bids
-                        oidx = OLOWER.get(svc, 0)
-                    actions[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+                actions[:, 1:] = oracle_fcas_bids_to_env_order(
+                    self._oracle_result.optimal_raise_bids,
+                    self._oracle_result.optimal_lower_bids,
+                    env_fcas_order,
+                    max_flow,
+                )
             else:
                 actions[:, 1:5] = np.clip(self._oracle_result.optimal_raise_bids / max_flow, 0.0, 1.0)
                 actions[:, 5:9] = np.clip(self._oracle_result.optimal_lower_bids / max_flow, 0.0, 1.0)
@@ -1180,16 +1173,12 @@ class AEMOAgent:
             actions_out = np.zeros((n, 1 + 8))
             actions_out[:, 0] = np.clip(-result.optimal_dispatch / max_flow, -1.0, 1.0)
             if env_fcas_order is not None:
-                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
-                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
-                for i, svc in enumerate(env_fcas_order):
-                    if svc.startswith('RAISE'):
-                        acts = result.optimal_raise_bids
-                        oidx = ORAISE.get(svc, 0)
-                    else:
-                        acts = result.optimal_lower_bids
-                        oidx = OLOWER.get(svc, 0)
-                    actions_out[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+                actions_out[:, 1:] = oracle_fcas_bids_to_env_order(
+                    result.optimal_raise_bids,
+                    result.optimal_lower_bids,
+                    env_fcas_order,
+                    max_flow,
+                )
             else:
                 actions_out[:, 1:5] = np.clip(result.optimal_raise_bids / max_flow, 0.0, 1.0)
                 actions_out[:, 5:9] = np.clip(result.optimal_lower_bids / max_flow, 0.0, 1.0)

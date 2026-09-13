@@ -150,12 +150,16 @@ def sdp_energy_dispatch(
     < 0 = discharging (env convention).
 
     This is the honest energy planner: it uses only the *seasonal forecast*
-    of RRP (no realized future prices). Degradation is handled two ways: the
+    of RRP (no realized future prices). Degradation is approximated by the
     repo's rainflow DegradationCalculator (which returns ~0 for sub-3% DoD
     transitions, so it under-counts cycling) PLUS a linear throughput
     surrogate ``deg_cost_per_mwh`` (|energy| * \$/MWh) so multi-step daily
-    cycling is priced — matching the RealWorldBESS cycle aging the env
-    actually charges.
+    cycling is priced.
+
+    Note: this differs from the environment's ``real_world`` degradation mode,
+    which charges combined calendar + cycle aging via
+    ``RealWorldBESSDegradationModel``. The planner's wear cost is therefore an
+    approximation of the realized env wear; see ``docs/known_issues.md`` (B4).
     """
     capacity = float(env.battery_capacity)
     horizon = len(forecast)

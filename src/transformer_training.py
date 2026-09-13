@@ -1450,6 +1450,9 @@ def train_decision_transformer(
         _save_checkpoint(epochs, segment=-2, status="finished")
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    # NOTE: save_path is a pure state_dict — the architecture and return_scale
+    # are NOT embedded. Loaders must read the sidecars (<stem>.meta.json and the
+    # training surface manifest); see docs/known_issues.md (B6).
     torch.save(model.state_dict(), save_path)
     _write_model_meta(save_path)
     print(f"Model saved to {save_path}")
