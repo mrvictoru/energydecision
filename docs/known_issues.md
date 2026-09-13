@@ -278,6 +278,36 @@ results in `report.md` §8.1) and require regenerating teacher corpora,
 retraining, and re-running evaluation. Do them as one coherent
 "degradation-physics v2" change, not piecemeal.
 
+### D.0 Scope decision (required before any code change)
+
+**Cross-track caveat:** `RainflowCounter`/`DegradationModel`
+(`src/batterydeg.py`) are shared by `SolarBatteryEnv` **and**
+`AEMOBatteryTradingEnv`. A3 (C-rate units) and A4 (reset cap) are therefore
+**not** household-only. Impact by track:
+
+- **Household (H1–H4.x):** the degradation term enters the reward directly, so
+  every result shifts — plausibly the most, given H4.5's conclusions hinge on
+  net-of-wear sign.
+- **AEMO (Stage C identity surfaces + impact gate):** degradation cost changes,
+  so the just-corrected canonical results (B1/B8) would need re-running again.
+
+Options:
+
+1. **Global fix + re-baseline both tracks** — scientifically cleanest; highest
+   cost (regenerate corpora, retrain, re-run AEMO identity/gate). Recommended
+   end state.
+2. **Household-scoped correct-units path** — add a `batterydeg` option (e.g.
+   `c_rate_units="fraction"`) used only by `SolarBatteryEnv`, leaving the AEMO
+   default unchanged to preserve its results. Fast, but leaves AEMO carrying the
+   approximation and creates a two-convention divergence needing explicit
+   labelling everywhere.
+3. **Document only** — no code change; cite A1–A8 as limitations. Cheapest,
+   weakest.
+
+**Recommendation:** option 2 first as a clearly-labelled experiment branch to
+quantify the household delta, then option 1 once the delta is understood and the
+household track is frozen. Fix A3 and A4 together so the clamp is consistent.
+
 ### Coupling and order
 
 1. **A3 (rainflow C-rate units) + A4 (reset cap)** — fix together. A3 changes the
