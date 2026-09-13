@@ -969,16 +969,16 @@ footer strong { color: var(--ink); }
   <div class="container reveal">
     <span class="section-kicker">Failure modes, handled</span>
     <h2>Why the shipped default is rtg_mode="auto"</h2>
-    <p class="section-sub">State-dependent J_t(soc) prompting is strictly better when the battery is a price-taker —
-      and catastrophic when it isn't. At grid scale under merit-order impact, the optimistic prompt drives over-dispatch,
-      the battery suppresses its own realized price, and energy revenue collapses. Auto mode gates the prompt by market power.</p>
+    <p class="section-sub">State-dependent J_t(soc) prompting is strictly better when the battery is a price-taker.
+      Under merit-order impact the shipped <code>auto</code> mode uses a conservative constant RTG, which avoids residual
+      energy over-trading on large batteries. (The earlier claim that explicit j_t_soc "collapsed" under impact was a
+      <code>return_scale</code> evaluation bug — see report §8.2.10 and known_issues B8.)</p>
     <div class="chart-box" style="height:360px;max-width:860px">
-      <canvas id="autoModeChart" role="img" aria-label="Grouped bar chart comparing PPO, auto mode, and explicit j_t_soc prompting under market impact on Hornsdale and Torrens scale batteries"></canvas>
+      <canvas id="autoModeChart" role="img" aria-label="Grouped bar chart comparing PPO, auto mode, and explicit j_t_soc prompting under market impact across three battery scales"></canvas>
     </div>
-    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): j_t_soc under impact loses −$139.9k (Hornsdale) and −$346.6k (Torrens); auto passes with +$142.1k / +$173.1k vs PPO $56.5k / $69.5k.</div>
-    <p class="chart-caption">Mean profit/ep under piecewise impact, verified reruns (2026-08-22). Explicit j_t_soc remains available as an identity-only analysis mode.
-      Within auto mode, the constant fallback must stay conservative (rtg = 0.0): fallback values ≥ 20 re-introduce the collapse.</p>
-    <p class="footnote">Takeaway: <strong>prompts should be state-dependent, but gated by market power.</strong></p>
+    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): per-battery means under piecewise impact — Small $35.4k / $11.0k, Hornsdale-class $146.7k / $56.5k, Torrens-class $140.7k / $69.5k (DT auto vs PPO). Explicit j_t_soc (corrected): $36.9k / $154.6k / $101.7k.</div>
+    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact, corrected re-run (2026-09-13, B8 fix). Explicit j_t_soc is impact-viable but over-trades energy on some large-battery cells; the conservative constant fallback avoids that. All three modes beat PPO at every scale.</p>
+    <p class="footnote">Takeaway: <strong>prompts should be state-dependent; the constant fallback is a robustness trade-off, not collapse-avoidance.</strong></p>
   </div>
 </section>
 
@@ -1460,10 +1460,10 @@ var DATA = {
     { fix: "Forecast tokens (TTM, 48-step prefix)", result: "Negative result: $4,564/ep vs modern v2's $4,991/ep. TTM FCAS forecasts carry ~zero signal (corr 0.01–0.07); implicit context wins.", tag: "negative" }
   ],
   autoMode: {
-    labels: ["Hornsdale-class (150 MW)", "Torrens-class (250 MWh)"],
-    ppo:   [56500, 69500],
-    auto:  [142100, 173100],
-    jtsoc: [-139900, -346600]
+    labels: ["Small (~8 MWh)", "Hornsdale-class (150 MW)", "Torrens-class (250 MWh)"],
+    ppo:   [11031, 56540, 69507],
+    auto:  [35404, 146676, 140712],
+    jtsoc: [36894, 154631, 101652]
   }
 };
 
