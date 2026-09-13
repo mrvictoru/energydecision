@@ -361,13 +361,18 @@ class RainflowCounter:
                         if delta_time <= 1e-12:
                             Id_cycle = Ich_cycle = 0.0
                         else:
+                            # SoC is tracked in percent; convert the change to a
+                            # C-rate (fraction of capacity per hour) before
+                            # clamping to max_c_rate. Dividing by 100 is required
+                            # so the value matches DegradationModel's nominal
+                            # C-rates (Id_nom=0.25, Ich_nom=0.125).
                             if soc2 > soc1:
-                                Ich_cycle = (soc2 - soc1) / delta_time
+                                Ich_cycle = (soc2 - soc1) / 100.0 / delta_time
                                 # conduct clamping based on max C-rate
                                 Ich_cycle = min(Ich_cycle, self.max_c_rate)
                                 Id_cycle = 0.0
                             else:
-                                Id_cycle = (soc1 - soc2) / delta_time
+                                Id_cycle = (soc1 - soc2) / 100.0 / delta_time
                                 # conduct clamping based on max C-rate
                                 Id_cycle = min(Id_cycle, self.max_c_rate)
                                 Ich_cycle = 0.0

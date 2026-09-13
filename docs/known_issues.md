@@ -55,7 +55,14 @@ documentation-only correction.
 - **Impact:** the C-rate multipliers (`nCL_Id`, `nCL_Ich`) are effectively pinned
   near the `max_c_rate` clamp for realistic cycles, weakening the rate dependence.
 - **Suggested fix:** divide by 100 (or carry SOC as a fraction), then re-validate
-  the nominal multipliers and any reported degradation figures. Status: `OPEN`.
+  the nominal multipliers and any reported degradation figures.
+- **Resolved (2026-09-13):** `RainflowCounter.update` now computes the inferred
+  current as `ΔSoC% / 100 / Δt` (a true C-rate). Unit test:
+  `tests/test_batterydeg_units.py`. Controlled delta on a fixed square-wave
+  profile: household 7-day cycle-only cumulative degradation 0.02058 → 0.01487
+  (**−27.7%**); AEMO SA1 Oct 8 MWh/30 MW `real_world` LFP 288-step degradation
+  cost $4,456.77 → $2,739.34 (**−38.5%**). Because this is shared code, both
+  tracks shift; see §D.0. Status: `RESOLVED` (re-baseline pending).
 
 ### A4. `EnergySimEnv.reset()` drops the rainflow C-rate cap
 
@@ -67,7 +74,10 @@ documentation-only correction.
   `max_c_rate` (`src/AEMOBatteryEnv.py:501/508/634`).
 - **Impact:** household degradation after `reset()` uses a different clamp than the
   constructor implies; results depend on init/reset path.
-- **Suggested fix:** pass `max_c_rate` in `EnergySimEnv.reset()`. Status: `OPEN`.
+- **Suggested fix:** pass `max_c_rate` in `EnergySimEnv.reset()`.
+- **Resolved (2026-09-13):** `EnergySimEnv.reset()` now passes
+  `max_c_rate = max_battery_flow / initial_battery_capacity`, matching the
+  constructor. Test: `tests/test_batterydeg_units.py`. Status: `RESOLVED`.
 
 ### A5. `SDPSolver` prices degradation at a fixed representative SoC
 
@@ -134,7 +144,7 @@ documentation-only correction.
   in `tests/test_market_impact.py`, and end-to-end by
   `scripts/verify_jtsoc_impact_sign.py` (SA1 Oct, piecewise merit-order): with
   the corrected sign and checkpoint `return_scale`, explicit j_t_soc beats
-  constant on all three batteries. Full suite green (367 passed, 2026-09-13).
+  constant on all three batteries. Full suite green (370 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -350,15 +360,18 @@ limitations instead.
 ## Resolved
 
 - **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite
-  green (367 passed).
+  green (370 passed).
 - **B2** (Oracle vs env FCAS ordering) — fixed 2026-09-13.
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
 - **B4** (env vs planner degradation model) — documented 2026-09-13.
 - **B6** (checkpoint architecture not embedded) — documented 2026-09-13.
 - **B8** (`phase3_impact_eval.py` ignored checkpoint `return_scale`) — fixed and
   verified 2026-09-13; this reverses the reported j_t_soc impact collapse.
+- **A3** (rainflow C-rate units) — fixed 2026-09-13 globally; household/AEMO
+  degradation drops ~28%/~38% on controlled cycles. Re-baseline pending.
+- **A4** (`EnergySimEnv.reset` dropped `max_c_rate`) — fixed 2026-09-13.
 
-### Fixes applied on 2026-09-13 (verified: 367 tests pass)
+### Fixes applied on 2026-09-13 (verified: 370 tests pass)
 
 - `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
   `+energy/step_duration` to the impact model, matching the env's

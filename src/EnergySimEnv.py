@@ -300,7 +300,7 @@ class SolarBatteryEnv(gym.Env):
         self.static_deg_history = []
         self.last_dynamic_deg = 0.0
         self.last_num_cycles = 0
-        self._rainflow_counter = RainflowCounter(step_duration=self.step_duration)
+        self._rainflow_counter = RainflowCounter(step_duration=self.step_duration, max_c_rate=self.max_battery_flow / self.initial_battery_capacity)
         self._rainflow_num_cycles = 0
         
         self.deg_incidents = []
