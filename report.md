@@ -691,7 +691,7 @@ The AEMO environment evaluates grid-scale battery trading in Australia's Nationa
 | Dispatch-matched | **$35,320** | $22,530 | 1.57× |
 | Expanded broad-2024 | **$34,761** | $19,504 | 1.78× |
 | 2025 OOD | **$25,862** | $6,498 | 3.98× |
-| Impact gate (piecewise merit-order) | 2.5–3.1× PPO | — | PASS |
+| Impact gate (piecewise merit-order) | 3.2× / 2.6× / 2.0× PPO | — | PASS |
 
 All six DT-vs-PPO paired-difference 95% CIs exclude zero (bootstrap + paired Wilcoxon, §8.2.10). Full derivation and the impact-mode failure analysis: **§8.2.10**.
 
@@ -1338,7 +1338,7 @@ modern-v2 8×768 mixed-head DT is trained on them. Pilot: 160 eps. Full corpus:
 | Standard Oct | **$9,071** | $2,353 | DT 3.85× |
 | Dispatch-matched | **$50,671** | $22,530 | DT 2.25× |
 | Expanded broad-2024 | $11,987 | $19,504 | PPO 1.63× |
-| Impact gate (piecewise) | 2.6–3.0× | — | PASS |
+| Impact gate (piecewise) | 2.6–3.0× (pre-B8) | — | PASS |
 
 **Verdict:** the FCAS-cloning ceiling is broken — a pure transformer with no
 solver earns 3–6.8× PPO's FCAS everywhere (the skill now comes from the
