@@ -229,6 +229,53 @@ documentation-only correction.
 
 ---
 
+## D. Remediation plan for the result-invalidating physics issues (A1–A8)
+
+These changes alter household degradation physics and/or observation scaling, so
+they invalidate every existing household number (H1–H4.x and the legacy Ausgrid
+results in `report.md` §8.1) and require regenerating teacher corpora,
+retraining, and re-running evaluation. Do them as one coherent
+"degradation-physics v2" change, not piecemeal.
+
+### Coupling and order
+
+1. **A3 (rainflow C-rate units) + A4 (reset cap)** — fix together. A3 changes the
+   inferred current by ~100×, so the `max_c_rate` clamp (A4) stops being the
+   dominant factor. Recompute the nominal denominators exactly once.
+2. **A2 (round-trip efficiency)** — add symmetric efficiency to
+   `SolarBatteryEnv` (default RTE = 1.0) and set the teacher `roundtrip_eff`
+   consistently. Decide the canonical RTE (0.80 vs 1.0) before regenerating data.
+3. **A1 (calendar aging)** — wire `RealWorldBESSDegradationModel` (calendar+cycle)
+   into `SolarBatteryEnv` for `degradation_mode="full"`, or explicitly retire the
+   `"full"` label so `"full"`/`"cycle_only"` cannot be confused. Depends on A2/A3
+   for a clean per-step wear number.
+4. **A5/A6 (planner degradation)** — give `optimize_dispatch` a `λ_deg`
+   throughput term (so the teacher is degradation-aware) and make `SDPSolver` use
+   the true SOC (or document the C/2 approximation). This changes teacher
+   trajectories, so it must precede corpus regeneration.
+5. **A7/A8 (obs normalization)** — use fixed/reference normalizers rather than
+   `battery_life_cost`- or initial-capacity-anchored ones, so H4.5 cost sweeps and
+   long-horizon runs are not confounded.
+
+### Validation gates
+
+- Unit tests with hand-computed expected wear for representative cycles (A3), a
+  reset-path equality test (A4), an efficiency round-trip test (A2), and a
+  calendar-aging monotonicity test (A1).
+- A "delta report" on the fixed 10-window real-OOD surface and one synthetic
+  surface: old vs new physics, same policies, before any retraining.
+- Only after the delta is understood: regenerate the SDP-teacher corpora, retrain
+  the household DT, and re-issue H2/H4 numbers under the new protocol.
+- Update `report.md` §8.1.x and this file; supersede the prior household
+  headlines explicitly.
+
+### Recommendation
+
+Treat this as a scoped project (branch + plan) rather than a hotfix, because the
+blast radius is the entire household track. If the current results are needed
+as-is for a deadline, keep the present physics and cite A1–A8 as documented
+limitations instead.
+
 ## Resolved
 
 - **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite

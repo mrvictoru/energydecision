@@ -211,7 +211,7 @@ with $P_t = E_t / \Delta t$ the realized power; if the sum of raise-direction
 bids exceeds $h^{\text{raise}}_t$ the bids are **proportionally scaled** (not
 clipped). This coupling is what makes joint energy+FCAS bidding non-trivial
 (§4, diagnosis item 2). The objective is total profit per episode,
-$\sum_t r_t$, which is already net of degradation.
+$\sum_t r_t$, which is already net of degradation. The environment returns this reward divided by 1000 (`AEMOBatteryEnv._calculate_reward`); raw-dollar revenues and costs are logged in `info`.
 
 **Behaviour cloning and its ceiling.** A standard DT (Chen et al. [4]) models
 $p_\theta(a_t \mid \hat{R}_t, s_{\le t}, a_{<t})$ with a causal transformer over
