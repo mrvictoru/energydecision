@@ -288,6 +288,37 @@ the remaining seed incurred safety clips. This supports the safety wrapper
 and provides a broader fair comparison, but does not establish superiority
 across real households or hardware configurations.
 
+### Fair real-OOD transfer comparison
+
+The shared-wrapper comparison was transferred to the available normalized
+real-household OOD surface. It contains four complete 30-day windows covering
+February 2023, April-May 2023, October 2023, and July 2024. All policies used
+the same 5 kWh / 3.3 kW hardware, persistence forecast, realistic tariff,
+1%–99% SOC bounds, independent 0.05 charge/discharge EFC/day budgets, and
+`$0.30/$0.10` price gates.
+
+| Policy | Net savings vs no battery (A$/yr) | EFC/day | Mean capacity fade | SOC clips | Safety penalty |
+|---|---:|---:|---:|---:|---:|
+| DT (`rtg=-4`) | **+3.70** | 0.04999 | 0.0323% | 0 | 0 |
+| PPO seed 42 | -7.51 | 0.04575 | 0.0420% | 24 | 6.0 |
+| PPO seed 7 | +2.32 | 0.04648 | 0.0349% | 0 | 0 |
+| PPO seed 20260830 | +2.15 | 0.04059 | 0.0196% | 0 | 0 |
+| SAC seed 42 | -3.69 | 0.04924 | 0.0338% | 0 | 0 |
+| SAC seed 7 | -7.19 | 0.04999 | 0.0331% | 0 | 0 |
+| SAC seed 20260830 | -8.32 | 0.04673 | 0.0278% | 0 | 0 |
+| TD3 seed 42 | -3.54 | 0.03316 | 0.0164% | 0 | 0 |
+| TD3 seed 7 | +4.52 | 0.01640 | 0.0000% | 3 | 0.75 |
+| TD3 seed 20260830 | +4.18 | 0.01633 | 0.0000% | 3 | 0.75 |
+
+This is transfer and safety evidence, not a definitive seasonal claim: the
+available real-OOD surface has only four windows. DT preserved its synthetic
+behavioral profile—throughput at the intended budget, zero SOC clips, and zero
+safety penalty—and achieved positive net savings. PPO/SAC remained
+seed-sensitive, while TD3's positive results came from under-active policies
+using only about one-third of the intended discharge budget. Broader real
+coverage is limited by the available normalized telemetry; live shadow mode
+remains unavailable.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
