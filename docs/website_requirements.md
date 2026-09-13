@@ -205,14 +205,21 @@ Teacher trajectories (640 eps, 6.2M rows) ──→ Standalone DT (8×768 GQA)
 Include the three corpora table (§5.4 of report): conservative 320 eps /
 aggressive 320 eps / combined 640 eps with J_t(soc) RTG column.
 
-### 3.9 Why `rtg_mode="auto"` (failure-mode explainer)
+### 3.9 Why `rtg_mode="auto"` (mode-selection explainer)
 
-Short section with a mini before/after chart: explicit j_t_soc inference fails
-catastrophically at grid scale under merit-order impact (hornsdale −$142.7k,
-torrens −$347.8k mean profit) because the price-taking prompt drives
-over-dispatch → self-suppression. Auto mode falls back to constant RTG under
-impact and keeps +$62.9k/+$69.7k. Message: *"prompts should be state-dependent,
-but gated by market power."*
+Short section with a mini chart: on price-taking (identity) surfaces explicit
+J_t(soc) prompting wins outright; under merit-order impact the shipped `auto`
+mode uses a conservative constant RTG, which avoids residual energy
+over-trading on large batteries in some months.
+
+**Correction (2026-09-13):** the earlier "explicit j_t_soc fails catastrophically
+under impact" story (hornsdale −$142.7k, torrens −$347.8k) was a
+`phase3_impact_eval.py` `return_scale` bug (`report.md §8.2.10`,
+`docs/known_issues.md` B8), not a property of the prompt. The corrected gate
+passes (DT beats PPO on 9/9 cells; small 3.2×, Hornsdale 2.6×, Torrens 2.0×).
+Message: *"prompts should be state-dependent; the constant fallback is a
+robustness trade-off."* The before/after chart data must be regenerated before
+publishing.
 
 ### 3.10 Statistical rigor section
 

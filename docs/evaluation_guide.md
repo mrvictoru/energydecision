@@ -258,7 +258,7 @@ broadly to PPO in FCAS-spike months due to FCAS under-bidding). **This finding
 was superseded by the Stage C standalone DT** (see `report.md §8.2.10`), which
 distilled an honest SDP-planning teacher and now beats PPO on **all 4 identity
 surfaces** (standard 4.9×, dispatch 1.57×, expanded 1.78×, 2025 OOD 3.98×) and
-passes the impact gate (2.5–3.1×).
+passes the impact gate (2.0–3.2× after the B8 `return_scale` fix; see `report.md §8.2.10`).
 
 **Conclusion (updated Aug 2026):** the Stage C DT with `rtg_mode="auto"` now
 passes all required gates: standard, expanded, 2025 OOD, and impact. The

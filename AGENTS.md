@@ -3,7 +3,7 @@
 ## Two tracks, never compare across them
 
 - **Household**: ausgrid solar-battery (SolarBatteryEnv) — on the **legacy Ausgrid benchmark** the DT beats Oracle; on the **modern 2019+ real-telemetry rebuild** the perfect-foresight oracle instead dominates (DT +$357 vs oracle +$739/yr) and the DT over-cycles on long horizons (see `docs/household/workflow.md` §H4.4/H4.9 and `docs/known_issues.md`).
-- **AEMO / grid-scale**: NEM market + FCAS (AEMOBatteryTradingEnv) — the **standalone Decision Transformer is the preferred policy**. The Stage C standalone DT (`aemo_dt_sdp_jtsoc_fullcorpus.pt`, SDP-teacher trajectories + J_t(soc) RTG, `rtg_mode="auto"`) beats PPO on **all 4 identity surfaces** (standard 4.9×, dispatch-matched 1.57×, expanded broad-2024 1.78×, 2025 OOD 3.98×) **and passes the impact gate** (2.5–3.1× under merit-order impact). This supersedes the earlier "PPO dominates" narrative from the FCAS-poor data era — see `docs/aemo_dt_preferred_policy_plan.md`.
+- **AEMO / grid-scale**: NEM market + FCAS (AEMOBatteryTradingEnv) — the **standalone Decision Transformer is the preferred policy**. The Stage C standalone DT (`aemo_dt_sdp_jtsoc_fullcorpus.pt`, SDP-teacher trajectories + J_t(soc) RTG, `rtg_mode="auto"`) beats PPO on **all 4 identity surfaces** (standard 4.9×, dispatch-matched 1.57×, expanded broad-2024 1.78×, 2025 OOD 3.98×) **and passes the impact gate** (2.0–3.2× under merit-order impact; the earlier "explicit j_t_soc collapses under impact" finding was a `return_scale` evaluation bug — see `docs/known_issues.md` B8). This supersedes the earlier "PPO dominates" narrative from the FCAS-poor data era — see `docs/aemo_dt_preferred_policy_plan.md`.
 
 ## Repo structure quirks
 

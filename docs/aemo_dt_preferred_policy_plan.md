@@ -6,6 +6,14 @@
 > while preserving the **impact-gate pass** on every grid-scale battery by falling back to
 > constant RTG under merit-order impact. This file is **ARCHIVED** — the final session
 > was 2026-08-23. The forward plan is now in **`docs/FUTURE_PLAN.md`**.
+>
+> **CORRECTION (2026-09-13):** the "explicit `j_t_soc` fails the impact gate on large
+> batteries" finding in the INVESTIGATION below (2026-08-20) was an artifact of
+> `phase3_impact_eval.py` not applying the checkpoint `return_scale` (~26,000× prompt
+> error; see `docs/known_issues.md` B8), not a property of the J_t(soc) table. The
+> canonical impact gate was re-run with the fix and still **passes** (DT beats PPO on
+> all 9 cells; small 3.21×, hornsdale 2.59×, torrens 2.02×). `rtg_mode="auto"` remains
+> the shipped choice, but as a robustness trade-off rather than collapse-avoidance.
 
 ## 1. Goal
 

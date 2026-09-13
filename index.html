@@ -734,13 +734,14 @@ footer strong { color: var(--ink); }
 
     <h3 style="margin-top:48px">Market-impact gate <span class="tag tag-win">PASS</span></h3>
     <p class="prose" style="margin-top:10px">At grid scale a battery's own dispatch moves prices. Under a piecewise merit-order impact model,
-      the shipped auto-mode DT still beats PPO on every canonical grid-scale battery — where explicit
-      state-dependent prompting would catastrophically self-suppress (see <a href="#automode">why auto exists</a>).</p>
+      the shipped auto-mode DT still beats PPO on every canonical grid-scale battery (small 3.2×, Hornsdale 2.6×, Torrens 2.0×).
+      The earlier claim that explicit J_t(soc) prompting "collapses" under impact was a <a href="#automode">return_scale evaluation bug</a>,
+      now corrected; the constant fallback is a robustness choice, not collapse-avoidance.</p>
     <div class="chart-box" style="height:330px;margin-top:20px">
       <canvas id="impactChart" role="img" aria-label="Bar chart: auto-mode Decision Transformer versus PPO under market impact across three battery scales"></canvas>
     </div>
-    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): Small $34.6k vs $11.0k · Hornsdale-class $142.1k vs $56.5k · Torrens-class $173.1k vs $69.5k (DT vs PPO).</div>
-    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact. Diff +$63,064/cell, 95% CI [+$33,356, +$100,973], Wilcoxon p = 0.0039, win rate 9/9 cells.</p>
+    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): Small $35.4k vs $11.0k · Hornsdale-class $146.7k vs $56.5k · Torrens-class $140.7k vs $69.5k (DT vs PPO).</div>
+    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact. Diff +$61,905/cell, 95% CI [+$28,497, +$101,582], Wilcoxon p = 0.0039, win rate 9/9 cells (corrected re-run; B8).</p>
   </div>
 </section>
 
@@ -999,7 +1000,7 @@ footer strong { color: var(--ink); }
           <tr><td>Dispatch-matched</td><td class="num">6</td><td class="num pos">+$12,791</td><td class="num">[+$7,008, +$18,277]</td><td class="num">6/6</td><td class="num">0.0312*</td></tr>
           <tr><td>Expanded broad-2024</td><td class="num">27</td><td class="num pos">+$15,257</td><td class="num">[+$4,108, +$33,350]</td><td class="num">25/27</td><td class="num"><strong>0.0002</strong></td></tr>
           <tr><td>2025 OOD</td><td class="num">6</td><td class="num pos">+$19,364</td><td class="num">[+$7,138, +$39,670]</td><td class="num">6/6</td><td class="num">0.0312*</td></tr>
-          <tr><td>Impact gate (piecewise)</td><td class="num">9</td><td class="num pos">+$63,064</td><td class="num">[+$33,356, +$100,973]</td><td class="num">9/9</td><td class="num">0.0039*</td></tr>
+          <tr><td>Impact gate (piecewise)</td><td class="num">9</td><td class="num pos">+$61,905</td><td class="num">[+$28,497, +$101,582]</td><td class="num">9/9</td><td class="num">0.0039*</td></tr>
         </tbody>
       </table>
     </div>
@@ -1427,9 +1428,9 @@ var DATA = {
     { surface: "2025 OOD",            dt: 25862, ppo: 6498,  diff: "+$19,364", ciLo: 7138,  ciHi: 39670,  n: 6,  winRate: "6/6",   p: "0.0312*" }
   ],
   impactGate: [
-    { battery: "Small (~8 MWh)",            dt: 34600,  ppo: 11000 },
-    { battery: "Hornsdale-class (150 MW)",  dt: 142100, ppo: 56500 },
-    { battery: "Torrens-class (250 MWh)",   dt: 173100, ppo: 69500 }
+    { battery: "Small (~8 MWh)",            dt: 35404,  ppo: 11031 },
+    { battery: "Hornsdale-class (150 MW)",  dt: 146676, ppo: 56540 },
+    { battery: "Torrens-class (250 MWh)",   dt: 140712, ppo: 69507 }
   ],
   timeline: [
     { stage: 1, name: "Pilot DT", arch: "4×128, ctx=1152", data: "6 proxy episodes", dm: -10620,
@@ -2672,7 +2673,7 @@ function buildCharts() {
         datasets: [
           { label: "PPO", data: am.ppo, backgroundColor: getPal().orange, borderColor: getPal().ink, borderWidth: 1 },
           { label: "Shipped auto-mode DT", data: am.auto, backgroundColor: getPal().sky, borderColor: getPal().ink, borderWidth: 1 },
-          { label: "Explicit j_t_soc (fails under impact)", data: am.jtsoc, backgroundColor: getPal().coral, borderColor: getPal().ink, borderWidth: 1 }
+          { label: "Explicit j_t_soc (corrected)", data: am.jtsoc, backgroundColor: getPal().coral, borderColor: getPal().ink, borderWidth: 1 }
         ]
       },
       options: baseOpts()

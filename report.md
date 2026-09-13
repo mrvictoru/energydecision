@@ -1368,39 +1368,57 @@ Const-RTG inference (all 4 identity surfaces + impact gate):
 | Dispatch-matched | $34,399 | $22,530 | DT 1.53× |
 | Expanded broad-2024 | **$27,068** | $19,504 | DT 1.39× |
 | 2025 OOD | $24,500 | $6,498 | DT 3.77× |
-| Impact gate | 2.9× / 2.54× / 1.65× | — | PASS (no torrens collapse) |
+| Impact gate (corrected re-run) | 3.21× / 2.59× / 2.02× | — | PASS |
 
 Explicit j_t_soc inference improves identity further — standard $11,573 (4.9×),
 dispatch-matched $35,320 (1.57×), expanded $34,761 (1.78×), 2025 OOD $25,862
-(3.98×); the energy-arbitrage gap narrows to $14.8k vs PPO's $17.4k. But it
-introduced its own failure mode, resolved below.
+(3.98×); the energy-arbitrage gap narrows to $14.8k vs PPO's $17.4k. An early
+impact evaluation appeared to show it collapsing under merit-order impact; that
+finding was later traced to a `return_scale` evaluation bug and is corrected
+below.
 
-##### Impact investigation and the shipped decision: `rtg_mode="auto"` (2026-08-20/22)
+##### Impact investigation and the shipped decision: `rtg_mode="auto"` (2026-08-20/22; corrected 2026-09-13)
 
-Under piecewise merit-order impact, explicit j_t_soc inference **fails on large
-batteries**: hornsdale −$142,657 and torrens −$347,825 mean profit (const-RTG:
-+$62,940/+$69,722). Root cause (confirmed by revenue decomposition on hornsdale
-SA1 Oct): the J_t(soc) table assumes price-taking, but at 194–250 MWh the
-battery's own discharge lowers realized prices. The optimistic prompt drives
-over-dispatch → self-suppression → energy revenue collapses (−$88k) while FCAS
-stays strong. At 8 MW the mismatch is negligible.
+The original version of this subsection reported that explicit `j_t_soc`
+inference **collapsed on large batteries** under piecewise merit-order impact
+(hornsdale −$142,657, torrens −$347,825) and used that to motivate the
+surface-aware `auto` gating. That diagnosis was later found to be an
+**evaluation artifact**, not a property of the J_t(soc) prompt:
 
-Two fixes landed (2026-08-21):
+- `scripts/phase3_impact_eval.py` loaded the checkpoint with `torch.load(...)`
+  and passed the resulting **state dict** to `load_from_checkpoint`, which only
+  reads the `<ckpt>.meta.json` sidecar when given a **path**
+  (`src/decision_transformer.py:539-551`). The model therefore kept the
+  constructor default `return_scale = 1.0` instead of the Stage C value
+  **25988.19** — an RTG prompt ~26,000× too large. The loader is now fixed; see
+  `docs/known_issues.md` B8.
+- Reproducing the old setting (`return_scale=1.0`) on SA1 Oct reproduces the
+  collapse (hornsdale −$46k, torrens −$326k, energy strongly negative), whereas
+  the correct scale gives positive results everywhere.
 
-- **H1 — impact-aware J_t(soc):** the cost-to-go forecast is enriched with
-  settlement/demand context and `compute_cost_to_go_table` re-prices the
-  per-step energy stage cost through the env's impact model, so the prompt no
-  longer over-promises arbitrage where self-suppression bites.
-- **H3 — surface-aware mode selection:** `rtg_mode="auto"` resolves to
-  `j_t_soc` when the env is a price-taker (identity) and to constant RTG when
-  an impact model is present; `phase3_impact_eval.py` defaults to `auto`.
+With the corrected scale, a focused nine-cell check
+(`scripts/verify_jtsoc_impact_sign.py`, including the B1 dispatch-sign fix)
+shows explicit `j_t_soc` no longer collapses: it wins the three SA1 Oct cells
+(hornsdale +$238.8k vs constant +$115.6k), ties SA1 Nov small and VIC1
+small/hornsdale, and loses SA1 Nov hornsdale/torrens and VIC1 torrens where it
+over-trades energy. Across the nine cells constant is only marginally ahead
+(901.6k vs 879.5k, ~2.5%), and a full RTG sweep finds no collapse at higher
+prompts either.
 
-Verified reruns (2026-08-22): `auto` reproduces the j_t_soc identity headline
-numbers **exactly** (standard $11,572.58, dispatch-matched $35,320.48, expanded
-$34,760.91, 2025 OOD $25,861.51 — all beating PPO) while passing the impact
-gate on every battery (small $34.6k, hornsdale $142.1k, torrens $173.1k vs PPO
-$11.0k / $56.5k / $69.5k), where explicit j_t_soc still loses −$139.9k /
-−$346.6k. **Decision: ship `rtg_mode="auto"`.**
+The canonical impact gate was then re-run with the fix
+(`phase3_impact_eval.py --rtg-mode auto`, best RTG per cell, label
+`stagec_fix_20260913`). It **passes**: the DT beats PPO on all 9 cells, with
+per-battery means of **small 3.21×, hornsdale 2.59×, torrens 2.02×** (identity
+`j_t_soc` is RTG-invariant; piecewise uses the constant fallback). The
+previously reported per-battery ratios were 2.9× / 2.54× / 1.65×.
+
+**Decision (unchanged; rationale corrected):** ship `rtg_mode="auto"`. `auto`
+still resolves to `j_t_soc` on price-taking surfaces and to a conservative
+constant RTG under an impact model, but that fallback is now a *robustness*
+choice — constant avoids residual energy over-trading on large batteries in
+some months — not a rescue from a catastrophic collapse. The identity-surface
+headlines are unaffected because those runs load the surface manifest
+correctly.
 
 ##### Key observations
 
@@ -1413,9 +1431,12 @@ $11.0k / $56.5k / $69.5k), where explicit j_t_soc still loses −$139.9k /
 3. **Distillation retains most of the teacher.** The standalone DT keeps 51–91%
    of Stage A's profit per surface with zero solver cost at inference — and
    inherits impact robustness the teacher never explicitly trained for.
-4. **Prompts should be state-dependent, but gated by market power.** J_t(soc)
-   prompting is strictly better on identity surfaces and harmful at grid scale
-   under impact; automatic mode selection captures both.
+4. **Prompts should be state-dependent, and gated by market power.** J_t(soc)
+   prompting is strictly better on identity surfaces. Under impact, explicit
+   j_t_soc is viable — the earlier "collapse" was a `return_scale` artifact — but
+   a conservative constant fallback avoids residual energy over-trading on large
+   batteries in some months, so automatic mode selection remains the shipped
+   choice.
 5. **Degradation parity with PPO is achieved**, not just approached: the
    distilled models run $88–176/MWh vs PPO's ~$211–310, removing the long-held
    "PPO owns degradation efficiency" caveat (§8.2.6).
@@ -1434,7 +1455,7 @@ Wilcoxon signed-rank tests, computed by
 | Dispatch-matched | 6 | +$12,791 | [+$7,008, +$18,277] | 6/6 | 0.0312* |
 | Expanded broad-2024 | 27 | +$15,257 | [+$4,108, +$33,350] | 25/27 | **0.0002** |
 | 2025 OOD | 6 | +$19,364 | [+$7,138, +$39,670] | 6/6 | 0.0312* |
-| Impact gate (piecewise) | 9 | +$63,064 | [+$33,356, +$100,973] | 9/9 | 0.0039* |
+| Impact gate (piecewise, corrected) | 9 | +$61,905 | [+$28,497, +$101,582] | 9/9 | 0.0039* |
 
 \* For n<10 the Wilcoxon two-sided p has a bounded minimum (n=5→0.0625,
 n=6/9→0.031); these values mean *every* paired difference had the same sign —
@@ -1444,11 +1465,11 @@ with the expanded broad-2024 surface additionally significant under a
 conventional test.
 
 Two secondary observations from the same analysis: (a) per-cell bootstrap
-P(DT>PPO) ≥ 0.9998 on every identity surface; (b) within the auto-mode impact
-sweep, the labelled constant-RTG fallback value still matters — rtg≥20
-re-introduces the self-suppression collapse on hornsdale/torrens even in `auto`
-mode, confirming that the shipped fallback value must remain conservative
-(rtg=0.0).
+P(DT>PPO) ≥ 0.9998 on every identity surface; (b) after the B8 fix the
+constant-RTG fallback value is **not critical** — the sweep is flat or
+improving with higher prompts (e.g. hornsdale SA1 Nov $83k at rtg=0 rising to
+$144k at rtg=50), and no value reintroduces a collapse. The earlier "rtg≥20
+collapses" claim was another artifact of the `return_scale` bug.
 
 ##### Figures
 
@@ -1493,8 +1514,10 @@ PDF, 200 dpi) under `eval_output/paper_figures/`.
 
 - All results are simulator-based (historical AEMO prices, modeled FCAS
   co-optimization and degradation); sim-to-real transfer remains open (§9 Phase 4).
-- Explicit `j_t_soc` remains an **identity-only analysis mode** — it must not be
-  forced under market impact; H1 mitigates but the verified shipped default is `auto`.
+- Explicit `j_t_soc` is now **impact-viable** (the reported collapse was a
+  `return_scale` evaluation artifact; `docs/known_issues.md` B8), but it still
+  over-trades energy on some large-battery cells, so the shipped default remains
+  the conservative `auto` fallback.
 - The expanded-broad-2024 energy-arbitrage gap is narrowed ($14.8k vs $17.4k),
   not eliminated; further gains likely need richer teacher diversity.
 - Bootstrap/Wilcoxon coverage for the headline comparisons is complete
@@ -1504,11 +1527,11 @@ PDF, 200 dpi) under `eval_output/paper_figures/`.
 
 ### 8.3 Key Takeaways
 
-1. **The standalone AEMO Decision Transformer is the preferred shipped policy when run in surface-aware `rtg_mode="auto"`.** On identity surfaces, `auto` resolves to `j_t_soc` and matches the best DT results on standard Oct, dispatch-matched, expanded broad-2024, and 2025 OOD; under market impact, it falls back to constant RTG and preserves the large-battery impact-gate pass. The important caveat is no longer “PPO wins broad-year/OOD,” but rather that **explicit `j_t_soc` is not impact-robust enough to ship by itself**.
+1. **The standalone AEMO Decision Transformer is the preferred shipped policy when run in surface-aware `rtg_mode="auto"`.** On identity surfaces, `auto` resolves to `j_t_soc` and matches the best DT results on standard Oct, dispatch-matched, expanded broad-2024, and 2025 OOD; under market impact, it falls back to a conservative constant RTG and passes the impact gate on every grid-scale battery (small **3.21×**, hornsdale **2.59×**, torrens **2.02×** vs PPO). Note: the earlier claim that explicit `j_t_soc` "collapses" under impact was an evaluation artifact (`return_scale` bug; §8.2.10 and `docs/known_issues.md` B8) — explicit j_t_soc is viable, but the constant fallback remains the robust default.
 
 2. **Teacher quality breaks cloning ceilings; architecture matters within a fixed data source.** Offline data quality (2,401-episode FCAS-rich corpus), realistic battery configurations, and modern architecture each contributed to stages 1–5. But the decisive jump — beating PPO on all four identity surfaces — came from changing the *data source* itself: distilling an honest SDP-planning teacher rather than cloning market behaviour (§8.2.10). GRPO does not help the modern model.
 
-3. **RTG conditioning provides zero-shot controllability that no fixed-policy baseline matches — and it is now state-dependent.** An operator can tune profit vs degradation at inference time via the prompt. The shipped default is `rtg_mode="auto"`: the J_t(soc) cost-to-go table on price-taking surfaces, constant RTG under market impact (§8.2.10). The optimal prompt is architecture-, surface-, and market-power-dependent — never transfer it blindly.
+3. **RTG conditioning provides zero-shot controllability that no fixed-policy baseline matches — and it is now state-dependent.** An operator can tune profit vs degradation at inference time via the prompt. The shipped default is `rtg_mode="auto"`: the J_t(soc) cost-to-go table on price-taking surfaces, constant RTG under market impact (§8.2.10). The optimal prompt is architecture-, surface-, and market-power-dependent — never transfer it blindly; the impact-mode choice is a robustness trade-off, not collapse-avoidance.
 
 4. **Overfitting is a real risk for narrow benchmarks.** The legacy Phase 1 GRPO result ($8,242 dispatch-matched) looked like a breakthrough but collapsed on the broader standard surface ($1,533/ep). The modern v2 model's $4,630/ep on standard confirms that proper generalization requires diverse evaluation.
 

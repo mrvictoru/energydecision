@@ -12,7 +12,7 @@
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (Stage C, SDP-distilled, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate** ($11.6k vs $2.35k standard; $35.3k vs $22.5k dispatch-matched; $34.8k vs $19.5k expanded 2024; $25.9k vs $6.5k 2025 OOD; 2.5–3.1× impact resilience). Statistical rigor applied (bootstrap CIs, paired Wilcoxon, all six DT-vs-PPO CIs exclude zero).
+**What we have:** A standalone Decision Transformer (Stage C, SDP-distilled, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate** ($11.6k vs $2.35k standard; $35.3k vs $22.5k dispatch-matched; $34.8k vs $19.5k expanded 2024; $25.9k vs $6.5k 2025 OOD; 2.0–3.2× impact resilience after the B8 `return_scale` fix). Statistical rigor applied (bootstrap CIs, paired Wilcoxon, all six DT-vs-PPO CIs exclude zero).
 
 **What we don't have (the open problems):**
 
@@ -20,7 +20,7 @@
 |---|---|---|
 | 1 | **Sim-to-real gap** — all results simulator-based | The #1 credibility gap; a safety-wrapper + real settlement validation is the path to "deployable" |
 | 2 | **Broad-surface FCAS under-bidding** — DT $4.8k vs PPO $10.2k on 5-min expanded 2024 | The behaviour-cloning ceiling is real; offline data quality is the binding constraint |
-| 3 | **j_t_soc impact failure** — price-taking cost-to-go collapses at grid scale under merit-order | Open algorithmic problem: impact-aware cost-to-go or surface-aware mode gating |
+| 3 | **`j_t_soc` impact behaviour (revised)** — the reported "collapse" was a `return_scale` evaluation bug (B8); explicit `j_t_soc` is now impact-viable but can over-trade energy on some large-battery cells | Open work: per-surface/battery mode selection or a stronger impact-aware cost-to-go |
 | 4 | **Oracle_MI fixed-point artifact** — >100% PT at 150 MW+ | Numerical robustness for the impact-aware ceiling |
 | 5 | **Full_fcas broad surface** — protocol asymmetry means current expanded eval uses 3-dim actions | Quick win to close a disclosed limitation |
 | 6 | **Multi-agent NEM** — no learned multi-BESS interaction | Genuine research frontier with your impact model |
