@@ -133,7 +133,7 @@ documentation-only correction.
   table uses the env's positive=charging convention; regression coverage added
   in `tests/test_market_impact.py`. Re-running the impact gate with explicit
   `j_t_soc` remains recommended before relying on H1. Full suite green
-  (364 passed, 2026-09-13).
+  (367 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
