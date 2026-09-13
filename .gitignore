@@ -237,3 +237,6 @@ opencode.json
 *~
 .DS_Store
 Thumbs.db
+
+# Node.js / opencode out-of-memory crash dumps
+report.[0-9]*.json

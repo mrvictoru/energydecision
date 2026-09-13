@@ -132,8 +132,8 @@ documentation-only correction.
   (and the misleading `src/market_impact.py` comments fixed) so the cost-to-go
   table uses the env's positive=charging convention; regression coverage added
   in `tests/test_market_impact.py`. Re-running the impact gate with explicit
-  `j_t_soc` remains recommended before relying on H1. **Full test-suite
-  verification pending.**
+  `j_t_soc` remains recommended before relying on H1. Full suite green
+  (364 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -226,11 +226,11 @@ documentation-only correction.
 
 ## Resolved
 
-- **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full-suite
-  verification pending.
+- **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite
+  green (364 passed).
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
 
-### Fixes applied on 2026-09-13 (pending full-suite verification)
+### Fixes applied on 2026-09-13 (verified: 364 tests pass)
 
 - `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
   `+energy/step_duration` to the impact model, matching the env's
@@ -241,5 +241,5 @@ documentation-only correction.
 - `tests/test_market_impact.py` — new: impact-sign monotonicity, identity
   price-taking, depth schema/values, and a cost-to-go dispatch-sign regression.
 
-**Still to do:** run `python3 -m pytest tests/ -v` inside `energydecision-gpu`
-and re-run the impact gate with explicit `j_t_soc`.
+**Still to do:** re-run the impact gate with explicit `j_t_soc` (B1 follow-up)
+to confirm H1 is now consistent with the env.
