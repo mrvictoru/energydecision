@@ -13,6 +13,10 @@ from batterydeg import DegradationModel, RainflowCounter, CycleOnlyDegradationMo
 VIOLATION_PENALTY = -8964
 MAX_RAW_BATTERY_DEG_COST_IN_OBS_FACTOR = 0.01  # 1% of battery_life_cost per step
 MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM = 0.001  # 0.1% of battery_life_cost per step
+# A7: fixed reference for the normalized degradation-cost observation, so
+# varying ``battery_life_cost`` changes the signal (as it physically should)
+# rather than also rescaling the normalizer.
+REFERENCE_BATTERY_LIFE_COST = 5000.0
 
 DEG_INCIDENT_FIELDS = [
     "episode_id",
@@ -198,7 +202,8 @@ class SolarBatteryEnv(gym.Env):
         if self.battery_deg_cost_max_raw_obs_bound == 0: self.battery_deg_cost_max_raw_obs_bound = 1.0
 
         # Max degradation cost for normalization purposes (used if norm_obs is primary)
-        self.battery_deg_cost_max_for_norm = MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM * battery_life_cost
+        # A7: anchored to a fixed reference life cost, not the per-env life cost.
+        self.battery_deg_cost_max_for_norm = MAX_PCT_BATTERY_LIFE_COST_PER_STEP_FOR_NORM * REFERENCE_BATTERY_LIFE_COST
         if self.battery_deg_cost_max_for_norm == 0: self.battery_deg_cost_max_for_norm = 1.0
         
         # --- Observation Space Definition (for the primary observation) ---
@@ -281,7 +286,9 @@ class SolarBatteryEnv(gym.Env):
         raw_battery_deg_cost = np.float32(current_step_actual_deg_cost)
         raw_extra_features = np.array([raw_battery_level, raw_battery_deg_cost], dtype=np.float32)
 
-        norm_battery_level = (raw_battery_level - self.battery_level_min_raw) / (self.battery_level_max_raw - self.battery_level_min_raw + 1e-9)
+        # A8: normalize stored energy by the *current* (faded) capacity so the
+        # observation reports the usable SOC fraction, matching the AEMO env.
+        norm_battery_level = raw_battery_level / (self.battery_capacity + 1e-9)
         norm_battery_level = np.clip(norm_battery_level, 0.0, 1.0)
         
         norm_battery_deg_cost = (raw_battery_deg_cost - self.battery_deg_cost_min_raw) / (self.battery_deg_cost_max_for_norm - self.battery_deg_cost_min_raw + 1e-9)

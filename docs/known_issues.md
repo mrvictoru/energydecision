@@ -134,15 +134,20 @@ documentation-only correction.
   obs dim 11 is `deg_cost / normalizer`.
 - **Impact:** the H4.5 `$1,000`/`$10,000` life-cost arms change the observation
   scale and perturb the policy; this confounds those comparisons.
-- **Suggested fix:** use a fixed reference or capacity-relative normalizer.
-  Status: `OPEN`.
+- **Resolved (2026-09-13):** the normalized degradation-cost observation is now
+  anchored to a fixed `REFERENCE_BATTERY_LIFE_COST = 5000.0`
+  (`0.001 * 5000 = 5.0`), so varying `battery_life_cost` changes the signal
+  rather than also rescaling the normalizer. Test:
+  `tests/test_environment_normalization.py`. Status: `RESOLVED`.
 
 ### A8. Capacity-fade normalization stays pinned to initial capacity
 
 - **Location:** `src/EnergySimEnv.py:522-525` — `capacity = initial*(1 - total_degradation)`
   while observation normalizers remain anchored to `initial_battery_capacity`.
-- **Impact:** observation ranges drift as the battery fades; minor for short
-  windows, relevant for H4.9 long-horizon runs. Status: `OPEN` / document.
+- **Resolved (2026-09-13):** the battery-level observation is now normalized by
+  the *current* (faded) capacity, reporting the usable SOC fraction and matching
+  the AEMO env. Test: `tests/test_environment_normalization.py`. Status:
+  `RESOLVED`.
 
 ---
 
@@ -171,7 +176,7 @@ documentation-only correction.
   in `tests/test_market_impact.py`, and end-to-end by
   `scripts/verify_jtsoc_impact_sign.py` (SA1 Oct, piecewise merit-order): with
   the corrected sign and checkpoint `return_scale`, explicit j_t_soc beats
-  constant on all three batteries. Full suite green (378 passed, 2026-09-13).
+  constant on all three batteries. Full suite green (380 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -317,6 +322,13 @@ retraining, and re-running evaluation. Do them as one coherent
 
 ### D.0 Scope decision (required before any code change)
 
+> **Status (2026-09-13):** the chosen scope was **global fix + re-baseline**.
+> A1–A8 are now implemented with unit tests and the full suite passes (380).
+> The **P5 re-baseline has not been run** (regenerate SDP-teacher corpora →
+> retrain household + AEMO Stage C → re-run AEMO identity + impact gate →
+> refresh H4.x). All prior household and AEMO results predate these physics
+> fixes and must be treated as superseded once P5 runs.
+
 **Cross-track caveat:** `RainflowCounter`/`DegradationModel`
 (`src/batterydeg.py`) are shared by `SolarBatteryEnv` **and**
 `AEMOBatteryTradingEnv`. A3 (C-rate units) and A4 (reset cap) are therefore
@@ -387,7 +399,7 @@ limitations instead.
 ## Resolved
 
 - **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite
-  green (378 passed).
+  green (380 passed).
 - **B2** (Oracle vs env FCAS ordering) — fixed 2026-09-13.
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
 - **B4** (env vs planner degradation model) — documented 2026-09-13.
@@ -406,8 +418,10 @@ limitations instead.
   term added in `full` mode. Re-baseline pending.
 - **A2** (env had no round-trip efficiency) — fixed 2026-09-13; `roundtrip_eff`
   default 0.80 + efficiency-aware projector. Re-baseline pending.
+- **A7** (deg-cost obs normalizer tied to life cost) — fixed 2026-09-13.
+- **A8** (SOC obs anchored to initial capacity) — fixed 2026-09-13.
 
-### Fixes applied on 2026-09-13 (verified: 378 tests pass)
+### Fixes applied on 2026-09-13 (verified: 380 tests pass)
 
 - `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
   `+energy/step_duration` to the impact model, matching the env's
@@ -438,6 +452,8 @@ limitations instead.
 - `src/EnergySimEnv.py` — `roundtrip_eff` (A2) + calendar aging in `full` (A1);
   `scripts/evaluate_household_ood_baselines.py` projector efficiency-aware;
   `tests/test_environment_efficiency.py` + `tests/test_environment_calendar.py` — new.
+- `src/EnergySimEnv.py` — fixed-reference deg-cost normalizer (A7) and
+  current-capacity SOC normalization (A8); `tests/test_environment_normalization.py` — new.
 
 **Still to do:** re-run the impact gate with explicit `j_t_soc` (B1 follow-up)
 to confirm H1 is now consistent with the env.
