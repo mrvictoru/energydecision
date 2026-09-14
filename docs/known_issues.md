@@ -86,8 +86,15 @@ documentation-only correction.
   off wear against SOC position. `OracleSolver` uses the true state
   (`src/oracle_algorithm.py`), so SDP and Oracle are not directly comparable on
   degradation.
-- **Suggested fix:** use the true SOC in the stage cost or document the
-  approximation explicitly. Status: `INTENTIONAL` / needs documenting.
+- **Resolved (2026-09-13):** the fixed-midpoint approximation was not just
+  state-independent — the underlying `DegradationCalculator.compute_rainflow_degradation`
+  fed only 3 points to `RainflowCounter`, which can never close a cycle, so the
+  SDP/MRDP/Oracle stage-cost degradation term was **always zero**. Replaced with
+  `compute_step_degradation` (a per-step half-cycle estimate at the true SoC
+  and C-rate) and `SDPSolver._deg_cost_grid` now prices wear state-dependently,
+  precomputed once per solver. Tests: `tests/test_physics_v2_planner.py`. Status:
+  `RESOLVED` (planner policies are no longer degradation-blind; re-baseline
+  pending).
 
 ### A6. Household SDP teacher is degradation-blind; `J_t(soc)` excludes wear
 
@@ -98,8 +105,15 @@ documentation-only correction.
   reaches the DT only through realized reward and capacity fade. `report.md` §4.3
   describes the AEMO teacher's `λ_deg` and can mislead readers about the household
   teacher.
-- **Suggested fix:** add a `λ_deg` term to `optimize_dispatch`, or explicitly
-  document the household teacher as degradation-blind. Status: `OPEN`.
+- **Resolved (2026-09-13):** `optimize_dispatch` and
+  `build_j_t_soc_prompt_provider` now accept `deg_cost_per_mwh` (linear
+  throughput wear term; default 0.0 preserves the degradation-blind oracle).
+  `scripts/generate_household_sdp_trajectories.py` exposes
+  `--deg-cost-per-mwh` (default **50.0**) so teacher labels are wear-aware.
+  Delta on a representative synth day: throughput 24.7 kWh (λ=0) → 15.1 (λ=20)
+  → 14.8 (λ=50), with a ~$0.024/day bill increase. Tests:
+  `tests/test_physics_v2_planner.py`. Status: `RESOLVED` (teacher λ calibration
+  still open; re-baseline pending).
 
 ### A7. Household observation degradation-cost normalization is tied to `battery_life_cost`
 
@@ -144,7 +158,7 @@ documentation-only correction.
   in `tests/test_market_impact.py`, and end-to-end by
   `scripts/verify_jtsoc_impact_sign.py` (SA1 Oct, piecewise merit-order): with
   the corrected sign and checkpoint `return_scale`, explicit j_t_soc beats
-  constant on all three batteries. Full suite green (370 passed, 2026-09-13).
+  constant on all three batteries. Full suite green (373 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -360,7 +374,7 @@ limitations instead.
 ## Resolved
 
 - **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite
-  green (370 passed).
+  green (373 passed).
 - **B2** (Oracle vs env FCAS ordering) — fixed 2026-09-13.
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
 - **B4** (env vs planner degradation model) — documented 2026-09-13.
@@ -370,8 +384,13 @@ limitations instead.
 - **A3** (rainflow C-rate units) — fixed 2026-09-13 globally; household/AEMO
   degradation drops ~28%/~38% on controlled cycles. Re-baseline pending.
 - **A4** (`EnergySimEnv.reset` dropped `max_c_rate`) — fixed 2026-09-13.
+- **A5** (planner degradation was state-independent and always zero) — fixed
+  2026-09-13; state-dependent step estimator + precomputed grid. Re-baseline
+  pending.
+- **A6** (household teacher degradation-blind) — fixed 2026-09-13; `λ_deg`
+  parameter, generator default 50 $/MWh. Re-baseline pending.
 
-### Fixes applied on 2026-09-13 (verified: 370 tests pass)
+### Fixes applied on 2026-09-13 (verified: 373 tests pass)
 
 - `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
   `+energy/step_duration` to the impact model, matching the env's
@@ -393,6 +412,12 @@ limitations instead.
 - `scripts/verify_jtsoc_impact_sign.py` + `configs/aemo_decision_transformer_model_kwargs_sdp_jtsoc_fullcorpus.json`
   — new focused harness proving explicit j_t_soc is impact-viable when
   `return_scale` is correct.
+- `src/batterydeg.py` / `src/EnergySimEnv.py` — A3/A4 C-rate units + reset cap.
+- `src/algorithm_helpers.py` — `compute_step_degradation` (the old 3-point
+  rainflow path always returned 0); `src/sdp_algorithm.py` state-dependent
+  `_deg_cost_grid`; `src/oracle_algorithm.py` updated to match (A5).
+- `src/household_optimization.py` + `scripts/generate_household_sdp_trajectories.py`
+  — `deg_cost_per_mwh` (A6); `tests/test_physics_v2_planner.py` — new.
 
 **Still to do:** re-run the impact gate with explicit `j_t_soc` (B1 follow-up)
 to confirm H1 is now consistent with the env.

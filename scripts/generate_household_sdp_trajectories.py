@@ -60,6 +60,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--battery-life-cost", type=float, default=5000.0,
                         help="Battery life cost in USD (used for degradation cost in reward)")
+    parser.add_argument("--deg-cost-per-mwh", type=float, default=50.0,
+                        help="Teacher wear-awareness (A6): linear throughput degradation surrogate "
+                             "($/MWh) added to the DP stage cost. 0.0 = degradation-blind teacher.")
     return parser.parse_args()
 
 
@@ -68,6 +71,7 @@ def _trajectory_for_episode(
     soc_resolution: int, action_resolution: int, tariff: Tariff,
     roundtrip_eff: float, forecast_mode: str,
     degradation_mode: str = "full", battery_life_cost: float = 5000.0,
+    deg_cost_per_mwh: float = 50.0,
 ) -> pl.DataFrame:
     """Roll out per-day deterministic DP actions through the actual env."""
     priced_frame = frame.with_columns([
@@ -99,6 +103,7 @@ def _trajectory_for_episode(
             raw_kw, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow,
             roundtrip_eff=roundtrip_eff, initial_soc=env.battery_level / capacity,
             soc_resolution=soc_resolution, action_resolution=action_resolution,
+            deg_cost_per_mwh=deg_cost_per_mwh,
         )
         for offset, action_kw in enumerate(solution.actions_kw):
             step = day_start + offset
@@ -143,7 +148,7 @@ def main() -> None:
             float(battery["max_flow_kw"]), args.soc_resolution, args.action_resolution,
             tariff, args.roundtrip_eff,
             args.forecast_mode,
-            args.degradation_mode, args.battery_life_cost,
+            args.degradation_mode, args.battery_life_cost, args.deg_cost_per_mwh,
         ))
     result = pl.concat(frames)
     args.out.parent.mkdir(parents=True, exist_ok=True)

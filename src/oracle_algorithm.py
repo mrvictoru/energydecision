@@ -196,9 +196,9 @@ class OracleSolver:
                 energy = float(clipped_energies[si, ai])
                 battery_rate = energy / self.step_duration
                 
-                # Compute degradation cost using rainflow counting only
+                # Compute state-dependent step degradation (A5)
                 soc_next = soc_val + energy
-                deg_frac = self.degradation_calc.compute_rainflow_degradation(
+                deg_frac = self.degradation_calc.compute_step_degradation(
                     soc_val, soc_next
                 )
                 degradation_cost = deg_frac * self.battery_life_cost
