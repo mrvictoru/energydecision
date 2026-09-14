@@ -32,8 +32,15 @@ documentation-only correction.
 - **Impact:** the H4.5 `full_realistic` arm does not test calendar aging; CLI help
   in `scripts/h4_degradation_study.py` / `scripts/generate_household_sdp_trajectories.py`
   that implies "calendar+cycle" is misleading.
-- **Suggested fix:** either call `degradation_per_timestep` in `SolarBatteryEnv.step`
-  for `"full"`, or relabel the mode/arms and correct the CLI help. Status: `OPEN`.
+- **Resolved (2026-09-13):** `SolarBatteryEnv(mode="full")` now adds
+  `RealWorldBESSDegradationModel.calendar_aging_per_step` (Arrhenius + SOC
+  stress; NMC/LFP preset via new `degradation_chemistry` arg, default LFP) on
+  top of the rainflow/Muenzel cycle aging; `info["calendar_degradation"]` is
+  exposed. `cycle_only`/`disabled` are unchanged. Idle 24 h now accrues ~2.9e-5
+  fractional loss (LFP, 25 °C, 50% SOC). Tests:
+  `tests/test_environment_calendar.py`. Note: cycle aging remains Muenzel, so
+  `full` is a calendar(RealWorld)+cycle(Muenzel) composite — deliberate.
+  Status: `RESOLVED` (re-baseline pending).
 
 ### A2. No round-trip efficiency in the env, but the SDP teacher assumes `sqrt(0.80)`
 
@@ -43,9 +50,15 @@ documentation-only correction.
   losses. Teacher SoC paths and realized env SoC therefore diverge.
 - **Impact:** distillation labels/RTG are computed under dynamics the env does not
   have; any "honest teacher" claim must state which efficiency convention is used.
-- **Suggested fix:** add configurable symmetric efficiency to `SolarBatteryEnv`
-  (default 1.0) or set teacher `roundtrip_eff=1.0` to match the env, and document
-  the choice. Status: `OPEN`.
+- **Resolved (2026-09-13):** `SolarBatteryEnv` now has a `roundtrip_eff` arg
+  (default **0.80**); the stored-energy change applies symmetric one-way
+  efficiency (`eff = sqrt(roundtrip_eff)`; charge stores `ge*eff`, discharge
+  draws `ge/eff`). The safety `DailyThroughputProjector` is now
+  efficiency-aware, and the teacher generator passes its `roundtrip_eff` to the
+  env too. Tests: `tests/test_environment_efficiency.py` (SOC-limit/projector
+  tests set `roundtrip_eff=1.0` to stay focused). This changes household
+  dynamics, so all household results shift. Status: `RESOLVED` (re-baseline
+  pending).
 
 ### A3. Rainflow inferred C-rate is ~100× too large and saturates the clamp
 
@@ -158,7 +171,7 @@ documentation-only correction.
   in `tests/test_market_impact.py`, and end-to-end by
   `scripts/verify_jtsoc_impact_sign.py` (SA1 Oct, piecewise merit-order): with
   the corrected sign and checkpoint `return_scale`, explicit j_t_soc beats
-  constant on all three batteries. Full suite green (373 passed, 2026-09-13).
+  constant on all three batteries. Full suite green (378 passed, 2026-09-13).
 
 ### B2. FCAS service ordering differs between the env and the Oracle
 
@@ -374,7 +387,7 @@ limitations instead.
 ## Resolved
 
 - **B1** (impact-aware `J_t(soc)` dispatch sign) — fixed 2026-09-13; full suite
-  green (373 passed).
+  green (378 passed).
 - **B2** (Oracle vs env FCAS ordering) — fixed 2026-09-13.
 - **B3** (`aggregate_fcas_market_depth` undefined) — fixed 2026-09-13.
 - **B4** (env vs planner degradation model) — documented 2026-09-13.
@@ -389,8 +402,12 @@ limitations instead.
   pending.
 - **A6** (household teacher degradation-blind) — fixed 2026-09-13; `λ_deg`
   parameter, generator default 50 $/MWh. Re-baseline pending.
+- **A1** (household `full` had no calendar aging) — fixed 2026-09-13; calendar
+  term added in `full` mode. Re-baseline pending.
+- **A2** (env had no round-trip efficiency) — fixed 2026-09-13; `roundtrip_eff`
+  default 0.80 + efficiency-aware projector. Re-baseline pending.
 
-### Fixes applied on 2026-09-13 (verified: 373 tests pass)
+### Fixes applied on 2026-09-13 (verified: 378 tests pass)
 
 - `src/aemo_sdp_executor.py` — `compute_cost_to_go_table` now passes
   `+energy/step_duration` to the impact model, matching the env's
@@ -418,6 +435,9 @@ limitations instead.
   `_deg_cost_grid`; `src/oracle_algorithm.py` updated to match (A5).
 - `src/household_optimization.py` + `scripts/generate_household_sdp_trajectories.py`
   — `deg_cost_per_mwh` (A6); `tests/test_physics_v2_planner.py` — new.
+- `src/EnergySimEnv.py` — `roundtrip_eff` (A2) + calendar aging in `full` (A1);
+  `scripts/evaluate_household_ood_baselines.py` projector efficiency-aware;
+  `tests/test_environment_efficiency.py` + `tests/test_environment_calendar.py` — new.
 
 **Still to do:** re-run the impact gate with explicit `j_t_soc` (B1 follow-up)
 to confirm H1 is now consistent with the env.

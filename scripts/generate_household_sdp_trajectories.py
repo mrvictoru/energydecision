@@ -90,6 +90,7 @@ def _trajectory_for_episode(
         init_battery_level=capacity / 2.0, max_step=len(frame),
         degradation_mode=degradation_mode,
         battery_life_cost=battery_life_cost,
+        roundtrip_eff=roundtrip_eff,
     )
     observation, _ = env.reset()
     records = []

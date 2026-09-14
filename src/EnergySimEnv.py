@@ -7,7 +7,7 @@ import logging
 import numpy as np
 import polars as pl
 
-from batterydeg import DegradationModel, RainflowCounter, CycleOnlyDegradationModel, DisabledDegradationModel
+from batterydeg import DegradationModel, RainflowCounter, CycleOnlyDegradationModel, DisabledDegradationModel, RealWorldBESSDegradationModel
 
 # global variables
 VIOLATION_PENALTY = -8964
@@ -80,9 +80,11 @@ class SolarBatteryEnv(gym.Env):
         render_mode=None,
         battery_life_cost=5000.0,  # cost of the battery over its lifetime (USD), this is for calculating the battery degradation cost
         base_deg_DoD = 80.0,  # reference DoD for per-kWh wear linearization (%)
+        roundtrip_eff = 0.80,  # symmetric round-trip efficiency (A2); 1.0 = lossless
         step_duration = 0.5, # duration of each step in hours (default half an hour)
         degradation_temperature = 25.0,
         degradation_mode: str = "full",  # "full", "cycle_only", "disabled"
+        degradation_chemistry: str = "LFP",  # calendar-aging preset for "full" (NMC/LFP)
         soc_min: float = 0.0,
         soc_max: float = 1.0,
         enforce_soc_limits: bool = True,
@@ -104,6 +106,11 @@ class SolarBatteryEnv(gym.Env):
         self.battery_level = init_battery_level
         self.init_battery_level = init_battery_level
         self.max_battery_flow = max_battery_flow
+        self.roundtrip_eff = float(roundtrip_eff)
+        if not 0.0 < self.roundtrip_eff <= 1.0:
+            raise ValueError("roundtrip_eff must be in (0, 1]")
+        # Symmetric one-way efficiency: charge stores ge*eff, discharge draws ge/eff.
+        self._eff = self.roundtrip_eff ** 0.5
         self.max_grid_energy = max_grid_flow*step_duration
         self.render_mode = render_mode
         self.battery_life_cost = battery_life_cost
@@ -139,6 +146,15 @@ class SolarBatteryEnv(gym.Env):
             self.degradation_model = DisabledDegradationModel()
         else:  # "full"
             self.degradation_model = DegradationModel()
+
+        # Calendar aging is added on top of (Muenzel/rainflow) cycle aging in
+        # "full" mode (A1). Previously "full" and "cycle_only" were identical.
+        self.degradation_chemistry = str(degradation_chemistry)
+        self._calendar_model = (
+            RealWorldBESSDegradationModel(chemistry=self.degradation_chemistry)
+            if degradation_mode == "full"
+            else None
+        )
         
         self._rainflow_counter = RainflowCounter(step_duration=self.step_duration, max_c_rate=self.max_battery_flow / self.initial_battery_capacity)
         self._rainflow_num_cycles = 0
@@ -386,18 +402,25 @@ class SolarBatteryEnv(gym.Env):
             self.max_battery_flow
         )
 
-        # Convert power (kW) to energy (kWh) over the step duration.
+        # Convert power (kW) to energy (kWh) over the step duration. This is the
+        # grid-side energy; the stored energy change applies symmetric one-way
+        # efficiency (A2).
         battery_flow_energy = battery_flow_rate * self.step_duration
+        eff = self._eff
 
-        # ----- Check if battery level can support battery flow action -----
-        if battery_flow_energy < 0:  # Discharging action: ensure sufficient battery level
-            battery_flow_energy = max(battery_flow_energy, -self.battery_level)
-        else:  # Charging action: ensure battery does not exceed its capacity
-            battery_flow_energy = min(battery_flow_energy, self.battery_capacity - self.battery_level)
+        # ----- Check if battery level can support the grid-side action -----
+        if battery_flow_energy < 0:  # Discharging: stored draw is ge/eff
+            battery_flow_energy = max(battery_flow_energy, -self.battery_level * eff)
+        else:  # Charging: stored gain is ge*eff
+            battery_flow_energy = min(battery_flow_energy, (self.battery_capacity - self.battery_level) / eff)
+
+        requested_battery_flow_energy = battery_flow_energy
+
+        # Stored energy change and resulting level.
+        stored_delta = battery_flow_energy * eff if battery_flow_energy >= 0 else battery_flow_energy / eff
+        new_battery_level = self.battery_level + stored_delta
 
         # ----- Apply configured hard SOC limits -----
-        new_battery_level = self.battery_level + battery_flow_energy
-        requested_battery_flow_energy = battery_flow_energy
         soc_limit_clipped = False
         if self.enforce_soc_limits:
             min_battery_level = self.soc_min * self.battery_capacity
@@ -410,7 +433,8 @@ class SolarBatteryEnv(gym.Env):
                     self.soc_min,
                 )
                 new_battery_level = min_battery_level
-                battery_flow_energy = new_battery_level - self.battery_level
+                stored_delta = new_battery_level - self.battery_level
+                battery_flow_energy = stored_delta / eff if stored_delta >= 0 else stored_delta * eff
             elif new_battery_level > max_battery_level:
                 soc_limit_clipped = True
                 logging.warning(
@@ -419,7 +443,8 @@ class SolarBatteryEnv(gym.Env):
                     self.soc_max,
                 )
                 new_battery_level = max_battery_level
-                battery_flow_energy = new_battery_level - self.battery_level
+                stored_delta = new_battery_level - self.battery_level
+                battery_flow_energy = stored_delta / eff if stored_delta >= 0 else stored_delta * eff
 
         # ----- Update Battery Level & Check Constraints -----
         soc_after = float(np.clip((new_battery_level / self.battery_capacity) * 100.0, 0.0, 100.0))
@@ -513,6 +538,16 @@ class SolarBatteryEnv(gym.Env):
             primary_obs = np.concatenate((ctf, ndfv, nef))
             return primary_obs, float(VIOLATION_PENALTY), True, False, reward_info
 
+        # ----- Calendar aging (A1): time-based; applies in "full" mode -----
+        calendar_degradation = 0.0
+        if self._calendar_model is not None:
+            calendar_degradation = self._calendar_model.calendar_aging_per_step(
+                T_celsius=self.degradation_temperature,
+                soc_frac=float(soc_after) / 100.0,
+                dt_hours=self.step_duration,
+            )
+            step_degradation += calendar_degradation
+
         self._rainflow_num_cycles += len(new_cycles)
         self._rainflow_deg_cumulative += step_degradation
         self.total_degradation = min(1.0, self.total_degradation + step_degradation)
@@ -535,7 +570,7 @@ class SolarBatteryEnv(gym.Env):
         reward -= safety_penalty
         # check if step degradation is abnormally large
 
-        if step_degradation > 0.05:  # realistic explosion threshold
+        if step_degradation > 0.05 and new_cycles:  # realistic explosion threshold
             debug = self.degradation_model.debug_degradation_per_cycle(
                 T=self.degradation_temperature,
                 Id=Id_cycle,
@@ -573,6 +608,7 @@ class SolarBatteryEnv(gym.Env):
             requested_battery_flow_energy=requested_battery_flow_energy,
             safety_penalty=safety_penalty,
         )
+        reward_info["calendar_degradation"] = float(calendar_degradation)
 
         # ----- Advance Simulation Step -----
         self.current_step += 1

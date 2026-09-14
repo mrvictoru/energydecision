@@ -381,10 +381,13 @@ class DailyThroughputProjector:
             min_level = float(env.soc_min) * float(env.battery_capacity)
             max_level = float(env.soc_max) * float(env.battery_capacity)
             current_level = float(env.battery_level)
+            eff = float(getattr(env, "_eff", 1.0))
             if values[0] < 0.0:
-                feasible_kwh = max(0.0, current_level - min_level)
+                # grid-side energy needed to reach the minimum stored level
+                feasible_kwh = max(0.0, (current_level - min_level) * eff)
             else:
-                feasible_kwh = max(0.0, max_level - current_level)
+                # grid-side energy needed to reach the maximum stored level
+                feasible_kwh = max(0.0, (max_level - current_level) / eff)
             soc_scale = min(1.0, feasible_kwh / requested_kwh)
             if soc_scale < 1.0:
                 self.last_soc_projected = True

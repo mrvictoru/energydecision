@@ -104,6 +104,7 @@ class TestSolarBatteryEnv:
             init_battery_level=3.0,
             soc_max=0.75,
             max_step=2,
+            roundtrip_eff=1.0,
         )
         env.reset()
 
@@ -129,6 +130,7 @@ class TestSolarBatteryEnv:
             init_battery_level=1.0,
             soc_min=0.25,
             max_step=2,
+            roundtrip_eff=1.0,
         )
         env.reset()
 
@@ -155,6 +157,7 @@ class TestSolarBatteryEnv:
             soc_max=0.5,
             enforce_soc_limits=False,
             max_step=2,
+            roundtrip_eff=1.0,
         )
         env.reset()
 

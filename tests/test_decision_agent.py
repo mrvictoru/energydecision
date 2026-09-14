@@ -213,6 +213,7 @@ class TestActionProjector:
             max_step=4,
             soc_min=0.25,
             soc_max=0.75,
+            roundtrip_eff=1.0,
         )
         env.reset()
         projector = DailyThroughputProjector(max_efc_per_day=1.0)
@@ -234,6 +235,7 @@ class TestActionProjector:
             max_step=4,
             soc_min=0.25,
             soc_max=0.75,
+            roundtrip_eff=1.0,
         )
         env.reset()
         projector = DailyThroughputProjector(max_efc_per_day=1.0)
