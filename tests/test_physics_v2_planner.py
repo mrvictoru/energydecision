@@ -67,3 +67,11 @@ def test_teacher_default_is_degradation_blind():
     default = optimize_dispatch(frame, **common)
     explicit = optimize_dispatch(frame, deg_cost_per_mwh=0.0, **common)
     assert np.allclose(default.actions_kw, explicit.actions_kw)
+
+
+def test_planner_degradation_calibration_scales_grid():
+    s1 = SDPSolver(_FakeEnv(), horizon=4, soc_resolution=6, action_resolution=5,
+                   degradation_calibration=1.0)
+    s2 = SDPSolver(_FakeEnv(), horizon=4, soc_resolution=6, action_resolution=5,
+                   degradation_calibration=0.12)
+    assert np.allclose(s2._deg_cost_grid, s1._deg_cost_grid * 0.12)

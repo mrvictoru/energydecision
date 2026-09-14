@@ -90,7 +90,7 @@ def _attach_jt_rtg(
 
 
 def _build_slot_ctg(sliced: pl.DataFrame, region: str, cap: float, max_flow: float,
-                    n_steps: int, deg_cost_per_mwh: float):
+                    n_steps: int, deg_cost_per_mwh: float, deg_calibration: float = 1.0):
     """Build the J_t(soc) table for THIS episode's actual time window.
 
     The SDP RRP forecast is a function of (month, hour), so the value table
@@ -114,7 +114,8 @@ def _build_slot_ctg(sliced: pl.DataFrame, region: str, cap: float, max_flow: flo
     try:
         fc = build_rrp_forecast(sliced, profile)
         denv = _dummy_env(cap, max_flow, n_steps)
-        return compute_cost_to_go_table(denv, fc, deg_cost_per_mwh=deg_cost_per_mwh)
+        return compute_cost_to_go_table(denv, fc, deg_cost_per_mwh=deg_cost_per_mwh,
+                                        deg_calibration=deg_calibration)
     except Exception as e:
         print(f"  [j_t_soc] ctg failed {region} cap={cap} n={n_steps}: {e}")
         return None, None
@@ -132,6 +133,7 @@ def generate_slot(
     rtg_value: float,
     seed_base: int,
     rtg_mode: str = "constant",
+    deg_calibration: float = 1.0,
 ) -> list[pl.DataFrame]:
     cap = BATTERY_SPECS[battery_name]["capacity"]
     max_flow = BATTERY_SPECS[battery_name]["max_flow"]
@@ -154,6 +156,7 @@ def generate_slot(
         agent = AEMOAgent(env, algorithm="dt_soc_oracle", model=model,
                           rtg_value=rtg_value, executor="sdp",
                           deg_cost_per_mwh=deg_cost_per_mwh,
+                          deg_calibration=deg_calibration,
                           reset_seed=seed_base + ep)
         episode_df, _ = agent.run_episode()
         episode_df = episode_df.with_columns(
@@ -164,7 +167,7 @@ def generate_slot(
         )
         if rtg_mode == "j_t_soc":
             ctg, soc_levels = _build_slot_ctg(sliced, region, cap, max_flow,
-                                              n_steps, deg_cost_per_mwh)
+                                              n_steps, deg_cost_per_mwh, deg_calibration)
             if ctg is not None and soc_levels is not None:
                 episode_df = _attach_jt_rtg(episode_df, ctg, soc_levels, cap)
             else:
@@ -189,6 +192,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--model-path", type=Path,
                    default=Path("models/aemo/dt/soc_waypoint_dt_best.pt"))
     p.add_argument("--deg-cost-per-mwh", type=float, default=50.0)
+    p.add_argument("--deg-calibration", type=float, default=1.0,
+                   help="Scale the SDP planner's per-step wear to match the env's "
+                        "realized wear (known_issues B4). The env charges per closed "
+                        "rainflow cycle while the planner accumulates per-step "
+                        "half-cycles; measured planner/env ratio ~8x for AEMO "
+                        "real_world LFP, so ~0.12 aligns them.")
     p.add_argument("--rtg-value", type=float, default=0.0)
     p.add_argument("--rtg-mode", type=str, default="constant",
                    choices=["constant", "j_t_soc"],
@@ -219,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
                 frames = generate_slot(
                     processed, region, horizon, battery, args.episodes_per_slot,
                     rng, model, args.deg_cost_per_mwh, args.rtg_value, args.seed,
-                    rtg_mode=args.rtg_mode,
+                    rtg_mode=args.rtg_mode, deg_calibration=args.deg_calibration,
                 )
                 n_rows = sum(f.height for f in frames)
                 print(f"  {horizon}/{battery}: {len(frames)} eps, {n_rows} rows", flush=True)

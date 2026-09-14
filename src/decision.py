@@ -605,6 +605,7 @@ class AEMOAgent:
                  fcas_lower_threshold: float | None = None,
                  fcas_pctile: float = 0.80,
                  deg_cost_per_mwh: float = 50.0,
+                 deg_calibration: float = 1.0,
                  executor: str = "lp"):
         self.env = env
         self.algorithm = algorithm.lower()
@@ -627,6 +628,10 @@ class AEMOAgent:
         # (Only used by the 'lp' executor; the 'sdp' executor uses the repo's
         # rainflow DegradationCalculator directly.)
         self.deg_cost_per_mwh = float(deg_cost_per_mwh)
+        # Calibrates the SDP planner's per-step wear to the env's realized
+        # (per-cycle) wear; see known_issues B4. Only the 'sdp' executor and the
+        # J_t(soc) table use it.
+        self.deg_calibration = float(deg_calibration)
 
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
@@ -1382,6 +1387,7 @@ class AEMOAgent:
                 energy, soc = sdp_energy_dispatch(
                     env, forecast[t0:t1], start_soc, target,
                     deg_cost_per_mwh=self.deg_cost_per_mwh,
+                    deg_calibration=self.deg_calibration,
                 )
             except Exception as e:
                 print(f"  [dt_soc_sdp] SDP failed on segment {seg} ({e}); flat SOC")
@@ -1631,6 +1637,7 @@ class AEMOAgent:
             forecast,
             deg_cost_per_mwh=self.deg_cost_per_mwh,
             impact_model=impact_model,
+            deg_calibration=self.deg_calibration,
         )
 
     def _lookup_jtsoc_rtg(self, step_idx: int, soc_kwh: float) -> float:

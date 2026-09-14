@@ -140,6 +140,7 @@ def sdp_energy_dispatch(
     action_resolution: int = 41,
     terminal_penalty: float = 1e6,
     deg_cost_per_mwh: float = 200.0,
+    deg_calibration: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Plan energy dispatch from start_soc to target_soc over ``forecast`` steps.
 
@@ -172,6 +173,7 @@ def sdp_energy_dispatch(
         soc_resolution=soc_resolution,
         action_resolution=action_resolution,
         use_monte_carlo=False,
+        degradation_calibration=deg_calibration,
     )
     soc_levels = solver.soc_levels_kwh
     action_energies = solver.battery_flow_energies
@@ -268,6 +270,7 @@ def compute_cost_to_go_table(
     deg_cost_per_mwh: float = 200.0,
     terminal_soc: float | None = None,
     impact_model=None,
+    deg_calibration: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Unconstrained (free-terminal) SDP value table for the RTG token.
 
@@ -305,6 +308,7 @@ def compute_cost_to_go_table(
         soc_resolution=soc_resolution,
         action_resolution=action_resolution,
         use_monte_carlo=False,
+        degradation_calibration=deg_calibration,
     )
     soc_levels = solver.soc_levels_kwh
     action_energies = solver.battery_flow_energies

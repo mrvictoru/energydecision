@@ -21,21 +21,27 @@ class DegradationCalculator:
     """
     
     def __init__(self, battery_capacity: float, step_duration: float, 
-                 battery_life_cost: float, degradation_temperature: float = 25.0):
+                 battery_life_cost: float, degradation_temperature: float = 25.0,
+                 calibration: float = 1.0):
         """
         Initialize degradation calculator.
-        
+
         Args:
             battery_capacity: Battery capacity in kWh
             step_duration: Time step duration in hours
             battery_life_cost: Total cost of battery replacement in $
             degradation_temperature: Operating temperature in °C
+            calibration: Multiplier applied to the per-step wear estimate so the
+                planner's total wear can be matched to the environment's realized
+                wear (the env charges per closed rainflow cycle, while the planner
+                accumulates a per-step half-cycle; see known_issues B4).
         """
         self.battery_capacity = battery_capacity
         self.step_duration = step_duration
         self.battery_life_cost = battery_life_cost
         self.degradation_temperature = degradation_temperature
-        
+        self.calibration = float(calibration)
+
         # Initialize the class-based degradation model from batterydeg.py
         self.cycle_degradation_model = DegradationModel()
     
@@ -92,7 +98,7 @@ class DegradationCalculator:
         # Sanitize: ensure non-negative and finite
         if not np.isfinite(deg) or deg <= 0.0:
             return 0.0
-        return float(min(0.5 * deg, 1.0))
+        return float(min(0.5 * deg * self.calibration, 1.0))
 
     def compute_rainflow_degradation(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
         """Deprecated alias for :meth:`compute_step_degradation`."""

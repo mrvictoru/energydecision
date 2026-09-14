@@ -23,6 +23,7 @@ python3 scripts/generate_sdp_dt_trajectories.py \
   --batteries medium_1c fast_375c large_07c small_05c \
   --episodes-per-slot 8 \
   --deg-cost-per-mwh 50.0 \
+  --deg-calibration 0.12 \
   --rtg-mode j_t_soc \
   --out data/aemo_dt_sdp/dt_trajectories_jtsoc_v2_conservative.parquet
 ```
@@ -36,6 +37,7 @@ python3 scripts/generate_sdp_dt_trajectories.py \
   --batteries medium_1c fast_375c large_07c small_05c \
   --episodes-per-slot 8 \
   --deg-cost-per-mwh 20.0 \
+  --deg-calibration 0.12 \
   --rtg-mode j_t_soc \
   --out data/aemo_dt_sdp/dt_trajectories_jtsoc_v2_aggressive.parquet
 ```

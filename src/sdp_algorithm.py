@@ -41,7 +41,8 @@ class SDPSolver:
                  use_monte_carlo: bool = False,
                  mc_samples: int = 100,
                  mc_seed: Optional[int] = None,
-                 scenario_generator: Optional[Any] = None):
+                 scenario_generator: Optional[Any] = None,
+                 degradation_calibration: float = 1.0):
         """
         Initialize SDP solver.
         
@@ -78,7 +79,8 @@ class SDPSolver:
             battery_capacity=self.battery_capacity,
             step_duration=self.step_duration,
             battery_life_cost=self.battery_life_cost,
-            degradation_temperature=getattr(env, 'degradation_temperature', 25.0)
+            degradation_temperature=getattr(env, 'degradation_temperature', 25.0),
+            calibration=degradation_calibration,
         )
         
         # Uncertainty handling

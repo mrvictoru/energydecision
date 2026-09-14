@@ -218,7 +218,21 @@ documentation-only correction.
   a model mismatch.
 - **Documented (2026-09-13):** the mismatch is now stated in the
   `sdp_energy_dispatch` docstring (`src/aemo_sdp_executor.py`) and this file.
-  Using one model in both remains a follow-up. Status: `DOCUMENTED`.
+  Using one model in both remains a follow-up.
+- **Measured + calibrated (2026-09-14):** on identical actions (10 MWh/10 MW,
+  `real_world` LFP, 288-step square wave) the planner's A5 wear is **8.4×** the
+  env's realized wear ($23,022 vs $2,739). The over-count is an *accounting*
+  effect — the planner sums a per-step half-cycle while the env charges per
+  closed rainflow cycle — not the per-cycle model (per-cycle, Muenzel is
+  actually 0.14–0.62× the RealWorld value). This made the regenerated AEMO
+  teacher over-conservative: the Stage C v2 student earned almost no energy
+  revenue (standard-surface energy $197/ep; profit $6,630 vs the old $11,573).
+  Fix: a `deg_calibration` multiplier threaded through `DegradationCalculator`,
+  `SDPSolver`, `aemo_sdp_executor.{sdp_energy_dispatch,compute_cost_to_go_table}`
+  and `AEMOAgent`; the teacher generator exposes `--deg-calibration` (use
+  **~0.12** to align planner wear with the env on this surface). Status:
+  `MITIGATED` (factor is a first-order global calibration; corpora must be
+  regenerated with it).
 
 ### B5. Muenzel model returns zero degradation for DoD ≤ 3%
 
