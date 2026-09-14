@@ -319,6 +319,26 @@ using only about one-third of the intended discharge budget. Broader real
 coverage is limited by the available normalized telemetry; live shadow mode
 remains unavailable.
 
+### Paired statistical analysis
+
+`scripts/household_fair_statistics.py` computes paired bootstrap 95% CIs and
+exact two-sided Wilcoxon tests from the per-window annualized net-savings
+values. On the ten-window synthetic surface, DT's paired advantage was
+significant against PPO seed 42 (+A$15.24/year, CI +A$7.62 to +A$23.51,
+`p=0.00195`), PPO seed 20260830 (+A$5.60, CI +A$3.49 to +A$7.74,
+`p=0.00195`), SAC seeds 42 and 20260830 (`p=0.00195` and `p=0.01367`),
+and TD3 seed 42 (+A$4.66, CI +A$2.87 to +A$6.52, `p=0.00195`).
+Differences against the better or more conservative seeds were positive but
+not significant at this sample size.
+
+On the four-window real-OOD surface, no DT-versus-RL comparison reached
+`p<0.05`; the sample is too small for a reliable significance claim. The
+statistics support the synthetic result as seed-dependent evidence rather
+than a universal DT win, and characterize the real result as directional
+transfer evidence only. Artifacts are
+`eval_output/household/h4_11_fair/statistics_10x90.json` and
+`eval_output/household/h4_12_fair_real/statistics_4x30.json`.
+
 ## Standard Household Workflow
 
 ### 1. Prepare raw household data
