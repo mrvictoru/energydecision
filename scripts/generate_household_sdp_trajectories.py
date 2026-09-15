@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from EnergySimEnv import SolarBatteryEnv
-from household_optimization import optimize_dispatch
+from household_optimization import optimize_dispatch, DEFAULT_HOUSEHOLD_DEG_CALIBRATION
 from household_replay import Tariff
 
 
@@ -63,6 +63,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--deg-cost-per-mwh", type=float, default=50.0,
                         help="Teacher wear-awareness (A6): linear throughput degradation surrogate "
                              "($/MWh) added to the DP stage cost. 0.0 = degradation-blind teacher.")
+    parser.add_argument("--deg-mode", choices=("none", "linear", "step"), default="step",
+                        help="Teacher wear model: 'none', 'linear' (deg-cost-per-mwh), or 'step' "
+                             "(state-dependent half-cycle wear calibrated to the env).")
+    parser.add_argument("--deg-calibration", type=float, default=DEFAULT_HOUSEHOLD_DEG_CALIBRATION,
+                        help="Scale for --deg-mode step, to match the env's realized wear.")
     return parser.parse_args()
 
 
@@ -72,6 +77,7 @@ def _trajectory_for_episode(
     roundtrip_eff: float, forecast_mode: str,
     degradation_mode: str = "full", battery_life_cost: float = 5000.0,
     deg_cost_per_mwh: float = 50.0,
+    deg_mode: str = "step", deg_calibration: float = 1.0,
 ) -> pl.DataFrame:
     """Roll out per-day deterministic DP actions through the actual env."""
     priced_frame = frame.with_columns([
@@ -105,6 +111,8 @@ def _trajectory_for_episode(
             roundtrip_eff=roundtrip_eff, initial_soc=env.battery_level / capacity,
             soc_resolution=soc_resolution, action_resolution=action_resolution,
             deg_cost_per_mwh=deg_cost_per_mwh,
+            deg_mode=deg_mode, deg_calibration=deg_calibration,
+            battery_life_cost=battery_life_cost,
         )
         for offset, action_kw in enumerate(solution.actions_kw):
             step = day_start + offset
@@ -150,6 +158,7 @@ def main() -> None:
             tariff, args.roundtrip_eff,
             args.forecast_mode,
             args.degradation_mode, args.battery_life_cost, args.deg_cost_per_mwh,
+            args.deg_mode, args.deg_calibration,
         ))
     result = pl.concat(frames)
     args.out.parent.mkdir(parents=True, exist_ok=True)

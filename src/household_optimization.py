@@ -15,9 +15,16 @@ import numpy as np
 import polars as pl
 
 from household_replay import Tariff
+from algorithm_helpers import DegradationCalculator
 
 
 STEP_HOURS = 5.0 / 60.0
+
+# Household planner wear calibration: on identical actions the state-dependent
+# step-wear grid over-counts the environment's realized cycle wear by ~3.4x
+# (measured 2026-09-15, 5 kWh / 5 kW synth episode), so ~0.29 aligns the
+# teacher with the env (known_issues A6). Approximate, config-dependent.
+DEFAULT_HOUSEHOLD_DEG_CALIBRATION = 0.29
 
 
 @dataclass(frozen=True)
@@ -62,6 +69,10 @@ def optimize_dispatch(
     soc_resolution: int = 31,
     action_resolution: int = 21,
     deg_cost_per_mwh: float = 0.0,
+    deg_mode: str = "linear",
+    deg_calibration: float = 1.0,
+    battery_life_cost: float = 5000.0,
+    degradation_temperature: float = 25.0,
 ) -> OptimizationResult:
     """Solve a deterministic finite-horizon DP for a contiguous frame.
 
@@ -71,10 +82,17 @@ def optimize_dispatch(
     terminal value is zero, deliberately making this an honest cost-minimizing
     lower-bound comparator rather than a replay of observed dispatch.
 
-    ``deg_cost_per_mwh`` (>0) adds a linear throughput wear term
-    ``|action_kwh| * deg_cost_per_mwh/1000`` to each stage, making the plan
-    wear-aware (A6). The default 0.0 preserves the degradation-blind oracle.
+    Wear model (``deg_mode``):
+      - ``"none"``   — no wear (degradation-blind).
+      - ``"linear"`` — ``|action_kwh| * deg_cost_per_mwh/1000`` (A6 surrogate).
+      - ``"step"``   — **state-dependent** wear: a time-invariant ``(SoC, action)``
+        matrix from ``DegradationCalculator.compute_step_degradation`` (a
+        Muenzel per-step half-cycle at the true SoC), scaled by
+        ``deg_calibration`` to match the environment's realized per-cycle wear.
+        This is the household analogue of the AEMO planner's ``_deg_cost_grid``.
     """
+    if deg_mode not in ("none", "linear", "step"):
+        raise ValueError("deg_mode must be one of 'none', 'linear', 'step'")
     if len(frame) == 0:
         raise ValueError("Cannot optimize an empty frame")
     if capacity_kwh <= 0 or max_flow_kw <= 0:
@@ -104,10 +122,29 @@ def optimize_dispatch(
     feasible = (next_state >= -1e-9) & (next_state <= capacity_kwh + 1e-9)
     clipped_next = np.clip(next_state, 0.0, capacity_kwh)
 
+    # State-dependent wear grid (time-invariant; computed once).
+    deg_grid = None
+    if deg_mode == "step":
+        calc = DegradationCalculator(
+            battery_capacity=capacity_kwh,
+            step_duration=STEP_HOURS,
+            battery_life_cost=battery_life_cost,
+            degradation_temperature=degradation_temperature,
+            calibration=deg_calibration,
+        )
+        deg_grid = np.zeros((soc_resolution, action_resolution), dtype=float)
+        for si in range(soc_resolution):
+            for ai in range(action_resolution):
+                deg_grid[si, ai] = calc.compute_step_degradation(
+                    float(states[si]), float(clipped_next[si, ai])
+                ) * battery_life_cost
+
     for index in range(horizon - 1, -1, -1):
         grid = load[index] * STEP_HOURS - solar[index] * STEP_HOURS + action_grid
         stage = np.where(grid >= 0, grid * import_price[index], grid * export_price[index])
-        if deg_cost_per_mwh:
+        if deg_grid is not None:
+            stage = stage + deg_grid
+        elif deg_mode == "linear" and deg_cost_per_mwh:
             # Linear throughput wear surrogate (A6): $/MWh -> $/kWh.
             stage = stage + np.abs(action_grid) * (deg_cost_per_mwh / 1000.0)
         stage = np.broadcast_to(stage, (soc_resolution, action_resolution))
@@ -159,6 +196,10 @@ def build_j_t_soc_prompt_provider(
     soc_resolution: int = 31,
     action_resolution: int = 21,
     deg_cost_per_mwh: float = 0.0,
+    deg_mode: str = "linear",
+    deg_calibration: float = 1.0,
+    battery_life_cost: float = 5000.0,
+    degradation_temperature: float = 25.0,
 ) -> Callable[[float, int], float]:
     """Precompute exact deterministic ``-J_t(soc)`` prompts for an env frame.
 
@@ -185,6 +226,10 @@ def build_j_t_soc_prompt_provider(
             soc_resolution=soc_resolution,
             action_resolution=action_resolution,
             deg_cost_per_mwh=deg_cost_per_mwh,
+            deg_mode=deg_mode,
+            deg_calibration=deg_calibration,
+            battery_life_cost=battery_life_cost,
+            degradation_temperature=degradation_temperature,
         )
         tables.append((offset, offset + len(day), result.cost_to_go, result.soc_levels_kwh))
         offset += len(day)

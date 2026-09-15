@@ -75,3 +75,18 @@ def test_planner_degradation_calibration_scales_grid():
     s2 = SDPSolver(_FakeEnv(), horizon=4, soc_resolution=6, action_resolution=5,
                    degradation_calibration=0.12)
     assert np.allclose(s2._deg_cost_grid, s1._deg_cost_grid * 0.12)
+
+
+def test_household_step_wear_reduces_throughput_and_calibration_monotone():
+    frame = _arbitrage_frame()
+    tariff = Tariff(import_cents_per_kwh=31.042, feed_in_cents_per_kwh=1.0,
+                    free_window_start_hour=24, free_window_end_hour=24)
+    common = dict(tariff=tariff, capacity_kwh=5.0, max_flow_kw=3.3,
+                  roundtrip_eff=0.80, initial_soc=0.5)
+    none = optimize_dispatch(frame, deg_mode="none", **common)
+    low = optimize_dispatch(frame, deg_mode="step", deg_calibration=0.1, **common)
+    high = optimize_dispatch(frame, deg_mode="step", deg_calibration=1.0, **common)
+    tp = [float(np.abs(r.actions_kw).sum()) for r in (none, low, high)]
+    assert tp[0] > 0.0
+    # More wear -> less throughput; both step plans trade less than the blind plan.
+    assert tp[1] <= tp[0] and tp[2] <= tp[1]

@@ -29,6 +29,7 @@ from household_optimization import (
     bootstrap_mean_ci,
     build_j_t_soc_prompt_provider,
     optimize_dispatch,
+    DEFAULT_HOUSEHOLD_DEG_CALIBRATION,
 )
 from household_replay import Tariff
 
@@ -439,7 +440,8 @@ def _run_agent(
     )
     prompt_provider = (
         build_j_t_soc_prompt_provider(
-            frame, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow
+            frame, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow,
+            deg_mode="step", deg_calibration=DEFAULT_HOUSEHOLD_DEG_CALIBRATION,
         )
         if algorithm == "dt" and rtg_mode == "j_t_soc" else None
     )
@@ -503,7 +505,8 @@ class _BatchedEnvState:
         )
         self.prompt_provider = (
             build_j_t_soc_prompt_provider(
-                frame, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow
+                frame, tariff=tariff, capacity_kwh=capacity, max_flow_kw=flow,
+                deg_mode="step", deg_calibration=DEFAULT_HOUSEHOLD_DEG_CALIBRATION,
             )
             if rtg_mode == "j_t_soc"
             else None
