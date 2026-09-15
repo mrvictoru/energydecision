@@ -27,7 +27,8 @@
 | H4.7, H4.9-H4.12 household deployment evaluations | 🔴 RERUN REQUIRED | Re-run safety, throughput, price-gate, fair DT/RL, real-OOD, and paired-statistics artifacts. |
 | AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
 | AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on 4/4 identity surfaces + impact. HF upload pending. |
-| Household teacher wear calibration | ⬜ OPEN | `λ_deg=50` under-prices wear (known_issues A6); calibrate to the env, regenerate corpora, retrain, then re-run H4.x. |
+| Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$86/yr vs rule −$60. |
+| Household H4.x re-runs + RTE-matched oracle | ⬜ OPEN | Re-run H4.2–H4.5, H4.7, H4.9–H4.12 with the calibrated pipeline; run the oracle at RTE=0.80 for a fair ceiling; apply the safety projector in eval. |
 
 ---
 

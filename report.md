@@ -1550,16 +1550,17 @@ Weights + card: `mrvictoru/energydecision-dt-v2-sdp`
 (`aemo_dt_sdp_jtsoc_v2cal.pt`); corpus: `mrvictoru/AEMO_simulated_trade_sdp`
 (`dt_trajectories_jtsoc_v2cal_conservative.parquet`).
 
-**Household track — open regression.** Under the corrected physics the
-household v2 DT over-cycles (≈0.9 EFC/day, ~127 SOC clips/day), is worse than
-the rule on gross bill (+$12–19/yr vs +$23/yr), and is strongly negative
-net-of-wear (≈ −$575 to −$605/yr; the lossless oracle is +$739/yr). RTG sweeps
-do not fix it. Diagnosis: the household SDP teacher (`optimize_dispatch`,
-`λ_deg=50 $/MWh`) **under-prices** wear relative to the corrected environment
-(calendar + corrected cycle aging + RTT losses), so the student over-cycles —
-the household counterpart of B4 with the opposite sign. The household
-re-baseline is **pending a wear calibration + corpus regeneration**; all H4.x
-numbers remain historical (`docs/known_issues.md` §A6, `docs/FUTURE_PLAN.md`).
+**Household track — re-baselined (2026-09-15).** The uncalibrated household
+teacher under-priced wear (known-issues A6), making the first v2 student
+over-cycle (net ≈ −$600/yr). The teacher was then given **state-dependent,
+env-calibrated wear** (`deg_mode="step"`, `deg_calibration=0.29`; measured
+planner/env cycle-wear ratio 3.4×), the corpora were regenerated, and the DT
+retrained. On the 10-window real-OOD surface it now earns **gross +$293/yr and
+net-of-wear +$86/yr** (0.6 EFC/day, ~11 clips/day) versus the rule's +$23/−$60
+and the uncalibrated model's +$12–19/−$600. The DT is net-positive again and
+beats the rule; it remains below the lossless, degradation-blind oracle
+(+$739/yr), which is not an RTE-matched ceiling (an RTE-matched oracle and the
+remaining H4.x re-runs are tracked in `docs/FUTURE_PLAN.md`).
 
 ### 8.3 Key Takeaways
 

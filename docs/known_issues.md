@@ -139,7 +139,20 @@ documentation-only correction.
   sign (AEMO's planner *over*-priced; the household planner *under*-prices).
   **Required:** calibrate household `λ_deg` to the env's realized wear (or have
   `optimize_dispatch` use the env's degradation model), regenerate the corpora,
-  retrain, and re-run H4.x. Status: `OPEN` (blocks the household re-baseline).
+  retrain, and re-run H4.x.
+- **Resolved (2026-09-15, option 2 — state-dependent calibrated wear).**
+  `optimize_dispatch(deg_mode="step")` now uses a time-invariant `(SoC, action)`
+  wear grid from `DegradationCalculator.compute_step_degradation` at the true
+  SoC, scaled by `DEFAULT_HOUSEHOLD_DEG_CALIBRATION` (measured planner/env
+  cycle-wear ratio 3.4× → **0.29**). Corpora regenerated and the DT retrained
+  (`models/household/dt/h4_v2c_persistence_8x512_ctx576.pt`). On the 10-window
+  real-OOD surface (persistence forecasts): **gross +$293/yr, net-of-wear
+  +$86/yr, 0.6 EFC/day, ~11 clips/day** at RTG=−2 — versus the uncalibrated
+  model's +$12–19 gross / −$600 net / 0.9 EFC / ~127 clips, and the rule's
+  +$23 gross / −$60 net. The household DT is again net-positive and beats the
+  rule; it remains below the (lossless, degradation-blind) oracle (+$739/yr),
+  which is not an RTE-matched ceiling. Status: `RESOLVED` (remaining household
+  H4.x re-runs and an RTE-matched oracle are tracked in FUTURE_PLAN).
 
 ### A7. Household observation degradation-cost normalization is tied to `battery_life_cost`
 
