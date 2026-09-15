@@ -1,24 +1,22 @@
+import json
+
 import torch
 from huggingface_hub import hf_hub_download
 
-print("Downloading SDP-teacher DT checkpoint from HF...")
+print("Downloading physics-v2 SDP-teacher DT checkpoint from HF...")
+repo = "mrvictoru/energydecision-dt-v2-sdp"
+filename = "aemo_dt_sdp_jtsoc_v2cal.pt"
 path = hf_hub_download(
-    repo_id="mrvictoru/energydecision-dt-v2-sdp",
-    filename="aemo_dt_fcas_best_checkpoint.pt",
+    repo_id=repo,
+    filename=filename,
     local_dir="models/aemo/dt/",
     repo_type="model",
     local_dir_use_symlinks=False,
 )
+meta = json.loads(hf_hub_download(repo, f"{filename}.meta.json", repo_type="model"))
 print(f"Downloaded to: {path}")
+print(f"return_scale={meta.get('return_scale')} model={meta.get('model')}")
 
-# Verify checkpoint structure
-ckpt = torch.load(path, map_location="cpu")
-print(f"Checkpoint keys: {list(ckpt.keys())[:10]}")
-if "meta" in ckpt:
-    print(f"Meta: {ckpt['meta']}")
-if "model_state_dict" in ckpt:
-    sd = ckpt["model_state_dict"]
-    print(f"Model state dict has {len(sd)} keys")
-    # Check for action_head_mode by looking for sigmoid-related params
-    act_keys = [k for k in sd.keys() if 'act' in k.lower()]
-    print(f"Action-related keys: {act_keys[:5]}...")
+# The main .pt is a pure state_dict; load it with DecisionTransformer.load_from_checkpoint
+state = torch.load(path, map_location="cpu")
+print(f"state_dict entries: {len(state)}")

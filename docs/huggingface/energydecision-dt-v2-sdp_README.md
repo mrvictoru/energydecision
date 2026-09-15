@@ -27,9 +27,9 @@ pipeline_tag: reinforcement-learning
 | File | Model | Status |
 |---|---|---|
 | **`aemo_dt_sdp_jtsoc_v2cal.pt`** (+ `.pt.meta.json`) | **Physics-v2 Stage C — J_t(soc) RTG, wear-calibrated SDP teacher (320 eps)** | ✅ **Shipped — use this one** |
-| `aemo_dt_sdp_jtsoc_fullcorpus.pt` (+ `.pt.meta.json`) | Stage C v1 — J_t(soc) RTG, combined corpus (640 eps), pre-physics-fix | Historical (superseded) |
-| `aemo_dt_fcas_model.pt` | Stage B — conservative teacher (320 eps), discounted RTG | Historical (superseded) |
-| `aemo_dt_fcas_best_checkpoint.pt` | Stage B — best checkpoint of the same model | Historical |
+| `aemo_dt_sdp_jtsoc_fullcorpus.pt` (+ `.pt.meta.json`) | Stage C v1 — J_t(soc) RTG, combined corpus (640 eps), pre-physics-fix | Historical (superseded; kept for the v1 comparison) |
+
+(Removed 2026-09: the behaviour-cloning-era files `aemo_dt_fcas_model.pt` and `aemo_dt_fcas_best_checkpoint.pt`.)
 
 ## Results (physics-v2 shipped model, `aemo_dt_sdp_jtsoc_v2cal.pt`, `rtg_mode="auto"`)
 
