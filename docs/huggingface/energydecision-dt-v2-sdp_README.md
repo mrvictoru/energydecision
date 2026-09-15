@@ -104,6 +104,12 @@ agent = AEMOAgent(env, algorithm="dt", model=model, rtg_mode="auto")
 
 `rtg_mode="auto"` resolves to state-dependent `j_t_soc` prompting on price-taking (identity) surfaces and a conservative constant-RTG fallback under a market-impact model.
 
+## Inference prerequisites (what else you need)
+
+1. **Source code.** The `DecisionTransformer` model, `AEMOAgent`, and the `AEMOBatteryTradingEnv` live in the [energydecision](https://github.com/mrvictoru/energydecision) repo, not in this model repo.
+2. **Seasonal RRP profiles (bundled here).** For `rtg_mode="j_t_soc"` / `"auto"` on identity surfaces, the agent builds a J_t(soc) cost-to-go table from a seasonal price forecast, cached to `data/aemo_sdp/seasonal_rrp_<REGION>.json`. The five profiles are included in this repo under `data/aemo_sdp/` — copy them to `data/aemo_sdp/` in the repo checkout (otherwise the `j_t_soc` path has to rebuild them from raw AEMO parquets, which the simulation environment fetches separately).
+3. **Alternative without profiles.** `rtg_mode="constant"` (with a prompt value) needs no seasonal profile, but it is not the shipped setting and under-performs on identity surfaces.
+
 ## Intended use
 
 Research into offline RL / sequence modeling for energy markets; simulation of multi-market BESS dispatch in Australia's NEM; baseline for planner-distilled offline RL. **Not intended for live trading** without further validation (sim-to-real is open), risk management, and regulatory compliance.
