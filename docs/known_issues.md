@@ -127,6 +127,19 @@ documentation-only correction.
   → 14.8 (λ=50), with a ~$0.024/day bill increase. Tests:
   `tests/test_physics_v2_planner.py`. Status: `RESOLVED` (teacher λ calibration
   still open; re-baseline pending).
+- **Measured regression (2026-09-14): the λ is uncalibrated.** With `λ_deg=50`
+  the regenerated household teacher still **under-prices** wear relative to the
+  corrected environment (calendar + corrected cycle aging + RTE losses). The
+  retrained household DT over-cycles (≈0.9 EFC/day, ~127 SOC clips/day), earns
+  **less than the rule on gross bill** (+$12–19/yr vs +$23/yr on the 10-window
+  real-OOD surface) and is strongly negative net-of-wear (≈ −$575 to −$605/yr;
+  the lossless oracle is +$739/yr). RTG sweeps (−4/−2/−1) do not fix it.
+  Back-of-envelope: the environment's effective wear is ≈$190–370/MWh versus the
+  teacher's $50/MWh. This is the household counterpart of B4 with the opposite
+  sign (AEMO's planner *over*-priced; the household planner *under*-prices).
+  **Required:** calibrate household `λ_deg` to the env's realized wear (or have
+  `optimize_dispatch` use the env's degradation model), regenerate the corpora,
+  retrain, and re-run H4.x. Status: `OPEN` (blocks the household re-baseline).
 
 ### A7. Household observation degradation-cost normalization is tied to `battery_life_cost`
 
@@ -337,11 +350,20 @@ retraining, and re-running evaluation. Do them as one coherent
 ### D.0 Scope decision (required before any code change)
 
 > **Status (2026-09-13):** the chosen scope was **global fix + re-baseline**.
-> A1–A8 are now implemented with unit tests and the full suite passes (380).
-> The **P5 re-baseline has not been run** (regenerate SDP-teacher corpora →
-> retrain household + AEMO Stage C → re-run AEMO identity + impact gate →
-> refresh H4.x). All prior household and AEMO results predate these physics
-> fixes and must be treated as superseded once P5 runs.
+> A1–A8 are now implemented with unit tests and the full suite passes (381).
+> The **P5 re-baseline has not been run**. All prior household and AEMO
+> numerical results predate at least one of these physics/planner fixes and
+> are historical only. Required order:
+>
+> 1. Regenerate the H4.1 household corpus and retrain household policies.
+> 2. Re-run household H4.2-H4.5, H4.7, H4.9-H4.12 evaluations and paired
+>    statistics, including the interrupted `h4_13_real_90d` run.
+> 3. Regenerate SDP-teacher corpora with `--deg-calibration 0.12`, retrain
+>    AEMO Stage C, then rerun AEMO identity surfaces and the impact gate.
+>
+> This includes old SB3/DT checkpoints: evaluating them under the corrected
+> environment is useful as a fixed-policy delta diagnostic, but it is not a
+> replacement for retraining on the corrected dynamics.
 
 **Cross-track caveat:** `RainflowCounter`/`DegradationModel`
 (`src/batterydeg.py`) are shared by `SolarBatteryEnv` **and**

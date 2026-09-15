@@ -1525,6 +1525,42 @@ PDF, 200 dpi) under `eval_output/paper_figures/`.
   few scenarios (n=5–6), so point estimates should still be read alongside their
   intervals.
 
+##### Physics-v2 Re-baseline (2026-09) — corrected degradation, calibrated teacher
+
+A shared-physics pass corrected the battery degradation/efficiency models used
+by **both** tracks (issues A1–A8: round-trip efficiency 0.80, calendar aging,
+corrected rainflow C-rate units, the reset C-rate cap, and observation
+normalisation), fixed two AEMO evaluation bugs (B1 impact-aware `J_t(soc)`
+dispatch sign; B8 `return_scale` sidecar), and calibrated the SDP planner's
+per-step wear to the environment's realized per-cycle wear (B4;
+`--deg-calibration 0.12`). Corpora were regenerated and both DTs retrained.
+
+The AEMO checkpoint `aemo_dt_sdp_jtsoc_v2cal.pt` (`rtg_mode="auto"`) supersedes
+`aemo_dt_sdp_jtsoc_fullcorpus.pt`:
+
+| Surface | physics-v2 (shipped) | v1 (previous) | PPO | ratio vs PPO |
+|---|---:|---:|---:|---:|
+| Standard Oct | **$16,209** | $11,573 | $2,353 | 6.9× |
+| Dispatch-matched | **$40,039** | $35,320 | $22,530 | 1.78× |
+| 2025 OOD | **$30,791** | $25,862 | $6,498 | 4.74× |
+| Expanded broad-2024 | $32,146 | $34,761 | $19,504 | 1.65× |
+| Impact (piecewise merit-order) | stronger than v1 (e.g. Hornsdale-class SA1 Oct ≈ $362k vs PPO ≈ $75k) | — | — | passes |
+
+Weights + card: `mrvictoru/energydecision-dt-v2-sdp`
+(`aemo_dt_sdp_jtsoc_v2cal.pt`); corpus: `mrvictoru/AEMO_simulated_trade_sdp`
+(`dt_trajectories_jtsoc_v2cal_conservative.parquet`).
+
+**Household track — open regression.** Under the corrected physics the
+household v2 DT over-cycles (≈0.9 EFC/day, ~127 SOC clips/day), is worse than
+the rule on gross bill (+$12–19/yr vs +$23/yr), and is strongly negative
+net-of-wear (≈ −$575 to −$605/yr; the lossless oracle is +$739/yr). RTG sweeps
+do not fix it. Diagnosis: the household SDP teacher (`optimize_dispatch`,
+`λ_deg=50 $/MWh`) **under-prices** wear relative to the corrected environment
+(calendar + corrected cycle aging + RTT losses), so the student over-cycles —
+the household counterpart of B4 with the opposite sign. The household
+re-baseline is **pending a wear calibration + corpus regeneration**; all H4.x
+numbers remain historical (`docs/known_issues.md` §A6, `docs/FUTURE_PLAN.md`).
+
 ### 8.3 Key Takeaways
 
 1. **The standalone AEMO Decision Transformer is the preferred shipped policy when run in surface-aware `rtg_mode="auto"`.** On identity surfaces, `auto` resolves to `j_t_soc` and matches the best DT results on standard Oct, dispatch-matched, expanded broad-2024, and 2025 OOD; under market impact, it falls back to a conservative constant RTG and passes the impact gate on every grid-scale battery (small **3.21×**, hornsdale **2.59×**, torrens **2.02×** vs PPO). Note: the earlier claim that explicit `j_t_soc` "collapses" under impact was an evaluation artifact (`return_scale` bug; §8.2.10 and `docs/known_issues.md` B8) — explicit j_t_soc is viable, but the constant fallback remains the robust default.

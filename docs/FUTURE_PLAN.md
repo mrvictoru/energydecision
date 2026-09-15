@@ -8,11 +8,32 @@
 >
 > Status key: ⬜ = open, 🟡 = in progress / partially measured, ✅ = done, 🔴 = on hold, 📝 = writing / meta.
 
+> **Physics rebaseline notice (2026-09-14):** Household results and status
+> claims recorded before the A1-A4 fixes are historical and require reruns.
+> The fixes changed round-trip efficiency, calendar aging, rainflow C-rate
+> units, and the reset C-rate cap. Marked household items H4.1-H4.5, H4.7,
+> and H4.9-H4.12 as pending rebaseline; their existing artifacts and headline
+> numbers must not be used as current evidence until regenerated. The shared
+> `batterydeg` changes also invalidate prior AEMO simulator evaluations; the
+> A5/B4 planner calibration requires regenerated SDP-teacher corpora,
+> Stage C retraining, and rerun identity/impact-gate evaluations.
+
+### Rebaseline status
+
+| Scope | Status | Required action |
+|---|---|---|
+| H4.1 corpus and household DT/SB3 checkpoints | 🔴 RERUN REQUIRED | Regenerate with corrected physics, then retrain policies. |
+| H4.2-H4.5 household studies | 🔴 RERUN REQUIRED | Re-run forecast, PPO, evaluation-surface, and degradation studies. |
+| H4.7, H4.9-H4.12 household deployment evaluations | 🔴 RERUN REQUIRED | Re-run safety, throughput, price-gate, fair DT/RL, real-OOD, and paired-statistics artifacts. |
+| AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
+| AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on 4/4 identity surfaces + impact. HF upload pending. |
+| Household teacher wear calibration | ⬜ OPEN | `λ_deg=50` under-prices wear (known_issues A6); calibrate to the env, regenerate corpora, retrain, then re-run H4.x. |
+
 ---
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (Stage C, SDP-distilled, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate** ($11.6k vs $2.35k standard; $35.3k vs $22.5k dispatch-matched; $34.8k vs $19.5k expanded 2024; $25.9k vs $6.5k 2025 OOD; 2.0–3.2× impact resilience after the B8 `return_scale` fix). Statistical rigor applied (bootstrap CIs, paired Wilcoxon, all six DT-vs-PPO CIs exclude zero).
+**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is not yet re-baselined:** the household teacher under-prices wear (known_issues A6), so H4.x numbers are historical.
 
 **What we don't have (the open problems):**
 

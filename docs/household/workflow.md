@@ -11,6 +11,15 @@ Use this document when you need:
 
 If you only need environment mechanics, read [environment.md](environment.md). If you want the full household docs map, start with [README.md](README.md).
 
+> **Rebaseline required (2026-09-14):** The numerical household results below
+> were produced before the A1-A4 physics corrections: round-trip efficiency,
+> calendar aging, rainflow C-rate units, and the reset C-rate cap. They are
+> historical diagnostics only and must not be treated as current benchmarks.
+> Re-run H4.1 corpus generation and policy training before final comparisons;
+> then rerun H4.2-H4.5, H4.7, H4.9-H4.12, including all fair statistics and
+> shadow proxies. The interrupted 90-day run under
+> `eval_output/household/h4_13_real_90d/` is incomplete and must also be rerun.
+
 ## Recommended Entry Points
 
 - Environment and baseline sanity check: `notebooks/testrun.ipynb`
