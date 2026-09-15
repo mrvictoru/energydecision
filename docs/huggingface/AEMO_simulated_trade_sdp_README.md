@@ -28,9 +28,9 @@ Each row is a single 5-minute market interval with a **self-consistent** `(norma
 | File | Episodes | Rows | RTG | Status |
 |---|---:|---:|---|---|
 | **`dt_trajectories_jtsoc_v2cal_conservative.parquet`** | **320** | **3.13M** | **`rtg_value` = J_t(soc) cost-to-go** | ✅ **Training data of the shipped physics-v2 model** |
-| `dt_trajectories_jtsoc_combined.parquet` | 640 | 6.27M | `rtg_value` = J_t(soc) | Historical (pre-physics-fix; superseded) |
-| `dt_trajectories_full.parquet` | 320 | 3.13M | discounted return (train-time) | Historical |
-| `dt_trajectories_aggressive.parquet` | 320 | 3.13M | discounted return (train-time) | Historical |
+| `dt_trajectories_jtsoc_combined.parquet` | 640 | 6.27M | `rtg_value` = J_t(soc) | Historical (v1 Stage C training data; pre-physics-fix) |
+
+(Removed 2026-09: the Stage B discounted-return corpora `dt_trajectories_full.parquet` and `dt_trajectories_aggressive.parquet`, which paired with the deleted Stage B model weights.)
 
 ### What is different about the physics-v2 corpus?
 
