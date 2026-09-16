@@ -24,17 +24,18 @@
 |---|---|---|
 | H4.1 corpus and household DT/SB3 checkpoints | 🔴 RERUN REQUIRED | Regenerate with corrected physics, then retrain policies. |
 | H4.2-H4.5 household studies | 🔴 RERUN REQUIRED | Re-run forecast, PPO, evaluation-surface, and degradation studies. |
-| H4.7, H4.9-H4.12 household deployment evaluations | 🔴 RERUN REQUIRED | Re-run safety, throughput, price-gate, fair DT/RL, real-OOD, and paired-statistics artifacts. |
+| H4.9 real-OOD / long-horizon eval | 🟡 PARTIAL (2026-09-16) | RTE-matched oracle + calibrated `h4_v2c` DT re-run on 7 d/30 d/90 d; see `workflow.md` §H4.9. |
+| H4.7, H4.10-H4.12 household deployment evaluations | 🔴 RERUN REQUIRED | Re-run safety, throughput, price-gate, fair DT/RL, and paired-statistics artifacts. |
 | AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
 | AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on 4/4 identity surfaces + impact. HF upload pending. |
-| Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$86/yr vs rule −$60. |
-| Household H4.x re-runs + RTE-matched oracle | ⬜ OPEN | Re-run H4.2–H4.5, H4.7, H4.9–H4.12 with the calibrated pipeline; run the oracle at RTE=0.80 for a fair ceiling; apply the safety projector in eval. |
+| Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$93/yr vs rule −$60 (RTE-matched oracle +$690/yr). |
+| Household H4.x re-runs + RTE-matched oracle | 🟡 PARTIAL (2026-09-16) | RTE-matched oracle (`--oracle-roundtrip-eff 0.80`) and H4.9 eval re-run DONE. Remaining: H4.2–H4.5, H4.7, H4.10–H4.12 with the calibrated pipeline + safety projector. |
 
 ---
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is not yet re-baselined:** the household teacher under-prices wear (known_issues A6), so H4.x numbers are historical.
+**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is partially re-baselined:** the teacher wear is calibrated (`h4_v2c`) and the H4.9 real-OOD/long-horizon eval is re-run with an RTE-matched oracle, but H4.2–H4.5/H4.7/H4.10–H4.12 remain historical (known_issues A6).
 
 **What we don't have (the open problems):**
 

@@ -150,9 +150,18 @@ documentation-only correction.
   +$86/yr, 0.6 EFC/day, ~11 clips/day** at RTG=−2 — versus the uncalibrated
   model's +$12–19 gross / −$600 net / 0.9 EFC / ~127 clips, and the rule's
   +$23 gross / −$60 net. The household DT is again net-positive and beats the
-  rule; it remains below the (lossless, degradation-blind) oracle (+$739/yr),
-  which is not an RTE-matched ceiling. Status: `RESOLVED` (remaining household
-  H4.x re-runs and an RTE-matched oracle are tracked in FUTURE_PLAN).
+  rule. The oracle is now scored at the environment's round-trip efficiency
+  (`--oracle-roundtrip-eff`, default **0.80**), lowering the real-OOD ceiling
+  from +$739 to **+$690/yr** (−6.7%; −6.9% at 30 d, −8.9% at 90 d) and
+  re-scoring the v2c DT at **gross +$293 / net +$93/yr** (an earlier run of the
+  same checkpoint scored +$86 — the two differ by a handful of near-rail SOC
+  steps, i.e. GPU nondeterminism onto knife-edge clipping, not a checkpoint
+  change). On 30 d/90 d the calibrated DT still over-cycles (net −$114 /
+  −$238/yr; clips 25→48/day). The evaluator also gained
+  `--reference-cache-dir` (cached rule/oracle/SB3 rollouts), and `--batch-eval`
+  is confirmed numerically equivalent to per-window stepping ($2/yr, <0.1%
+  clips at 90 d). Status: `RESOLVED` (remaining household H4.x re-runs tracked
+  in FUTURE_PLAN).
 
 ### A7. Household observation degradation-cost normalization is tied to `battery_life_cost`
 

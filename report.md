@@ -461,7 +461,7 @@ This section presents the empirical evaluation of the Decision Transformer (DT) 
 
 The household environment (1D action, Ausgrid Solar Home data) was the original testbed that established the DT's effectiveness on a simpler control problem; it is retained as a validation domain rather than the primary contribution. The DT achieves the best mean return (−$2,408) among all baselines including the perfect-foresight Oracle (−$2,483), a difference that is statistically significant (Wilcoxon p = 0.005). Critically, the RTG prompt provides **zero-shot control of the degradation/return trade-off**: moderate prompts yield 0.005/ep degradation versus 0.114/ep for near-zero prompts (a 22× reduction) without any retraining, and tail-risk (CVaR ≈ −9,705) is competitive with or better than SDP, A2C, and PPO. The full metric table, RTG-sensitivity analysis, and pairwise Wilcoxon tests are provided in [eval_output/household/](eval_output/household/) (see Appendix B for the per-algorithm table).
 
-> **Scope.** The "DT beats the perfect-foresight Oracle" statement above holds only for this legacy 2010–2013 Ausgrid benchmark. On the modern 2019+ real-telemetry rebuild the ordering reverses: the daily perfect-foresight oracle saves **+$738.96/yr** versus the best DT's **+$357.29/yr** (§8.1.1). Do not generalise the legacy claim to the modern track.
+> **Scope.** The "DT beats the perfect-foresight Oracle" statement above holds only for this legacy 2010–2013 Ausgrid benchmark. On the modern 2019+ real-telemetry rebuild the ordering reverses: the daily perfect-foresight oracle saves **+$738.96/yr lossless or +$689.65/yr at the environment's 0.80 round-trip efficiency** versus the best DT's **+$357.29/yr** (§8.1.1). Do not generalise the legacy claim to the modern track.
 
 > **NOTE:** These household results establish the DT's effectiveness on a simpler 1D-action problem. The repository's primary contribution is the more challenging AEMO utility-scale environment (Section 8.2), where the action space is 9D (energy + FCAS bidding) and market dynamics are significantly more complex.
 
@@ -1556,11 +1556,15 @@ over-cycle (net ≈ −$600/yr). The teacher was then given **state-dependent,
 env-calibrated wear** (`deg_mode="step"`, `deg_calibration=0.29`; measured
 planner/env cycle-wear ratio 3.4×), the corpora were regenerated, and the DT
 retrained. On the 10-window real-OOD surface it now earns **gross +$293/yr and
-net-of-wear +$86/yr** (0.6 EFC/day, ~11 clips/day) versus the rule's +$23/−$60
-and the uncalibrated model's +$12–19/−$600. The DT is net-positive again and
-beats the rule; it remains below the lossless, degradation-blind oracle
-(+$739/yr), which is not an RTE-matched ceiling (an RTE-matched oracle and the
-remaining H4.x re-runs are tracked in `docs/FUTURE_PLAN.md`).
+net-of-wear +$86–93/yr** (0.6 EFC/day, ~11 clips/day) versus the rule's
++$23/−$60 and the uncalibrated model's +$12–19/−$600. The DT is net-positive
+again and beats the rule. The oracle is now scored at the environment's
+round-trip efficiency (`--oracle-roundtrip-eff`, default `roundtrip_eff=0.80`,
+previously lossless), which lowers its real-OOD ceiling from +$739 to
+**+$690/yr** (−6.7%; −6.9% at 30 d, −8.9% at 90 d). On long horizons the
+calibrated DT still over-cycles (net −$114/yr at 30 d, −$238/yr at 90 d; SOC
+clips 25→48/day), so it remains below the RTE-matched oracle. The remaining
+H4.x re-runs are tracked in `docs/FUTURE_PLAN.md`.
 
 ### 8.3 Key Takeaways
 
@@ -1675,7 +1679,7 @@ This repository introduces a unified framework for learning and planning in batt
 
 **Key empirical findings:**
 
-- **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: offline causal TTM forecasts add +$47.94/yr over persistence on real OOD, but the DT still trails a perfect-foresight oracle (+$357 vs +$739/yr) and over-cycles on long horizons; inference-time throughput budgeting and price-aware gating are the current mitigations (§8.1.1, §8.1.2).
+- **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: offline causal TTM forecasts add +$47.94/yr over persistence on real OOD, but the DT still trails an RTE-matched perfect-foresight oracle (+$357 vs +$690/yr) and over-cycles on long horizons; inference-time throughput budgeting and price-aware gating are the current mitigations (§8.1.1, §8.1.2).
 - **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is now the standalone DT with **surface-aware `rtg_mode="auto"`**. On identity surfaces this reproduces the best `j_t_soc` results — standard **$11,573/ep**, dispatch-matched **$35,320/ep**, expanded broad-2024 **$34,761/ep**, and **2025 OOD $25,862/ep** — all ahead of PPO. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on the canonical grid-scale batteries, avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
 - **AEMO utility-scale (the ceiling was real, then broken):** A systematic attempt to close the DT-vs-PPO gap *within* behaviour cloning — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, architecture changes — all failed to exceed the offline data's FCAS bidding. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver at inference), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.

@@ -51,6 +51,60 @@ contiguous real-normalized windows. Results are stored in
 `eval_output/household/h4_9_pilot_30d/summary.json`; this is a pilot rather
 than a final seasonal claim because the surface has only four windows.
 
+#### H4.9 re-baseline (2026-09-16): RTE-matched oracle + calibrated v2c DT
+
+The evaluator now takes `--oracle-roundtrip-eff` (default **0.80**, matching the
+environment) so the perfect-foresight oracle is no longer scored lossless, and
+`--reference-cache-dir` to cache rule/oracle/SB3 rollouts across runs. The
+re-baseline uses the calibrated `h4_v2c` DT and the full-corpus PPO with
+`--batch-eval` (confirmed numerically equivalent to per-window stepping: at 90 d
+the two agree to $2/yr and <0.1% on clips).
+
+RTE-matched oracle (savings vs no-battery, A$/yr):
+
+| surface | lossless (old) | RTE=0.80 | Δ |
+|---|---:|---:|---:|
+| real-OOD 7 d (10 windows) | +738.96 | **+689.65** | −6.7% |
+| real 30 d (4 windows) | +699.1 | **+650.9** | −6.9% |
+| real 90 d (3 windows) | +799.8 | **+728.6** | −8.9% |
+
+DT v2c net-of-wear (gross / EFC·day⁻¹ / clips·day⁻¹), RTG=−2:
+
+| surface | DT v2c net | gross | EFC·day⁻¹ | clips·day⁻¹ | rule net | PPO net |
+|---|---:|---:|---:|---:|---:|---:|
+| real-OOD 7 d | **+92.8** | +293.0 | 0.649 | 10.7 | −60.1 | −64.6 |
+| real 30 d | **−113.8** | +298.2 | 0.648 | 25.1 | −131.5 | −77.5 |
+| real 90 d | **−237.5** | +348.6 | 0.733 | 47.6 | −229.3 | −99.1 |
+
+The calibrated v2c model is net-positive on the 7 d real-OOD surface (RTG=−2
+best; RTG=0 nets +28.3 at 37.2 clips/day, RTG=−4 nets +83.2 at 11.1 clips/day)
+but the long-horizon over-cycling persists: on 30 d/90 d it earns the highest
+gross bill yet nets negative because SOC-rail clipping grows with horizon
+(10.7 → 25.1 → 47.6 clips/day), concentrating wear. This is genuine policy
+behaviour, not an evaluation artifact. For comparison, the earlier uncalibrated
+`h4_4` model was net −$641/yr (30 d) and −$1338/yr (90 d) at ~1.1 EFC/day; v2c
+is a large improvement but does not close the ~$600–970/yr gap to the
+RTE-matched oracle. Runs of the same checkpoint can differ by a few $/yr because
+near-rail SOC clipping makes degradation unusually sensitive to a handful of
+non-deterministic GPU steps (e.g. the 7 d v2c net has been observed at +$86 and
++$93). Artifacts: `eval_output/household/h4_v2c_rtgsweep_rte080/`,
+`h4_9_pilot_{30d,90d}_rte080/`, `h4_9_pilot_90d_rte080_perwindow/`; reference
+cache `eval_output/household/reference_cache/`.
+
+```bash
+python3 scripts/evaluate_household_ood_baselines.py \
+  --normalized-dir data/household/real/normalized \
+  --dt-path models/household/dt/h4_v2c_persistence_8x512_ctx576.pt \
+  --dt-config models/household/dt/h4_v2c_persistence_8x512_ctx576_model_kwargs.json \
+  --ppo-path models/household/sb3/h4_4_full/ppo_h4_4_fullcorpus.zip \
+  --tariff realistic --forecast-mode persistence --dt-rtg-value -2 \
+  --window-days 7 --windows-per-segment 2 --limit-windows 10 \
+  --soc-min 0.01 --soc-max 0.99 \
+  --reference-cache-dir eval_output/household/reference_cache \
+  --output-dir eval_output/household/h4_v2c_rtgsweep_rte080/rtg-2 \
+  --batch-eval --device cuda --workers 8
+```
+
 The longer-horizon extensions use the same checkpoints and no retraining:
 
 - `eval_output/household/h4_9_pilot_90d/summary.json`: three 90-day
