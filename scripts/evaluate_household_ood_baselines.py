@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import datetime as dt
+import hashlib
 import json
 import multiprocessing as mp
 import os
+import pickle
 import sys
 from pathlib import Path
 
@@ -163,6 +165,19 @@ def parse_args() -> argparse.Namespace:
         "--batch-eval",
         action="store_true",
         help="Step active evaluation windows concurrently with batched DT forward passes on GPU.",
+    )
+    parser.add_argument(
+        "--oracle-roundtrip-eff",
+        type=float,
+        default=0.80,
+        help="Round-trip efficiency for the perfect-foresight oracle. Default 0.80 matches the env; "
+             "use 1.0 for the legacy lossless bound.",
+    )
+    parser.add_argument(
+        "--reference-cache-dir",
+        type=Path,
+        default=None,
+        help="Cache rule/oracle (and SB3) rollouts, content-addressed by scenario/config, reused across runs.",
     )
     return parser.parse_args()
 
@@ -646,7 +661,8 @@ def _run_batched_dt(
     return results, degradation_costs, cycle_metrics
 
 
-def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tariff) -> float:
+def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tariff,
+                 roundtrip_eff: float = 1.0) -> float:
     """Perfect-foresight daily DP, retaining the segment boundary discipline."""
     raw_kw = frame.with_columns([
         (pl.col("HouseLoad") * 12.0).alias("HouseLoad"),
@@ -658,24 +674,50 @@ def _oracle_bill(frame: pl.DataFrame, capacity: float, flow: float, tariff: Tari
         if len(day) == 288:
             costs.append(optimize_dispatch(
                 day.drop("_date"), tariff=tariff, capacity_kwh=capacity,
-                max_flow_kw=flow, roundtrip_eff=1.0,
+                max_flow_kw=flow, roundtrip_eff=roundtrip_eff,
             ).bill_aud)
     return float(sum(costs))
 
 
 def _oracle_worker(
-    args: tuple[pl.DataFrame, float, float, Tariff, float, float],
+    args: tuple[pl.DataFrame, float, float, Tariff, float, float, float],
 ) -> float:
-    frame, capacity, flow, tariff, _, _ = args
-    return _oracle_bill(frame, capacity, flow, tariff)
+    frame, capacity, flow, tariff, _, _, roundtrip_eff = args
+    return _oracle_bill(frame, capacity, flow, tariff, roundtrip_eff)
 
 
 def _rule_worker(
-    args: tuple[pl.DataFrame, float, float, Tariff, float, float],
+    args: tuple[pl.DataFrame, float, float, Tariff, float, float, float],
 ) -> tuple[float, float, dict[str, float]]:
-    frame, capacity, flow, tariff, soc_min, soc_max = args
+    frame, capacity, flow, tariff, soc_min, soc_max, _ = args
     return _run_agent(frame, "rule", None, capacity, flow, tariff,
                       soc_min=soc_min, soc_max=soc_max)
+
+
+def _cache_path(cache_dir, kind: str, payload: dict):
+    if cache_dir is None:
+        return None
+    blob = json.dumps(payload, sort_keys=True, default=str).encode()
+    digest = hashlib.sha1(blob).hexdigest()[:16]
+    return Path(cache_dir) / f"{kind}__{digest}.pkl"
+
+
+def _cache_load(path):
+    if path is None or not Path(path).exists():
+        return None
+    try:
+        with open(path, "rb") as handle:
+            return pickle.load(handle)
+    except Exception:
+        return None
+
+
+def _cache_store(path, value) -> None:
+    if path is None:
+        return
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        pickle.dump(value, handle)
 
 
 def _resolve_device(name: str) -> str:
@@ -910,52 +952,90 @@ def main() -> None:
     degradation_costs: dict[str, list[float]] = {}
     cycle_metrics: dict[str, list[dict[str, float]]] = {}
     if not args.skip_reference_policies:
-        bills.update({"rule": [], "oracle": []})
-        print(
-            f"Evaluating reference policies across {len(segments)} windows (workers={args.workers})...",
-            flush=True,
-        )
-        if args.workers > 1 and len(segments) > 1:
-            ref_args = [
-                (
-                    segment, window_batteries[idx]["capacity_kwh"],
-                    window_batteries[idx]["max_flow_kw"], tariff,
-                    args.soc_min, args.soc_max,
-                )
-                for idx, segment in enumerate(segments)
-            ]
-            # Spawn workers after CUDA/device setup; fork can inherit an
-            # unusable CUDA runtime and leave reference rollouts hung.
-            context = mp.get_context("spawn")
-            with concurrent.futures.ProcessPoolExecutor(
-                max_workers=min(args.workers, len(ref_args)),
-                mp_context=context,
-            ) as executor:
-                bills["oracle"] = list(executor.map(_oracle_worker, ref_args))
-                rule_results = list(executor.map(_rule_worker, ref_args))
-                bills["rule"] = [result[0] for result in rule_results]
-                degradation_costs["rule"] = [result[1] for result in rule_results]
-                cycle_metrics["rule"] = [result[2] for result in rule_results]
+        ref_payload = {
+            "tariff": args.tariff,
+            "soc_min": args.soc_min,
+            "soc_max": args.soc_max,
+            "oracle_roundtrip_eff": args.oracle_roundtrip_eff,
+            "windows": window_provenance,
+            "batteries": [dict(b) for b in window_batteries],
+        }
+        ref_cache_path = _cache_path(args.reference_cache_dir, "rule_oracle", ref_payload)
+        cached_refs = _cache_load(ref_cache_path)
+        if cached_refs is not None:
+            bills["rule"], degradation_costs["rule"], cycle_metrics["rule"], bills["oracle"] = cached_refs
+            print("Loaded rule/oracle reference rollouts from cache.", flush=True)
         else:
-            for idx, segment in enumerate(segments):
-                battery = window_batteries[idx]
-                rule_bill, rule_deg_cost, rule_cycle = _run_agent(
-                    segment, "rule", None, battery["capacity_kwh"],
-                    battery["max_flow_kw"], tariff,
-                    soc_min=args.soc_min, soc_max=args.soc_max,
-                )
-                bills["rule"].append(rule_bill)
-                degradation_costs.setdefault("rule", []).append(rule_deg_cost)
-                cycle_metrics.setdefault("rule", []).append(rule_cycle)
-                bills["oracle"].append(
-                    _oracle_bill(segment, battery["capacity_kwh"], battery["max_flow_kw"], tariff)
-                )
+            bills.update({"rule": [], "oracle": []})
+            print(
+                f"Evaluating reference policies across {len(segments)} windows (workers={args.workers})...",
+                flush=True,
+            )
+            if args.workers > 1 and len(segments) > 1:
+                ref_args = [
+                    (
+                        segment, window_batteries[idx]["capacity_kwh"],
+                        window_batteries[idx]["max_flow_kw"], tariff,
+                        args.soc_min, args.soc_max, args.oracle_roundtrip_eff,
+                    )
+                    for idx, segment in enumerate(segments)
+                ]
+                # Spawn workers after CUDA/device setup; fork can inherit an
+                # unusable CUDA runtime and leave reference rollouts hung.
+                context = mp.get_context("spawn")
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=min(args.workers, len(ref_args)),
+                    mp_context=context,
+                ) as executor:
+                    bills["oracle"] = list(executor.map(_oracle_worker, ref_args))
+                    rule_results = list(executor.map(_rule_worker, ref_args))
+                    bills["rule"] = [result[0] for result in rule_results]
+                    degradation_costs["rule"] = [result[1] for result in rule_results]
+                    cycle_metrics["rule"] = [result[2] for result in rule_results]
+            else:
+                for idx, segment in enumerate(segments):
+                    battery = window_batteries[idx]
+                    rule_bill, rule_deg_cost, rule_cycle = _run_agent(
+                        segment, "rule", None, battery["capacity_kwh"],
+                        battery["max_flow_kw"], tariff,
+                        soc_min=args.soc_min, soc_max=args.soc_max,
+                    )
+                    bills["rule"].append(rule_bill)
+                    degradation_costs.setdefault("rule", []).append(rule_deg_cost)
+                    cycle_metrics.setdefault("rule", []).append(rule_cycle)
+                    bills["oracle"].append(
+                        _oracle_bill(segment, battery["capacity_kwh"], battery["max_flow_kw"],
+                                     tariff, args.oracle_roundtrip_eff)
+                    )
+            _cache_store(ref_cache_path, (
+                bills["rule"], degradation_costs["rule"], cycle_metrics["rule"], bills["oracle"],
+            ))
 
     for name, (model, rtg_mode) in models.items():
         bills[name] = []
         degradation_costs[name] = []
         cycle_metrics[name] = []
         is_dt = isinstance(model, DecisionTransformer)
+        sb3_cache_path = None
+        if name in {"ppo", "sac", "td3"}:
+            model_path = str({
+                "ppo": args.ppo_path, "sac": args.sac_path, "td3": args.td3_path,
+            }[name])
+            sb3_cache_path = _cache_path(args.reference_cache_dir, f"sb3_{name}", {
+                "model_path": model_path,
+                "windows": window_provenance,
+                "batteries": [dict(b) for b in window_batteries],
+                "tariff": args.tariff,
+                "soc_min": args.soc_min,
+                "soc_max": args.soc_max,
+                "forecast_mode": args.forecast_mode,
+                "seed": args.seed,
+            })
+            cached_sb3 = _cache_load(sb3_cache_path)
+            if cached_sb3 is not None:
+                bills[name], degradation_costs[name], cycle_metrics[name] = cached_sb3
+                print(f"Loaded '{name}' rollouts from cache.", flush=True)
+                continue
         if (
             is_dt and args.batch_eval and len(segments) > 1
             and args.dt_max_efc_per_day is None
@@ -997,6 +1077,8 @@ def main() -> None:
                 bills[name].append(bill)
                 degradation_costs[name].append(deg_cost)
                 cycle_metrics[name].append(cycle)
+        if sb3_cache_path is not None:
+            _cache_store(sb3_cache_path, (bills[name], degradation_costs[name], cycle_metrics[name]))
 
     no_battery = []
     for segment in segments:

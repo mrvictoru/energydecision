@@ -4,8 +4,12 @@ import polars as pl
 
 from scripts.evaluate_household_ood_baselines import (
     _bounded_windows,
+    _cache_load,
+    _cache_path,
+    _cache_store,
     _degradation_cost_from_logs,
     _duration_days,
+    _oracle_bill,
     _subsample_windows,
     parse_args,
 )
@@ -103,6 +107,72 @@ def test_workers_and_batch_eval_flags_are_configurable(monkeypatch):
     args = parse_args()
     assert args.workers == 6
     assert args.batch_eval is True
+
+
+def test_oracle_roundtrip_eff_defaults_to_env_efficiency(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv", ["evaluate_household_ood_baselines.py"],
+    )
+    assert parse_args().oracle_roundtrip_eff == 0.80
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["evaluate_household_ood_baselines.py", "--oracle-roundtrip-eff", "1.0"],
+    )
+    assert parse_args().oracle_roundtrip_eff == 1.0
+
+
+def test_reference_cache_dir_is_configurable(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["evaluate_household_ood_baselines.py", "--reference-cache-dir", "/tmp/ref_cache"],
+    )
+    assert str(parse_args().reference_cache_dir).endswith("ref_cache")
+
+
+def test_reference_cache_roundtrips_and_keys_on_payload(tmp_path):
+    payload = {"tariff": "tou", "windows": [{"source_segment": 0}]}
+    path = _cache_path(tmp_path, "rule_oracle", payload)
+    assert _cache_load(path) is None
+
+    _cache_store(path, ([1.0], [0.0], [{}], [2.0]))
+    assert _cache_load(path) == ([1.0], [0.0], [{}], [2.0])
+
+    changed = _cache_path(tmp_path, "rule_oracle", {**payload, "tariff": "flat"})
+    assert changed != path
+    assert _cache_load(changed) is None
+
+
+def test_reference_cache_is_a_noop_without_dir():
+    assert _cache_path(None, "rule_oracle", {"a": 1}) is None
+    _cache_store(None, "ignored")
+    assert _cache_load(None) is None
+
+
+def test_oracle_bill_threads_roundtrip_efficiency(monkeypatch):
+    import scripts.evaluate_household_ood_baselines as module
+
+    captured: dict[str, float] = {}
+
+    class _Result:
+        bill_aud = 1.0
+
+    def fake_optimize(day, *, tariff, capacity_kwh, max_flow_kw, roundtrip_eff=1.0):
+        captured["rte"] = roundtrip_eff
+        return _Result()
+
+    monkeypatch.setattr(module, "optimize_dispatch", fake_optimize)
+    frame = pl.DataFrame({
+        "Timestamp": [
+            dt.datetime(2026, 1, 1) + dt.timedelta(minutes=5 * index)
+            for index in range(288)
+        ],
+        "HouseLoad": [0.1] * 288,
+        "SolarGen": [0.0] * 288,
+    })
+
+    _oracle_bill(frame, 10.0, 5.0, object(), 0.80)
+    assert captured["rte"] == 0.80
 
 
 def test_degradation_cost_uses_step_degradation_and_battery_cost():
