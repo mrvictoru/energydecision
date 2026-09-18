@@ -572,11 +572,16 @@ same per-step logs.
 
 | Training condition | Grid-bill savings vs no battery | Net-of-wear savings vs no battery | EFC/day | Cycles/day | Capacity fade/day |
 |---|---:|---:|---:|---:|---:|
-| Degradation disabled | +A$364.9/yr | **−A$401.1/yr** | 1.02 | 5.06 | 0.042% |
-| Cycle-only | +A$310.3/yr | **−A$494.9/yr** | 1.10 | 4.72 | 0.044% |
-| Full realistic (A$5,000) | +A$369.7/yr | **−A$469.5/yr** | 1.08 | 4.30 | 0.046% |
-| Full, high cost (A$10,000) | +A$321.7/yr | **−A$459.8/yr** | 1.09 | 4.26 | 0.043% |
-| Full, low cost (A$1,000) | +A$270.8/yr | **−A$647.0/yr** | 1.12 | 4.75 | 0.050% |
+| Degradation disabled | +A$283.1/yr | **−A$164.2/yr** | 0.87 | 4.31 | 0.0245% |
+| Cycle-only | +A$249.8/yr | **−A$289.3/yr** | 0.93 | 4.63 | 0.0295% |
+| Full realistic (A$5,000) | +A$305.5/yr | **−A$186.0/yr** | 0.87 | 3.59 | 0.0269% |
+| Full, high cost (A$10,000) | +A$264.1/yr | **−A$193.7/yr** | 0.83 | 3.65 | 0.0251% |
+| Full, low cost (A$1,000) | +A$215.9/yr | **−A$343.5/yr** | 0.96 | 4.08 | 0.0306% |
+
+These are the **2026-09-18 eval-only re-price** under the corrected physics (same
+five teacher regimes, no retraining). The earlier values (net −$401 to
+−$647/yr, EFC 1.02–1.12/day) were computed with the pre-fix wear accounting and
+are retained only as history.
 
 The unambiguous headline: **every condition is negative net-of-wear** once
 battery degradation is priced into the ledger, so on these short seven-day
@@ -588,10 +593,9 @@ dose-response curve can be claimed.
 
 One earlier hypothesis is **not** supported by the mechanism data: the
 degradation-disabled policy was expected to be the hardest cycler, but its
-equivalent-full-cycles-per-day (1.02) is actually the *lowest* of the five
-conditions (full/high/low all sit at 1.08–1.12), and its rainflow cycle count
-(5.06/day) overlaps the others' within-seed spread (2.8–6.2 across all
-conditions). The net-of-wear penalty is therefore not simply "more cycling =
+equivalent-full-cycles-per-day (0.87) is actually the *lowest* of the five
+conditions (full/high/low sit at 0.83–0.96), and its rainflow cycle count
+(4.31/day) overlaps the others' range (3.59–4.63). The net-of-wear penalty is therefore not simply "more cycling =
 more wear": the degradation-aware policies also cycle near-saturating
 throughput yet still fail to clear their own wear cost. What the data does
 support is the weaker but robust statement: **short-window arbitrage alone is
@@ -600,8 +604,8 @@ not a valid economic objective once battery wear is charged.**
 The paired comparisons across the ten windows are consistent with this. On
 **grid-bill** savings the between-condition differences are statistically
 clear in several pairwise cases (e.g., full_realistic vs low_degradation_cost:
-+A$98.9/yr, 95% CI +A$67.6–A$131.9, p=0.0010; degradation_disabled vs
-cycle_only: +A$54.6/yr, 95% CI +A$20.8–A$87.1, p=0.0137), while **net-of-wear**
++A$89.6/yr, 95% CI +A$61.3–A$121.0, p=0.0010; full_realistic vs
+high_degradation_cost: +A$41.4/yr, 95% CI +A$22.8–A$57.4, p=0.0029), while **net-of-wear**
 differences remain economically large but noisier because wear is a short-window
 quantity (the window-level bootstrap intervals span both signs). The definitive
 conclusion is that degradation-aware policy behaviour is economically
@@ -623,6 +627,20 @@ horizons, where degradation economics actually converge, using **inference-time
 safety controls only (no retraining)**. The track is still in progress: live
 shadow mode and a time-aligned spot-price pass-through remain open, so the
 results below are deployment-readiness evidence, not a final claim.
+
+**Re-baselined (2026-09-18).** With the calibrated `h4_v2c` DT, corrected
+physics and an RTE-matched oracle, these surfaces were re-evaluated eval-only
+(no retraining). The pre-fix results below are superseded: the small positive
+inference-time savings all become net-negative — 30 d directional +$2.7 →
+**−$53.9**/yr; 30 d gate +$4.44 → **−$51.7**; 90 d directional +$1.1 →
+**−$103.2**; offline shadow +$6.08 → **−$45.2** — because corrected wear exceeds
+the arbitrage margin at 5 kWh. Long-horizon rail handling is still unresolved:
+at 90 d the directional projection clips ~9.6–10.3 steps/day (all lower-bound)
+with a ~$649–698/window safety penalty, and the 180 d surfaces clip 6.0–19.9/day.
+On synthetic surfaces the unconstrained DT is net-positive on a 1-year horizon
+(**+$298.8**/yr) and the combined 0.10 EFC/day budget turns positive at 20 kWh
+(**+$30.9**/yr), while every directional capacity is negative. The full
+refreshed surface list is in `docs/household/workflow.md` §H4.9 (bucket-A table).
 
 **Safety wrapper (H4.7).** `SolarBatteryEnv.step()` now enforces validated
 `soc_min`/`soc_max` hard limits, clipping to bounds, logging a warning, exposing

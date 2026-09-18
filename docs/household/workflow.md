@@ -105,6 +105,78 @@ python3 scripts/evaluate_household_ood_baselines.py \
   --batch-eval --device cuda --workers 8
 ```
 
+#### Bucket-A re-baseline (2026-09-18): H4.5 re-price + inference-time & synth surfaces
+
+Eval-only refresh of the remaining H4.x surfaces with the calibrated `h4_v2c`
+DT, the corrected environment and the RTE-matched oracle (no retraining; the
+pre-fix artifacts are preserved under `*_prefix`). Consolidated net-of-wear
+savings vs no battery (A$/yr):
+
+| surface | windows | DT net | DT gross | EFC/day | clips/day | rule | PPO | oracle |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| real-OOD 7 d (RTG −2) | 10 | **+92.8** | +293.0 | 0.649 | 10.7 | −60.1 | −64.6 | +689.6 |
+| real-OOD 7 d (RTG −4) | 10 | +83.2 | +292.7 | 0.658 | 11.1 | −60.1 | −64.6 | +689.6 |
+| real-OOD 7 d (RTG 0) | 10 | +28.3 | +247.2 | 0.514 | 37.2 | −60.1 | −64.6 | +689.6 |
+| real 30 d unconstrained (RTG −2) | 4 | −113.8 | +298.2 | 0.648 | 25.1 | −131.5 | −77.5 | +650.9 |
+| real 90 d unconstrained (RTG −2) | 3 | −237.5 | +348.6 | 0.733 | 47.6 | −229.3 | −99.1 | +728.6 |
+| real 30 d directional 0.05+0.05 | 12 | −53.9 | +23.8 | 0.050 | 0.0 | −89.3 | −72.1 | +673.3 |
+| real 30 d directional + $0.30/$0.10 gate | 12 | −51.7 | +26.1 | 0.050 | 0.0 | −89.3 | −72.1 | +673.3 |
+| real 90 d directional 0.05+0.05 | 3 | −103.2 | +14.0 | 0.045 | 9.6 | −229.3 | −99.1 | +728.6 |
+| real 90 d directional + gate | 3 | −107.6 | +22.8 | 0.045 | 10.3 | −229.3 | −99.1 | +728.6 |
+| offline shadow 14 d + gate | 5 | −45.2 | +25.4 | 0.050 | 0.0 | −67.2 | −55.3 | +668.7 |
+| synth 1 y (RTG −2) | 10 | **+298.8** | +463.8 | 0.240 | 10.1 | −49.3 | −86.1 | +1937.8 |
+| synth 180 d 5 kWh combined 0.10 | 10 | −91.6 | +34.5 | 0.082 | 6.4 | −63.6 | −93.2 | +768.9 |
+| synth 180 d 10 kWh combined 0.10 | 10 | −51.0 | +73.3 | 0.082 | 6.0 | −39.6 | −60.7 | +1360.4 |
+| synth 180 d 15 kWh combined 0.10 | 10 | −14.7 | +111.4 | 0.082 | 11.6 | −40.4 | −42.5 | +1799.1 |
+| synth 180 d 20 kWh combined 0.10 | 10 | **+30.9** | +154.0 | 0.082 | 9.8 | −32.7 | −54.5 | +2098.9 |
+| synth 180 d 5 kWh directional 0.05+0.05 | 10 | −82.8 | +14.3 | 0.042 | 9.1 | −63.6 | −93.2 | +768.9 |
+| synth 180 d 10 kWh directional | 10 | −68.5 | +32.8 | 0.042 | 9.6 | −39.6 | −60.7 | +1360.4 |
+| synth 180 d 15 kWh directional | 10 | −56.5 | +50.5 | 0.042 | 18.8 | −40.4 | −42.5 | +1799.1 |
+| synth 180 d 20 kWh directional | 10 | −39.7 | +71.7 | 0.042 | 19.9 | −32.7 | −54.5 | +2098.9 |
+
+Findings:
+
+- **The only net-positive real-data surface is the unconstrained 7 d real-OOD
+  DT** (+$83–93/yr at RTG −2/−4). Every long-horizon or budget-constrained real
+  surface is net-negative once corrected wear is charged, even though the
+  RTE-matched oracle still saves $650–730/yr — the 5 kWh arbitrage margin is
+  smaller than the battery's own wear.
+- **The old "small positive" inference-time results do not survive corrected
+  physics**: 30 d directional +$2.7 → **−$53.9**/yr; 30 d gate +$4.44 →
+  **−$51.7**; 90 d directional +$1.1 → **−$103.2**; offline shadow +$6.08 →
+  **−$45.2**.
+- **Long-horizon rail handling remains unsolved.** At 90 d the directional
+  projection still clips ~9.6–10.3 steps/day (all lower-bound) and incurs a
+  ~$649–698/window safety penalty; the 180 d surfaces clip 6.0–19.9/day. The
+  30 d surface is the only one with zero clips (`soc_projected_steps` = 0 there).
+- **Directional budgeting is no longer better than combined** on corrected
+  surfaces: under the combined 0.10 budget net savings rise monotonically with
+  capacity and turn positive at 20 kWh (**+$30.9**), while every directional
+  capacity is negative (e.g. 15 kWh: −14.7 combined vs −56.5 directional) and
+  clips more. The earlier directional advantage was an artifact of the pre-fix
+  wear accounting.
+- **Safety penalty is a reward-shaping cost, not a bill cost**, and is *not*
+  included in `net_savings_vs_no_battery`. The long-horizon penalties are large
+  (e.g. $9,180 total for the 1 y synth, $8,938 for 20 kWh directional), so the
+  net figures above are optimistic in deployment terms.
+- **H4.5 re-price** (same five teacher regimes, eval-only): all regimes remain
+  net-negative, but wear is ~2–2.5× cheaper than the pre-fix accounting (full
+  realistic −$469.5 → −$186.0/yr; `report.md` §8.1.1).
+
+Paired statistics (per-window net savings, bootstrap 95% CI + Wilcoxon) are in
+`eval_output/household/h4_12_bucket_a/statistics.json`. The DT beats PPO
+significantly on the 7 d real-OOD (p=0.002), 30 d directional (p<0.001), 1 y
+synth (p=0.002) and 180 d 20 kWh combined (p=0.002), and is not significantly
+different on the three-window 90 d surface (underpowered).
+
+> **Superseded (2026-09-18).** The inference-time throughput/price-gate,
+> offline-shadow, multi-seed SB3, and fair-comparison numbers in the remainder
+> of this H4.9 section were produced under the pre-fix pipeline (pre-calibration
+> wear, uncorrected physics, lossless oracle) and are retained only as history.
+> The re-baselined values are in the bucket-A table above. The SB3 checkpoints
+> themselves are pre-fix, so a fully fair DT-vs-RL comparison still requires
+> retraining them under the corrected environment.
+
 The longer-horizon extensions use the same checkpoints and no retraining:
 
 - `eval_output/household/h4_9_pilot_90d/summary.json`: three 90-day

@@ -184,6 +184,27 @@ documentation-only correction.
   the AEMO env. Test: `tests/test_environment_normalization.py`. Status:
   `RESOLVED`.
 
+### A9. Long-horizon throughput projection still clips at the lower SOC rail
+
+- **Location:** `scripts/evaluate_household_ood_baselines.py`,
+  `DailyThroughputProjector.__call__` (SOC-feasibility + daily-budget scaling).
+- **Measured (2026-09-18):** on the re-baselined 5 kWh/3.3 kW real data, the
+  directional `0.05+0.05` EFC/day projection holds throughput at 0.050 EFC/day
+  with **zero** clips on 12×30 d windows, but on 3×90 d windows the battery
+  parks at the lower rail and the projection still lets **9.6–10.3 steps/day**
+  clip (`segment_soc_lower_clipped_steps` > 0), adding a `$649–698`/window
+  safety penalty. The 180 d synthetic surfaces clip 6.0–19.9/day. The env
+  `enforce_soc_limits=True` and the projector *is* firing
+  (`segment_action_soc_projected_steps` = 1,730–3,992), so this is a
+  rail-handling weakness over long horizons, not a disabled wrapper.
+- **Impact:** the old "zero clips at 90 d" claim is not reproducible under the
+  corrected pipeline; long-horizon deployment results must report clips and the
+  safety penalty, which is a reward-shaping cost and is **not** part of
+  `net_savings_vs_no_battery`.
+- **Status:** `OPEN` — needs either a reset-aware projection (read the post-step
+  SOC and re-scale) or an explicit terminal SOC guardrail. Not blocking the
+  re-baseline, but blocking any long-horizon deployment claim.
+
 ---
 
 ## B. AEMO environment, planners, and data
