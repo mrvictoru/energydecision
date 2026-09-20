@@ -169,6 +169,43 @@ significantly on the 7 d real-OOD (p=0.002), 30 d directional (p<0.001), 1 y
 synth (p=0.002) and 180 d 20 kWh combined (p=0.002), and is not significantly
 different on the three-window 90 d surface (underpowered).
 
+#### Bucket-B re-baseline (2026-09-20): retrained forecast arms + fair SB3
+
+The two missing calibrated teacher corpora (no-forecast, TTM) were regenerated,
+the two forecast-arm DTs retrained with the h4_4 recipe (persistence arm =
+`h4_v2c`), and the nine SB3 checkpoints retrained on the corrected environment.
+Real-OOD 7 d / 10-window forecast ablation (net-of-wear A$/yr, DT):
+
+| arm | RTG −2 | RTG −4 | RTG 0 | gross (RTG −2) | EFC/day | clips/day |
+|---|---:|---:|---:|---:|---:|---:|
+| persistence (`h4_v2c`) | +92.8 | +83.2 | +28.3 | +293.0 | 0.649 | 10.7 |
+| no_forecast | **+116.7** | **+119.2** | +63.1 | +278.8 | 0.605 | 3.4 |
+| ttm | +111.9 | +58.3 | **+94.5** | +289.3 | 0.697 | 5.5 |
+
+- **The pre-fix "TTM beats persistence by +$47.94/yr" result does not survive
+  the calibrated teacher.** At the shared prompt (RTG −2) the arms are
+  statistically indistinguishable (ttm−persistence +$19.1, 95% CI −$26.6–$61.6,
+  p=0.49; no_forecast−persistence +$23.9, p=0.23). The ranking is RTG-dependent:
+  at RTG −4 no_forecast beats ttm by $60.9 (p=0.027); at RTG 0 ttm beats
+  persistence by $66.2 (p=0.037). TTM has the best *gross* bill at RTG −4
+  ($309.9) but pays it back in clips and wear. No arm dominates.
+
+Fair DT-vs-RL under the shared wrapper (directional 0.05+0.05, $0.30/$0.10
+gate; net-of-wear A$/yr):
+
+| surface | DT | best SB3 | SB3 range | verdict |
+|---|---:|---|---:|---|
+| 4×30 d real | −58.7 | td3_seed42 −53.8 | −53.8 … −76.3 | no policy net-positive; DT over PPO/SAC (p=0.125, n=4), under TD3 seed 42 |
+| 10×90 d synth | −7.7 | ppo_seed7 +5.9 | −50.3 … +5.9 | DT over TD3 (p=0.002; TD3 under-active, 76 clips/day) and SAC seed 20260830 (p=0.0098); mixed vs PPO/SAC |
+
+- Under the corrected environment **no policy is robustly net-positive on the
+  wrapped surfaces**; the DT is competitive (near-best on 10×90 d, middle on
+  4×30 d) but the prior "DT highest mean" claim does not hold — PPO seed 7 is
+  positive on the synth surface and TD3 seed 42 edges the DT on 4×30 d.
+- Paired statistics: `eval_output/household/h4_12_bucket_b/statistics.json`.
+- Remaining household gaps: live shadow mode, a time-aligned spot-price
+  pass-through, and broader multi-household telemetry (bucket C).
+
 > **Superseded (2026-09-18).** The inference-time throughput/price-gate,
 > offline-shadow, multi-seed SB3, and fair-comparison numbers in the remainder
 > of this H4.9 section were produced under the pre-fix pipeline (pre-calibration
@@ -826,6 +863,12 @@ the mirror corpus and TTM trajectories were regenerated so all three arms share
 identical action/reward/RTG labels and observation layout, differing only in
 dims 6–7.
 
+> **Superseded (2026-09-20):** the TTM advantage reported above (+$47.94/yr over
+> persistence) used the pre-fix wear accounting and the pre-calibration teacher.
+> After regenerating the calibrated no-forecast and TTM teachers and retraining
+> all three arms, the advantage does not hold — at the shared RTG −2 prompt the
+> arms are statistically indistinguishable, and no-forecast is best at RTG −4.
+> See the bucket-B subsection under §H4.9.
 
 ### 7. Compare observed and optimized real-battery dispatch
 

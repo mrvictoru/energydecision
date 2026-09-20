@@ -553,6 +553,17 @@ demonstrated on the held-out **real** household (surface of record) but not
 yet on the broad synthetic multi-battery surface. The fresh full-corpus PPO
 (+$23.66/yr) again trails every DT, consistent with H4.3.
 
+> **Re-baselined (2026-09-20).** The three forecast arms were retrained on
+> calibrated teachers (persistence = `h4_v2c`) and re-evaluated under corrected
+> physics + the RTE-matched oracle. The pre-fix TTM advantage does **not**
+> survive: on the real-OOD 10-window surface at the shared RTG −2 prompt the
+> arms are statistically indistinguishable (ttm−persistence +$19.1/yr, 95% CI
+> −$26.6–$61.6, p=0.49; no-forecast−persistence +$23.9, p=0.23). Best net at
+> RTG −2/−4 is **no-forecast** (+$116.7 / +$119.2), while TTM is best at RTG 0
+> (+$94.5); TTM has the best gross bill at RTG −4 but pays it back in clips and
+> wear. The table above is historical. Details in
+> `docs/household/workflow.md` §H4.9 (bucket-B).
+
 **H4.5 definitive degradation-aware policy study.** We completed the final
 five-condition, three-seed run on the fixed ten-window real-OOD surface. The
 study keeps the DT recipe fixed (architecture, optimizer, schedule, and
@@ -682,6 +693,14 @@ on three matched 180-day windows, the DT (`rtg=-4`) achieved +A$2.98/yr with
 0.04995 EFC/day and zero clips/safety penalty, while PPO/SAC were mixed across
 seeds and TD3 was mostly under-active. This is a reduced-sample
 safety-and-viability comparison, not a full DT-superiority claim.
+
+> **Re-baselined (2026-09-20).** With the nine SB3 checkpoints retrained on the
+> corrected environment and the DT re-evaluated under the same wrapper, no
+> policy is robustly net-positive: on 10×90 d synth the DT nets −$7.7/yr (PPO
+> seed 7 +$5.9 is the only positive; the DT beats TD3 p=0.002 and SAC seed
+> 20260830 p=0.0098), and on 4×30 d real every policy is negative (DT −$58.7;
+> best SB3 td3_seed42 −$53.8). The prior DT-best figures above are historical;
+> paired statistics in `eval_output/household/h4_12_bucket_b/statistics.json`.
 
 **Offline shadow proxy (H4.11).** Five contiguous 14-day real-data windows
 replayed the selected gate with 0.049997 EFC/day, zero clips and zero safety
@@ -1697,7 +1716,7 @@ This repository introduces a unified framework for learning and planning in batt
 
 **Key empirical findings:**
 
-- **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: offline causal TTM forecasts add +$47.94/yr over persistence on real OOD, but the DT still trails an RTE-matched perfect-foresight oracle (+$357 vs +$690/yr) and over-cycles on long horizons; inference-time throughput budgeting and price-aware gating are the current mitigations (§8.1.1, §8.1.2).
+- **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: the forecast arms are re-baselined under corrected physics (the pre-fix TTM > persistence advantage does not survive — the three arms are statistically indistinguishable at the shared prompt), only the unconstrained 7 d real-OOD DT is net-positive, and the DT trails an RTE-matched perfect-foresight oracle (+$293 vs +$690/yr gross) while over-cycling on long horizons; throughput budgeting and price gating do not make the long-horizon surfaces net-positive (§8.1.1, §8.1.2).
 - **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is now the standalone DT with **surface-aware `rtg_mode="auto"`**. On identity surfaces this reproduces the best `j_t_soc` results — standard **$11,573/ep**, dispatch-matched **$35,320/ep**, expanded broad-2024 **$34,761/ep**, and **2025 OOD $25,862/ep** — all ahead of PPO. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on the canonical grid-scale batteries, avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
 - **AEMO utility-scale (the ceiling was real, then broken):** A systematic attempt to close the DT-vs-PPO gap *within* behaviour cloning — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, architecture changes — all failed to exceed the offline data's FCAS bidding. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver at inference), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.

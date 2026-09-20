@@ -379,6 +379,11 @@ documentation-only correction.
   `scripts/pretrain_decision_transformer.py`.
 - `AGENTS.md` stated the household DT "beats Oracle" without scoping it to the
   legacy benchmark.
+- `report.md` §8.1.1/§8.1.2 and `workflow.md` §H4.4 claimed TTM forecasts added
+  **+$47.94/yr** over persistence. After regenerating the calibrated forecast
+  teachers and retraining all three arms (2026-09-20), the advantage does not
+  survive: at the shared RTG −2 prompt the arms are statistically
+  indistinguishable. See `workflow.md` §H4.9 (bucket-B).
 
 ---
 
@@ -394,9 +399,10 @@ retraining, and re-running evaluation. Do them as one coherent
 
 > **Status (2026-09-13):** the chosen scope was **global fix + re-baseline**.
 > A1–A8 are now implemented with unit tests and the full suite passes (381).
-> The **P5 re-baseline has not been run**. All prior household and AEMO
-> numerical results predate at least one of these physics/planner fixes and
-> are historical only. Required order:
+> **Re-baseline status (2026-09-20):** AEMO done 2026-09-14; household buckets
+> A (eval-only) and B (retrained forecast arms + SB3) done 2026-09-18/20. All
+> prior household and AEMO numerical results predate at least one of these
+> physics/planner fixes and are historical only. Required order:
 >
 > 1. Regenerate the H4.1 household corpus and retrain household policies.
 > 2. Re-run household H4.2-H4.5, H4.7, H4.9-H4.12 evaluations and paired

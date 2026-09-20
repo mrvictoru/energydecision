@@ -22,21 +22,21 @@
 
 | Scope | Status | Required action |
 |---|---|---|
-| H4.1 corpus and household DT/SB3 checkpoints | 🔴 RERUN REQUIRED | The `h4_v2c` DT is done; SB3 policies still need retraining under corrected physics. |
-| H4.2-H4.4 household forecast / PPO / evaluation surfaces | 🔴 RERUN REQUIRED | Retrain the TTM and no-forecast DTs and fresh SB3 policies under corrected physics. |
+| H4.1 corpus and household DT/SB3 checkpoints | ✅ DONE (2026-09-20) | `h4_v2c` DT + 9 retrained SB3 checkpoints under corrected physics. |
+| H4.2-H4.4 household forecast / PPO / evaluation surfaces | ✅ DONE (2026-09-20) | Calibrated no-forecast + TTM teachers generated and DTs retrained; the pre-fix TTM advantage does not survive (arms statistically indistinguishable at RTG −2). |
 | H4.5 degradation study | 🟡 RE-PRICED (2026-09-18) | Eval-only re-price of the 5×3 existing checkpoints: all regimes net-negative, wear ~2–2.5× cheaper. Policies themselves remain pre-fix. |
 | H4.7/H4.9/H4.11 deployment + long-horizon eval | ✅ DONE (eval-only, 2026-09-18) | RTE-matched oracle + calibrated `h4_v2c` DT on real 7/30/90/14 d + 1 y/180 d synth; see `workflow.md` §H4.9 bucket-A table. |
-| H4.10/H4.12 fair DT-vs-RL + paired statistics | 🔴 RERUN REQUIRED (bucket B) | Retrain PPO/SAC/TD3 under corrected physics, then recompute paired statistics; the DT side is refreshed. |
+| H4.10/H4.12 fair DT-vs-RL + paired statistics | ✅ DONE (bucket B, 2026-09-20) | PPO/SAC/TD3 retrained on corrected env; no policy robustly net-positive under the wrapper; stats in `eval_output/household/h4_12_bucket_b/statistics.json`. |
 | AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
 | AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on 4/4 identity surfaces + impact. HF upload pending. |
 | Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$93/yr vs rule −$60 (RTE-matched oracle +$690/yr). |
-| Household H4.x re-runs + RTE-matched oracle | 🟡 PARTIAL (2026-09-18) | RTE-matched oracle + H4.5/H4.7/H4.9/H4.11 eval DONE (bucket A). Remaining: retrain H4.2–H4.4 forecast arms + H4.10 SB3, then H4.12 statistics (bucket B). |
+| Household H4.x re-runs + RTE-matched oracle | ✅ DONE (2026-09-20) | Bucket A (eval-only, RTE-matched oracle) + bucket B (retrained forecast arms and SB3) complete. Remaining household gaps: live shadow, spot pass-through, broader telemetry (bucket C). |
 
 ---
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is partially re-baselined:** the teacher wear is calibrated (`h4_v2c`) and the H4.5/H4.7/H4.9/H4.11 eval surfaces are re-run with an RTE-matched oracle (bucket A), but the forecast arms, SB3 baselines, and H4.12 statistics still need retraining (bucket B).
+**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is re-baselined (buckets A+B, 2026-09-20):** calibrated `h4_v2c` teacher, RTE-matched oracle, retrained forecast arms and 9 SB3 checkpoints. Open household work is bucket C only (live shadow, spot pass-through, broader telemetry).
 
 **What we don't have (the open problems):**
 
