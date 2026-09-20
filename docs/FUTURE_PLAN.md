@@ -58,6 +58,15 @@ This table consolidates the household-track evidence behind the deployment
 readiness decision. "Successful" means the specific validation objective was
 met; it does not necessarily mean that the DT is production-ready.
 
+> **Superseded (2026-09-18/20).** The quantitative values in this table
+> (e.g. +A$2.7/+A$1.1/+A$4.44/yr directional and gate, +A$3.55/+A$3.70/yr fair
+> DT, +A$6.08/yr shadow, +A$22–61/yr directional synthetic) were computed under
+> the pre-fix pipeline and are retained as history. Under corrected physics with
+> the calibrated `h4_v2c` DT and an RTE-matched oracle, the inference-time and
+> wrapped surfaces are net-negative (30 d −$54, 90 d −$103, shadow −$45; no
+> policy robustly net-positive under the wrapper). See
+> `docs/household/workflow.md` §H4.9 (buckets A/B) and `report.md` §8.1.2.
+
 | Validation area | Status | What has been established | Still required |
 |---|---|---|---|
 | Hard SOC limits | ✅ Successful | Unsafe SOC states are clipped, logged, and exposed through step metadata. | Shadow-mode confirmation with real telemetry. |

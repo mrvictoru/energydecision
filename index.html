@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>energydecision — Offline Decision Transformers for Battery Control: AEMO/NEM Grid-Scale &amp; Household Tracks</title>
-<meta name="description" content="A degradation-aware benchmark showing planner-distilled Decision Transformers beating online RL (PPO) and real-world dispatch — on the utility-scale AEMO/NEM market (4/4 surfaces + impact gate) and on a household solar-battery track with offline causal TTM forecasts.">
+<meta name="description" content="A degradation-aware benchmark showing planner-distilled Decision Transformers beating online RL (PPO) and real-world dispatch on the utility-scale AEMO/NEM market (4/4 surfaces + impact gate), plus a household solar-battery track where the DT is net-positive only on a short real-OOD horizon and over-cycles on long horizons.">
 <meta property="og:title" content="energydecision — Offline DT Outperforms Online RL for Battery Dispatch">
-<meta property="og:description" content="Two tracks: the AEMO DT beats PPO on 4/4 identity surfaces + impact gate; the household DT turns offline causal solar/load forecasts into real annual savings. Interactive results dashboard.">
+<meta property="og:description" content="Two tracks: the AEMO DT beats PPO on 4/4 identity surfaces + impact gate; the household DT is net-positive only on a short real-OOD horizon and over-cycles on long horizons. Interactive results dashboard.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://mrvictoru.github.io/energydecision/">
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="10" y="3" width="12" height="5" rx="1" fill="none" stroke="%23383838" stroke-width="2"/><rect x="5" y="8" width="22" height="20" rx="2" fill="%23ffde00" stroke="%23383838" stroke-width="2"/><path d="M16 13 L11 20 H15 L14 25 L20 17 H16 Z" fill="%23383838"/></svg>'>
@@ -525,8 +525,8 @@ footer strong { color: var(--ink); }
       every evaluation surface tested — with no solver at inference time.</p>
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-num"><span data-countup data-end="4.9" data-decimals="1" data-suffix="×">0</span></div>
-        <div class="stat-label">Profit vs PPO on the standard surface ($11,573 vs $2,353 per episode)</div>
+        <div class="stat-num"><span data-countup data-end="6.9" data-decimals="1" data-suffix="×">0</span></div>
+        <div class="stat-label">Profit vs PPO on the standard surface ($16,209 vs $2,353 per episode)</div>
       </div>
       <div class="stat-card">
         <div class="stat-num">4/4 + GATE</div>
@@ -537,8 +537,8 @@ footer strong { color: var(--ink); }
         <div class="stat-label">Nothing but a standalone transformer at inference — fully deployable</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num">6/6 CIs</div>
-        <div class="stat-label">DT-vs-PPO paired comparisons whose 95% bootstrap intervals exclude zero</div>
+        <div class="stat-num">3/4 CIs</div>
+        <div class="stat-label">Identity-surface DT-vs-PPO paired 95% bootstrap intervals excluding zero (expanded broad-2024 is marginal)</div>
       </div>
     </div>
     <div class="cta-row">
@@ -826,7 +826,7 @@ footer strong { color: var(--ink); }
         In <strong>August 2024</strong> — a major FCAS event — the story flips: the real operator earned <strong>$204,525/ep</strong> while the DT
         ($92,143) and PPO ($91,446) finished in a near-tie far behind. On the <strong>2025 OOD</strong> surface the
         shipped DT still generalizes — e.g. SA Jan–Feb 2025: <strong>$457,116 vs PPO's $114,820</strong>. Aggregated over 2024
-        like-for-like windows the DT still leads (<strong>$35,320 vs PPO $22,530</strong>; the replay mean is dominated by that single August event).</p>
+        like-for-like windows the DT still leads (<strong>$40,039 vs PPO $22,530</strong>; the replay mean is dominated by that single August event).</p>
     </div>
     <p class="footnote">Sources: eval_output/stagec_jtsoc_dispatch_rtgjtsoc/heldout_logs/*.parquet (2024 — candidate_dt under the SHIPPED
       rtg_mode="auto" ≡ J_t(soc) prompting on this identity surface, ppo_reference 9-dim full_fcas, dispatch_dalrymple_north replay)
@@ -1024,8 +1024,8 @@ footer strong { color: var(--ink); }
         <p>Methods, experiment ladder, statistical analysis, limitations.</p>
       </a>
       <a class="artifact-card" href="https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp" target="_blank" rel="noopener">
-        <span class="kind">Model · shipped</span><h3>aemo_dt_sdp_jtsoc_fullcorpus.pt</h3>
-        <p>Stage C standalone DT with config sidecar. Run with rtg_mode="auto".</p>
+        <span class="kind">Model · shipped</span><h3>aemo_dt_sdp_jtsoc_v2cal.pt</h3>
+        <p>Physics-v2 Stage C standalone DT (corrected degradation/efficiency + calibrated SDP teacher) with config sidecar. Run with rtg_mode="auto". Supersedes the v1 fullcorpus checkpoint.</p>
       </a>
       <a class="artifact-card" href="https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp" target="_blank" rel="noopener">
         <span class="kind">Dataset</span><h3>AEMO_simulated_trade_sdp</h3>
@@ -1082,19 +1082,20 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
     <polygon points="35,8 62,62 8,62" fill="none" stroke="var(--mint)" stroke-width="3"/>
   </svg>
   <div class="container hero-inner">
-    <span class="section-kicker">Household · Solar + Battery · Offline Causal Forecasting</span>
-    <h1>Forecasts pay off at home</h1>
+    <span class="section-kicker">Household · Solar + Battery · Physics-v2 re-baseline</span>
+    <h1>Calibrated, and honest about the limits</h1>
     <p class="tagline">The same planner-distilled Decision Transformer recipe, rebuilt on modern 5-minute household
-      telemetry under real time-of-use tariffs — plus offline <em>causal</em> Granite TTM-R3 solar/load forecasts that
-      measurably improve control. Household-track money; not comparable to the AEMO $/episode figures.</p>
+      telemetry under real time-of-use tariffs with a <em>calibrated</em> wear model. Under corrected physics the
+      calibrated DT is net-positive only on short real-OOD windows and over-cycles on long horizons. Household-track
+      money; not comparable to the AEMO $/episode figures.</p>
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-num">$<span data-countup data-end="357" data-decimals="0">0</span>/yr</div>
-        <div class="stat-label">TTM-forecast DT savings vs no battery on the held-out real household (10 × 7-day OOD windows)</div>
+        <div class="stat-num">$<span data-countup data-end="293" data-decimals="0">0</span>/yr</div>
+        <div class="stat-label">Calibrated DT gross savings vs no battery on the held-out real household (10 × 7-day OOD windows); net-of-wear +$86–93/yr at RTG −2</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num">+$<span data-countup data-end="47.94" data-decimals="2">0</span></div>
-        <div class="stat-label">paired TTM advantage over 24-hour persistence per year (95% CI +$27.99–$67.59, 9/10 windows, p=0.0020)</div>
+        <div class="stat-num">−$<span data-countup data-end="238" data-decimals="0">0</span>/yr</div>
+        <div class="stat-label">calibrated DT net-of-wear on the 90-day real windows — long-horizon over-cycling makes the household economics negative</div>
       </div>
       <div class="stat-card">
         <div class="stat-num"><span data-countup data-end="39.2" data-decimals="1" data-suffix="%">0</span></div>
@@ -1269,9 +1270,9 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
         and the mint band is the <strong>11:00–14:00 free-import window</strong>. The DTs charge from surplus around noon
         (middle panel, positive kW), sit full through the afternoon, then <strong>discharge into the evening peak</strong>
         — swinging the 5 kWh pack 0%→100% about six times that week. Persistence (lilac) tracks TTM closely; the extra
-        forecast hour is mostly <em>timing</em> (earlier pre-charge, fuller evening discharge), which is the paired
-        <strong>+$47.94/yr vs persistence</strong> and <strong>+$46.39/yr vs no-forecast</strong> in
-        <a href="#hh-results">the results</a>. The rule barely moves (±0.4 kW, SOC ~40–60%) and captures about a sixth
+        forecast hour is mostly <em>timing</em> (earlier pre-charge, fuller evening discharge), a difference the
+        re-baseline finds <strong>statistically indistinguishable</strong> from persistence and no-forecast at the shared
+        prompt (<a href="#hh-results">the results</a>). The rule barely moves (±0.4 kW, SOC ~40–60%) and captures about a sixth
         of the savings — tick it on to compare. Cloudy Mon 5 Feb is the stress-test day.</p>
     </div>
     <p class="footnote">Source: <code>scripts/dump_household_behavior.py --window 6</code> ·
@@ -1284,23 +1285,23 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
 <section id="hh-results">
   <div class="container reveal">
     <span class="section-kicker">Headline result</span>
-    <h2>Real forecasts beat fake ones beat none — at every corpus scale</h2>
-    <p class="section-sub">Annualized savings vs no battery on the ten fixed 7-day held-out real-household windows
-      (each window × 365/7 — not a contiguous calendar year). H4.2 trained the three arms on the controlled seven-day
-      corpus; H4.4 retrained the identical recipe on the full horizon-diverse corpus (240 of the 1,440 training episodes).
-      Rule and a fresh full-corpus PPO are deployable context; the oracle is a clairvoyant upper bound, hidden on the
-      chart by default so the learned policies are readable.</p>
+    <h2>Calibrated re-baseline: short-horizon positive, long-horizon negative</h2>
+    <p class="section-sub">Net-of-wear savings vs no battery on the ten fixed 7-day held-out real-household windows
+      (each window × 365/7 — not a contiguous calendar year), using the calibrated <code>h4_v2c</code> teacher and an
+      RTE-matched (0.80) oracle. Under the corrected physics the forecast arms are statistically indistinguishable at
+      the shared RTG −2 prompt; the oracle is an RTE-matched upper bound, hidden on the chart by default. Long-horizon
+      and wrapped surfaces are net-negative (see the caveats below).</p>
 
     <div class="panel chart-panel">
       <div class="controls">
-        <label class="check"><input type="checkbox" id="hhShowOracle"> Include oracle (perfect-foresight DP, +$738.96/yr)</label>
+        <label class="check"><input type="checkbox" id="hhShowOracle"> Include oracle (RTE-matched perfect-foresight DP, +$689.65/yr)</label>
       </div>
       <div class="chart-box tall">
-        <canvas id="hhHeadlineChart" role="img" aria-label="Bar chart of annualized household savings versus no battery for rule, no-forecast DT, persistence DT, TTM DT, PPO, and optionally oracle"></canvas>
+        <canvas id="hhHeadlineChart" role="img" aria-label="Bar chart of annualized household net-of-wear savings versus no battery for rule, no-forecast DT, persistence DT, TTM DT, PPO, and optionally oracle"></canvas>
       </div>
       <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline). Exact values are in the table below.</div>
-      <p class="chart-caption">H4.4 full corpus (mint = TTM) with H4.2 seven-day-corpus values for the three DT arms (pale lilac).
-        Units are AUD/year vs no battery, annualized from 10 × 7-day windows. Oracle off by default — it is not a fair competitor.</p>
+      <p class="chart-caption">Physics-v2 re-baseline (RTG −2, net of wear; mint = no-forecast, the best net arm at RTG −2/−4).
+        Units are AUD/year vs no battery, annualized from 10 × 7-day windows. Oracle off by default — it is an RTE-matched upper bound, not a competitor.</p>
     </div>
 
     <h3 style="margin-top:40px">Exact values &amp; statistical treatment</h3>
@@ -1330,15 +1331,16 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
           <th scope="col" class="num">Wilcoxon p</th>
         </tr></thead>
         <tbody id="hhPairedTableBody"></tbody>
-        <tfoot><tr><td colspan="9">Window-level paired bootstrap (2,000 resamples, seed 42); one-sided Wilcoxon signed-rank on 10 windows.
-          On the full corpus, 24-hour persistence ≈ no forecast (p=0.46): with diverse training data the policy stops exploiting the weak channel — only the genuinely better TTM forecast adds value.</td></tr></tfoot>
+        <tfoot><tr><td colspan="9">Window-level paired bootstrap (10,000 resamples, seed 42); two-sided Wilcoxon signed-rank on 10 windows.
+          Under the calibrated teacher at RTG −2 the three forecast arms are statistically indistinguishable (all p ≥ 0.23) — the pre-fix TTM advantage does not survive.</td></tr></tfoot>
       </table>
     </div>
 
-    <p class="prose" style="margin-top:26px"><strong>Every arm improved on the broader corpus</strong> (TTM +$258.50 → +$357.29/yr),
-      so the offline-forecast benefit generalizes beyond the controlled seven-day training set — and the DT arms leave
-      the freshly trained online-RL baseline far behind (PPO +$23.66/yr), consistent with the household track's
-      distillation-first findings.</p>
+    <p class="prose" style="margin-top:26px"><strong>The forecast advantage does not survive the calibrated teacher.</strong>
+      At the shared RTG −2 prompt the three arms are statistically indistinguishable; at RTG −4 the no-forecast arm is
+      best on net-of-wear, and TTM has the best gross bill but pays it back in clips and wear. The DT still leaves the
+      fresh online-RL PPO far behind on net, but on longer and wrapped surfaces no policy is net-positive — see the
+      long-horizon caveats below.</p>
   </div>
 </section>
 
@@ -1346,17 +1348,19 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
 <section id="hh-contrast">
   <div class="container reveal">
     <span class="section-kicker">Two tracks, one lesson</span>
-    <h2>Why forecasts help at home but not at grid scale</h2>
+    <h2>What the re-baseline changes about the forecast story</h2>
     <p class="section-sub">The AEMO track's explicit 48-step price-forecast tokens were a documented negative result
-      (§8.2.8). The household track's causal solar/load forecasts are a positive result. The two findings do not conflict —
-      they identify <em>which</em> quantities are learnable in <em>which</em> market.</p>
+      (§8.2.8). The household track's causal solar/load forecasts improve forecast <em>accuracy</em> (MAE −39.2%/−17.5%),
+      but after the physics-v2 re-baseline that does <em>not</em> translate into a robust control advantage: at the shared
+      prompt the three forecast arms are statistically indistinguishable. The lesson is narrower than before — a better
+      forecast only pays when it changes the economic action.</p>
     <div class="env-grid">
       <div class="env-card" tabindex="0" title="Physically predictable: irradiance and occupancy drive solar/load, and the tariff is deterministic.">
-        <h3>🏠 Household: solar / load <span class="tag tag-win">POSITIVE</span></h3>
+        <h3>🏠 Household: solar / load <span class="tag tag-flag">NULL</span></h3>
         <ul>
           <li>One-hour-ahead solar and load are physically forecastable — MAE −39.2% / −17.5% over persistence.</li>
-          <li>Tariff is a deterministic schedule, so a better forecast converts directly into cheaper dispatch.</li>
-          <li>Matched-arm evidence: TTM beats both controls, 9/10 windows, p=0.0020.</li>
+          <li>Under the calibrated teacher the three arms are statistically indistinguishable at RTG −2 (all p ≥ 0.23).</li>
+          <li>At RTG −4 the no-forecast arm is best on net; TTM's better gross bill is offset by clips and wear.</li>
         </ul>
       </div>
       <div class="env-card" tabindex="0" title="FCAS prices are nearly unpredictable from history; the 210-step context already captures the signal.">
@@ -1368,8 +1372,9 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
         </ul>
       </div>
     </div>
-    <p class="footnote">Rule of thumb from both tracks: forecasts help where the forecast target is the
-      <em>physically predictable quantity</em>, and add nothing where the target is <em>endogenous market behaviour</em>.</p>
+    <p class="footnote">Rule of thumb from both tracks: forecasts help only when the target is the
+      <em>physically predictable quantity</em> <strong>and</strong> the improved forecast changes the economic action —
+      neither track shows an unconditional forecast benefit.</p>
   </div>
 </section>
 
@@ -1381,9 +1386,13 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
     <ul class="limit-list">
       <li><strong>One real household.</strong> The held-out surface of record is a single (privacy-gated) VPP-coordinated
         home; multi-household OOD validation remains open.</li>
-      <li><strong>Synthetic multi-battery surface is a null result.</strong> On the 20-window synthetic test surface with
-        mixed 5/10/20 kWh batteries the three arms are statistically indistinguishable (TTM − no-forecast −$15.49/yr,
-        p=0.86) — the forecast benefit is proven on the real household, not yet on the broad synthetic surface.</li>
+      <li><strong>The forecast advantage does not survive the re-baseline.</strong> With the calibrated teacher the three
+        forecast arms are statistically indistinguishable at the shared RTG −2 prompt (all p ≥ 0.23); the pre-fix
+        "+$47.94/yr TTM over persistence" is superseded.</li>
+      <li><strong>Long-horizon over-cycling.</strong> Net-of-wear savings are positive only on the short 7-day real-OOD
+        surface; on 30 d/90 d the calibrated DT nets −$114/−$238 per year and clips at the SOC rails (known-issues A9).</li>
+      <li><strong>No policy robustly net-positive under the fair wrapper.</strong> With the retrained SB3 baselines the
+        longer/wrapped surfaces are negative for the DT and every RL arm.</li>
       <li><strong>Simulator economics.</strong> Savings come from the in-repo simulator under a modeled ToU tariff —
         not settled retail outcomes; spot pass-through is pending a time-aligned price series.</li>
       <li><strong>Prompt sensitivity.</strong> The shared RTG=−2 prompt is justified from the training median, but
@@ -1417,15 +1426,16 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
 "use strict";
 
 /* =====================================================================
-   DATA LAYER — verified numbers from report.md §8.2.10 (2026-08-23).
+   DATA LAYER — verified numbers from report.md §8.2.11 (physics-v2, 2026-09).
+   Shipped checkpoint: aemo_dt_sdp_jtsoc_v2cal.pt (rtg_mode="auto").
    Do not modify without cross-checking the technical report.
    ===================================================================== */
 var DATA = {
   headline: [
-    { surface: "Standard Oct",        dt: 11573, ppo: 2353,  diff: "+$9,220",  ciLo: 7073,  ciHi: 11624,  n: 5,  winRate: "5/5",   p: "0.0625*" },
-    { surface: "Dispatch-matched",    dt: 35320, ppo: 22530, diff: "+$12,791", ciLo: 7008,  ciHi: 18277,  n: 6,  winRate: "6/6",   p: "0.0312*" },
-    { surface: "Expanded broad-2024", dt: 34761, ppo: 19504, diff: "+$15,257", ciLo: 4108,  ciHi: 33350,  n: 27, winRate: "25/27", p: "0.0002" },
-    { surface: "2025 OOD",            dt: 25862, ppo: 6498,  diff: "+$19,364", ciLo: 7138,  ciHi: 39670,  n: 6,  winRate: "6/6",   p: "0.0312*" }
+    { surface: "Standard Oct",        dt: 16209, ppo: 2353,  diff: "+$13,856", ciLo: 12908, ciHi: 14966,  n: 5,  winRate: "5/5",   p: "0.0625*" },
+    { surface: "Dispatch-matched",    dt: 40039, ppo: 22530, diff: "+$17,509", ciLo: 6090,  ciHi: 25825,  n: 6,  winRate: "5/6",   p: "0.0625*" },
+    { surface: "Expanded broad-2024", dt: 32146, ppo: 19504, diff: "+$12,643", ciLo: -622,  ciHi: 23926,  n: 27, winRate: "25/27", p: "0.0004" },
+    { surface: "2025 OOD",            dt: 30791, ppo: 6498,  diff: "+$24,294", ciLo: 12780, ciHi: 44663,  n: 6,  winRate: "6/6",   p: "0.0312*" }
   ],
   impactGate: [
     { battery: "Small (~8 MWh)",            dt: 35404,  ppo: 11031 },
@@ -1447,8 +1457,8 @@ var DATA = {
       desc: "Structural decomposition: a waypoint-DT predicts a coarse target-SOC trajectory; an LP executor co-optimizes energy + all 8 FCAS within each segment. First policy to beat PPO on all four identity surfaces ($291,841/ep dispatch-matched). Fatal flaw: the LP sees full-episode prices — perfect foresight, not deployable." },
     { stage: 7, name: "Honest SDP executor", arch: "waypoint-DT + SDP", data: "seasonal forecast only", dm: 59091, solver: true,
       desc: "Replacing the clairvoyant LP with a non-clairvoyant SDP planner (seasonal forecast, degradation-aware) lifted the foresight caveat — and beat the LP out-of-distribution ($59,091 DM, wins on expanded and 2025 OOD). Honest planners generalize better than clairvoyant ones. A solver still runs at inference." },
-    { stage: 8, name: "Standalone J_t(soc) DT — SHIPPED", arch: "8×768 mixed-head", data: "SDP teacher trajs (640 eps)", dm: 35320,
-      desc: "The teacher distilled into a standalone transformer with no solver at inference. Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped with rtg_mode=\"auto\": beats PPO on all four identity surfaces and passes the market-impact gate." }
+    { stage: 8, name: "Standalone J_t(soc) DT — SHIPPED", arch: "8×768 mixed-head", data: "SDP teacher trajs (640 eps, wear-calibrated)", dm: 40039,
+      desc: "The teacher distilled into a standalone transformer with no solver at inference. Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped (physics-v2, aemo_dt_sdp_jtsoc_v2cal.pt) with rtg_mode=\"auto\": beats PPO on all four identity surfaces and passes the market-impact gate." }
   ],
   failedFixes: [
     { fix: "RTG prompt sweep (0–50)", result: "Flat — not a prompting artifact.", tag: "negative" },
@@ -1542,27 +1552,27 @@ navLinks.addEventListener("click", function (e) {
    ten fixed 7-day held-out real-household windows.
    ===================================================================== */
 var HH_DATA = {
-  labels: ["Rule", "No-forecast DT", "Persistence DT", "TTM-forecast DT", "PPO (fresh, online RL)", "Oracle (foresight)"],
-  h44: [58.03, 310.90, 309.35, 357.29, 23.66, 738.96],
-  h42: [null, 155.12, 216.74, 258.50, null, null],
+  labels: ["Rule", "No-forecast DT", "Persistence DT (h4_v2c)", "TTM-forecast DT", "PPO (fresh, online RL)", "Oracle (RTE-matched)"],
+  h44: [-60.1, 116.7, 92.8, 111.9, -64.6, 689.65],
+  h42: [null, null, null, null, null, null],
   policies: [
-    { name: "Rule (charging heuristic)", h44: "+$58.03", h42: "—" },
-    { name: "DT, no forecast", h44: "+$310.90", h42: "+$155.12" },
-    { name: "DT, 24-hour persistence forecast", h44: "+$309.35", h42: "+$216.74" },
-    { name: "DT, causal TTM-R3 forecast", h44: "+$357.29", h42: "+$258.50" },
-    { name: "Fresh full-corpus PPO (online RL)", h44: "+$23.66", h42: "—" },
-    { name: "Oracle (perfect-foresight DP, reference)", h44: "+$738.96", h42: "—" }
+    { name: "Rule (charging heuristic)", h44: "−$60.1", h42: "—" },
+    { name: "DT, no forecast", h44: "+$116.7", h42: "—" },
+    { name: "DT, 24-hour persistence (h4_v2c)", h44: "+$92.8", h42: "—" },
+    { name: "DT, causal TTM-R3 forecast", h44: "+$111.9", h42: "—" },
+    { name: "Fresh full-corpus PPO (online RL)", h44: "−$64.6", h42: "—" },
+    { name: "Oracle (RTE-matched perfect-foresight DP)", h44: "+$689.65", h42: "—" }
   ],
   paired: [
-    { pair: "TTM − persistence",
-      h44: ["+$47.94", "+$27.99 – +$67.59", "9/10", "0.0020"],
-      h42: ["+$41.75", "+$16.56 – +$69.43", "9/10", "0.0068"] },
-    { pair: "TTM − no forecast",
-      h44: ["+$46.39", "+$23.78 – +$68.91", "9/10", "0.0020"],
-      h42: ["+$103.37", "+$78.23 – +$127.67", "10/10", "0.0010"] },
-    { pair: "persistence − no forecast",
-      h44: ["−$1.55", "−$22.40 – +$14.84", "6/10", "0.46"],
-      h42: ["+$61.62", "+$33.96 – +$90.77", "8/10", "0.0049"] }
+    { pair: "TTM − persistence (RTG −2)",
+      h44: ["+$19.1", "−$26.6 – +$61.6", "6/10", "0.49"],
+      h42: ["—", "—", "—", "—"] },
+    { pair: "TTM − no forecast (RTG −2)",
+      h44: ["−$4.8", "−$31.4 – +$16.2", "6/10", "0.63"],
+      h42: ["—", "—", "—", "—"] },
+    { pair: "no forecast − persistence (RTG −2)",
+      h44: ["+$23.9", "−$3.5 – +$52.0", "5/10", "0.23"],
+      h42: ["—", "—", "—", "—"] }
   ]
 };
 

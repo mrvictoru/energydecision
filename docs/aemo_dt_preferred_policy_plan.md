@@ -2,10 +2,16 @@
 
 > **STATUS:** Stages A–C are **DONE** and the shipped recommendation is now settled:
 > use **`rtg_mode="auto"`**. It reproduces the `j_t_soc` wins on **all 4 identity
-> surfaces** exactly (standard 4.9×, dispatch 1.57×, 2025 OOD 3.98×, expanded 1.78×)
+> surfaces** exactly (physics-v2 v2cal: standard 6.9×, dispatch 1.78×, 2025 OOD 4.74×,
+> expanded 1.65×; the pre-physics-fix v1 numbers were 4.9×/1.57×/3.98×/1.78×)
 > while preserving the **impact-gate pass** on every grid-scale battery by falling back to
 > constant RTG under merit-order impact. This file is **ARCHIVED** — the final session
 > was 2026-08-23. The forward plan is now in **`docs/FUTURE_PLAN.md`**.
+>
+> **SHIPPED MODEL (2026-09):** `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` (physics-v2,
+> wear-calibrated SDP teacher, `--deg-calibration 0.12`) supersedes the v1
+> `aemo_dt_sdp_jtsoc_fullcorpus.pt` referenced throughout the diary below; see
+> `report.md §8.2.11`.
 >
 > **CORRECTION (2026-09-13):** the "explicit `j_t_soc` fails the impact gate on large
 > batteries" finding in the INVESTIGATION below (2026-08-20) was an artifact of

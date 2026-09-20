@@ -62,10 +62,10 @@ fetch them at runtime.
 - **Title:** "Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch"
 - **Subtitle:** A degradation-aware AEMO/NEM benchmark: planner-distilled Decision Transformer vs online RL vs real-world dispatch replay.
 - **Key stat callouts** (large numbers, animated count-up on scroll):
-  - **4.9×** profit vs PPO on standard surface ($11,573 vs $2,353 /ep)
+  - **6.9×** profit vs PPO on standard surface ($16,209 vs $2,353 /ep; physics-v2 `v2cal` checkpoint)
   - **4/4** identity surfaces won (+ impact gate passed)
   - **0** solver at inference (fully deployable standalone transformer)
-  - **95% CI excludes zero** on all six DT-vs-PPO paired comparisons
+  - **3/4** identity-surface 95% bootstrap CIs exclude zero (expanded broad-2024 is marginal; the v1 six-comparison result is in §8.2.10)
 - **Primary CTA buttons:** "Read the report" → `https://github.com/mrvictoru/energydecision/blob/main/report.md`; "Get the model" → `https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp`
 
 ### 3.2 What is this? (plain-language intro)
@@ -97,16 +97,16 @@ Four identity surfaces, profit per episode (USD, net of degradation),
 
 ```js
 const HEADLINE = [
-  { surface: "Standard Oct",        dt: 11573, ppo: 2353,  n: 5,  winRate: "5/5",   wilcoxonP: 0.0625 },
-  { surface: "Dispatch-matched",    dt: 35320, ppo: 22530, n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
-  { surface: "Expanded broad-2024", dt: 34761, ppo: 19504, n: 27, winRate: "25/27", wilcoxonP: 0.0002 },
-  { surface: "2025 OOD",            dt: 25862, ppo: 6498,  n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
+  { surface: "Standard Oct",        dt: 16209, ppo: 2353,  n: 5,  winRate: "5/5",   wilcoxonP: 0.0625 },
+  { surface: "Dispatch-matched",    dt: 40039, ppo: 22530, n: 6,  winRate: "5/6",   wilcoxonP: 0.0625 },
+  { surface: "Expanded broad-2024", dt: 32146, ppo: 19504, n: 27, winRate: "25/27", wilcoxonP: 0.0004 },
+  { surface: "2025 OOD",            dt: 30791, ppo: 6498,  n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
 ];
 // Impact gate (piecewise merit-order impact): DT passes on all 3 grid-scale batteries
 const IMPACT_GATE = [
-  { battery: "Small (~8 MWh)",          dt: 34600,  ppo: 11000 },
-  { battery: "Hornsdale-class (194)",   dt: 142100, ppo: 56500 },
-  { battery: "Torrens-class (250 MWh)", dt: 173100, ppo: 69500 },
+  { battery: "Small (~8 MWh)",          dt: 35404,  ppo: 11031 },
+  { battery: "Hornsdale-class (150 MW)", dt: 146676, ppo: 56540 },
+  { battery: "Torrens-class (250 MWh)", dt: 140712, ppo: 69507 },
 ];
 ```
 
@@ -153,7 +153,7 @@ const TIMELINE = [
   { stage: 5, name: "Modern v2 pretrained",     arch: "8×768 GQA",              data: "2,401 eps (realistic bats)",  dmProfit: 10138,  fcas: 10068,  deg: 187,   change: "Architecture improvement" },
   { stage: 6, name: "Hierarchical DT+LP",       arch: "waypoint-DT + Oracle-LP",data: "Oracle SOC paths (1,200 eps)",dmProfit: 291841, note: "*perfect foresight — not deployable*", change: "Decomposition: DT plans SOC, LP executes" },
   { stage: 7, name: "Honest SDP executor",      arch: "waypoint-DT + SDP",      data: "seasonal forecast only",      dmProfit: 59091,  note: "*solver at inference*", change: "Foresight caveat lifted" },
-  { stage: 8, name: "Standalone J_t(soc) DT",   arch: "8×768 mixed-head",       data: "SDP teacher trajs (640 eps)", dmProfit: 35320,  fcas: 105000, deg: 145,   change: "Planner distillation + state-dependent prompts — SHIPPED" },
+  { stage: 8, name: "Standalone J_t(soc) DT",   arch: "8×768 mixed-head",       data: "SDP teacher trajs (640 eps, wear-calibrated)", dmProfit: 40039,  fcas: 105000, deg: 145,   change: "Planner distillation + state-dependent prompts — SHIPPED (physics-v2 v2cal)" },
 ];
 ```
 
@@ -284,10 +284,11 @@ lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureCha
 `report.md` §8.1.1 / `results.tsv` / `eval_output/household/h4_4_*`
 (embed as the `HH_DATA` JS constant; do not fetch at runtime):
 
-1. **Mini-hero + 4 stat cards:** TTM-forecast DT **+$357/yr** savings vs no
-   battery on the ten fixed 7-day real-OOD windows; paired TTM−persistence
-   **+$47.94/yr** (95% CI +$27.99–$67.59, 9/10, p=0.0020); one-hour-ahead solar
-   MAE **−39.2%** vs persistence (load −17.5%); **1,440** synthetic training
+1. **Mini-hero + 4 stat cards:** calibrated `h4_v2c` DT **+$293/yr gross**
+   savings vs no battery on the ten fixed 7-day real-OOD windows
+   (**net-of-wear +$86–93/yr** at RTG −2); long-horizon net-of-wear
+   **−$238/yr** on the 90-day real windows; one-hour-ahead solar MAE
+   **−39.2%** vs persistence (load −17.5%); **1,440** synthetic training
    episodes (1,200 seven-day + 240 horizon-diverse).
 2. **`#hh-environment`** — `SolarBatteryEnv` 12-D observation cards (4-D time
    features, 2-D solar/load, 2-D forecast channels `FutureSolar`/`FutureLoad`,
@@ -316,22 +317,23 @@ lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureCha
    (10-min means)**, four policies, regenerated with
    `scripts/dump_household_behavior.py --window 6` (persist via `--policies persist --merge`).
    Charts are one representative week; headline savings average ten windows.
-   Copy must say **1,440 training episodes**, not 1,440 households, and
-   **+$47.94 / +$46.39** (not “+$46”).
-5. **`#hh-results`** — one bar chart + two tables. Oracle is **off by default**
-   on the bar chart (clairvoyant DP, +$738.96/yr) so the learned cluster
-   ($24–$357) remains readable; a checkbox reveals it. Savings vs no battery
-   (H4.4 full corpus / H4.2 seven-day corpus): Rule +$58.03/—; no-forecast DT
-   +$310.90/+$155.12; persistence DT +$309.35/+$216.74; TTM DT **+$357.29/
-   +$258.50**; fresh full-corpus PPO +$23.66/—; oracle +$738.96/—. Paired
-   table: TTM−persistence +$47.94 [+$27.99,+$67.59] 9/10 p=0.0020 (H4.2:
-   +$41.75, 9/10, p=0.0068); TTM−no-forecast +$46.39 [+$23.78,+$68.91] 9/10
-   p=0.0020 (H4.2: +$103.37, 10/10, p=0.0010); persistence−no-forecast
-   −$1.55 p=0.46 on the full corpus (the persistence edge disappears).
-6. **`#hh-contrast`** — why forecasts help at household scale (physically
-   predictable solar/load under a deterministic tariff) but not as AEMO price
-   tokens (FCAS corr ≈ 0.01–0.07, §8.2.8 negative result). Required framing:
-   the two results are consistent, not in conflict.
+   Copy must say **1,440 training episodes**, not 1,440 households.
+5. **`#hh-results`** — one bar chart + two tables (physics-v2 re-baseline,
+   RTG −2, **net of wear**). Oracle is **off by default** on the bar chart
+   (RTE-matched perfect-foresight DP, +$689.65/yr); a checkbox reveals it.
+   Values: Rule −$60.1; no-forecast DT **+$116.7**; persistence DT (`h4_v2c`)
+   +$92.8; TTM DT +$111.9; fresh full-corpus PPO −$64.6; oracle +$689.65.
+   Paired table (two-sided Wilcoxon, n=10): **TTM−persistence +$19.1
+   [−$26.6, +$61.6] p=0.49**; TTM−no-forecast −$4.8 p=0.63;
+   no-forecast−persistence +$23.9 p=0.23 — at the shared prompt the arms are
+   statistically indistinguishable and the pre-fix "+$47.94 TTM over
+   persistence" is superseded.
+6. **`#hh-contrast`** — the re-baseline narrows the forecast story: improved
+   solar/load forecast accuracy does **not** translate into a robust control
+   advantage under the calibrated teacher (arms indistinguishable at RTG −2),
+   while AEMO FCAS price-token forecasts are a documented negative result
+   (corr ≈ 0.01–0.07, §8.2.8). Required framing: a forecast only pays when it
+   changes the economic action.
 7. **`#hh-limits`** — single real household; synthetic multi-battery test
    surface is statistically indistinguishable (TTM−no-forecast −$15.49/yr,
    p=0.86); simulator economics; RTG prompt must be reported (OOD prompts

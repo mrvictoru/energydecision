@@ -1,5 +1,14 @@
 # Physics-v2 Re-baseline Commands (P5)
 
+> **Superseded by the final calibration (2026-09-15/20).** The commands below
+> were the *first* P5 pass and produced the `*_v2` / `h4_v2` artifacts. The
+> shipped results use the **calibrated** variants: AEMO `--deg-calibration 0.12`
+> → `aemo_dt_sdp_jtsoc_v2cal.pt` (corpus
+> `dt_trajectories_jtsoc_v2cal_conservative.parquet`); household
+> `deg_mode="step"` + `deg_calibration=0.29` → `h4_v2c`
+> (`data/household/dt/sdp_teacher_h4_v2c_*`). See `known_issues.md` A6/B4,
+> `report.md` §8.2.11, and `docs/household/workflow.md` §H4.9 (buckets A/B).
+
 Exact commands for the A1–A8 "degradation-physics v2" re-baseline. All commands
 run from the repo root inside Distrobox `energydecision-gpu`. Outputs are
 written to **new** `*_v2` paths so the shipped artifacts are preserved for
