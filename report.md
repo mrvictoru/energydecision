@@ -983,7 +983,7 @@ The following table traces the DT's progression from the original pilot model th
 | 5. Modern v2 pretrained | 8×768 GQA | 2,401 episodes (realistic bat) | +$10,138 | $10,068 | $187 | Architecture improvement |
 | **6. Hierarchical DT+LP** | 8×768 waypoint-DT (K=8 SOC) | Oracle-LP SOC paths (1,200 eps) | +$291,841* | — | $176/MWh* | Decomposition: DT plans SOC, LP executes |
 | **7. Honest SDP executor** | same waypoint-DT + SDP executor | seasonal forecast only | +$59,091* | — | $163/MWh* | Foresight caveat lifted |
-| **8. Standalone J_t(soc) DT (shipped)** | 8×768 mixed-head, `rtg_mode="auto"` | SDP-teacher trajectories (640 eps) | +$35,320 | $105k+ | $145/MWh | Planner distillation + state-dependent prompts |
+| **8. Standalone J_t(soc) DT (shipped, physics-v2 v2cal)** | 8×768 mixed-head, `rtg_mode="auto"` | Wear-calibrated SDP-teacher trajectories (320 eps) | +$40,039 | $105k+ | $145/MWh | Planner distillation + state-dependent prompts |
 
 \* Stages 6–7 use a solver at inference and are not directly comparable to
 stages 1–5 (the LP stage's $291,841 exploits perfect foresight). Stage 8 is
