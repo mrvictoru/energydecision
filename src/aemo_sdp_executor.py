@@ -140,6 +140,7 @@ def sdp_energy_dispatch(
     action_resolution: int = 41,
     terminal_penalty: float = 1e6,
     deg_cost_per_mwh: float = 200.0,
+    deg_calibration: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Plan energy dispatch from start_soc to target_soc over ``forecast`` steps.
 
@@ -150,12 +151,16 @@ def sdp_energy_dispatch(
     < 0 = discharging (env convention).
 
     This is the honest energy planner: it uses only the *seasonal forecast*
-    of RRP (no realized future prices). Degradation is handled two ways: the
+    of RRP (no realized future prices). Degradation is approximated by the
     repo's rainflow DegradationCalculator (which returns ~0 for sub-3% DoD
     transitions, so it under-counts cycling) PLUS a linear throughput
     surrogate ``deg_cost_per_mwh`` (|energy| * \$/MWh) so multi-step daily
-    cycling is priced — matching the RealWorldBESS cycle aging the env
-    actually charges.
+    cycling is priced.
+
+    Note: this differs from the environment's ``real_world`` degradation mode,
+    which charges combined calendar + cycle aging via
+    ``RealWorldBESSDegradationModel``. The planner's wear cost is therefore an
+    approximation of the realized env wear; see ``docs/known_issues.md`` (B4).
     """
     capacity = float(env.battery_capacity)
     horizon = len(forecast)
@@ -168,6 +173,7 @@ def sdp_energy_dispatch(
         soc_resolution=soc_resolution,
         action_resolution=action_resolution,
         use_monte_carlo=False,
+        degradation_calibration=deg_calibration,
     )
     soc_levels = solver.soc_levels_kwh
     action_energies = solver.battery_flow_energies
@@ -264,6 +270,7 @@ def compute_cost_to_go_table(
     deg_cost_per_mwh: float = 200.0,
     terminal_soc: float | None = None,
     impact_model=None,
+    deg_calibration: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Unconstrained (free-terminal) SDP value table for the RTG token.
 
@@ -301,6 +308,7 @@ def compute_cost_to_go_table(
         soc_resolution=soc_resolution,
         action_resolution=action_resolution,
         use_monte_carlo=False,
+        degradation_calibration=deg_calibration,
     )
     soc_levels = solver.soc_levels_kwh
     action_energies = solver.battery_flow_energies
@@ -356,7 +364,11 @@ def compute_cost_to_go_table(
                     "TOTALDEMAND": float(forecast_step.get("TOTALDEMAND", 0.0) or 0.0),
                 }
                 for ui, energy in enumerate(unique_vals):
-                    dispatch_mw = -float(energy) / max(float(env.step_duration), 1e-9)
+                    # Env convention: positive dispatch = charging (matches
+                    # AEMOBatteryTradingEnv's actual_power), and energy > 0 =
+                    # charging here. Keep the signs aligned so the cost-to-go
+                    # table prices charging/discharging like the environment.
+                    dispatch_mw = float(energy) / max(float(env.step_duration), 1e-9)
                     realized_rrp = impact_model.realized_energy_price(
                         base_rrp,
                         dispatch_mw,
@@ -379,76 +391,3 @@ def compute_cost_to_go_table(
         cost_to_go[t, :] = row_min
 
     return cost_to_go, soc_levels
-
-
-_COST_TO_GO_CACHE: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
-
-
-def get_cost_to_go_table(
-    aemo_data: pl.DataFrame,
-    env,
-    deg_cost_per_mwh: float = 200.0,
-    soc_resolution: int = 40,
-    forecast: Sequence[dict] | None = None,
-    profile: Callable[[int, int], float] | None = None,
-    impact_model=None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Memoized ``J_t(soc)`` table keyed by (region, step_count, capacity, deg).
-
-    Args:
-        aemo_data: The episode's processed frame (used for REGIONID + step count).
-        env: The AEMOBatteryTradingEnv instance.
-        deg_cost_per_mwh: Throughput degradation surrogate ($/MWh).
-        soc_resolution: Number of discrete SOC levels in the value table.
-        forecast: Optional pre-built RRP forecast. If None, built from
-            ``aemo_data`` times + (optional ``profile``; else seasonal cache).
-        profile: Optional seasonal RRP profile callable. If None, built from
-            the training-era cache for the region.
-
-    Returns ``(cost_to_go, soc_levels_kwh)`` matching :func:`compute_cost_to_go_table`.
-    """
-    region = str(aemo_data["REGIONID"][0]) if "REGIONID" in aemo_data.columns else "?"
-    cap = float(env.battery_capacity)
-    step_h = float(env.step_duration)
-
-    if forecast is None:
-        if profile is None:
-            cache_dir = getattr(env, '_aemo_data_dir', None)
-            if cache_dir is None:
-                from pathlib import Path as _Path
-                cache_dir = _Path(__file__).resolve().parent.parent / "data" / "aemo"
-            key_p = (region, step_h)
-            if key_p not in _COST_TO_GO_CACHE:
-                profile = build_seasonal_rrp_profile(cache_dir, region, step_h)
-            else:
-                profile = _COST_TO_GO_CACHE[key_p]
-        forecast = build_rrp_forecast(aemo_data, profile)
-
-    impact_key = (
-        None
-        if impact_model is None
-        else (impact_model.__class__.__name__, float(getattr(impact_model, "intensity", 1.0)))
-    )
-    key = (region, len(forecast), cap, deg_cost_per_mwh, soc_resolution, impact_key)
-    if key not in _COST_TO_GO_CACHE:
-        _COST_TO_GO_CACHE[key] = compute_cost_to_go_table(
-            env, forecast, soc_resolution=soc_resolution,
-            deg_cost_per_mwh=deg_cost_per_mwh,
-            impact_model=impact_model,
-        )
-    return _COST_TO_GO_CACHE[key]
-
-
-def lookup_j_t_soc(
-    cost_to_go: np.ndarray,
-    soc_levels: np.ndarray,
-    t: int,
-    soc_kwh: float,
-) -> float:
-    """Return ``-J_t(soc)`` (RTG) from a value table at step ``t`` and SOC (MWh).
-
-    Converts the SDP *cost*-to-go into a *return*-to-go (higher = better).
-    """
-    s_idx = int(np.argmin(np.abs(soc_levels - soc_kwh)))
-    t_idx = min(max(int(t), 0), cost_to_go.shape[0] - 1)
-    return -float(cost_to_go[t_idx, s_idx])

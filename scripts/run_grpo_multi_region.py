@@ -85,7 +85,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--entropy-coeff", type=float, default=0.0)
     parser.add_argument("--rtg-count", type=int, default=4)
     parser.add_argument("--rtg-spread", type=float, default=3.0)
-    parser.add_argument("--rtg-dist", default="gaussian")
     parser.add_argument(
         "--rtg-target", type=float, default=None,
         help="Center RTG for the prompt distribution. Defaults to "
@@ -94,8 +93,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--dt-gamma", type=float, default=1.0)
     parser.add_argument("--sync-reference-every", type=int, default=0)
-    parser.add_argument("--adaptive-rtg", action="store_true", default=False)
-    parser.add_argument("--adaptive-rtg-ewma-alpha", type=float, default=0.1)
     parser.add_argument("--deg-penalty-weight", type=float, default=1.0)
     parser.add_argument("--mixed-precision", action="store_true", default=False,
                         help="Enable mixed precision (fp16/bf16) forward passes to reduce GPU memory")
@@ -235,7 +232,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         target_rtg = args.rtg_count * optimal_rtg / 2  # center RTG on return_scale
     else:
         target_rtg = float(args.rtg_target)
-    rtg_values = sample_rtg_values(optimum=target_rtg, spread=args.rtg_spread, count=args.rtg_count, distribution=args.rtg_dist, seed=args.seed)
+    rtg_values = sample_rtg_values(optimum=target_rtg, spread=args.rtg_spread, count=args.rtg_count, seed=args.seed)
     print(f"[GRPO] RTG prompts: {[round(v, 2) for v in rtg_values]}")
 
     prompts = [
@@ -246,7 +243,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "[GRPO] Phase 1 config: "
         f"sync_reference_every={args.sync_reference_every}, "
-        f"adaptive_rtg={args.adaptive_rtg}, "
         f"deg_penalty_weight={args.deg_penalty_weight}"
     )
 
@@ -271,11 +267,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         dt_gamma=args.dt_gamma,
         sync_reference_every=args.sync_reference_every,
-        adaptive_rtg=args.adaptive_rtg,
-        adaptive_rtg_spread=args.rtg_spread,
-        adaptive_rtg_dist=args.rtg_dist,
-        adaptive_rtg_ewma_alpha=args.adaptive_rtg_ewma_alpha,
-        adaptive_rtg_seed=args.seed,
     )
 
     # 7. Post-GRPO eval
@@ -305,8 +296,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             "kl_coeff": args.kl_coeff,
             "entropy_coeff": args.entropy_coeff,
             "sync_reference_every": args.sync_reference_every,
-            "adaptive_rtg": args.adaptive_rtg,
-            "adaptive_rtg_ewma_alpha": args.adaptive_rtg_ewma_alpha,
             "degradation_penalty_weight": args.deg_penalty_weight,
         },
         "paths": {"save_path": str(save_path), "loss_csv_path": str(loss_csv)},
@@ -316,7 +305,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             "group_size": args.group_size,
             "rtg_count": args.rtg_count,
             "rtg_spread": args.rtg_spread,
-            "rtg_dist": args.rtg_dist,
             "dt_gamma": args.dt_gamma,
             "minibatch_size": args.minibatch_size,
             "gradient_accumulation_steps": args.gradient_accumulation_steps,

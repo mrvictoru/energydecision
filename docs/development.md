@@ -94,7 +94,7 @@ python scripts/autoresearch_evaluator.py \
   --output-dir eval_output/autoresearch/<run-tag>
 ```
 
-## Test Suite Coverage (332 tests)
+## Test Suite Coverage (367 tests as of 2026-09-13)
 
 | File | Area | Key Coverage |
 |------|------|--------------|
@@ -115,11 +115,8 @@ python scripts/autoresearch_evaluator.py \
 | `test_dispatch_utils.py` | Dispatch utilities | DISPATCHLOAD parsing, station resolution, replay |
 | `test_environment.py` | Household env | SolarBatteryEnv dynamics, reward, degradation |
 | `test_episode_visualizer.py` | Visualization | Episode plotting, grid energy, SOC trajectories |
-| `test_forecast_dt_evaluator.py` | Forecast DT eval | Forecast DT dispatch, eval integration |
-| `test_forecast_dt.py` | Forecast DT model | TTM forecast tokens, type embeddings, training |
 | `test_grpo_posttraining.py` | GRPO fine-tuning | Online RL fine-tuning, mixed action distribution |
 | `test_launch_aemo_training.py` | Training launcher | Tier defaults, command building, dry-run plan |
-| `test_performance.py` | Performance | Degradation model microbenchmarks |
 | `test_pretrain_aemo_decision_transformer.py` | AEMO DT CLI | Command building, checkpoint epoch parsing |
 | `test_pretrain_decision_transformer.py` | DT training CLI | Legacy CLI contract, surface presets, artifact manifest |
 | `test_prewarm_aemo_cache.py` | Cache warming | Eval config-driven AEMO cache precomputation |
@@ -127,6 +124,8 @@ python scripts/autoresearch_evaluator.py \
 | `test_real_world_degradation.py` | RealWorld BESS deg | Calendar+cycle aging, NMC/LFP chemistry, Arrhenius |
 | `test_risk_statistics.py` | Risk metrics | VaR/CVaR@5%, Sharpe/Sortino, bootstrap CIs, Wilcoxon |
 | `test_transformer_training.py` | Training internals | Resource monitor, loss aggregation, AMP/grad clip |
+| `test_market_impact.py` | Market impact | Impact dispatch-sign convention, identity price-taking, FCAS depth proxy |
+| `test_aemo_fcas_order.py` | FCAS ordering | Oracle-to-env FCAS bid remap, env full_fcas action order |
 
 ## Contributor Rules Of Thumb
 
@@ -154,3 +153,4 @@ python scripts/autoresearch_evaluator.py \
 - AEMO workflow: [aemo/workflow.md](aemo/workflow.md)
 - Household docs: [household/README.md](household/README.md)
 - Research-note index: [research/README.md](research/README.md)
+- Known issues and modelling caveats: [known_issues.md](known_issues.md)

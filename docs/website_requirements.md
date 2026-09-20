@@ -4,7 +4,10 @@
 > the website. Everything needed to build it is in this file — you do **not**
 > need access to the repository's code or results to complete the task.
 >
-> **Status of this document:** requirements only. No website exists yet.
+> **Status of this document:** requirements for the built page. The site exists at
+> repo-root `index.html` (AEMO track shipped 2026-08; household track tab added
+> 2026-09 — see §3.14; AEMO behaviour charts clarified 2026-09 — see §3.15;
+> household behaviour zoom/picker 2026-09 — see §3.16).
 
 ---
 
@@ -59,10 +62,10 @@ fetch them at runtime.
 - **Title:** "Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch"
 - **Subtitle:** A degradation-aware AEMO/NEM benchmark: planner-distilled Decision Transformer vs online RL vs real-world dispatch replay.
 - **Key stat callouts** (large numbers, animated count-up on scroll):
-  - **4.9×** profit vs PPO on standard surface ($11,573 vs $2,353 /ep)
+  - **6.9×** profit vs PPO on standard surface ($16,209 vs $2,353 /ep; physics-v2 `v2cal` checkpoint)
   - **4/4** identity surfaces won (+ impact gate passed)
   - **0** solver at inference (fully deployable standalone transformer)
-  - **95% CI excludes zero** on all six DT-vs-PPO paired comparisons
+  - **3/4** identity-surface 95% bootstrap CIs exclude zero (expanded broad-2024 is marginal; the v1 six-comparison result is in §8.2.10)
 - **Primary CTA buttons:** "Read the report" → `https://github.com/mrvictoru/energydecision/blob/main/report.md`; "Get the model" → `https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp`
 
 ### 3.2 What is this? (plain-language intro)
@@ -94,16 +97,16 @@ Four identity surfaces, profit per episode (USD, net of degradation),
 
 ```js
 const HEADLINE = [
-  { surface: "Standard Oct",        dt: 11573, ppo: 2353,  n: 5,  winRate: "5/5",   wilcoxonP: 0.0625 },
-  { surface: "Dispatch-matched",    dt: 35320, ppo: 22530, n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
-  { surface: "Expanded broad-2024", dt: 34761, ppo: 19504, n: 27, winRate: "25/27", wilcoxonP: 0.0002 },
-  { surface: "2025 OOD",            dt: 25862, ppo: 6498,  n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
+  { surface: "Standard Oct",        dt: 16209, ppo: 2353,  n: 5,  winRate: "5/5",   wilcoxonP: 0.0625 },
+  { surface: "Dispatch-matched",    dt: 40039, ppo: 22530, n: 6,  winRate: "5/6",   wilcoxonP: 0.0625 },
+  { surface: "Expanded broad-2024", dt: 32146, ppo: 19504, n: 27, winRate: "25/27", wilcoxonP: 0.0004 },
+  { surface: "2025 OOD",            dt: 30791, ppo: 6498,  n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
 ];
 // Impact gate (piecewise merit-order impact): DT passes on all 3 grid-scale batteries
 const IMPACT_GATE = [
-  { battery: "Small (~8 MWh)",          dt: 34600,  ppo: 11000 },
-  { battery: "Hornsdale-class (194)",   dt: 142100, ppo: 56500 },
-  { battery: "Torrens-class (250 MWh)", dt: 173100, ppo: 69500 },
+  { battery: "Small (~8 MWh)",          dt: 35404,  ppo: 11031 },
+  { battery: "Hornsdale-class (150 MW)", dt: 146676, ppo: 56540 },
+  { battery: "Torrens-class (250 MWh)", dt: 140712, ppo: 69507 },
 ];
 ```
 
@@ -150,7 +153,7 @@ const TIMELINE = [
   { stage: 5, name: "Modern v2 pretrained",     arch: "8×768 GQA",              data: "2,401 eps (realistic bats)",  dmProfit: 10138,  fcas: 10068,  deg: 187,   change: "Architecture improvement" },
   { stage: 6, name: "Hierarchical DT+LP",       arch: "waypoint-DT + Oracle-LP",data: "Oracle SOC paths (1,200 eps)",dmProfit: 291841, note: "*perfect foresight — not deployable*", change: "Decomposition: DT plans SOC, LP executes" },
   { stage: 7, name: "Honest SDP executor",      arch: "waypoint-DT + SDP",      data: "seasonal forecast only",      dmProfit: 59091,  note: "*solver at inference*", change: "Foresight caveat lifted" },
-  { stage: 8, name: "Standalone J_t(soc) DT",   arch: "8×768 mixed-head",       data: "SDP teacher trajs (640 eps)", dmProfit: 35320,  fcas: 105000, deg: 145,   change: "Planner distillation + state-dependent prompts — SHIPPED" },
+  { stage: 8, name: "Standalone J_t(soc) DT",   arch: "8×768 mixed-head",       data: "SDP teacher trajs (640 eps, wear-calibrated)", dmProfit: 40039,  fcas: 105000, deg: 145,   change: "Planner distillation + state-dependent prompts — SHIPPED (physics-v2 v2cal)" },
 ];
 ```
 
@@ -202,14 +205,21 @@ Teacher trajectories (640 eps, 6.2M rows) ──→ Standalone DT (8×768 GQA)
 Include the three corpora table (§5.4 of report): conservative 320 eps /
 aggressive 320 eps / combined 640 eps with J_t(soc) RTG column.
 
-### 3.9 Why `rtg_mode="auto"` (failure-mode explainer)
+### 3.9 Why `rtg_mode="auto"` (mode-selection explainer)
 
-Short section with a mini before/after chart: explicit j_t_soc inference fails
-catastrophically at grid scale under merit-order impact (hornsdale −$142.7k,
-torrens −$347.8k mean profit) because the price-taking prompt drives
-over-dispatch → self-suppression. Auto mode falls back to constant RTG under
-impact and keeps +$62.9k/+$69.7k. Message: *"prompts should be state-dependent,
-but gated by market power."*
+Short section with a mini chart: on price-taking (identity) surfaces explicit
+J_t(soc) prompting wins outright; under merit-order impact the shipped `auto`
+mode uses a conservative constant RTG, which avoids residual energy
+over-trading on large batteries in some months.
+
+**Correction (2026-09-13):** the earlier "explicit j_t_soc fails catastrophically
+under impact" story (hornsdale −$142.7k, torrens −$347.8k) was a
+`phase3_impact_eval.py` `return_scale` bug (`report.md §8.2.10`,
+`docs/known_issues.md` B8), not a property of the prompt. The corrected gate
+passes (DT beats PPO on 9/9 cells; small 3.2×, Hornsdale 2.6×, Torrens 2.0×).
+Message: *"prompts should be state-dependent; the constant fallback is a
+robustness trade-off."* The before/after chart data must be regenerated before
+publishing.
 
 ### 3.10 Statistical rigor section
 
@@ -249,6 +259,125 @@ Must be present, not buried:
 
 License note (match repo license), "Built with vanilla JS + Chart.js",
 last-updated date (2026-08), links back to repo.
+
+### 3.14 Track tabs — AEMO ↔ Household (added 2026-09)
+
+The page hosts **two research tracks** behind a sticky tab bar directly below the
+nav (`role="tablist"`, `.track-tab` styled like the existing segmented controls):
+
+- **⚡ AEMO / NEM · grid-scale** — all pre-existing content (§3.1–3.12), wrapped in
+  `#track-aemo` (`role="tabpanel"`). Default visible track.
+- **🏠 Household · solar + battery** — `#track-household`, hidden by default.
+
+Switching rules: only one panel visible (`hidden` attribute); nav links carry
+`data-track="aemo|household"` and are shown per active track (household anchors:
+`#hh-environment`, `#hh-forecast`, `#hh-behavior`, `#hh-results`, `#hh-contrast`, `#hh-limits`);
+choice persists in `localStorage` (`ed-track`); `#household` or any `#hh-*` URL
+hash opens the household track; a tab switch scrolls to top and `resize()`s live
+charts (canvases built in a hidden panel have zero size). Arrow keys move focus
+between tabs. Without JS the page must render the AEMO track exactly as before.
+Charts: the AEMO `buildCharts()` and the household `renderHhChart()` are both
+guarded behind `typeof Chart !== 'undefined'`; the household bar chart is built
+lazily on first activation and rebuilt on theme toggle via `window.__hhEnsureChart`.
+
+**Household content specification** — all numbers verified 2026-09 from
+`report.md` §8.1.1 / `results.tsv` / `eval_output/household/h4_4_*`
+(embed as the `HH_DATA` JS constant; do not fetch at runtime):
+
+1. **Mini-hero + 4 stat cards:** calibrated `h4_v2c` DT **+$293/yr gross**
+   savings vs no battery on the ten fixed 7-day real-OOD windows
+   (**net-of-wear +$86–93/yr** at RTG −2); long-horizon net-of-wear
+   **−$238/yr** on the 90-day real windows; one-hour-ahead solar MAE
+   **−39.2%** vs persistence (load −17.5%); **1,440** synthetic training
+   episodes (1,200 seven-day + 240 horizon-diverse).
+2. **`#hh-environment`** — `SolarBatteryEnv` 12-D observation cards (4-D time
+   features, 2-D solar/load, 2-D forecast channels `FutureSolar`/`FutureLoad`,
+   2-D ToU prices (31.042c import, free 11:00–14:00, 1c FiT), 2-D SOC +
+   degradation), 1-D action; real household telemetry 2023–2026 (319,170 rows,
+   5-min, privacy-gated); matched battery 5 kWh / 3.3 kW, RTE 0.80. Metric:
+   annualized savings vs no battery.
+3. **`#hh-forecast`** — offline causal sidecar explainer: TTM-R3
+   (`512-48-dec-512-r3`) emits 48 predictions but the environment has only two
+   scalar forecast fields, so **prediction 12 (one hour ahead at 5-min cadence)**
+   is stored in a timestamp-keyed parquet sidecar; causal contract "row *t* uses
+   data through *t*, targets *t+12*"; TTM runs offline in an isolated container
+   and never inside the simulator; the three arms share **byte-identical
+   SDP-teacher action labels** — only the two forecast channels differ.
+4. **`#hh-behavior`** — "what one extra forecast hour actually changes": three
+   stacked, shared-axis charts on ONE held-out summer week (1–7 Feb 2024,
+   window 6 of the ten-window surface). Default view is **24 hours** with a
+   start-day picker (Thu 1 Feb … Wed 7 Feb); 48 hours shows that day plus the
+   next (Wed disabled). (a) solar and load as filled areas (mint / orange) with
+   the import-price line dashed on the right axis and a shaded 11:00–14:00 free
+   window; (b) battery power per policy (positive = charging) — TTM DT sky,
+   persistence DT lilac, no-forecast DT coral, rule graphite (rule off by
+   default); (c) SOC 0–100%. Tooltips use kW / ¢/kWh / %, never dollars.
+   Window bill chips reconstruct the slice import bill vs no battery from 10-min
+   means (RTE not reapplied). Data: `HH_BEHAVIOR` constant, **1008 bins
+   (10-min means)**, four policies, regenerated with
+   `scripts/dump_household_behavior.py --window 6` (persist via `--policies persist --merge`).
+   Charts are one representative week; headline savings average ten windows.
+   Copy must say **1,440 training episodes**, not 1,440 households.
+5. **`#hh-results`** — one bar chart + two tables (physics-v2 re-baseline,
+   RTG −2, **net of wear**). Oracle is **off by default** on the bar chart
+   (RTE-matched perfect-foresight DP, +$689.65/yr); a checkbox reveals it.
+   Values: Rule −$60.1; no-forecast DT **+$116.7**; persistence DT (`h4_v2c`)
+   +$92.8; TTM DT +$111.9; fresh full-corpus PPO −$64.6; oracle +$689.65.
+   Paired table (two-sided Wilcoxon, n=10): **TTM−persistence +$19.1
+   [−$26.6, +$61.6] p=0.49**; TTM−no-forecast −$4.8 p=0.63;
+   no-forecast−persistence +$23.9 p=0.23 — at the shared prompt the arms are
+   statistically indistinguishable and the pre-fix "+$47.94 TTM over
+   persistence" is superseded.
+6. **`#hh-contrast`** — the re-baseline narrows the forecast story: improved
+   solar/load forecast accuracy does **not** translate into a robust control
+   advantage under the calibrated teacher (arms indistinguishable at RTG −2),
+   while AEMO FCAS price-token forecasts are a documented negative result
+   (corr ≈ 0.01–0.07, §8.2.8). Required framing: a forecast only pays when it
+   changes the economic action.
+7. **`#hh-limits`** — single real household; synthetic multi-battery test
+   surface is statistically indistinguishable (TTM−no-forecast −$15.49/yr,
+   p=0.86); simulator economics; RTG prompt must be reported (OOD prompts
+   collapse the advantage); **household and AEMO numbers must never be
+   compared directly.**
+8. Footer line names both tracks and their verification dates.
+
+### 3.15 AEMO “Actions along time” charts (added 2026-09)
+
+The AEMO `#behavior` section must not imply that dispatch is a normalized
+`[−1, +1]` action. Held-out logs store **actual MW** (`info.battery_dispatch`,
+positive = charging). The y-axis must auto-scale to the visible series.
+
+Explain on-page, with verified July 2024 Dalrymple numbers:
+
+- SOC is inventory, not activity. An 8 MWh / 30 MW stack can empty in ~16 min;
+  the DT often sits full to keep **raise FCAS** headroom.
+- Energy pays only for MWh moved; FCAS regulation pays for reserved MW. July DT:
+  energy **−$777**, FCAS **$27,945**. The real operator replay on this surface is
+  energy-only (FCAS bids ≈ 0).
+- Native steps are 5 min; 2024 charts use 30-min means (cumulative 1 h). A short
+  burst is diluted. Rebuild extras with `scripts/dump_aemo_behavior.py`.
+
+Required canvases: energy MW, FCAS raise/lower bid fractions (0–1), SOC (MWh),
+cumulative energy vs FCAS $, cumulative profit vs wear. Profit chips keep episode
+totals and add energy / FCAS / wear split from `BEHAVIOR_SPLIT`. Payload must stay
+under 500 KB. Do not mix household kW charts into this section.
+
+### 3.16 Household “Actions along time” zoom (added 2026-09)
+
+Household `#hh-behavior` must not dump the full week as the primary view — seven
+sunny/cloudy days on one axis hides the midday charge / evening discharge.
+
+Required UI:
+
+- Segmented **24 hours / 48 hours** control (`hhSpan24`, `hhSpan48`).
+- Start-day chips for 1–7 Feb 2024 (`hhDayNav`). 48-hour mode disables Wed.
+- Persistence DT series (H4.4 `h4_4_persistence_standard_rtg_8x512_ctx576`) in
+  lilac, dumped from the checkpoint — do not invent traces.
+- Free-window band via a Chart.js `beforeDraw` plugin (no extra CDN).
+- Reconstructed window bill chips (`hhBillRow`) labelled as reconstructed.
+- Units: solar/load/battery **kW**, price **¢/kWh**, SOC **%**.
+
+Do not mix AEMO MW / FCAS charts into this section.
 
 ## 4. Design Requirements
 

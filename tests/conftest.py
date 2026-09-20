@@ -14,6 +14,8 @@ from requests.exceptions import RequestsDependencyWarning
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Add scripts to path so script modules can be imported in isolation
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 warnings.filterwarnings("ignore", category=RequestsDependencyWarning)
 

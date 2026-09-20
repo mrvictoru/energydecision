@@ -99,10 +99,6 @@ step_cost = deg_fraction * battery_replacement_cost
     - **Args**: a single stress variable or SOC/DOD pair.
     - **Returns**: dimensionless multiplier relative to the nominal condition. Each helper guards against invalid inputs by returning `1.0` when the raw factor is non-finite or negative.
 
-- `static_degradation(Id, Ich, SoC_avg, DoD)`
-    - **Args**: convenience wrapper that instantiates a default `DegradationModel` and calls `degradation_per_cycle` (temperature fixed at 25 °C here).
-    - **Returns**: the degradation fraction and prints the equivalent cycle life to stdout for quick sanity checks.
-
 ### `RainflowCounter` Class
 In real-world operation, batteries don't follow clean cycles. They have partial charges and micro-discharges. The `RainflowCounter` implements the **ASTM E1049-85 standard** to extract cycles from a varying State of Charge (SoC) profile.
 
@@ -126,10 +122,6 @@ for soc in soc_profile:
 - `update(soc)`
     - **Args**: incoming SoC percentage ([0, 100]) at the next timestep.
     - **Returns**: list of closed cycles detected since the previous update. Each tuple carries `(SoC_avg, DoD, Id_cycle, Ich_cycle)` describing the average SoC, depth-of-discharge, and implied charge/discharge C-rate for that cycle. The method discards tiny cycles below `eps` and ensures `DoD` remains positive before reporting.
-
-- `rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6)`
-    - **Args**: helper function that accepts a full SoC profile (sequence) and optional granularity parameters.
-    - **Returns**: same sequence of closed cycles as repeatedly calling `RainflowCounter.update`; useful when you have a batch SoC trace instead of streaming data.
 
 ---
 

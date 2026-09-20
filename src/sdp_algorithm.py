@@ -41,15 +41,15 @@ class SDPSolver:
                  use_monte_carlo: bool = False,
                  mc_samples: int = 100,
                  mc_seed: Optional[int] = None,
-                 scenario_generator: Optional[Any] = None):
+                 scenario_generator: Optional[Any] = None,
+                 degradation_calibration: float = 1.0):
         """
         Initialize SDP solver.
         
         Notes:
-            - This solver uses **rainflow-based** degradation exclusively. The
-              `DegradationCalculator` provides the `compute_rainflow_degradation`
-              method which is used to estimate per-step degradation based on SoC
-              transitions.
+            - This solver uses the per-step half-cycle degradation estimator
+              from `DegradationCalculator` (`compute_step_degradation`), applied
+              state-dependently at the true starting SoC (A5).
 
         Args:
             env: Environment with battery and grid parameters
@@ -79,7 +79,8 @@ class SDPSolver:
             battery_capacity=self.battery_capacity,
             step_duration=self.step_duration,
             battery_life_cost=self.battery_life_cost,
-            degradation_temperature=getattr(env, 'degradation_temperature', 25.0)
+            degradation_temperature=getattr(env, 'degradation_temperature', 25.0),
+            calibration=degradation_calibration,
         )
         
         # Uncertainty handling
@@ -93,6 +94,31 @@ class SDPSolver:
         self.soc_levels_kwh = np.linspace(0, self.battery_capacity, self.soc_resolution)
         self.action_levels_norm = np.linspace(-1.0, 1.0, self.action_resolution)
         self.battery_flow_energies = self.action_levels_norm * self.max_battery_flow * self.step_duration
+
+        # State-dependent degradation cost grid (time-invariant: depends only on
+        # the starting SoC and the action, so it is computed once per solver).
+        # This replaces the previous representative-midpoint approximation (A5).
+        self._deg_cost_grid = self._build_deg_cost_grid()
+
+    def _build_deg_cost_grid(self) -> np.ndarray:
+        """Degradation cost for every (SoC level, action) transition.
+
+        Uses the true starting SoC rather than a representative midpoint, and the
+        physically clipped step energy. Time-invariant, so computed once.
+        """
+        n_soc = len(self.soc_levels_kwh)
+        n_act = len(self.battery_flow_energies)
+        grid = np.zeros((n_soc, n_act), dtype=float)
+        for s, soc in enumerate(self.soc_levels_kwh):
+            for a, energy in enumerate(self.battery_flow_energies):
+                clipped = float(np.clip(energy, -soc, self.battery_capacity - soc))
+                if clipped == 0.0:
+                    continue
+                deg_frac = self.degradation_calc.compute_step_degradation(
+                    float(soc), float(soc) + clipped
+                )
+                grid[s, a] = float(deg_frac * self.battery_life_cost)
+        return grid
     
     def solve(self, forecasts: List[Dict], start_index: int = 0) -> np.ndarray:
         """
@@ -236,7 +262,7 @@ class SDPSolver:
             # Compute cost for each unique energy value
             unique_costs = np.empty(unique_vals.shape, dtype=float)
             for ui, energy in enumerate(unique_vals):
-                unique_costs[ui] = self._compute_single_stage_cost(
+                unique_costs[ui] = self._compute_grid_stage_cost(
                     energy, forecast_step, monte_samples
                 )
             
@@ -244,31 +270,24 @@ class SDPSolver:
             costs_flat = np.full(rounded_flat.shape, np.inf)
             costs_flat[feasible_flat] = unique_costs[inverse]
             stage_costs = costs_flat.reshape(rounded.shape)
+
+        # Add the state-dependent degradation term (A5). Grid cost is energy-only
+        # (state-independent), so degradation is added per (SoC, action) after.
+        finite = np.isfinite(stage_costs)
+        stage_costs = np.where(finite, stage_costs + self._deg_cost_grid, stage_costs)
         
         return stage_costs
     
-    def _compute_single_stage_cost(self, energy: float, forecast_step: Dict,
-                                   monte_samples: Optional[Tuple]) -> float:
+    def _compute_grid_stage_cost(self, energy: float, forecast_step: Dict,
+                                 monte_samples: Optional[Tuple]) -> float:
+        """Grid (energy) cost for a single energy value.
+
+        Degradation is state-dependent and added separately in
+        ``_compute_stage_costs`` via ``self._deg_cost_grid``.
         """
-        Compute stage cost for a single energy value.
-        
-        Cost = Grid cost + Degradation cost
-        """
-        battery_rate = energy / self.step_duration
-        
-        # Compute grid cost (with or without Monte Carlo)
         if monte_samples is not None:
-            grid_cost = self._compute_grid_cost_monte_carlo(energy, monte_samples)
-        else:
-            grid_cost = self._compute_grid_cost_deterministic(energy, forecast_step)
-        
-        if grid_cost == np.inf:
-            return np.inf
-        
-        # Compute degradation cost
-        degradation_cost = self._compute_degradation_cost(energy, battery_rate)
-        
-        return grid_cost + degradation_cost
+            return self._compute_grid_cost_monte_carlo(energy, monte_samples)
+        return self._compute_grid_cost_deterministic(energy, forecast_step)
     
     def _compute_grid_cost_monte_carlo(self, energy: float, 
                                       monte_samples: Tuple) -> float:
@@ -309,26 +328,6 @@ class SDPSolver:
         grid_energy = load + battery_charge_energy - solar - battery_discharge_energy
         
         return compute_grid_cost(grid_energy, import_price, export_price, self.max_grid_energy)
-    
-    def _compute_degradation_cost(self, energy: float, battery_rate: float) -> float:
-        """Compute battery degradation cost for energy throughput using rainflow counting.
-        
-        A representative SoC is used for the per-step estimation (midpoint of capacity)
-        because `_compute_single_stage_cost` is evaluated on unique energy values only
-        and does not have direct access to the current state's SoC. This keeps the
-        computation efficient while using the rainflow-based estimator for wear.
-        """
-        if abs(energy) <= 0.0:
-            return 0.0
-
-        # Representative SoC (kWh) at midpoint of battery
-        rep_soc = self.battery_capacity / 2.0
-        soc_next = rep_soc + energy
-
-        # Compute rainflow-based degradation fraction for this SoC transition
-        deg_frac = self.degradation_calc.compute_rainflow_degradation(rep_soc, soc_next)
-        return float(deg_frac * self.battery_life_cost)
-
     
     def _compute_future_costs(self, next_cost_to_go: np.ndarray) -> np.ndarray:
         """

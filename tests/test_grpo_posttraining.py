@@ -183,46 +183,18 @@ def test_grpo_train_syncs_reference_model_periodically():
         torch.testing.assert_close(model_state[key], reference_state[key])
 
 
-def test_grpo_train_adapts_prompt_rtgs_between_iterations():
-    model = _build_model()
-    trainer = GRPOTrainer(model, device="cpu", trainable_log_std=False)
-    initial_prompts = [
-        GRPOPrompt(seed=10, options={"target": -0.4}, rtg_value=-1.0, max_steps=3),
-        GRPOPrompt(seed=11, options={"target": 0.6}, rtg_value=1.0, max_steps=3),
-    ]
 
-    history = trainer.train(
-        lambda: TinyContinuousEnv(),
-        prompts=initial_prompts,
-        iterations=2,
-        group_size=1,
-        update_epochs=1,
-        minibatch_size=2,
-        adaptive_rtg=True,
-        adaptive_rtg_spread=0.25,
-        adaptive_rtg_dist="gaussian",
-        adaptive_rtg_seed=123,
-    )
-
-    assert len(history) == 2
-    assert history[0]["adaptive_rtg_enabled"] == pytest.approx(1.0)
-    assert trainer._last_prompts[0].seed == initial_prompts[0].seed
-    assert trainer._last_prompts[0].options == initial_prompts[0].options
-    assert len(trainer._last_prompts) == len(initial_prompts)
-    final_rtgs = [prompt.rtg_value for prompt in trainer._last_prompts]
-    initial_rtgs = [prompt.rtg_value for prompt in initial_prompts]
-    assert final_rtgs != initial_rtgs
 
 
 def test_sample_rtg_values_always_includes_optimum():
-    values = sample_rtg_values(optimum=5.0, spread=1.0, count=4, distribution="gaussian", seed=42)
+    values = sample_rtg_values(optimum=5.0, spread=1.0, count=4, seed=42)
     assert len(values) == 4
     assert 5.0 in values
     assert all(isinstance(v, float) for v in values)
 
 
 def test_sample_rtg_values_count_clamps_to_one():
-    values = sample_rtg_values(optimum=2.0, spread=0.5, count=1, distribution="gaussian", seed=0)
+    values = sample_rtg_values(optimum=2.0, spread=0.5, count=1, seed=0)
     assert values == [2.0]
 
 
@@ -235,7 +207,7 @@ def test_sample_rtg_values_zero_count_returns_only_optimum():
 def test_sample_rtg_values_gaussian_centers_on_optimum():
     """Samples should be roughly centered on the optimum (mean ≈ optimum)."""
     values = sample_rtg_values(
-        optimum=10.0, spread=2.0, count=200, distribution="gaussian", seed=123
+        optimum=10.0, spread=2.0, count=200, seed=123
     )
     others = [v for v in values if v != 10.0]
     assert abs(np.mean(others) - 10.0) < 0.5  # sample mean within 0.5 of optimum

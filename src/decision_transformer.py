@@ -733,5 +733,7 @@ class DecisionTransformer(nn.Module):
         _, _, act_preds = self.forward(states, rtg, timesteps, actions, attention_mask=attention_mask)
         act_preds = torch.nan_to_num(act_preds, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Return the last action prediction, removing batch dimension
-        return act_preds[0, -1]
+        # Return the last action prediction (preserving batch dimension if B > 1)
+        if states.shape[0] == 1:
+            return act_preds[0, -1]
+        return act_preds[:, -1]

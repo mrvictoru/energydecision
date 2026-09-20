@@ -131,15 +131,11 @@ def test_build_training_command_forwards_optimizer_surface_flags(tmp_path: Path)
             "--runtime-mode",
             "allow-host",
             "--optimizer",
-            "custom",
-            "--optimizer-class-path",
-            "torch.optim:AdamW",
+            "adamw",
             "--optimizer-kwargs-json",
             '{"eps": 1e-7}',
             "--scheduler",
-            "custom",
-            "--scheduler-class-path",
-            "torch.optim.lr_scheduler:StepLR",
+            "steplr",
             "--scheduler-kwargs-json",
             '{"step_size": 3, "gamma": 0.8}',
         ]
@@ -159,11 +155,9 @@ def test_build_training_command_forwards_optimizer_surface_flags(tmp_path: Path)
         paths=paths,
     )
 
-    assert command[command.index("--optimizer") + 1] == "custom"
-    assert command[command.index("--optimizer-class-path") + 1] == "torch.optim:AdamW"
+    assert command[command.index("--optimizer") + 1] == "adamw"
     assert command[command.index("--optimizer-kwargs-json") + 1] == '{"eps": 1e-7}'
-    assert command[command.index("--scheduler") + 1] == "custom"
-    assert command[command.index("--scheduler-class-path") + 1] == "torch.optim.lr_scheduler:StepLR"
+    assert command[command.index("--scheduler") + 1] == "steplr"
     assert command[command.index("--scheduler-kwargs-json") + 1] == '{"step_size": 3, "gamma": 0.8}'
 
 

@@ -1,11 +1,10 @@
-import logging
 import inspect
 import numpy as np
 import torch
 import polars as pl
 import warnings
 from pathlib import Path
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Callable, Dict, List, Tuple
 from EnergySimEnv import SolarBatteryEnv, VIOLATION_PENALTY
 
 from batterydeg import DegradationModel, RainflowCounter
@@ -16,10 +15,9 @@ from grpo_posttraining import stable_rtg_update
 from sdp_algorithm import SDPSolver
 from mrdp_algorithm import MRDPSolver
 from oracle_algorithm import OracleSolver
-from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES
+from aemo_oracle_algo import AEMOOracleSolver, OracleResult, FCAS_SERVICES, oracle_fcas_bids_to_env_order
 
 import concurrent.futures
-from tqdm.notebook import tqdm
 
 DEG_INCIDENT_FIELDS = [
     "episode_id",
@@ -136,7 +134,9 @@ class Agent:
                  horizon=72, soc_resolution=20, action_resolution=41,
                  use_monte_carlo: bool = True, mc_samples: int = 200, mc_seed: Optional[int] = None,
                  subhorizon_specs=None, rtg_value: float = 0.0, dt_gamma: float = 0.99,
-                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None):
+                 reset_seed: Optional[int] = None, reset_options: Optional[Dict[str, Any]] = None,
+                 rtg_prompt_provider: Optional[Callable[[float, int], float]] = None,
+                 action_projector: Optional[Callable[[Any, Any], Any]] = None):
         """
         env: an instance of SolarBatteryEnv.
         algorithm: choose between 'rule', 'rl', 'dt', 'mrdp', 'sdp', or 'oracle'.
@@ -152,6 +152,8 @@ class Agent:
         self.rule_presistence = False  # Preset for rule-based action persistence
         self.reset_seed = reset_seed
         self.reset_options = reset_options
+        self.rtg_prompt_provider = rtg_prompt_provider
+        self.action_projector = action_projector
 
         if self.algorithm in ('sdp', 'mrdp', 'oracle'):
             required_subhorizon_keys = {'start', 'length', 'soc_resolution', 'action_resolution', 'step_duration'}
@@ -264,6 +266,13 @@ class Agent:
                 raise ValueError("Decision Transformer selected but no model provided.")
             self.model.eval()
             device = next(self.model.parameters()).device
+            if self.rtg_prompt_provider is not None:
+                prompt = self.rtg_prompt_provider(
+                    float(self.env.battery_level), int(self.env.current_step)
+                )
+                if not np.isfinite(prompt):
+                    raise ValueError("rtg_prompt_provider returned a non-finite value")
+                self.dt_rtgs_buffer[-1] = float(prompt)
             
             states, actions, rtgs, timesteps, mask = _build_dt_inference_context(
                 self.model, self.dt_states_buffer, self.dt_actions_buffer,
@@ -384,10 +393,6 @@ class Agent:
         forecast_list = forecast_df.to_dicts()
         return forecast_list
 
-    def _soc_to_idx(self, soc_kwh):
-        """Maps a continuous SoC value to the index of the nearest discrete level."""
-        return np.argmin(np.abs(self.soc_levels_kwh - soc_kwh))
-
     # --- Oracle Helper Methods ---
 
 
@@ -458,7 +463,13 @@ class Agent:
         if self.algorithm == 'dt':
             self.dt_states_buffer = [obs.copy()]
             self.dt_actions_buffer = [np.zeros(self.model.act_dim)]  # Placeholder action for first step
-            self.dt_rtgs_buffer = [self.rtg_value]
+            initial_rtg = (
+                self.rtg_prompt_provider(float(self.env.battery_level), int(self.env.current_step))
+                if self.rtg_prompt_provider is not None else self.rtg_value
+            )
+            if not np.isfinite(initial_rtg):
+                raise ValueError("rtg_prompt_provider returned a non-finite value")
+            self.dt_rtgs_buffer = [float(initial_rtg)]
             self.dt_timesteps_buffer = [self.env.current_step]
 
         logs = []
@@ -472,21 +483,32 @@ class Agent:
             # Use norm_obs if available, else fallback to obs
             current_obs = obs
 
-        #pbar = None
         if display_progress:
             print("Starting Simulation...")
-            """
-            try:
-                from tqdm.notebook import tqdm as tqdm_bar
-            except Exception:
-                from tqdm import tqdm as tqdm_bar
-            # Use DataFrame length as an upper bound for progress
-            pbar = tqdm_bar(total=max_possible_steps, desc="Episode", leave=False)
-            """
         try:
             while not (terminated or truncated):
                 action = self.choose_action(current_obs)
+                if self.action_projector is not None:
+                    action = self.action_projector(action, self.env)
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
+                if self.action_projector is not None and hasattr(
+                    self.action_projector, "last_projected"
+                ):
+                    info = dict(info)
+                    info["action_projected"] = bool(
+                        self.action_projector.last_projected
+                    )
+                    info["projected_action_scale"] = float(
+                        self.action_projector.last_scale
+                    )
+                    if hasattr(self.action_projector, "last_soc_projected"):
+                        info["action_soc_projected"] = bool(
+                            self.action_projector.last_soc_projected
+                        )
+                    if hasattr(self.action_projector, "last_price_gated"):
+                        info["action_price_gated"] = bool(
+                            self.action_projector.last_price_gated
+                        )
 
                 logs.append({
                     'step': step,
@@ -538,12 +560,9 @@ class Agent:
                     self.env.render()
                 step += 1  # Increment step counter
                 if display_progress is not False:
-                    #pbar.update(1)
                     print(f"Step {step}/{max_possible_steps}", end='\r')
 
         finally:
-            #if pbar is not None:
-                #pbar.close()
             print("Sim Complete")
 
         episode_df = pl.DataFrame(logs)
@@ -585,8 +604,8 @@ class AEMOAgent:
                  fcas_raise_threshold: float | None = None,
                  fcas_lower_threshold: float | None = None,
                  fcas_pctile: float = 0.80,
-                 forecast_npz_path: str | None = None,
                  deg_cost_per_mwh: float = 50.0,
+                 deg_calibration: float = 1.0,
                  executor: str = "lp"):
         self.env = env
         self.algorithm = algorithm.lower()
@@ -609,6 +628,10 @@ class AEMOAgent:
         # (Only used by the 'lp' executor; the 'sdp' executor uses the repo's
         # rainflow DegradationCalculator directly.)
         self.deg_cost_per_mwh = float(deg_cost_per_mwh)
+        # Calibrates the SDP planner's per-step wear to the env's realized
+        # (per-cycle) wear; see known_issues B4. Only the 'sdp' executor and the
+        # J_t(soc) table use it.
+        self.deg_calibration = float(deg_calibration)
 
         self.rtg_value = rtg_value
         self.dt_gamma = dt_gamma
@@ -665,10 +688,6 @@ class AEMOAgent:
         self.fcas_pctile = float(fcas_pctile)
         self._fcas_norm_max = self._compute_fcas_norm_max()
         self._init_fcas_thresholds()
-
-        # Forecast DT config
-        self.forecast_npz_path = forecast_npz_path
-        self._forecast_map: np.ndarray | None = None
 
     def _env_has_non_identity_impact(self) -> bool:
         impact = getattr(self.env, "_impact", None)
@@ -886,61 +905,6 @@ class AEMOAgent:
             return np.array([0.0], dtype=np.float32) if self.dispatch_action_mode == 'simple' else np.zeros(self.env.action_space.shape[0], dtype=np.float32)
         return self.dispatch_actions[idx]
 
-    # ── Forecast DT helpers ─────────────────────────────────────────────
-
-    def _ensure_forecast_map(self) -> None:
-        if self._forecast_map is not None:
-            return
-        if self.forecast_npz_path:
-            try:
-                fc = np.load(str(self.forecast_npz_path))
-                self._forecast_map = fc["forecast_map"]
-                self._forecast_timestamps = fc["timestamps"]
-            except Exception:
-                self._forecast_map = np.array([], dtype=np.float32)
-                self._forecast_timestamps = np.array([], dtype=np.float32)
-        else:
-            self._forecast_map = np.array([], dtype=np.float32)
-            self._forecast_timestamps = np.array([], dtype=np.float32)
-
-    def _forecast_npz_offset(self) -> int:
-        fts = getattr(self, '_forecast_timestamps', np.array([], dtype=np.float32))
-        if len(fts) == 0:
-            return 0
-        df = getattr(self.env, 'aemo_data', None)
-        if df is None or 'SETTLEMENTDATE' not in df.columns:
-            return 0
-        first_row = df.row(0)
-        col_idx = df.columns.index('SETTLEMENTDATE')
-        raw_ts = first_row[col_idx]
-        if hasattr(raw_ts, 'timestamp'):
-            target = int(raw_ts.timestamp())
-        elif isinstance(raw_ts, (int, float)):
-            target = int(raw_ts)
-        else:
-            try:
-                target = int(raw_ts)
-            except (ValueError, TypeError):
-                return 0
-        idx = int(np.searchsorted(fts, target))
-        if idx >= len(fts):
-            return 0
-        return idx
-
-    def _build_forecast_window(self, episode_step: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        F = int(self.model.forecast_len)
-        f_states = np.zeros((F, self.model.state_dim), dtype=np.float32)
-        if self._forecast_map is not None and len(self._forecast_map) > 0:
-            offset = self._forecast_npz_offset()
-            fmap = self._forecast_map
-            for fi in range(F):
-                g_idx = offset + episode_step + fi
-                if 0 <= g_idx < len(fmap):
-                    f_states[fi, 5:11] = fmap[g_idx, 0, :6]
-        f_rtgs = np.zeros((F, 1), dtype=np.float32)
-        f_timesteps = np.zeros(F, dtype=np.int64)
-        return f_states, f_rtgs, f_timesteps
-
     def _compute_fcas_norm_max(self) -> float:
         if not hasattr(self.env, 'aemo_data') or self.env.aemo_data is None:
             return 100.0
@@ -1051,26 +1015,19 @@ class AEMOAgent:
             # Pack per-interval actions NORMALISED to env's action space [-1,1] and [0,1].
             # Env interprets: dispatch_mw = action[0] * max_flow (positive = charge, negative = discharge).
             # Oracle's dispatch convention is the opposite: positive = discharge, negative = charge.
-            # So we negate when mapping to env's convention.
-            # FCAS bid order must match the env's self._fcas_services order:
-            #   ['RAISEREG', 'LOWERREG', 'RAISE6SEC', 'LOWER6SEC',
-            #    'RAISE60SEC', 'LOWER60SEC', 'RAISE5MIN', 'LOWER5MIN']
-            env_fcas_order = self.env._fcas_services if hasattr(self.env, '_fcas_services') else None
+            # So we negate when mapping to env's convention. FCAS bids are remapped from
+            # the Oracle's grouped raise/lower order into the env's action order by
+            # ``oracle_fcas_bids_to_env_order``.
+            env_fcas_order = getattr(self.env, '_fcas_services', None)
             actions = np.zeros((T, 1 + 8))
             actions[:, 0] = np.clip(-self._oracle_result.optimal_dispatch / max_flow, -1.0, 1.0)
             if env_fcas_order is not None:
-                # Map Oracle's RAISE bids (indexed 0-3: 6SEC, 60SEC, 5MIN, REG) and
-                # LOWER bids (0-3: 6SEC, 60SEC, 5MIN, REG) into env's order.
-                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
-                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
-                for i, svc in enumerate(env_fcas_order):
-                    if svc.startswith('RAISE'):
-                        acts = self._oracle_result.optimal_raise_bids
-                        oidx = ORAISE.get(svc, 0)
-                    else:  # LOWER
-                        acts = self._oracle_result.optimal_lower_bids
-                        oidx = OLOWER.get(svc, 0)
-                    actions[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+                actions[:, 1:] = oracle_fcas_bids_to_env_order(
+                    self._oracle_result.optimal_raise_bids,
+                    self._oracle_result.optimal_lower_bids,
+                    env_fcas_order,
+                    max_flow,
+                )
             else:
                 actions[:, 1:5] = np.clip(self._oracle_result.optimal_raise_bids / max_flow, 0.0, 1.0)
                 actions[:, 5:9] = np.clip(self._oracle_result.optimal_lower_bids / max_flow, 0.0, 1.0)
@@ -1221,16 +1178,12 @@ class AEMOAgent:
             actions_out = np.zeros((n, 1 + 8))
             actions_out[:, 0] = np.clip(-result.optimal_dispatch / max_flow, -1.0, 1.0)
             if env_fcas_order is not None:
-                ORAISE = {'RAISE6SEC': 0, 'RAISE60SEC': 1, 'RAISE5MIN': 2, 'RAISEREG': 3}
-                OLOWER = {'LOWER6SEC': 0, 'LOWER60SEC': 1, 'LOWER5MIN': 2, 'LOWERREG': 3}
-                for i, svc in enumerate(env_fcas_order):
-                    if svc.startswith('RAISE'):
-                        acts = result.optimal_raise_bids
-                        oidx = ORAISE.get(svc, 0)
-                    else:
-                        acts = result.optimal_lower_bids
-                        oidx = OLOWER.get(svc, 0)
-                    actions_out[:, 1 + i] = np.clip(acts[:, oidx] / max_flow, 0.0, 1.0)
+                actions_out[:, 1:] = oracle_fcas_bids_to_env_order(
+                    result.optimal_raise_bids,
+                    result.optimal_lower_bids,
+                    env_fcas_order,
+                    max_flow,
+                )
             else:
                 actions_out[:, 1:5] = np.clip(result.optimal_raise_bids / max_flow, 0.0, 1.0)
                 actions_out[:, 5:9] = np.clip(result.optimal_lower_bids / max_flow, 0.0, 1.0)
@@ -1434,6 +1387,7 @@ class AEMOAgent:
                 energy, soc = sdp_energy_dispatch(
                     env, forecast[t0:t1], start_soc, target,
                     deg_cost_per_mwh=self.deg_cost_per_mwh,
+                    deg_calibration=self.deg_calibration,
                 )
             except Exception as e:
                 print(f"  [dt_soc_sdp] SDP failed on segment {seg} ({e}); flat SOC")
@@ -1487,34 +1441,10 @@ class AEMOAgent:
             timesteps = torch.tensor(timesteps, dtype=torch.long, device=device).unsqueeze(0)
             attention_mask = torch.tensor(mask, dtype=torch.bool, device=device).unsqueeze(0)
 
-            is_forecast = hasattr(self.model, 'forecast_len') and self.model.forecast_len > 0
-            if is_forecast:
-                self._ensure_forecast_map()
-                # Training sliding window: history at start_idx..start_idx+T-1,
-                # forecast at start_idx+T..start_idx+T+F-1. At inference the
-                # right-aligned buffer means start_idx = max(0, buffer_len-T),
-                # so the forecast must be at max(T, buffer_len), not pinned
-                # at context_len (which leaves a stale forecast for 88% of
-                # a 1728-step episode).
-                context_len = self.model.context_len
-                buffer_len = len(self.dt_states_buffer)
-                episode_start = int(getattr(self.env, 'episode_start_idx', 0))
-                forecast_ep_step = episode_start + max(context_len, buffer_len)
-                f_states, f_rtgs, f_timesteps = self._build_forecast_window(forecast_ep_step)
-                f_states = torch.tensor(f_states, dtype=torch.float32, device=device).unsqueeze(0)
-                f_rtgs = torch.tensor(f_rtgs, dtype=torch.float32, device=device).unsqueeze(0)
-                f_timesteps = torch.tensor(f_timesteps, dtype=torch.long, device=device).unsqueeze(0)
-                with torch.no_grad():
-                    action = self.model.get_action(
-                        states, actions, rtgs, timesteps, attention_mask=attention_mask,
-                        forecast_states=f_states, forecast_rtgs=f_rtgs,
-                        forecast_timesteps=f_timesteps,
-                    )
-            else:
-                with torch.no_grad():
-                    action = self.model.get_action(
-                        states, actions, rtgs, timesteps, attention_mask=attention_mask,
-                    )
+            with torch.no_grad():
+                action = self.model.get_action(
+                    states, actions, rtgs, timesteps, attention_mask=attention_mask,
+                )
             action = torch.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
             action = action.detach().cpu().numpy()
             action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0)
@@ -1707,6 +1637,7 @@ class AEMOAgent:
             forecast,
             deg_cost_per_mwh=self.deg_cost_per_mwh,
             impact_model=impact_model,
+            deg_calibration=self.deg_calibration,
         )
 
     def _lookup_jtsoc_rtg(self, step_idx: int, soc_kwh: float) -> float:

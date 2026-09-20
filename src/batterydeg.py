@@ -284,17 +284,6 @@ class DegradationModel:
         }
 
 
-
-def static_degradation(Id, Ich, SoC_avg, DoD):
-    """Alias for per-cycle degradation used in static estimations."""
-    model = DegradationModel()
-
-    d = model.degradation_per_cycle(T=25.0, Id=Id, Ich=Ich, SOCav=SoC_avg, DOD=DoD)
-    print("Degradation per cycle:", d)
-    print("Equivalent cycle life:", np.inf if d == 0 else 1.0 / d)
-    return d
-
-
 class RainflowCounter:
     def __init__(self, step_duration=1.0, eps=0.1, max_c_rate=1.0): # eps in percent SoC, smaller than 0.1% is ignored
         self.step_duration = step_duration
@@ -372,13 +361,18 @@ class RainflowCounter:
                         if delta_time <= 1e-12:
                             Id_cycle = Ich_cycle = 0.0
                         else:
+                            # SoC is tracked in percent; convert the change to a
+                            # C-rate (fraction of capacity per hour) before
+                            # clamping to max_c_rate. Dividing by 100 is required
+                            # so the value matches DegradationModel's nominal
+                            # C-rates (Id_nom=0.25, Ich_nom=0.125).
                             if soc2 > soc1:
-                                Ich_cycle = (soc2 - soc1) / delta_time
+                                Ich_cycle = (soc2 - soc1) / 100.0 / delta_time
                                 # conduct clamping based on max C-rate
                                 Ich_cycle = min(Ich_cycle, self.max_c_rate)
                                 Id_cycle = 0.0
                             else:
-                                Id_cycle = (soc1 - soc2) / delta_time
+                                Id_cycle = (soc1 - soc2) / 100.0 / delta_time
                                 # conduct clamping based on max C-rate
                                 Id_cycle = min(Id_cycle, self.max_c_rate)
                                 Ich_cycle = 0.0
@@ -393,15 +387,6 @@ class RainflowCounter:
 
         return closed_cycles
 
-
-def rainflow_counting(soc_profile, step_duration=1.0, eps=1e-6):
-    """Return all closed cycles for the provided SoC profile."""
-
-    counter = RainflowCounter(step_duration=step_duration, eps=eps)
-    closed_cycles = []
-    for soc in soc_profile:
-        closed_cycles.extend(counter.update(soc))
-    return closed_cycles
 
 
 # =============================================================================
@@ -638,6 +623,62 @@ class RealWorldBESSDegradationModel:
         c_rate_factor = 1.0 + self.beta_crate * c_rate_clamped
 
         return self.k_cyc * arr * dod_factor * c_rate_factor
+
+
+# =============================================================================
+# Specialized Degradation Models for Ablation Studies
+# =============================================================================
+
+class CycleOnlyDegradationModel:
+    """
+    Degradation model with only cycle aging, no calendar aging.
+    Calendar aging (degradation_per_timestep) returns 0.
+    """
+    
+    def __init__(self):
+        from batterydeg import DegradationModel as RealDegradationModel
+        self._real_model = RealDegradationModel()
+    
+    def degradation_per_cycle(
+        self,
+        *,
+        T: float,
+        Id: float,
+        Ich: float,
+        SOCav: float,
+        DOD: float,
+    ) -> float:
+        """Only cycle aging, no calendar aging."""
+        return self._real_model.degradation_per_cycle(
+            T=T, Id=Id, Ich=Ich, SOCav=SOCav, DOD=DOD
+        )
+    
+    def degradation_per_timestep(self, *args, **kwargs) -> float:
+        """No calendar aging per timestep."""
+        return 0.0
+
+
+class DisabledDegradationModel:
+    """
+    Degradation model with all degradation disabled.
+    No cycle aging, no calendar aging.
+    """
+    
+    def degradation_per_cycle(
+        self,
+        *,
+        T: float,
+        Id: float,
+        Ich: float,
+        SOCav: float,
+        DOD: float,
+    ) -> float:
+        """No cycle aging."""
+        return 0.0
+    
+    def degradation_per_timestep(self, *args, **kwargs) -> float:
+        """No calendar aging."""
+        return 0.0
 
 
 

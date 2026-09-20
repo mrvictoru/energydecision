@@ -62,7 +62,7 @@ With Distrobox you just:
 ```bash
 distrobox enter energydecision
 cd ~/path/to/energydecision
-python3 src/pretrain_decision_transformer.py ...
+python3 scripts/pretrain_decision_transformer.py ...
 ```
 
 ---
@@ -190,7 +190,7 @@ You are now in a shell inside the container. Your home directory is mounted, so:
 
 ```bash
 cd ~/path/to/energydecision
-python3 src/pretrain_decision_transformer.py \
+python3 scripts/pretrain_decision_transformer.py \
   --data-dir data/household/logs \
   --epochs 2 --batch-size 6 --lr 2e-5 \
   --save-path models/household/dt/dt_model.pt \
@@ -199,7 +199,8 @@ python3 src/pretrain_decision_transformer.py \
 ```
 
 Note: you are at the **repo root**, not `/code/src` as in the Docker Compose setup, so
-scripts are referenced with a `src/` prefix and relative data/model paths work as-is.
+canonical entrypoints are referenced under `scripts/` (some data-generation modules
+remain under `src/`) and relative data/model paths work as-is.
 
 ### Step 3a — Translate Docker commands to repo-root Distrobox commands
 
@@ -207,11 +208,11 @@ For this repository, the important migration rule is:
 
 | Docker Compose shell (`/code/src`) | Distrobox shell (repo root) |
 |---|---|
-| `python3 pretrain_decision_transformer.py --data-dir ../data/...` | `python3 src/pretrain_decision_transformer.py --data-dir data/...` |
-| `python3 pretrain_aemo_decision_transformer.py --dataset-path ../data/...` | `python3 src/pretrain_aemo_decision_transformer.py --dataset-path data/...` |
+| `python3 pretrain_decision_transformer.py --data-dir ../data/...` | `python3 scripts/pretrain_decision_transformer.py --data-dir data/...` |
+| `python3 pretrain_aemo_decision_transformer.py --dataset-path ../data/...` | `python3 scripts/pretrain_aemo_decision_transformer.py --dataset-path data/...` |
 | save to `../models/...` | save to `models/...` |
 
-If you are moving from the old Docker shell workflow, the rule is simple: **add `src/` to script paths and remove leading `../` from repo-relative data/model paths**.
+If you are moving from the old Docker shell workflow, the rule is simple: **use `scripts/` for canonical entrypoints (or `src/` for data-generation modules) and remove leading `../` from repo-relative data/model paths**.
 
 ### Step 4 — Run Jupyter Notebook
 
@@ -262,7 +263,7 @@ distrobox list
 distrobox enter energydecision
 
 # Run a single command without entering (non-interactive)
-distrobox enter energydecision -- python3 src/pretrain_decision_transformer.py --help
+distrobox enter energydecision -- python3 scripts/pretrain_decision_transformer.py --help
 
 # Stop a running container
 distrobox stop energydecision

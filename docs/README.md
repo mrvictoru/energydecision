@@ -50,6 +50,7 @@ This is the main human documentation entrypoint for the repository.
 
 These files are useful, but they are not the best place to start if you are new to the repo.
 
+- [known_issues.md](known_issues.md): tracked code-level inconsistencies and modelling caveats
 - [research/README.md](research/README.md)
 - [grpo_experiments.md](grpo_experiments.md)
 - [aemo_research_plan.md](aemo_research_plan.md)

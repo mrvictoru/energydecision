@@ -8,7 +8,7 @@ while using shared degradation models from batterydeg.py.
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from batterydeg import DegradationModel, RainflowCounter
+from batterydeg import DegradationModel
 
 
 class DegradationCalculator:
@@ -21,21 +21,27 @@ class DegradationCalculator:
     """
     
     def __init__(self, battery_capacity: float, step_duration: float, 
-                 battery_life_cost: float, degradation_temperature: float = 25.0):
+                 battery_life_cost: float, degradation_temperature: float = 25.0,
+                 calibration: float = 1.0):
         """
         Initialize degradation calculator.
-        
+
         Args:
             battery_capacity: Battery capacity in kWh
             step_duration: Time step duration in hours
             battery_life_cost: Total cost of battery replacement in $
             degradation_temperature: Operating temperature in °C
+            calibration: Multiplier applied to the per-step wear estimate so the
+                planner's total wear can be matched to the environment's realized
+                wear (the env charges per closed rainflow cycle, while the planner
+                accumulates a per-step half-cycle; see known_issues B4).
         """
         self.battery_capacity = battery_capacity
         self.step_duration = step_duration
         self.battery_life_cost = battery_life_cost
         self.degradation_temperature = degradation_temperature
-        
+        self.calibration = float(calibration)
+
         # Initialize the class-based degradation model from batterydeg.py
         self.cycle_degradation_model = DegradationModel()
     
@@ -60,42 +66,43 @@ class DegradationCalculator:
             DOD=DoD,
         )
     
-    def compute_rainflow_degradation(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
-        """
-        Estimate degradation for a single step using rainflow counting.
-        
-        Uses the RainflowCounter class from batterydeg.py to detect cycles
-        and calculate degradation.
-        
-        Args:
-            soc_start_kwh: Starting state of charge in kWh
-            soc_end_kwh: Ending state of charge in kWh
-            
-        Returns:
-            Degradation fraction (0-1) for this SoC transition
+    def compute_step_degradation(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
+        """Marginal degradation fraction for one step's SoC transition.
+
+        A single step is treated as a **half-cycle** whose depth is the SoC
+        excursion. The multi-factor per-cycle model is evaluated at the
+        transition's average SoC and C-rate, then halved.
+
+        The previous implementation fed a 3-point sequence (start, end, start)
+        to ``RainflowCounter``, which can never close a cycle (that needs four
+        turning points), so this estimator always returned 0 — the SDP/MRDP/
+        Oracle stage costs were effectively degradation-blind (known_issues A5).
         """
         if self.battery_capacity <= 0:
             return 0.0
-        
-        # Convert to percentages
-        start_pct = np.clip((soc_start_kwh / self.battery_capacity) * 100.0, 0.0, 100.0)
-        end_pct = np.clip((soc_end_kwh / self.battery_capacity) * 100.0, 0.0, 100.0)
-        
-        # Use RainflowCounter to detect cycles
-        counter = RainflowCounter(step_duration=self.step_duration)
-        cycles = []
-        for val in (start_pct, end_pct, start_pct):
-            cycles.extend(counter.update(val))
-        
-        # Sum degradation from all detected cycles
-        deg_frac = 0.0
-        for SoC_avg, DoD, Id_cycle, Ich_cycle in cycles:
-            deg_frac += self.degradation_per_cycle(Id_cycle, Ich_cycle, SoC_avg, DoD)
-        
-        # Sanitize: ensure non-negative and finite
-        if not np.isfinite(deg_frac) or deg_frac <= 0.0:
+
+        delta = float(soc_end_kwh) - float(soc_start_kwh)
+        if abs(delta) <= 1e-12:
             return 0.0
-        return float(min(deg_frac, 1.0))
+
+        dod = abs(delta) / self.battery_capacity * 100.0
+        soc_avg = (float(soc_start_kwh) + float(soc_end_kwh)) / 2.0 / self.battery_capacity * 100.0
+        c_rate = abs(delta) / self.battery_capacity / max(self.step_duration, 1e-12)
+        if delta > 0:
+            Id, Ich = 0.0, c_rate
+        else:
+            Id, Ich = c_rate, 0.0
+
+        deg = self.degradation_per_cycle(Id, Ich, soc_avg, dod)
+
+        # Sanitize: ensure non-negative and finite
+        if not np.isfinite(deg) or deg <= 0.0:
+            return 0.0
+        return float(min(0.5 * deg * self.calibration, 1.0))
+
+    def compute_rainflow_degradation(self, soc_start_kwh: float, soc_end_kwh: float) -> float:
+        """Deprecated alias for :meth:`compute_step_degradation`."""
+        return self.compute_step_degradation(soc_start_kwh, soc_end_kwh)
 
 
 def interpolate_ctg(soc_levels_kwh: np.ndarray, ctg_array: np.ndarray, soc_value: float) -> float:

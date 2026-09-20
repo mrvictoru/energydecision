@@ -4,7 +4,7 @@ CACHE_DIR=/tmp/scenario_cache
 OUT_DIR=data/aemo_dt_impact
 LOG_DIR=/tmp/impact_gen_logs
 mkdir -p "$LOG_DIR"
-REPO=/media/victoru/0a1c0748-f508-de49-9b25-b0ac435a9727/energydecision
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 REGIONS="NSW1 QLD1 SA1 TAS1 VIC1"

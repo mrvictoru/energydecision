@@ -2,10 +2,25 @@
 
 > **STATUS:** Stages A–C are **DONE** and the shipped recommendation is now settled:
 > use **`rtg_mode="auto"`**. It reproduces the `j_t_soc` wins on **all 4 identity
-> surfaces** exactly (standard 4.9×, dispatch 1.57×, 2025 OOD 3.98×, expanded 1.78×)
-> while preserving the **impact-gate pass** on every grid-scale battery by falling back to
-> constant RTG under merit-order impact. This file is **ARCHIVED** — the final session
-> was 2026-08-23. The forward plan is now in **`docs/FUTURE_PLAN.md`**.
+> surfaces** (physics-v2 v2cal: standard 6.9×, dispatch 1.78×, 2025 OOD 4.74×,
+> expanded 1.65×) while preserving the **impact-gate pass** on every grid-scale battery by
+> falling back to constant RTG under merit-order impact. This file is **ARCHIVED** —
+> the final session was 2026-08-23; **all numbers in the diary below are historical
+> and must not be cited** (the shipped numbers are in `report.md §8.2.11`). The
+> forward plan is now in **`docs/FUTURE_PLAN.md`**.
+>
+> **SHIPPED MODEL (2026-09):** `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` (physics-v2,
+> wear-calibrated SDP teacher, `--deg-calibration 0.12`) supersedes the v1
+> `aemo_dt_sdp_jtsoc_fullcorpus.pt` referenced throughout the diary below; see
+> `report.md §8.2.11`.
+>
+> **CORRECTION (2026-09-13):** the "explicit `j_t_soc` fails the impact gate on large
+> batteries" finding in the INVESTIGATION below (2026-08-20) was an artifact of
+> `phase3_impact_eval.py` not applying the checkpoint `return_scale` (~26,000× prompt
+> error; see `docs/known_issues.md` B8), not a property of the J_t(soc) table. The
+> canonical impact gate was re-run with the fix and still **passes** (DT beats PPO on
+> all 9 cells; small 3.21×, hornsdale 2.59×, torrens 2.02×). `rtg_mode="auto"` remains
+> the shipped choice, but as a robustness trade-off rather than collapse-avoidance.
 
 ## 1. Goal
 
@@ -1076,7 +1091,7 @@ line. Defer unless Stages A–C plateau.
 - Training: 3 epochs, batch=16, stride=105, lr=3e-5, 1h 19m on RTX 2080 Ti
 - Loss: train 0.140, val 0.134 (action 0.139, state 0.320, return 6.7e-6 — properly scaled!)
 
-**j_t_soc inference (identity-surface improvement, BUT impact-gate regression):**
+**j_t_soc inference (historical v1 numbers; the impact-gate FAILURE was a `return_scale` eval bug, B8):**
 - Standard Oct $11,573 (4.9×), Expanded $34,761 (1.78×), 2025 OOD $25,862 (3.98×)
 - Impact gate FAILS on hornsdale/torrens under merit-order — see §INVESTIGATION (2026-08-20)
 
@@ -1085,7 +1100,11 @@ line. Defer unless Stages A–C plateau.
 fails the impact gate — pending the impact-aware J_t(soc) fix (H1/H3 in §INVESTIGATION).
 
 ### Final project verdict
-The standalone Decision Transformer is now the preferred policy for AEMO battery trading under **const-RTG inference**, beating PPO on all 4 identity surfaces (standard 3.85×, dispatch 2.25×, 2025 OOD 1.98×, expanded 1.63×) and passing the impact gate (2.6–3.0×). The j_t_soc inference path improves identity further (standard 4.9×, expanded 1.78×, 2025 3.98×) but fails the impact gate on large batteries due to the price-taking J_t(soc) table — the impact-aware fix (H1) is the next priority.
+**Superseded.** The v1 numbers in this archived diary are historical. The shipped
+result is the physics-v2 v2cal checkpoint (`aemo_dt_sdp_jtsoc_v2cal.pt`,
+`rtg_mode="auto"`): standard $16,209 (6.9× PPO), dispatch-matched $40,039
+(1.78×), expanded broad-2024 $32,146 (1.65×), 2025 OOD $30,791 (4.74×), impact
+gate passed. See `report.md §8.2.11`.
 
 ### 2026-08-18 — Final checklist
 - [x] Exp 0 — PPO-only DT eval (2025 OOD, dispatch-matched, standard) **DONE**

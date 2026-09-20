@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Few-shot fine-tune IBM Granite TTM-R3 on AEMO price data, then generate
-forecast-augmented training data for the ForecastDecisionTransformer.
+Few-shot fine-tune IBM Granite TTM-R3 on AEMO price data.
 
 Usage:
-    python3 scripts/ttm_finetune_and_forecast.py --finetune --generate
+    python3 scripts/ttm_finetune_and_forecast.py --finetune
 """
 from __future__ import annotations
 
@@ -26,7 +25,6 @@ from transformers import EarlyStoppingCallback, Trainer, TrainingArguments
 from tsfm_public import (
     TinyTimeMixerForPrediction,
     TimeSeriesPreprocessor,
-    TimeSeriesForecastingPipeline,
     TrackingCallback,
     get_datasets,
 )
@@ -49,7 +47,6 @@ TARGET_COLUMNS = [
 FINETUNE_DIR = Path("models/ttm_aemo_finetuned")
 FINETUNE_DIR.mkdir(parents=True, exist_ok=True)
 
-OUTPUT_NPZ = Path("data/aemo_dt_forecast/ttm_forecasts.npz")
 
 
 # ── Data loading ─────────────────────────────────────────────────────────
@@ -235,124 +232,12 @@ def finetune_ttm(
 
 # ── Forecast generation ──────────────────────────────────────────────────
 
-def generate_forecasts(
-    pdf: pd.DataFrame, model: TinyTimeMixerForPrediction, device: str
-) -> dict[str, np.ndarray]:
-    """Generate 48-step forecasts for every valid starting position.
-
-    For each channel, slides a window over the data and produces
-    forecasts at stride intervals, then fills gaps via interpolation.
-    """
-    print("\n=== Generating forecasts ===")
-    n_total = len(pdf)
-    stride = FORECAST_LEN // 2  # 24 — enough overlap
-    results: dict[str, np.ndarray] = {}
-
-    for channel in TARGET_COLUMNS:
-        t0 = time.time()
-        series_data = pdf[["time", channel]].copy()
-        series_data[channel] = series_data[channel].fillna(0.0).astype(np.float32)
-
-        # Preprocessor for this channel
-        tsp = TimeSeriesPreprocessor(
-            timestamp_column="time",
-            target_columns=[channel],
-            context_length=CONTEXT_LEN,
-            prediction_length=FORECAST_LEN,
-            scaling=True,
-            center=True,
-        )
-        tsp.train(series_data)
-
-        # Build pipeline
-        pipeline = TimeSeriesForecastingPipeline(
-            model=model,
-            device=device,
-            batch_size=64,
-            preprocessor=tsp,
-        )
-
-        # Generate forecasts at stride intervals
-        forecasts = np.zeros((n_total, FORECAST_LEN), dtype=np.float32)
-
-        # For each position with enough context, get the forecast
-        positions = list(range(CONTEXT_LEN, n_total - FORECAST_LEN + 1, stride))
-
-        for pos in positions:
-            chunk = series_data.iloc[:pos + FORECAST_LEN]
-            try:
-                pred_df = pipeline(chunk)
-                # Extract the prediction columns
-                pred_col = [c for c in pred_df.columns if channel in c]
-                if pred_col:
-                    vals = pred_df[pred_col[-1]].values  # last prediction column
-                    if len(vals) >= FORECAST_LEN:
-                        forecasts[pos] = vals[:FORECAST_LEN]
-            except Exception as e:
-                print(f"  [WARN] pos {pos}: {e}")
-
-        # Fill gaps between stride windows via linear interpolation
-        for col in range(FORECAST_LEN):
-            col_vals = forecasts[:, col]
-            valid = col_vals != 0
-            if valid.any():
-                idx = np.where(valid)[0]
-                for i in range(len(idx) - 1):
-                    start, end = idx[i], idx[i + 1]
-                    if end - start > stride:
-                        forecasts[start:end, col] = np.linspace(
-                            forecasts[start, col], forecasts[end, col], end - start
-                        )
-
-        results[channel] = forecasts
-        elapsed = time.time() - t0
-        print(f"[FC] {channel}: {len(positions)} forecasts in {elapsed:.1f}s")
-
-    return results
-
-
-def assemble_forecast_states(
-    forecasts: dict[str, np.ndarray], n_total: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Assemble per-step forecast states from individual channel forecasts.
-
-    Returns:
-        forecast_states: [n_total, FORECAST_LEN, 18] — 18-dim observation
-        forecast_rtgs:   [n_total, FORECAST_LEN] — discounted RTGs
-    """
-    # Build the 18-dim observations from available forecast channels
-    # The 18-dim observation is: [time_feats(5), RRP(1), demand(1),
-    #   FCAS(8), gen(2), SOC(1)]
-    # We forecast: RRP, demand, 8 FCAS = 10 dims
-    # Time features (hour_sin/cos, day_sin/cos, is_peak), gen(2), SOC are
-    #   not forecast (they follow deterministic patterns).
-    # For those, we'll use the last observed value or a persistence forecast.
-
-    n_channels = len(TARGET_COLUMNS)  # 10
-    f_states = np.zeros((n_total, FORECAST_LEN, 18), dtype=np.float32)
-
-    for ci, ch in enumerate(TARGET_COLUMNS):
-        if ch in forecasts:
-            f_states[:, :, 5 + ci] = forecasts[ch]  # offset 5 for time features
-    # Remaining dims (time features, gen mix, SOC) stay 0
-    # These will be masked or filled by the dataset
-
-    # RTGs: cumulative discounted return from forecast point
-    f_rtgs = np.zeros((n_total, FORECAST_LEN), dtype=np.float32)
-    for t in range(n_total):
-        for fi in range(FORECAST_LEN):
-            # Simple heuristic: RTG decays exponentially from current step
-            f_rtgs[t, fi] = 0.95 ** fi
-
-    return f_states, f_rtgs
-
 
 # ── Main ────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--finetune", action="store_true", help="Run fine-tuning")
-    parser.add_argument("--generate", action="store_true", help="Generate forecasts")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--aemo-data-dir", default="data/aemo")
     parser.add_argument(
@@ -380,23 +265,6 @@ def main():
         else:
             print("[Main] No fine-tuned model found. Use --finetune first.")
             return
-
-    if args.generate:
-        forecasts = generate_forecasts(pdf, model, args.device)
-        f_states, f_rtgs = assemble_forecast_states(forecasts, len(pdf))
-
-        OUTPUT_NPZ.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            OUTPUT_NPZ,
-            forecast_states=f_states,
-            forecast_rtgs=f_rtgs,
-            n_total=len(pdf),
-            forecast_len=FORECAST_LEN,
-            channels=TARGET_COLUMNS,
-        )
-        print(f"[Main] Forecast data saved to {OUTPUT_NPZ}")
-        print(f"   forecast_states: {f_states.shape}")
-        print(f"   forecast_rtgs:   {f_rtgs.shape}")
 
     print("[Main] Done")
 

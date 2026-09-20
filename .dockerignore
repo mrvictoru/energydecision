@@ -1,0 +1,9 @@
+.git
+.venv*
+.ttm-bootstrap
+data
+eval_output
+models
+system_logs
+__pycache__
+*.pyc

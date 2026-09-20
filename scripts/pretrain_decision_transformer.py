@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from decision_transformer import DecisionTransformer
+from dt_artifacts import write_model_kwargs
 from transformer_training import (
     TrajectoryDataset,
     episode_train_val_split,
@@ -47,8 +48,8 @@ SUPPORTED_MODEL_CONFIG_KEYS = frozenset(
         "action_head_mode",
     }
 )
-APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop", "custom")
-APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none", "custom")
+APPROVED_OPTIMIZERS = ("adamw", "adam", "sgd", "rmsprop")
+APPROVED_SCHEDULERS = ("steplr", "cosineannealinglr", "exponentiallr", "none")
 ACTION_MODE_TO_ACT_DIM = {
     "simple": 1,
     "multi_market": 3,
@@ -74,6 +75,7 @@ SEARCHABLE_KNOBS = (
     "rope_max_position",
     "rope_base",
     "batch_size",
+    "stride",
     "epochs",
     "lr",
     "val_split",
@@ -89,8 +91,6 @@ SEARCHABLE_KNOBS = (
     "prefetch_factor",
     "optimizer",
     "scheduler",
-    "optimizer_class_path",
-    "scheduler_class_path",
     "optimizer_kwargs",
     "scheduler_kwargs",
     "checkpoint_interval",
@@ -100,6 +100,7 @@ SEARCHABLE_KNOBS = (
 )
 TRAINING_KNOB_TO_ARG_DEST = {
     "batch_size": "batch_size",
+    "stride": "stride",
     "lr": "lr",
     "epochs": "epochs",
     "discount": "discount",
@@ -120,8 +121,6 @@ TRAINING_KNOB_TO_ARG_DEST = {
     "prefetch_factor": "prefetch_factor",
     "optimizer": "optimizer",
     "scheduler": "scheduler",
-    "optimizer_class_path": "optimizer_class_path",
-    "scheduler_class_path": "scheduler_class_path",
     "optimizer_kwargs": "optimizer_kwargs_json",
     "scheduler_kwargs": "scheduler_kwargs_json",
 }
@@ -152,6 +151,7 @@ SAFE_NUMERIC_RANGES: dict[str, tuple[float, float]] = {
     "rope_max_position": (1, 16_384),
     "rope_base": (1.0, 1_000_000.0),
     "batch_size": (1, 4096),
+    "stride": (1, 1_000_000),
     "epochs": (1, 100_000),
     "lr": (1e-8, 1.0),
     "val_split": (0.0, 0.95),
@@ -200,17 +200,6 @@ MODEL_VARIANTS: dict[str, dict[str, Any]] = {
         "n_heads": 8,
         "drop_p": 0.1,
     },
-    "aemo_multimarket": {
-        "state_dim": 18,
-        "act_dim": 3,
-        "n_block": 4,
-        "h_dim": 128,
-        "context_len": 288,
-        "n_heads": 8,
-        "drop_p": 0.1,
-        "max_timestep": 2016,
-        "rope_enabled": True,
-    },
 }
 SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "legacy": SurfacePreset(
@@ -219,10 +208,6 @@ SURFACE_PRESETS: dict[str, SurfacePreset] = {
     "household_baseline": SurfacePreset(
         description="Household-oriented baseline preset using the legacy model defaults.",
         model_variant="baseline",
-    ),
-    "aemo_multimarket": SurfacePreset(
-        description="AEMO multi-market preset aligned with the shared notebook and wrapper defaults.",
-        model_variant="aemo_multimarket",
     ),
     "aemo_proxy": SurfacePreset(
         description=(
@@ -425,22 +410,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Approved scheduler selection exposed by the training surface.",
     )
     parser.add_argument(
-        "--optimizer-class-path",
-        type=str,
-        default=None,
-        help="Import path for --optimizer=custom in the form package.module:ClassName.",
-    )
-    parser.add_argument(
         "--optimizer-kwargs-json",
         type=str,
         default=None,
         help="Optional JSON object merged into optimizer construction kwargs.",
-    )
-    parser.add_argument(
-        "--scheduler-class-path",
-        type=str,
-        default=None,
-        help="Import path for --scheduler=custom in the form package.module:ClassName.",
     )
     parser.add_argument(
         "--scheduler-kwargs-json",
@@ -838,6 +811,7 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     explicit_cli_args = set(getattr(args, "explicit_cli_args", set()))
     training_kwargs = {
         "batch_size": args.batch_size,
+        "stride": args.stride,
         "lr": args.lr,
         "epochs": args.epochs,
         "discount": args.discount,
@@ -864,12 +838,10 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "prefetch_factor": args.prefetch_factor,
         "optimizer": args.optimizer,
         "scheduler": args.scheduler,
-        "optimizer_class_path": args.optimizer_class_path,
         "optimizer_kwargs": parse_json_object_arg(
             args.optimizer_kwargs_json,
             flag_name="--optimizer-kwargs-json",
         ),
-        "scheduler_class_path": args.scheduler_class_path,
         "scheduler_kwargs": parse_json_object_arg(
             args.scheduler_kwargs_json,
             flag_name="--scheduler-kwargs-json",
@@ -880,16 +852,6 @@ def assemble_training_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         if arg_dest is not None and arg_dest in explicit_cli_args:
             continue
         training_kwargs[key] = value
-    if training_kwargs["optimizer"] == "custom":
-        if not training_kwargs["optimizer_class_path"]:
-            raise ValueError("--optimizer=custom requires --optimizer-class-path.")
-    elif training_kwargs["optimizer_class_path"] is not None:
-        raise ValueError("--optimizer-class-path requires --optimizer=custom.")
-    if training_kwargs["scheduler"] == "custom":
-        if not training_kwargs["scheduler_class_path"]:
-            raise ValueError("--scheduler=custom requires --scheduler-class-path.")
-    elif training_kwargs["scheduler_class_path"] is not None:
-        raise ValueError("--scheduler-class-path requires --scheduler=custom.")
     for key, value in training_kwargs.items():
         validate_numeric_range(key, value)
     return training_kwargs
@@ -1002,7 +964,9 @@ def load_trajectory_datasets(
     return datasets
 
 
-def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDataset:
+def merge_trajectory_datasets(
+    datasets: list[TrajectoryDataset], *, stride: int = 1
+) -> TrajectoryDataset:
     if not datasets:
         raise ValueError("datasets must be non-empty")
     first = datasets[0]
@@ -1017,6 +981,7 @@ def merge_trajectory_datasets(datasets: list[TrajectoryDataset]) -> TrajectoryDa
         first.state_dim,
         first.act_dim,
         first.gamma,
+        stride=stride,
         use_rtg_col=getattr(first, "use_rtg_col", False),
     )
 
@@ -1253,8 +1218,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             action_mode=surface.action_mode,
             label="Validation",
         )
-        train_dataset = merge_trajectory_datasets(datasets)
-        val_dataset = merge_trajectory_datasets(val_datasets)
+        train_dataset = merge_trajectory_datasets(datasets, stride=args.stride)
+        val_dataset = merge_trajectory_datasets(val_datasets, stride=args.stride)
         print("Using explicit validation parquet files; bypassing episode partitioning.")
     else:
         train_dataset, val_dataset = episode_train_val_split(
@@ -1316,6 +1281,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         val_parquet_files=val_parquet_files,
     )
     write_json(surface_manifest_path, surface_manifest)
+    # A checkpoint's architecture is part of its artifact contract.  Do not
+    # make downstream inference recover it from an unrelated legacy config.
+    model_kwargs_path = save_path.with_name(save_path.stem + "_model_kwargs.json")
+    write_model_kwargs(model_kwargs_path, model_kwargs)
 
     model = DecisionTransformer(**model_kwargs)
     started_at = time.monotonic()
@@ -1345,9 +1314,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         return_scale=surface.training_kwargs["return_scale"],
         optimizer_name=surface.training_kwargs["optimizer"],
         scheduler_name=surface.training_kwargs["scheduler"],
-        optimizer_class_path=surface.training_kwargs["optimizer_class_path"],
         optimizer_kwargs=surface.training_kwargs["optimizer_kwargs"],
-        scheduler_class_path=surface.training_kwargs["scheduler_class_path"],
         scheduler_kwargs=surface.training_kwargs["scheduler_kwargs"],
         amp_mode=surface.training_kwargs["amp_mode"],
         num_workers=surface.training_kwargs["num_workers"],
@@ -1479,6 +1446,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if val_losses:
         print(f"Final validation total loss {val_losses[-1]:.6f}")
     print(f"Trained weights available at {save_path}")
+    print(f"Model configuration written to {model_kwargs_path}")
     print(f"Loss history written to {loss_csv_path} and {checkpoints_csv}")
     print(f"Training surface manifest written to {surface_manifest_path}")
 

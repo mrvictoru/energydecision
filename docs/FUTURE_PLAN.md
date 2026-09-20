@@ -8,11 +8,35 @@
 >
 > Status key: ⬜ = open, 🟡 = in progress / partially measured, ✅ = done, 🔴 = on hold, 📝 = writing / meta.
 
+> **Physics rebaseline notice (2026-09-14):** Household results and status
+> claims recorded before the A1-A4 fixes are historical and require reruns.
+> The fixes changed round-trip efficiency, calendar aging, rainflow C-rate
+> units, and the reset C-rate cap. Marked household items H4.1-H4.5, H4.7,
+> and H4.9-H4.12 as pending rebaseline; their existing artifacts and headline
+> numbers must not be used as current evidence until regenerated. The shared
+> `batterydeg` changes also invalidate prior AEMO simulator evaluations; the
+> A5/B4 planner calibration requires regenerated SDP-teacher corpora,
+> Stage C retraining, and rerun identity/impact-gate evaluations.
+
+### Rebaseline status
+
+| Scope | Status | Required action |
+|---|---|---|
+| H4.1 corpus and household DT/SB3 checkpoints | ✅ DONE (2026-09-20) | `h4_v2c` DT + 9 retrained SB3 checkpoints under corrected physics. |
+| H4.2-H4.4 household forecast / PPO / evaluation surfaces | ✅ DONE (2026-09-20) | Calibrated no-forecast + TTM teachers generated and DTs retrained; the pre-fix TTM advantage does not survive (arms statistically indistinguishable at RTG −2). |
+| H4.5 degradation study | 🟡 RE-PRICED (2026-09-18) | Eval-only re-price of the 5×3 existing checkpoints: all regimes net-negative, wear ~2–2.5× cheaper. Policies themselves remain pre-fix. |
+| H4.7/H4.9/H4.11 deployment + long-horizon eval | ✅ DONE (eval-only, 2026-09-18) | RTE-matched oracle + calibrated `h4_v2c` DT on real 7/30/90/14 d + 1 y/180 d synth; see `workflow.md` §H4.9 bucket-A table. |
+| H4.10/H4.12 fair DT-vs-RL + paired statistics | ✅ DONE (bucket B, 2026-09-20) | PPO/SAC/TD3 retrained on corrected env; no policy robustly net-positive under the wrapper; stats in `eval_output/household/h4_12_bucket_b/statistics.json`. |
+| AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
+| AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on 4/4 identity surfaces + impact. HF upload pending. |
+| Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$93/yr vs rule −$60 (RTE-matched oracle +$690/yr). |
+| Household H4.x re-runs + RTE-matched oracle | ✅ DONE (2026-09-20) | Bucket A (eval-only, RTE-matched oracle) + bucket B (retrained forecast arms and SB3) complete. Remaining household gaps: live shadow, spot pass-through, broader telemetry (bucket C). |
+
 ---
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (Stage C, SDP-distilled, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate** ($11.6k vs $2.35k standard; $35.3k vs $22.5k dispatch-matched; $34.8k vs $19.5k expanded 2024; $25.9k vs $6.5k 2025 OOD; 2.5–3.1× impact resilience). Statistical rigor applied (bootstrap CIs, paired Wilcoxon, all six DT-vs-PPO CIs exclude zero).
+**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is re-baselined (buckets A+B, 2026-09-20):** calibrated `h4_v2c` teacher, RTE-matched oracle, retrained forecast arms and 9 SB3 checkpoints. Open household work is bucket C only (live shadow, spot pass-through, broader telemetry).
 
 **What we don't have (the open problems):**
 
@@ -20,11 +44,51 @@
 |---|---|---|
 | 1 | **Sim-to-real gap** — all results simulator-based | The #1 credibility gap; a safety-wrapper + real settlement validation is the path to "deployable" |
 | 2 | **Broad-surface FCAS under-bidding** — DT $4.8k vs PPO $10.2k on 5-min expanded 2024 | The behaviour-cloning ceiling is real; offline data quality is the binding constraint |
-| 3 | **j_t_soc impact failure** — price-taking cost-to-go collapses at grid scale under merit-order | Open algorithmic problem: impact-aware cost-to-go or surface-aware mode gating |
+| 3 | **`j_t_soc` impact behaviour (revised)** — the reported "collapse" was a `return_scale` evaluation bug (B8); explicit `j_t_soc` is now impact-viable but can over-trade energy on some large-battery cells | Open work: per-surface/battery mode selection or a stronger impact-aware cost-to-go |
 | 4 | **Oracle_MI fixed-point artifact** — >100% PT at 150 MW+ | Numerical robustness for the impact-aware ceiling |
 | 5 | **Full_fcas broad surface** — protocol asymmetry means current expanded eval uses 3-dim actions | Quick win to close a disclosed limitation |
 | 6 | **Multi-agent NEM** — no learned multi-BESS interaction | Genuine research frontier with your impact model |
 | 7 | **Offline-Q (IQL/CQL) vs planner-distillation** | Never tried; clean methods comparison on same ceiling |
+
+---
+
+## 0.1 Household DT Validation Status
+
+This table consolidates the household-track evidence behind the deployment
+readiness decision. "Successful" means the specific validation objective was
+met; it does not necessarily mean that the DT is production-ready.
+
+> **Superseded (2026-09-18/20).** The quantitative values in this table
+> (e.g. +A$2.7/+A$1.1/+A$4.44/yr directional and gate, +A$3.55/+A$3.70/yr fair
+> DT, +A$6.08/yr shadow, +A$22–61/yr directional synthetic) were computed under
+> the pre-fix pipeline and are retained as history. Under corrected physics with
+> the calibrated `h4_v2c` DT and an RTE-matched oracle, the inference-time and
+> wrapped surfaces are net-negative (30 d −$54, 90 d −$103, shadow −$45; no
+> policy robustly net-positive under the wrapper). See
+> `docs/household/workflow.md` §H4.9 (buckets A/B) and `report.md` §8.1.2.
+
+| Validation area | Status | What has been established | Still required |
+|---|---|---|---|
+| Hard SOC limits | ✅ Successful | Unsafe SOC states are clipped, logged, and exposed through step metadata. | Shadow-mode confirmation with real telemetry. |
+| SOC safety penalty | ✅ Implementation validated | The penalty is applied consistently and can provide a training signal. | Demonstrate through retraining that the policy learns to avoid unsafe requests. |
+| Raw long-horizon evaluation | ✅ Diagnostic success | Exposed the original DT's over-cycling and degradation-adjusted economic weakness. | Use the finding to assess improved policies, not the raw DT alone. |
+| RTG prompt sweep | 🟡 Partial | `RTG=-4` was the best tested prompt, but prompting alone did not solve over-cycling. | No further prompt-only work unless later evidence requires it. |
+| Combined throughput projection | 🟡 Partial | Bounded wear and improved larger-capacity cases without retraining. | Keep as comparator; 5 kWh real economics remain marginal. |
+| SOC-aware action projection | ✅ Successful | Actions are made SOC-feasible before `env.step()`, eliminating environment SOC clips in tested runs. | Confirm projection behavior in shadow mode. |
+| Directional throughput budgeting | 🟡 Promising | Independent `0.05` charge / `0.05` discharge limits improved all four 180-day synthetic capacity cases. | Validate longer real-data behavior. |
+| Calendar-day budget accounting | ✅ Successful | Irregular and missing timestamps no longer distort daily throughput resets. | Continue monitoring with real telemetry. |
+| Real-data directional evaluation | 🟡 Partial | Twelve 30-day windows and three 90-day windows achieved zero SOC clips, zero safety penalty, and approximately `0.04999` / `0.049974 EFC/day`; net savings were approximately +A$2.7/year and +A$1.1/year respectively. | Expand seasonal coverage and compare directly against the same-window combined projector. |
+| Matched-capacity synthetic evaluation | ✅ Successful on tested surface | Directional net savings were approximately −A$0.9, +A$22.2, +A$42.5, and +A$61.4/year for 5/10/15/20 kWh systems. | Confirm transfer to real households. |
+| Hardware versatility | 🟡 Partially validated | Inference-time controls operate across 5–20 kWh and 3.3–7 kW configurations. | Validate model mismatch and real hardware constraints. |
+| Price-aware gating | 🟡 Promising | A threshold sweep rejected `$0.35/kWh` discharge gating as too restrictive; the `$0.30/$0.10` gate improved the same three 90-day windows to approximately +A$3.7/year, then improved all twelve 30-day real windows to approximately +A$4.44/year versus +A$2.69/year without gating and about +A$3.82/year for the combined comparator. Throughput remained 0.049992 EFC/day with zero SOC clips/safety penalty. | Validate the selected gate in shadow mode and under broader tariff/forecast conditions before making it a deployment default. |
+| Multi-seed RL baselines | 🟡 Fair synthetic and limited real-OOD deployment comparison complete | Three seeds each at 250k timesteps completed for PPO, SAC, and TD3 on the H4.1 training corpus. The matched comparison applies identical 1%–99% SOC, independent 0.05 charge/discharge EFC/day, and `$0.30/$0.10` price-gate wrappers. On ten shared 90-day synthetic windows, DT (`rtg=-4`) achieved +A$3.55/year with 0.04997 EFC/day, 0 SOC clips, and 0 safety penalty. On the available four-window, 30-day real-OOD surface, DT achieved +A$3.70/year with 0.04999 EFC/day, 0 SOC clips, and 0 safety penalty; PPO/SAC remained mixed across seeds and TD3 was under-active. Paired bootstrap/Wilcoxon analysis found significant synthetic DT advantages against selected weaker seeds, but no significant real-OOD differences (`n=4`). | Treat the real result as limited transfer evidence, not a definitive seasonal claim; live shadow mode is unavailable with the current hardware interface. |
+| Real-household shadow mode | 🟡 Offline proxy complete | Five contiguous 14-day real-data windows replayed the selected gate with 0.049997 EFC/day, zero SOC clips, zero safety penalty, and approximately +A$6.08/year annualized net savings. | Run a true live telemetry shadow for approximately 14 days; the repository currently has no device-control/stream interface. |
+| Retraining benefit | ⬜ Deferred | Inference-time controls have not yet justified a training change. | Retrain only after shadow or gating results identify a specific gap. |
+
+The current evidence supports **safe inference-time experimentation**, not
+closed-loop deployment. The next gates are longer real-data validation,
+price-aware gating, and shadow mode; stronger RL baselines are needed for
+comparative claims, but are not a safety prerequisite.
 
 ---
 
@@ -74,6 +138,15 @@
 
 ---
 
+| 🔵 **H4.8** | **Cycle-throughput / capacity-fade telemetry** — already implemented in evaluator (`_cycle_metrics_from_logs`, `segment_efc`, `segment_cycles`, `segment_capacity_fade`, `mean_efc_per_day`, etc.). | Use the new per-window cycle metrics to strengthen H4.5 claims with direct mechanism evidence. | ✅ Implemented (eval script + `h4_degradation_study.py` aggregation). |
+|  |  |  |
+| **H4.8** | **Production hardening — deployment readiness checklist** | **Progress:** (1) ✅ Hard SOC limits implemented in `EnergySimEnv.step()` with validated `soc_min`/`soc_max`, default clipping + `logging.warning`, opt-out via `enforce_soc_limits=False`, `SafetyViolation` API type, and a calibrated A$0.25 `soc_limit_penalty`; reward info exposes clipping metadata. **Remaining:** (2) 30-day shadow-mode eval with realistic price/solar noise; (3) multi-seed PPO/SAC/TD3 baselines; (4) 14-day sim-to-real shadow analysis; (5) H4.6 spot-price pass-through + TTM gap adapter. | **Hard constraints:** no retraining for (1)-(4); shadow-mode deploy on 1 real home for 14 days before any closed-loop trial. |
+|  |  |  |
+| **H4.9** | **Long-horizon evaluation** — 30-day / 90-day / 1-year evaluation horizons with realistic seasonal price/solar profiles. 7-day windows are too short for degradation economics to converge. | **Evaluation complete, readiness gap identified:** 30-day real-normalized OOD on 4 windows and 90-day real-normalized OOD on 3 windows show that the DT achieves the lowest gross energy bill but over-cycles (about 1.14 EFC/day at 90 days), making its degradation-adjusted net bill worse than PPO and no-battery. The 1-year held-out H4.1 synthetic test is positive for DT (about A$503/year net savings) but uses episode-specific 20 kWh batteries and is not directly comparable to the 5 kWh real surface. Artifacts: `eval_output/household/h4_9_pilot_{30d,90d,1y_synth}/summary.json`. No retraining was used. **Diagnostic update:** evaluator safety telemetry and RTG sweep (`-4,-2,-1,0,+1`) under 1%–99% SOC bounds found `-4` best but still negative after degradation. An inference-time daily-throughput sweep selected **0.10 EFC/day**; the constrained DT gave A$1,607/year at 5 kWh (A$10.5 loss), A$1,591 at 10 kWh (A$5.6 savings), A$1,574 at 15 kWh (A$23.2 savings), and A$1,548 at 20 kWh (A$49.3 savings), with about 0.07–0.08 EFC/day and zero clipping on the larger systems. **Matched-capacity synthetic validation:** ten held-out 180-day windows with explicit 5/10/15/20 kWh overrides produced approximately −A$3.5, +A$4.1, +A$14.6, and +A$34.6/year net savings respectively at 0.10 EFC/day; mean EFC was stable at about 0.0506/day. The 20 kWh case had no SOC clips; smaller cases had initialization-related lower-bound clips in one window. **Implemented next diagnostic:** the projector now enforces exact SOC-feasible action bounds before the environment step and reports `action_soc_projected_steps`. The 30-day endpoint reruns with SOC-aware projection removed all environment clips and gave approximately +A$0.2/year (5 kWh) and +A$41.4/year (20 kWh). A fair directional ablation using 0.05 charge + 0.05 discharge EFC/day improved net savings to approximately +A$0.9/year and +A$60.1/year at 5 kWh and 20 kWh respectively, with zero SOC clips and observed discharge EFC near 0.05/day. **Real-data correction:** calendar-date budget resets eliminated the irregular-timestamp accounting artifact; twelve 30-day windows held discharge throughput to 0.04999 EFC/day with zero SOC clips and +A$2.7/year net savings, below the prior combined-budget real result of about +A$3.8/year. **Next:** retain the combined projector as the current economic default, keep directional budgets as a safe experimental option, and validate the matched-capacity 180-day directional surface before adding price-aware gating or retraining. |
+| **H4.9.1** | **Directional throughput validation** — matched-capacity 180-day evaluation using independent `0.05` charge and `0.05` discharge EFC/day budgets. | **Complete:** on the same ten held-out windows, net savings were approximately −A$0.9, +A$22.2, +A$42.5, and +A$61.4/year for 5, 10, 15, and 20 kWh systems respectively, versus −A$3.5, +A$4.1, +A$14.6, and +A$34.6/year for the combined `0.10` budget. Mean EFC stayed at 0.049945–0.049947/day with zero SOC clips. Directional budgeting is the preferred inference-time candidate for matched-capacity synthetic evaluation; retain the combined projector as the real-data comparator and proceed to shadow-mode/price-aware validation before retraining. |
+| **H4.10** | **Multi-seed PPO/SAC/TD3 baselines** — three seeds × three algorithms at 250k steps on the H4.1 corpus, followed by a shared-wrapper comparison. | **Complete for the reduced synthetic surface:** DT was evaluated on three deterministic 180-day windows and all nine SB3 checkpoints were aggregated on those same windows. Broader seasonal and real-OOD comparison remains open. |
+| **H4.11** | **Sim-to-real shadow mode** — 14-day shadow deployment on 1 real household (log actions, don't control). Validate sim-to-real gap on price/solar forecast errors, model mismatch, degradation model mismatch. | Single highest-impact sim-to-real step; gate before any closed-loop trial. |
+|  |  |  |
 ## 5. Engineering / Rigor / Reproducibility
 
 | ID | Task | Priority |
@@ -126,17 +199,141 @@
 
 | Phase | Task | Notes |
 |---|---|---|
-| **H0** | **Data pipeline**: ingestion script normalizing portal CSVs → `transform_polars_df` schema (`Timestamp, SolarGen, HouseLoad, FutureSolar, FutureLoad, ImportEnergyPrice, ExportEnergyPrice, Time`); validate gaps / DST transitions / meter resets / resolution changes; merge script + manifest for ~52 files/year | Unglamorous, critical first step |
-| **H0** | **Privacy guardrails**: anonymize identifiers; raw data stays local-only (`.gitignore`); consent documented; only derived stats or one synthetic household published | Non-negotiable before any commit of data |
-| **H1** | **Re-establish benchmark**: rerun rule / oracle / SB3 PPO / current DT on modern data; define surfaces — train 2019–2022, OOD 2023–2025; seasonal splits; tariff-regime splits (e.g., if plan changed over time) | Establishes whether old results hold |
-| **H2** | **Port the AEMO playbook**: trajectory collection (rule/SDP/PPO) → SDP-teacher distillation → standalone DT → cost-to-go prompting → smoke/standard/comprehensive eval tiers with bootstrap CIs | Reuse `TrajectoryDataset`, trainer, evaluator patterns verbatim |
-| **H3** | **Replay-gap analysis**: quantify actual vs optimal operation per year; decompose into timing errors vs capacity misallocation | The headline result unique to this track |
-| **H3** | **Tariff-policy experiments**: flat vs ToU vs spot pass-through (e.g. Amber-style plans) — same hardware, different tariffs → policy-relevant economics | Reuses everything built in H1–H2 |
+| ✅ **H0** | **Data pipeline**: SMA 'Energy balance - Day' parser (`src/household_ingest.py`) — 12-h dotted clock, [W]/[kW] variants auto-scaled, battery SOC/power channels preserved; year dataset builder (`build_year_dataset`): merge/dedupe/convert kW→kWh + day-ahead persistence `FutureSolar`/`FutureLoad`; privacy-anonymized manifest. **First real year ingested: 365/365 days, 105,108 rows, zero gaps** (2025-08-25 → 2026-08-24, VPP household). Env smoke-tested end-to-end on the full year (12-D obs, 5-min steps inferred correctly). | Done |
+| ✅ **H0** | **Privacy guardrails**: raw + normalized telemetry gitignored under `data/household/real/`; only the anonymized manifest (`sma_<date>` identities, sha256 checksums) is committed; privacy leak test enforced. Protocol: `docs/household/real_data_protocol.md`. Data source is a **VPP-coordinated** battery (grid-charging schedule) — noted for H3 interpretation. | Done |
+| ✅ **H0** | **Gap & disconnection guards**: raw exports contain month-scale holes (renovation disconnection) and offline periods log as hard zeros, not NaN. Defenses: `find_gap_boundaries`/`split_segments` (>90-min timestamp jumps → contiguous episodes with `SegmentID`, DST-passing threshold); seam-row kW→kWh conversion capped at nominal step; `drop_dead_runs` removes sustained all-zero stretches (HouseLoad AND SolarGen == 0 for ≥2h); per-file `exact_zero_rows` (sustained) and `suspect_zero_rows` (isolated ≤10-min all-zero runs flanked by normal data, interpolated as dropped samples) manifest stats. Ingest CLI supports `--start-date`/`--end-date` range filtering. Env must always run per-segment. Corpus: 1,153 days (2023-02-24 → 2026-08-24), 319,170 rows, 5 segments; 105 isolated zero-rows across 101 files interpolated. | Done |
+| ✅ **H1** | **Re-established legacy benchmark**: existing rule, perfect-foresight oracle, SB3 PPO, and cloning-era DT evaluated on five gap-separated real OOD segments at 5 kWh / 3.3 kW under the legacy flat 30c/5c tariff. Annualized bootstrap results: no battery $1,254 (95% CI $700–$1,894), rule $1,185 (saves $70), PPO $1,252 (saves $2), DT $1,260 (loses $6), oracle $525 (saves $729). | Confirms the Ausgrid-era PPO/DT policies do not generalize to modern telemetry; H2 retraining is required |
+| ✅ **H1.5** | **Synthetic diverse-household generator** — see detailed plan below | Core generator, G1–G6 gates, env-view export, OOD holdout, and reproducible corpus CLI implemented; optional Granite TTM adapter remains separately provisioned |
+| ✅ **H2** | **SDP-teacher distillation transfer test completed — POSITIVE TRANSFER**: checkpoint-specific configs now persist alongside weights (`h2_*_model_kwargs.json`); 840/180 synthetic teacher episodes regenerated under realistic tariff (31.042c import, free 11:00–14:00, 1c FiT) with correct RTE=0.80; inference precomputes exact segment-local `-J_t(soc)` prompt per calendar day. **Standard-RTG baseline on 2×128 ctx60 achieves +$254/yr** (beats rule +$82, 28% of oracle gap). **J_t(soc) on 8×512 ctx576 with corrected RTE=0.80 achieves +$300/yr** (3.6× rule, 24% of oracle gap). Both models beat rule and demonstrate successful planner-distillation transfer at household scale. | Distillation transfers across scales when: (1) config persists correctly, (2) RTE matches env (0.80), (3) model capacity ≥ AEMO-scale (8×512/ctx576), (4) teacher data uses realistic tariff. J_t(soc) inference works but requires sufficient model capacity; standard-RTG remains a strong baseline.
+| ✅ **H3** | **Replay-gap analysis completed**: deterministic 5-minute optimizer compares recorded VPP actions with re-optimized dispatch per contiguous real day. At 5 kWh / 3.3 kW / 0.80 RTE: observed-to-optimal gap is **$355/yr** with free 11:00–14:00 pricing (95% bootstrap CI $342–$368 over 1,084 complete days); **$214/yr** under flat pricing. Spot pass-through remains pending a time-aligned retail spot-price series. |
+| ✅ **H3** | **Tariff-policy experiments**: flat and realistic free-window ToU sweep implemented in `scripts/evaluate_household_tariffs.py`; prices are re-derived rather than using stored 0.30/0.05 defaults. | Spot pass-through remains pending a time-aligned retail spot-price series. |
+
+### Household follow-on work (H4 — bring household evidence to AEMO standard)
+
+H0–H3 establish a working household pipeline and a positive distillation
+signal, but the evidence is not yet comparable to the AEMO track's
+multi-surface result. The current synthetic corpus is fixed at seven-day
+episodes, the forecast channels use a simple persistence baseline, and the
+PPO comparison is the legacy checkpoint rather than a policy freshly trained
+on the modern synthetic corpus. These are research gaps, not implementation
+failures.
+
+| ID | Next experiment | Acceptance criteria |
+|---|---|---|
+| ✅ H4.1 | **Horizon- and scenario-diverse synthetic corpus** — generate episodes spanning one week, several weeks, roughly six months, and multi-year horizons across the existing five archetypes, seasons/day-types, appliance recipes, solar sizing/orientation, and battery configurations. Preserve contiguous calendar order within each episode and record horizon, source dates, tariff, battery size, degradation model, and seed in the manifest. The first H4.1 build also supplies the held-out synthetic surfaces for H4.4 evaluation. | Degradation and calendar aging affect the objective and learned policy; no horizon/scenario leakage across train/validation/test; short- and long-horizon results reported separately. **Done (2026-09-01):** full build at `data/household/synth_h4_1` — 240 episodes (5 archetypes × 4 seasons × 3 capacities × horizons 1w/2w/6m/2y; 55,860 episode-days), schema-v2 manifest with per-episode horizon, degradation (`calendar_cycle_rainflow`, life cost $5,000), solar, appliance and provenance params; splits 165/35/40 with the same 158 real source dates held out for OOD. Note: 23/40 train 2y episodes terminate early (`total_degradation >= 1.0`) — degradation exhaustion is a genuine long-horizon signal, identically present in all forecast variants. |
+| ✅ **H4.2** | **Forecast ablation and improved forecast generation** — inference-only substitution showed no value from the old forecast fields, so three matched 8×512/context-576 policies were retrained. Granite TTM-R3 runs offline in an isolated CUDA Distrobox and improved real-OOD solar/load MAE by **39.2%/17.5%** over current-value persistence. Under causal standard RTG at the shared training-median prompt (RTG=−2), annualized savings were **TTM +$258.50**, **24-hour persistence +$216.74**, and **no forecast +$155.12**. TTM beat persistence by **+$41.75/yr** (95% CI **+$16.56–$69.43**, 9/10 wins, p=0.0068) and no forecast by **+$103.37/yr** (95% CI **+$78.23–$127.67**, 10/10 wins, p=0.0010). The oracle-assisted J_t(soc) comparison independently favored TTM by +$117.36/year. | Matched standard-RTG controls establish that forecast features are useful and TTM adds value beyond 24-hour persistence. Keep the offline TTM channels in the household observation pipeline. RTG prompt sensitivity and the current single-household OOD surface remain explicit H4.4 limitations. |
+| ✅ **H4.3** | **Fresh modern-data SB3 baseline** — fresh PPO was trained for 250k steps on the H4.1 train split with 12 parallel CPU environments and evaluated at the matched 5 kWh/3.3 kW configuration. On the five real OOD segments it saves **+$27/yr**, below the rule **+$81/yr** and H2 DT **+$300/yr**; the legacy PPO remains only a historical transfer baseline. | Initial fresh-PPO comparison complete; retraining SB3 alone does not solve household transfer. Longer/multi-seed PPO and optional SAC/TD3 remain follow-ups after forecast and degradation studies. |
+| ✅ **H4.4** | **AEMO-equivalent household evaluation surfaces** — full-corpus (H4.1) matched three-way forecast comparison plus fresh full-corpus PPO, evaluated on the fixed 10-window real-OOD surface and a 20-window synthetic-test surface with per-episode battery configs. | **Done (2026-09-02).** Matched standard-RTG DTs (8×512/ctx576, shared RTG=−2 from training median −1.78) on real OOD: **TTM +$357.29/yr, 24h-persistence +$309.35/yr, no-forecast +$310.90/yr, fresh full-corpus PPO +$23.66/yr, rule +$58.03/yr, oracle +$738.96/yr**. TTM beats persistence by **+$47.94/yr** (95% CI +$27.99–$67.59, 9/10, Wilcoxon p=0.0020) and no-forecast by **+$46.39/yr** (95% CI +$23.78–$68.91, 9/10, p=0.0020). Persistence≈no-forecast now collapses (−$1.55, p=0.46): with diverse data only the genuinely better TTM channel helps. All savings are higher than the H4.2 7-day-corpus run (TTM +$98.79), confirming the offline-forecast benefit generalizes beyond the controlled corpus. **Limitation:** on the synthetic multi-battery test surface the three DTs are statistically indistinguishable (TTM−no_forecast −$15.49/yr, p=0.86; per-horizon mixed) — the forecast advantage is proven on the held-out real household, not yet on the broad synthetic surface. Commands in `workflow.md` §6c; artifacts `eval_output/household/h4_4_*`, `models/household/dt/h4_4_*`. |
+| ✅ **H4.5** | **Degradation-aware policy study** — compare degradation disabled, cycle-only, calendar-plus-cycle, and realistic battery-life-cost settings across the horizon-diverse corpus. | **Done (2026-09-06).** Final definitive run: 5 conditions × 3 seeds on the fixed 10-window real-OOD surface, using the 24-hour persistence forecast channels (not the TTM sidecar — comparable to H4.4 only in surface, not forecast input), with the evaluator now reporting both **grid-bill-only savings** and **net-of-wear savings** (each policy’s actual `info["step_degradation"]` × default A$5,000 life cost) plus **cycling-mechanism metrics** (EFC/day, rainflow cycles/day, capacity fade/day). Net-of-wear economics (A$/yr vs no battery): degradation disabled **−A$401.1**, cycle-only **−A$494.9**, full realistic **−A$469.5**, high cost (**A$10,000**) **−A$459.8**, low cost (**A$1,000**) **−A$647.0**. Grid-bill-only means: disabled **+A$364.9**, cycle-only **+A$310.3**, full realistic **+A$369.7**, high cost **+A$321.7**, low cost **+A$270.8**. Headline: **every condition is negative net-of-wear** — short-window arbitrage does not pay for its own wear under any regime. The earlier "disabled = hardest cycler" hypothesis is **not** supported: EFC/day is flat (1.02–1.12) and disabled is actually the *lowest* (1.02); cycle counts overlap across conditions within-seed (2.8–6.2). The A$1,000/A$10,000 inversion does **not** survive across seeds — no dose-response claim. Grid-bill pairwise examples: full_realistic vs low_cost **+A$98.9/yr** (95% CI A$67.6–A$131.9, p=0.0010); disabled vs cycle_only **+A$54.6/yr** (CI A$20.8–A$87.1, p=0.0137). Net-of-wear pairwise intervals span both signs (noisy at 7-day windows). Final result supersedes the earlier single-seed pilot. Artifacts: `results/h4_5_degradation/` and `eval_output/household/h4_5_degradation/`. |
+
+> **Diary (2026-09-06):** We completed the definitive H4.5 multi-seed rerun. The earlier pilot was useful as a sanity check, but it was not the source of truth because it measured only grid-bill reduction and used a single seed. The final scorecard treats the net-of-wear metric as primary and the grid-bill-only metric as secondary, and also records EFC/cycle-count/capacity-fade per day. The key operational takeaway is that **every regime is net-negative once wear is charged** — short-window arbitrage does not pay for its own battery wear. The expected "no-degradation policy is the hardest cycler" story did not hold in the mechanism data (EFC is flat; disabled is the lowest), so the honest conclusion is about the economics (wear makes arbitrage negative) rather than about one regime cycling more than another. The $1k/$10k cost sweep does not show a robust monotone effect across seeds.
+| 🔵 **H4.6** | **Optional extensions** — add a time-aligned retail spot-price pass-through study and provision the isolated TTM gap/weather-residual adapter only after the statistical baselines are complete. | Spot and TTM claims remain separately gated and do not replace the bootstrap/recomposition baselines. |
+|  |  |  |  |
+| **H4.7** | **Production hardening** — close the sim-to-real gap for household deployment. | **Progress:** (1) ✅ Hard SOC limits implemented in `EnergySimEnv.step()` with validated fractional bounds, warning-based clipping, enforcement opt-out, `SafetyViolation`, and A$0.25 reward shaping; 12 focused environment tests and the full 360-test suite pass. (2) ✅ offline 14-day shadow proxy; (3) ✅ multi-seed PPO/SAC/TD3 training; (4) ✅ shared-wrapper DT/RL evaluation on ten 90-day synthetic windows and the available four-window real-OOD surface. DT achieved +A$3.55/year synthetic and +A$3.70/year real-OOD with zero SOC clips and zero safety penalty. **Remaining:** broader telemetry coverage and formal paired statistical analysis; live shadow mode is unavailable with the current hardware interface. | Hard constraints: no retraining for the fair inference comparison; live shadow remains unavailable. |
+|  |  |  |
+| **H4.8** | **Cycle-throughput / capacity-fade telemetry** — already implemented in evaluator (`_cycle_metrics_from_logs`, `segment_efc`, `segment_cycles`, `segment_capacity_fade`, `mean_efc_per_day`, etc.). | Use the new per-window cycle metrics to strengthen H4.5 claims with direct mechanism evidence. | ✅ Implemented (eval script + `h4_degradation_study.py` aggregation). |
+
+### H1.5 — Synthetic diverse-household generator (detailed plan)
+
+> **Problem:** one real household cannot provide behavioral diversity
+> (occupancy patterns, appliance stocks, solar/battery sizing). Policies
+> trained only on it will not generalize. Goal: a controllable corpus of
+> synthetic households recomposed from REAL components, validated against
+> real statistics.
+
+#### Architecture: statistical recomposition (primary), TTM as auxiliary
+
+Generative LLM/diffusion approaches (TimeGAN, Diffusion-TS) are rejected:
+finicky to train, weak control over semantics, no guarantee samples stay
+physically consistent. Bootstrap-from-real keeps every sample traceable.
+
+```
+synthetic household = archetype(load profile)
+                    × season/day-type resampling weights
+                    × injected appliance blocks (EV / AC / pool)
+                  + residual noise (TTM-imputed or bootstrap)
+with roof = f(solar scaling factor), battery = g(capacity, flow)
+```
+
+1. **Archetypes** (occupancy/behavior classes, each parameterized from the
+   real data's daily-profile clusters):
+   - `retiree-low`: flat low load, early peak, minimal evening spike
+   - `family-ev`: double peak + 7–14 kWh overnight/evening EV charge,
+     random weekdays-only or daily
+   - `ac-heavy`: summer afternoon duty-cycled AC blocks (2–5 kW),
+     temperature-driven frequency
+   - `wfh-daytime`: elevated daytime baseline, midday peaks
+   - `shift-worker`: inverted schedule (overnight activity)
+2. **Day resampling**: for target (season × weekday/weekend × archetype),
+   bootstrap whole days from the real corpus's matching cluster, then scale
+   by household-size factor λ ∈ [0.4, 3.0]. Whole-day resampling preserves
+   realistic intra-day autocorrelation (row-wise i.i.d. noise destroys it).
+3. **Appliance injection**: add stochastic blocks ON TOP of resampled days
+   (EV start time ~ N(18h, 45m) truncated, duration from battery-size draw;
+   AC duty cycle Markov chain conditioned on hour & season). Injection is
+   additive on HouseLoad; never negative-clipped silently.
+4. **Solar synthesis**: reuse the real solar shape scaled by installed kW
+   (3–15 kW) × orientation derate (0.75–1.0); optionally swap in TTM
+   weather-residual variation so different years feel like different weather.
+5. **Battery assignment**: capacity ∈ {5, 7, 10, 13.5, 20} kWh, flow ∈
+   {3.3, 5, 7} kW — env already parameterizes this.
+6. **TTM role (auxiliary, optional)**: `ibm-granite/granite-timeseries-ttm-r2`
+   (few-M params, CPU-fine) for (a) plausible imputation of the Feb–Jun 2024
+   renovation gap (labeled SYNTHETIC if used in training), (b) weather-driven
+   residual generation on top of bootstrapped profiles. TTM is NOT the
+   primary generator — it reproduces its context window; it does not invent
+   new households.
+
+#### Validation gate (all gates must pass before a synthetic day is accepted)
+
+| Gate | Statistic | Tolerance vs real corpus |
+|---|---|---|
+| G1 | Daily energy distribution (per archetype×season) | KS test p > 0.05 against matching real cluster |
+| G2 | Peak timing histogram (morning/evening modes) | ±1 h mode shift |
+| G3 | Ramp-rate distribution (95th pct 5-min ΔkW) | within ±20% |
+| G4 | Autocorrelation (lag 1–12 steps) | within ±0.1 |
+| G5 | Zero-energy rows | 0 (no fake idle days) |
+| G6 | Physical sanity | HouseLoad ≥ 0, SolarGen ≥ 0, no NaN |
+
+Gate failures loop back to resampling/injection parameters, never hand-fixed.
+
+#### Corpus target & surfaces
+
+- 5 archetypes × 4 seasons × 3 battery sizes × 20 seeds ≈ **1,200 episodes**
+  (episode = one segment-week; matches AEMO-track corpus scale)
+- Splits: train 70% (archetype-balanced), val 15%, test 15% + held-out
+  OOD surface = the REAL household segments (never trained on)
+- Output: `data/household/synth/<archetype>/<seed>_ep<id>.parquet` +
+  `manifest.json` (params per episode for reproducibility)
+- CLI: `python3 scripts/build_household_synth_corpus.py` (defaults to 1,200
+  seven-day episodes, seed 42, and a 15% real-source OOD holdout)
+- The manifest records every generation knob, source date/cluster, gate
+  metric, split, battery capacity/flow, and whether TTM was used. Generated
+  parquets are env-view-compatible (`SolarBatteryEnv` observes 12 features).
+
+#### Implementation phases
+
+| Step | Deliverable | Test |
+|---|---|---|
+| ✅ 1 | `src/household_synthetic.py`: day clustering (season×daytype k-means on normalized profiles) | cluster purity > 0.8 on held-out labels |
+| ✅ 2 | Resampler + λ-scaling + injection blocks | G1–G6 harness green |
+| ✅ 3 | Battery/solar assignment + env-view export | env instantiates per episode, 12-D obs |
+| ✅ 4 | Corpus build CLI (`scripts/build_household_synth_corpus.py`) | manifest complete, counts exact |
+| ✅ 5 | TTM integration superseded | The in-generator `--use-ttm`/`--ttm-mode` stub was removed (Sep 2026 cleanup); TTM forecasts are now handled by the offline causal sidecar pipeline (H4.2/H4.4, `src/household_forecast.py` + `scripts/run_household_ttm_forecasts.sh`), never inside the generator or simulator. |
+
+#### Risks
+
+- Archetype parameters are guesses until more real households exist — keep
+  every knob explicit and versioned in the manifest.
+- Over-trusting synthetic diversity: the OOD surface of record stays the
+  real household; synthetic is for training breadth only.
+- EV/AC injection may dominate small-λ archetypes (appliance block bigger
+  than base load) — cap injection at ≤60% of daily energy.
 
 ### Quick wins
 
-- QH1: Ingestion script skeleton (`scripts/ingest_household_portal_csv.py`) + `.gitignore` entry for `data/household/real/`
-- QH2: One-week pilot: normalize a single file end-to-end into an env episode and render a plot
+- ✅ QH1: Ingestion script (`scripts/ingest_household_portal_csv.py` + `src/household_ingest.py`) — normalization to env schema, gap/DST/duplicate/negative-value validation, sha256 manifest (share-safe, privacy-tested). PR `feature/household-modern-data`.
+- ⬜ QH2: One-week pilot — blocked on first real portal download; will finalize column hints + units (kW vs kWh) against a real sample (see `docs/household/real_data_protocol.md` "Known format unknowns").
 
 ---
 

@@ -139,6 +139,9 @@ $$R_t = - (C^{grid}_t + C^{deg}_t + P^{violation}_t)$$
     - Cost is proportional to the lost fraction of battery life $\times$ replacement cost.
 3.  **Penalties ($P^{violation}_t$):**
     - Large penalty if physics constraints are violated (e.g., resulting SoC < 0).
+    - Configured SOC-limit clipping applies a default A$0.25 penalty per
+      clipped action (`soc_limit_penalty`), while the action is clipped to
+      remain within the configured SOC bounds.
 
 ## Degradation Model
 The environment uses a rainflow-counting based degradation model or a linear approximation depending on configuration.

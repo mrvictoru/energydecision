@@ -1,0 +1,19 @@
+{
+  "state_dim": 18,
+  "act_dim": 9,
+  "n_block": 8,
+  "h_dim": 768,
+  "context_len": 210,
+  "n_heads": 12,
+  "n_kv_heads": 6,
+  "drop_p": 0.15,
+  "max_timestep": 2016,
+  "rope_enabled": true,
+  "rope_max_position": 630,
+  "rope_base": 10000.0,
+  "qk_norm": true,
+  "tie_weights": true,
+  "action_head_mode": "mixed",
+  "return_scale": 25988.190625,
+  "_comment": "Shipped Stage C (SDP-teacher J_t(soc)) architecture. Mirrors models/aemo/dt/aemo_dt_sdp_jtsoc_fullcorpus_loss_surface_manifest.json model_kwargs and the checkpoint .meta.json return_scale. Do not substitute the modern_v2 config (RoPE off / max_timestep 100000)."
+}
