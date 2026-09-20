@@ -1409,7 +1409,8 @@ Const-RTG inference (all 4 identity surfaces + impact gate):
 | 2025 OOD | $24,500 | $6,498 | DT 3.77× |
 | Impact gate (corrected re-run) | 3.21× / 2.59× / 2.02× | — | PASS |
 
-Explicit j_t_soc inference improves identity further — standard $11,573 (4.9×),
+Explicit j_t_soc inference improves identity further (**v1 Stage C numbers;
+superseded by physics-v2 v2cal in §8.2.11**) — standard $11,573 (4.9×),
 dispatch-matched $35,320 (1.57×), expanded $34,761 (1.78×), 2025 OOD $25,862
 (3.98×); the energy-arbitrage gap narrows to $14.8k vs PPO's $17.4k. An early
 impact evaluation appeared to show it collapsing under merit-order impact; that
@@ -1689,8 +1690,8 @@ This phase drove two research lines to completion:
   (J_t(soc) cost-to-go prompting), plus hierarchical SDP+DT inference
   (`dt_soc_oracle`/`dt_soc_sdp` executors, Stages A–B of §8.2.10).
 - ✅ **Success criteria exceeded:** target was >$12,000/ep dispatch-matched or
-  >$6,000/ep standard; shipped result is $35,320 dispatch-matched and $11,573
-  standard under `rtg_mode="auto"`, both far above target.
+  >$6,000/ep standard; shipped physics-v2 v2cal result is $40,039 dispatch-matched
+  and $16,209 standard under `rtg_mode="auto"`, both far above target.
 
 The current direction moves to **Phase 4's sim-to-real readiness**: safety wrappers,
 hardware-in-the-loop validation where available, and artifact provenance — the DT
@@ -1720,7 +1721,7 @@ This repository introduces a unified framework for learning and planning in batt
 **Key empirical findings:**
 
 - **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: the forecast arms are re-baselined under corrected physics (the pre-fix TTM > persistence advantage does not survive — the three arms are statistically indistinguishable at the shared prompt), only the unconstrained 7 d real-OOD DT is net-positive, and the DT trails an RTE-matched perfect-foresight oracle (+$293 vs +$690/yr gross) while over-cycling on long horizons; throughput budgeting and price gating do not make the long-horizon surfaces net-positive (§8.1.1, §8.1.2).
-- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is now the standalone DT with **surface-aware `rtg_mode="auto"`**. On identity surfaces this reproduces the best `j_t_soc` results — standard **$11,573/ep**, dispatch-matched **$35,320/ep**, expanded broad-2024 **$34,761/ep**, and **2025 OOD $25,862/ep** — all ahead of PPO. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on the canonical grid-scale batteries, avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
+- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is the standalone physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`) with **surface-aware `rtg_mode="auto"`**. On identity surfaces — standard **$16,209/ep**, dispatch-matched **$40,039/ep**, expanded broad-2024 **$32,146/ep**, and **2025 OOD $30,791/ep** — all ahead of PPO (3/4 paired 95% CIs exclude zero; expanded broad-2024 marginal). Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on the canonical grid-scale batteries, avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
 - **AEMO utility-scale (the ceiling was real, then broken):** A systematic attempt to close the DT-vs-PPO gap *within* behaviour cloning — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, architecture changes — all failed to exceed the offline data's FCAS bidding. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver at inference), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. It has evolved from a hand-tuned scalar (architecture-dependent: modern peaks at 0.0, legacy at 0.5) to a state-dependent J_t(soc) cost-to-go table — with automatic fallback to constant RTG under market impact, since optimistic prompts self-suppress at grid scale (§8.2.10).
