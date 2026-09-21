@@ -734,14 +734,14 @@ footer strong { color: var(--ink); }
 
     <h3 style="margin-top:48px">Market-impact gate <span class="tag tag-win">PASS</span></h3>
     <p class="prose" style="margin-top:10px">At grid scale a battery's own dispatch moves prices. Under a piecewise merit-order impact model,
-      the shipped auto-mode DT still beats PPO on every canonical grid-scale battery (small 3.2×, Hornsdale 2.6×, Torrens 2.0×).
+      the shipped auto-mode DT still beats PPO on all 9 canonical grid-scale cells (fixed <code>rtg0.0</code> fallback: small 4.4×, Hornsdale 4.7×, Torrens 4.7×).
       The earlier claim that explicit J_t(soc) prompting "collapses" under impact was a <a href="#automode">return_scale evaluation bug</a>,
       now corrected; the constant fallback is a robustness choice, not collapse-avoidance.</p>
     <div class="chart-box" style="height:330px;margin-top:20px">
       <canvas id="impactChart" role="img" aria-label="Bar chart: auto-mode Decision Transformer versus PPO under market impact across three battery scales"></canvas>
     </div>
-    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): Small $35.4k vs $11.0k · Hornsdale-class $146.7k vs $56.5k · Torrens-class $140.7k vs $69.5k (DT vs PPO).</div>
-    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact. Diff +$61,905/cell, 95% CI [+$28,497, +$101,582], Wilcoxon p = 0.0039, win rate 9/9 cells (corrected re-run; B8).</p>
+    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): Small $48.1k vs $11.0k · Hornsdale-class $266.0k vs $56.5k · Torrens-class $324.3k vs $69.5k (DT vs PPO).</div>
+    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact (shipped physics-v2 v2cal, fixed <code>rtg0.0</code> fallback). Diff +$167,099/cell, 95% CI [+$101,213, +$227,362], Wilcoxon p = 0.0039, win rate 9/9 cells.</p>
   </div>
 </section>
 
@@ -976,8 +976,8 @@ footer strong { color: var(--ink); }
     <div class="chart-box" style="height:360px;max-width:860px">
       <canvas id="autoModeChart" role="img" aria-label="Grouped bar chart comparing PPO, auto mode, and explicit j_t_soc prompting under market impact across three battery scales"></canvas>
     </div>
-    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): per-battery means under piecewise impact — Small $35.4k / $11.0k, Hornsdale-class $146.7k / $56.5k, Torrens-class $140.7k / $69.5k (DT auto vs PPO). Explicit j_t_soc (corrected): $36.9k / $154.6k / $101.7k.</div>
-    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact, corrected re-run (2026-09-13, B8 fix). Explicit j_t_soc is impact-viable but over-trades energy on some large-battery cells; the conservative constant fallback avoids that. All three modes beat PPO at every scale.</p>
+    <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline): <strong>v1-checkpoint investigation</strong> — per-battery means under piecewise impact Small $35.4k / $11.0k, Hornsdale-class $146.7k / $56.5k, Torrens-class $140.7k / $69.5k (DT auto vs PPO). Explicit j_t_soc (corrected): $36.9k / $154.6k / $101.7k.</div>
+    <p class="chart-caption">Mean profit/ep under piecewise merit-order impact, corrected re-run (2026-09-13, B8 fix) on the <strong>v1 checkpoint</strong>. Explicit j_t_soc is impact-viable but over-trades energy on some large-battery cells; the conservative constant fallback avoids that. All three modes beat PPO at every scale. Shipped physics-v2 v2cal gate: report §8.2.11 (9/9 cells).</p>
     <p class="footnote">Takeaway: <strong>prompts should be state-dependent; the constant fallback is a robustness trade-off, not collapse-avoidance.</strong></p>
   </div>
 </section>
@@ -986,9 +986,10 @@ footer strong { color: var(--ink); }
 <section id="evidence">
   <div class="container reveal">
     <span class="section-kicker">Statistical rigor</span>
-    <h2>All six paired-difference CIs exclude zero</h2>
+    <h2>Three of four identity CIs exclude zero; impact gate 9/9</h2>
     <p class="section-sub">Bootstrap resampling (10,000 draws) over matched cells plus paired Wilcoxon signed-rank tests
-      (scripts/stagec_statistical_significance.py). Per-cell bootstrap P(DT &gt; PPO) ≥ 0.9998 on every identity surface.</p>
+      (physics-v2 v2cal; regenerated in <code>paper/audit/artifacts/stagec_v2cal_significance.json</code>).
+      Expanded broad-2024 is marginal (CI spans zero). The paired-difference CI is the primary evidence at small n.</p>
     <div class="table-wrap">
       <table>
         <thead><tr>
@@ -996,11 +997,11 @@ footer strong { color: var(--ink); }
           <th scope="col" class="num">95% CI</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Wilcoxon p</th>
         </tr></thead>
         <tbody>
-          <tr><td>Standard Oct</td><td class="num">5</td><td class="num pos">+$9,220</td><td class="num">[+$7,073, +$11,624]</td><td class="num">5/5</td><td class="num">0.0625*</td></tr>
-          <tr><td>Dispatch-matched</td><td class="num">6</td><td class="num pos">+$12,791</td><td class="num">[+$7,008, +$18,277]</td><td class="num">6/6</td><td class="num">0.0312*</td></tr>
-          <tr><td>Expanded broad-2024</td><td class="num">27</td><td class="num pos">+$15,257</td><td class="num">[+$4,108, +$33,350]</td><td class="num">25/27</td><td class="num"><strong>0.0002</strong></td></tr>
-          <tr><td>2025 OOD</td><td class="num">6</td><td class="num pos">+$19,364</td><td class="num">[+$7,138, +$39,670]</td><td class="num">6/6</td><td class="num">0.0312*</td></tr>
-          <tr><td>Impact gate (piecewise)</td><td class="num">9</td><td class="num pos">+$61,905</td><td class="num">[+$28,497, +$101,582]</td><td class="num">9/9</td><td class="num">0.0039*</td></tr>
+          <tr><td>Standard Oct</td><td class="num">5</td><td class="num pos">+$13,856</td><td class="num">[+$12,908, +$14,966]</td><td class="num">5/5</td><td class="num">0.0625*</td></tr>
+          <tr><td>Dispatch-matched</td><td class="num">6</td><td class="num pos">+$17,509</td><td class="num">[+$6,090, +$25,825]</td><td class="num">5/6</td><td class="num">0.0625*</td></tr>
+          <tr><td>Expanded broad-2024</td><td class="num">27</td><td class="num pos">+$12,643</td><td class="num">[−$622, +$23,926]</td><td class="num">25/27</td><td class="num"><strong>0.0004</strong></td></tr>
+          <tr><td>2025 OOD</td><td class="num">6</td><td class="num pos">+$24,294</td><td class="num">[+$12,780, +$44,663]</td><td class="num">6/6</td><td class="num">0.0312*</td></tr>
+          <tr><td>Impact gate (piecewise, fixed fallback)</td><td class="num">9</td><td class="num pos">+$167,099</td><td class="num">[+$101,213, +$227,362]</td><td class="num">9/9</td><td class="num">0.0039*</td></tr>
         </tbody>
       </table>
     </div>
@@ -1061,9 +1062,11 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
     <ul class="limit-list">
       <li><strong>Simulator-based results.</strong> All revenue/degradation figures come from the in-repo simulator driven by historical AEMO
         prices with modeled FCAS co-optimization — not settled market outcomes. Sim-to-real transfer is the top open item.</li>
-      <li><strong>Explicit j_t_soc is identity-only.</strong> It must never be forced under market impact; the shipped default is the
-        surface-aware auto mode.</li>
-      <li><strong>Energy-arbitrage gap narrowed, not closed.</strong> On expanded broad-2024 the DT reaches $14.8k/ep energy vs PPO's $17.4k.</li>
+      <li><strong>The shipped default is the surface-aware auto mode.</strong> Explicit j_t_soc is viable under market impact
+        once the checkpoint <code>return_scale</code> is applied (B8 fix), but the conservative constant fallback avoids residual
+        energy over-trading on large batteries and is the robust choice.</li>
+      <li><strong>Expanded broad-2024 is the marginal surface.</strong> Its paired-difference CI spans zero even though the
+        shipped DT's energy revenue ($21.6k/ep) now exceeds PPO's ($17.4k/ep); the remaining spread is in FCAS and risk.</li>
       <li><strong>Small samples on some surfaces.</strong> Headline surfaces have as few as n=5–6 scenarios; read point estimates alongside their intervals.</li>
       <li><strong>Disclosed protocol asymmetry.</strong> Broad-surface comparisons ran with a handicapped 3-dim-effective action space
         (multi_market scoring dims 0–2 only) — which strengthens rather than weakens the claim, but limits cross-family decomposition comparability.</li>
@@ -1438,9 +1441,9 @@ var DATA = {
     { surface: "2025 OOD",            dt: 30791, ppo: 6498,  diff: "+$24,294", ciLo: 12780, ciHi: 44663,  n: 6,  winRate: "6/6",   p: "0.0312*" }
   ],
   impactGate: [
-    { battery: "Small (~8 MWh)",            dt: 35404,  ppo: 11031 },
-    { battery: "Hornsdale-class (150 MW)",  dt: 146676, ppo: 56540 },
-    { battery: "Torrens-class (250 MWh)",   dt: 140712, ppo: 69507 }
+    { battery: "Small (~8 MWh)",            dt: 48098,  ppo: 11031 },
+    { battery: "Hornsdale-class (150 MW)",  dt: 266007, ppo: 56540 },
+    { battery: "Torrens-class (250 MWh)",   dt: 324269, ppo: 69507 }
   ],
   timeline: [
     { stage: 1, name: "Pilot DT", arch: "4×128, ctx=1152", data: "6 proxy episodes", dm: -10620,

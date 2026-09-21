@@ -18,8 +18,10 @@
 > batteries" finding in the INVESTIGATION below (2026-08-20) was an artifact of
 > `phase3_impact_eval.py` not applying the checkpoint `return_scale` (~26,000× prompt
 > error; see `docs/known_issues.md` B8), not a property of the J_t(soc) table. The
-> canonical impact gate was re-run with the fix and still **passes** (DT beats PPO on
-> all 9 cells; small 3.21×, hornsdale 2.59×, torrens 2.02×). `rtg_mode="auto"` remains
+> canonical impact gate was re-run with the fix and still **passes** (v1 checkpoint beats
+> PPO on all 9 cells, best-RTG-per-cell: small 3.21×, hornsdale 2.59×, torrens 2.02×). The
+> shipped physics-v2 v2cal gate at the fixed `rtg0.0` fallback is likewise 9/9 cells
+> (small 4.36×, hornsdale 4.71×, torrens 4.67×; `report.md §8.2.11`). `rtg_mode="auto"` remains
 > the shipped choice, but as a robustness trade-off rather than collapse-avoidance.
 
 ## 1. Goal

@@ -1,0 +1,6347 @@
+[
+  {
+    "label": "identity_oracle_small_sa1_oct_2024",
+    "profit": 45608.36563410325,
+    "energy": 125942.8578135763,
+    "fcas": 73046.13965186292,
+    "deg": 153380.63183133595,
+    "steps": 3744,
+    "time_s": 0.5691814430174418
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_small_sa1_oct_2024",
+    "profit": 14316.017109712528,
+    "energy": 3313.1806707808405,
+    "fcas": 17531.714185531553,
+    "deg": 6528.8777465998655,
+    "steps": 3744,
+    "time_s": 57.86920077999821
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_small_sa1_oct_2024",
+    "profit": 24804.821221665392,
+    "energy": 2109.7471160697824,
+    "fcas": 30240.978149390063,
+    "deg": 7545.904043794452,
+    "steps": 3744,
+    "time_s": 58.96071991295321
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_small_sa1_oct_2024",
+    "profit": 14712.218226507584,
+    "energy": 3125.2235875349397,
+    "fcas": 21156.54848263359,
+    "deg": 9569.553843660944,
+    "steps": 3744,
+    "time_s": 59.33514949301025
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_small_sa1_oct_2024",
+    "profit": 14668.68455412002,
+    "energy": 4327.68576436095,
+    "fcas": 19568.09563446116,
+    "deg": 9227.09684470209,
+    "steps": 3744,
+    "time_s": 59.53649635601323
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_small_sa1_oct_2024",
+    "profit": 15819.86399392081,
+    "energy": 5603.868490180261,
+    "fcas": 19185.492813385245,
+    "deg": 8969.497309644697,
+    "steps": 3744,
+    "time_s": 59.417296273983084
+  },
+  {
+    "label": "identity_fcasrule_small_sa1_oct_2024",
+    "profit": -214974.4184606266,
+    "energy": 14880.093793220089,
+    "fcas": 16249.972386850879,
+    "deg": 246104.48464069757,
+    "steps": 3744,
+    "time_s": 0.5062258209800348
+  },
+  {
+    "label": "identity_ppo_small_sa1_oct_2024",
+    "profit": 22393.373515269803,
+    "energy": 8344.859832590973,
+    "fcas": 15384.917380650406,
+    "deg": 1336.4036979715777,
+    "steps": 3744,
+    "time_s": 1.7721312799840234
+  },
+  {
+    "label": "identity_oracle_hornsdale_sa1_oct_2024",
+    "profit": 1552734.6127067276,
+    "energy": 1235268.218143401,
+    "fcas": 354584.6008778428,
+    "deg": 37118.20631451623,
+    "steps": 3744,
+    "time_s": 0.44871295703342184
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 196044.68144905806,
+    "energy": 87881.71988267997,
+    "fcas": 112845.15149420028,
+    "deg": 4682.189927822211,
+    "steps": 3744,
+    "time_s": 59.40042266697856
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 169748.49791578433,
+    "energy": 30753.567346816508,
+    "fcas": 140115.31176724445,
+    "deg": 1120.3811982766222,
+    "steps": 3744,
+    "time_s": 59.53001884598052
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 261165.2130445748,
+    "energy": 127526.78130252117,
+    "fcas": 135784.1420383761,
+    "deg": 2145.7102963224534,
+    "steps": 3744,
+    "time_s": 59.691350009001326
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 469817.7958328965,
+    "energy": 318138.973793206,
+    "fcas": 155663.3497695936,
+    "deg": 3984.5277299031427,
+    "steps": 3744,
+    "time_s": 59.65846901899204
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 464203.8324605651,
+    "energy": 314173.4345111166,
+    "fcas": 153989.83964579637,
+    "deg": 3959.441696347848,
+    "steps": 3744,
+    "time_s": 59.711990543000866
+  },
+  {
+    "label": "identity_fcasrule_hornsdale_sa1_oct_2024",
+    "profit": 335754.65373568056,
+    "energy": 312432.20677412965,
+    "fcas": 81433.87339840442,
+    "deg": 58111.42643685356,
+    "steps": 3744,
+    "time_s": 0.5088421099935658
+  },
+  {
+    "label": "identity_ppo_hornsdale_sa1_oct_2024",
+    "profit": 262665.9730888276,
+    "energy": 186050.99731337922,
+    "fcas": 77306.41816818425,
+    "deg": 691.4423927358341,
+    "steps": 3744,
+    "time_s": 1.7764964179950766
+  },
+  {
+    "label": "identity_oracle_torrens_sa1_oct_2024",
+    "profit": 2387747.434049877,
+    "energy": 1833311.4859522034,
+    "fcas": 600286.7662453738,
+    "deg": 45850.818147700236,
+    "steps": 3744,
+    "time_s": 0.42882589099463075
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 327891.8640165035,
+    "energy": 155393.73738212994,
+    "fcas": 178767.3979126377,
+    "deg": 6269.271278264168,
+    "steps": 3744,
+    "time_s": 59.468364128959365
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 272962.0672084251,
+    "energy": 41022.10318639289,
+    "fcas": 233258.51237256374,
+    "deg": 1318.5483505315515,
+    "steps": 3744,
+    "time_s": 59.68521116301417
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 314908.8491522689,
+    "energy": 111198.212213962,
+    "fcas": 205520.08213846287,
+    "deg": 1809.445200155937,
+    "steps": 3744,
+    "time_s": 59.52147522801533
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 593034.071634029,
+    "energy": 357169.1484011361,
+    "fcas": 240372.14328604678,
+    "deg": 4507.220053153804,
+    "steps": 3744,
+    "time_s": 59.57602155598579
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 585727.5696958457,
+    "energy": 359475.1710321345,
+    "fcas": 230386.51151475802,
+    "deg": 4134.112851046805,
+    "steps": 3744,
+    "time_s": 59.59023029799573
+  },
+  {
+    "label": "identity_fcasrule_torrens_sa1_oct_2024",
+    "profit": 437638.06309466856,
+    "energy": 378052.19592012797,
+    "fcas": 131050.28381416421,
+    "deg": 71464.41663962361,
+    "steps": 3744,
+    "time_s": 0.6280431390041485
+  },
+  {
+    "label": "identity_ppo_torrens_sa1_oct_2024",
+    "profit": 363033.0746471413,
+    "energy": 235112.34995497268,
+    "fcas": 128628.15848622307,
+    "deg": 707.4337940545153,
+    "steps": 3744,
+    "time_s": 1.7666963040246628
+  },
+  {
+    "label": "identity_oracle_small_sa1_nov_2024",
+    "profit": 40376.46969102553,
+    "energy": 114010.88188064143,
+    "fcas": 74109.76090497145,
+    "deg": 147744.17309458737,
+    "steps": 3744,
+    "time_s": 0.44313653599238023
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_small_sa1_nov_2024",
+    "profit": 48009.037175151454,
+    "energy": 3076.8776811301877,
+    "fcas": 46103.737215286536,
+    "deg": 1171.5777212652688,
+    "steps": 3744,
+    "time_s": 59.42770495102741
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_small_sa1_nov_2024",
+    "profit": 50440.50526354782,
+    "energy": 1690.306841391226,
+    "fcas": 49458.600213706675,
+    "deg": 708.4017915500781,
+    "steps": 3744,
+    "time_s": 59.570925653970335
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_small_sa1_nov_2024",
+    "profit": 47323.90864801845,
+    "energy": 2441.7319338304355,
+    "fcas": 45768.38259786688,
+    "deg": 886.2058836788732,
+    "steps": 3744,
+    "time_s": 59.84614860097645
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_small_sa1_nov_2024",
+    "profit": 25435.238577363038,
+    "energy": 1029.516273744961,
+    "fcas": 25587.46503909152,
+    "deg": 1181.7427354734411,
+    "steps": 3744,
+    "time_s": 59.617197084997315
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_small_sa1_nov_2024",
+    "profit": 27362.065921428133,
+    "energy": 1083.9832375866406,
+    "fcas": 27285.992459093697,
+    "deg": 1007.9097752522025,
+    "steps": 3744,
+    "time_s": 59.69481805898249
+  },
+  {
+    "label": "identity_fcasrule_small_sa1_nov_2024",
+    "profit": -212458.70161074738,
+    "energy": 22248.810193428602,
+    "fcas": 18270.85107932401,
+    "deg": 252978.36288349997,
+    "steps": 3744,
+    "time_s": 0.5192338160122745
+  },
+  {
+    "label": "identity_ppo_small_sa1_nov_2024",
+    "profit": 15522.7415203564,
+    "energy": 4686.103594005875,
+    "fcas": 12432.289520078928,
+    "deg": 1595.651593728404,
+    "steps": 3744,
+    "time_s": 1.7729223220376298
+  },
+  {
+    "label": "identity_oracle_hornsdale_sa1_nov_2024",
+    "profit": 1493211.054990011,
+    "energy": 1165473.8414773575,
+    "fcas": 362839.48160120635,
+    "deg": 35102.26808855281,
+    "steps": 3744,
+    "time_s": 0.42904245597310364
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 53867.54277928799,
+    "energy": 1973.9891322187625,
+    "fcas": 58983.4044001893,
+    "deg": 7089.850753120068,
+    "steps": 3744,
+    "time_s": 59.32716119097313
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 254919.50635298062,
+    "energy": 6027.655320694268,
+    "fcas": 249406.356452082,
+    "deg": 514.5054197956413,
+    "steps": 3744,
+    "time_s": 59.867986875993665
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 253825.88610013464,
+    "energy": 32244.68381159145,
+    "fcas": 222383.84739795988,
+    "deg": 802.6451094166958,
+    "steps": 3744,
+    "time_s": 59.43347642000299
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 150595.1745513188,
+    "energy": 18514.315194512903,
+    "fcas": 133065.8374217333,
+    "deg": 984.9780649273755,
+    "steps": 3744,
+    "time_s": 59.6606537179905
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 160392.76400372948,
+    "energy": 24515.471443457514,
+    "fcas": 136878.65749475316,
+    "deg": 1001.3649344811869,
+    "steps": 3744,
+    "time_s": 59.699380600999575
+  },
+  {
+    "label": "identity_fcasrule_hornsdale_sa1_nov_2024",
+    "profit": 349762.3921378804,
+    "energy": 327492.88333205396,
+    "fcas": 81150.74313278386,
+    "deg": 58881.234326957456,
+    "steps": 3744,
+    "time_s": 0.5012843090225942
+  },
+  {
+    "label": "identity_ppo_hornsdale_sa1_nov_2024",
+    "profit": 105841.29646782081,
+    "energy": 44416.78937707506,
+    "fcas": 62206.90008181654,
+    "deg": 782.392991070795,
+    "steps": 3744,
+    "time_s": 1.7962810100289062
+  },
+  {
+    "label": "identity_oracle_torrens_sa1_nov_2024",
+    "profit": 2303953.130326846,
+    "energy": 1734382.7553793883,
+    "fcas": 613101.1963563584,
+    "deg": 43530.82140890041,
+    "steps": 3744,
+    "time_s": 0.42915442102821544
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 92613.96543650926,
+    "energy": 5848.198842403821,
+    "fcas": 94589.17502000435,
+    "deg": 7823.408425898897,
+    "steps": 3744,
+    "time_s": 59.40463493700372
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 397547.3887869133,
+    "energy": 6638.536352735977,
+    "fcas": 391390.7110775308,
+    "deg": 481.8586433535242,
+    "steps": 3744,
+    "time_s": 59.60653752199141
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 403261.67161946825,
+    "energy": 39446.81856322882,
+    "fcas": 364584.57675358746,
+    "deg": 769.7236973480041,
+    "steps": 3744,
+    "time_s": 59.72994309203932
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 267715.7337317415,
+    "energy": 27806.060274421674,
+    "fcas": 240647.22990713437,
+    "deg": 737.5564498145042,
+    "steps": 3744,
+    "time_s": 59.583364214980975
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 237558.90895507415,
+    "energy": 16406.410060754264,
+    "fcas": 222181.268915746,
+    "deg": 1028.7700214261392,
+    "steps": 3744,
+    "time_s": 59.690730209986214
+  },
+  {
+    "label": "identity_fcasrule_torrens_sa1_nov_2024",
+    "profit": 489240.9821017736,
+    "energy": 427409.64134935243,
+    "fcas": 135060.0218182083,
+    "deg": 73228.6810657871,
+    "steps": 3744,
+    "time_s": 0.5217933400417678
+  },
+  {
+    "label": "identity_ppo_torrens_sa1_nov_2024",
+    "profit": 162423.70531058783,
+    "energy": 59620.91672730996,
+    "fcas": 103654.38925993729,
+    "deg": 851.6006766594438,
+    "steps": 3744,
+    "time_s": 1.798660052998457
+  },
+  {
+    "label": "identity_oracle_small_vic1_oct_2024",
+    "profit": 4686.8777270728315,
+    "energy": 84407.19633987175,
+    "fcas": 73881.6760876396,
+    "deg": 153601.99470043852,
+    "steps": 3744,
+    "time_s": 0.42970363498898223
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_small_vic1_oct_2024",
+    "profit": 12587.716589263793,
+    "energy": -124.9060852941809,
+    "fcas": 15125.33565315578,
+    "deg": 2412.7129785978073,
+    "steps": 3744,
+    "time_s": 59.44471167901065
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_small_vic1_oct_2024",
+    "profit": 18878.556542633425,
+    "energy": -361.74127204897195,
+    "fcas": 23433.269502585143,
+    "deg": 4192.971687902744,
+    "steps": 3744,
+    "time_s": 59.55815545696532
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_small_vic1_oct_2024",
+    "profit": 14993.189777051439,
+    "energy": -1075.405190905225,
+    "fcas": 25249.417810550094,
+    "deg": 9180.82284259343,
+    "steps": 3744,
+    "time_s": 59.63041521597188
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_small_vic1_oct_2024",
+    "profit": 19795.52000445776,
+    "energy": 408.8812295498707,
+    "fcas": 26273.878537145665,
+    "deg": 6887.239762237777,
+    "steps": 3744,
+    "time_s": 59.55204814398894
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_small_vic1_oct_2024",
+    "profit": 38342.12004289139,
+    "energy": 4358.2279526277825,
+    "fcas": 36649.80343939846,
+    "deg": 2665.91134913486,
+    "steps": 3744,
+    "time_s": 59.625897272024304
+  },
+  {
+    "label": "identity_fcasrule_small_vic1_oct_2024",
+    "profit": -221310.2326124706,
+    "energy": 12162.20611033801,
+    "fcas": 16499.3341056883,
+    "deg": 249971.7728284969,
+    "steps": 3744,
+    "time_s": 0.5082011959748343
+  },
+  {
+    "label": "identity_ppo_small_vic1_oct_2024",
+    "profit": 18361.86937920229,
+    "energy": 2680.518504910973,
+    "fcas": 16351.065288148959,
+    "deg": 669.7144138576398,
+    "steps": 3744,
+    "time_s": 1.8129377409932204
+  },
+  {
+    "label": "identity_oracle_hornsdale_vic1_oct_2024",
+    "profit": 1181901.502992016,
+    "energy": 856961.0935550602,
+    "fcas": 361615.788291715,
+    "deg": 36675.37885475925,
+    "steps": 3744,
+    "time_s": 0.43594043201301247
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 135253.58825620596,
+    "energy": 31885.036545310893,
+    "fcas": 105754.10326787455,
+    "deg": 2385.551556979476,
+    "steps": 3744,
+    "time_s": 59.40118705597706
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 147986.5087946907,
+    "energy": 22635.705520279258,
+    "fcas": 126309.79160442139,
+    "deg": 958.9883300099725,
+    "steps": 3744,
+    "time_s": 59.70630965201417
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 264619.96759283025,
+    "energy": 73117.18138644584,
+    "fcas": 195273.70483183366,
+    "deg": 3770.9186254492265,
+    "steps": 3744,
+    "time_s": 59.73614379699575
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 215512.12989717073,
+    "energy": 26899.72751996318,
+    "fcas": 189778.26053732442,
+    "deg": 1165.8581601168519,
+    "steps": 3744,
+    "time_s": 59.768607510020956
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 210338.83034692815,
+    "energy": 24362.477927571017,
+    "fcas": 186896.34727080064,
+    "deg": 919.9948514434985,
+    "steps": 3744,
+    "time_s": 59.684251060010865
+  },
+  {
+    "label": "identity_fcasrule_hornsdale_vic1_oct_2024",
+    "profit": 227323.57381709633,
+    "energy": 208083.41579338512,
+    "fcas": 79902.54824639954,
+    "deg": 60662.39022268835,
+    "steps": 3744,
+    "time_s": 0.6216155749862082
+  },
+  {
+    "label": "identity_ppo_hornsdale_vic1_oct_2024",
+    "profit": 101074.28997319247,
+    "energy": 19771.240725369866,
+    "fcas": 81758.2892296105,
+    "deg": 455.23998178789464,
+    "steps": 3744,
+    "time_s": 1.783516643976327
+  },
+  {
+    "label": "identity_oracle_torrens_vic1_oct_2024",
+    "profit": 1826088.2353404735,
+    "energy": 1261367.679613345,
+    "fcas": 609780.1248347836,
+    "deg": 45059.569107655116,
+    "steps": 3744,
+    "time_s": 0.4353372780024074
+  },
+  {
+    "label": "identity_dt_impact_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 325423.80141258216,
+    "energy": 57911.59556002492,
+    "fcas": 271800.1482029728,
+    "deg": 4287.942350415501,
+    "steps": 3744,
+    "time_s": 59.4646655729739
+  },
+  {
+    "label": "identity_dt_impact_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 226485.54480278285,
+    "energy": 21121.80724959905,
+    "fcas": 206527.35568551664,
+    "deg": 1163.6181323328422,
+    "steps": 3744,
+    "time_s": 59.7661519490066
+  },
+  {
+    "label": "identity_dt_impact_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 256267.93762119912,
+    "energy": 63156.97269776479,
+    "fcas": 195112.55113086436,
+    "deg": 2001.5862074300273,
+    "steps": 3744,
+    "time_s": 59.7509649930289
+  },
+  {
+    "label": "identity_dt_impact_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 362393.6468516275,
+    "energy": 47723.120589174876,
+    "fcas": 316240.6927972205,
+    "deg": 1570.166534767822,
+    "steps": 3744,
+    "time_s": 59.72727702104021
+  },
+  {
+    "label": "identity_dt_impact_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 349085.6340191652,
+    "energy": 38729.55237437739,
+    "fcas": 311386.4377200589,
+    "deg": 1030.35607527111,
+    "steps": 3744,
+    "time_s": 59.64140235900413
+  },
+  {
+    "label": "identity_fcasrule_torrens_vic1_oct_2024",
+    "profit": 284052.62645760365,
+    "energy": 224435.08361790495,
+    "fcas": 133685.17484330313,
+    "deg": 74067.63200360442,
+    "steps": 3744,
+    "time_s": 0.5087539709638804
+  },
+  {
+    "label": "identity_ppo_torrens_vic1_oct_2024",
+    "profit": 165561.83647927482,
+    "energy": 29722.29084515811,
+    "fcas": 136263.451104779,
+    "deg": 423.905470662282,
+    "steps": 3744,
+    "time_s": 1.802147574024275
+  },
+  {
+    "label": "piecewise_merit_order_oracle_small_sa1_oct_2024",
+    "profit": -126639.79156359317,
+    "energy": -20759.334858848473,
+    "fcas": 47500.17512659125,
+    "deg": 153380.63183133595,
+    "steps": 3744,
+    "time_s": 0.4620562859927304
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_small_sa1_oct_2024",
+    "profit": 185968.83217653053,
+    "energy": 107943.20794691311,
+    "fcas": 78025.62422961861,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_small_sa1_oct_2024",
+    "profit": 9040.531164148262,
+    "energy": 531.7567298177777,
+    "fcas": 16632.14483840892,
+    "deg": 8123.370404078435,
+    "steps": 3744,
+    "time_s": 58.73900272400351
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_small_sa1_oct_2024",
+    "profit": 14573.477196211245,
+    "energy": -278.2573700177089,
+    "fcas": 22409.56636922497,
+    "deg": 7557.8318029960155,
+    "steps": 3744,
+    "time_s": 59.83079513296252
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_small_sa1_oct_2024",
+    "profit": 2045.5487940119037,
+    "energy": -3244.7652567519785,
+    "fcas": 14849.975857310152,
+    "deg": 9559.66180654627,
+    "steps": 3744,
+    "time_s": 59.705625715025235
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_small_sa1_oct_2024",
+    "profit": 2772.5695517766508,
+    "energy": -1889.4180584795072,
+    "fcas": 13912.651227266062,
+    "deg": 9250.663617009905,
+    "steps": 3744,
+    "time_s": 59.71929715201259
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_small_sa1_oct_2024",
+    "profit": 5911.941217643638,
+    "energy": 1352.1188899868228,
+    "fcas": 13984.914284699607,
+    "deg": 9425.091957042792,
+    "steps": 3744,
+    "time_s": 59.737344296008814
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_small_sa1_oct_2024",
+    "profit": -246308.08195069619,
+    "energy": -11979.267420342074,
+    "fcas": 12076.950494973576,
+    "deg": 246405.76502532768,
+    "steps": 3744,
+    "time_s": 0.5408078850014135
+  },
+  {
+    "label": "piecewise_merit_order_ppo_small_sa1_oct_2024",
+    "profit": 11803.963027067795,
+    "energy": 1814.4764880346806,
+    "fcas": 11325.890237004693,
+    "deg": 1336.4036979715777,
+    "steps": 3744,
+    "time_s": 1.824942387000192
+  },
+  {
+    "label": "piecewise_merit_order_oracle_hornsdale_sa1_oct_2024",
+    "profit": -465663.6521894546,
+    "energy": -585868.7492018176,
+    "fcas": 157323.30332687922,
+    "deg": 37118.20631451623,
+    "steps": 3744,
+    "time_s": 0.5766244560363702
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_hornsdale_sa1_oct_2024",
+    "profit": 2490278.5897648884,
+    "energy": 2157085.211310339,
+    "fcas": 333193.37845455,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 243671.4768747878,
+    "energy": 180117.66287996504,
+    "fcas": 71525.51760585724,
+    "deg": 7971.703611034471,
+    "steps": 3744,
+    "time_s": 58.91387650696561
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 211862.94364336107,
+    "energy": 132862.13968450957,
+    "fcas": 82890.29594494718,
+    "deg": 3889.491986095709,
+    "steps": 3744,
+    "time_s": 59.677665241993964
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 185093.29337349298,
+    "energy": 111954.70155583945,
+    "fcas": 75837.79121681445,
+    "deg": 2699.1993991609293,
+    "steps": 3744,
+    "time_s": 59.66917230701074
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 508011.86535069626,
+    "energy": 440058.1111610147,
+    "fcas": 71947.46198128666,
+    "deg": 3993.707791605114,
+    "steps": 3744,
+    "time_s": 59.64554691099329
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 530379.4374053073,
+    "energy": 463058.708606313,
+    "fcas": 71296.55952037971,
+    "deg": 3975.8307213854546,
+    "steps": 3744,
+    "time_s": 59.62997017003363
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_hornsdale_sa1_oct_2024",
+    "profit": -95331.31274920408,
+    "energy": -85512.0142730864,
+    "fcas": 47983.509204286915,
+    "deg": 57802.8076804046,
+    "steps": 3744,
+    "time_s": 0.5408432930125855
+  },
+  {
+    "label": "piecewise_merit_order_ppo_hornsdale_sa1_oct_2024",
+    "profit": 75270.31237682275,
+    "energy": 39095.92107258315,
+    "fcas": 36865.833696975424,
+    "deg": 691.4423927358341,
+    "steps": 3744,
+    "time_s": 1.772707100957632
+  },
+  {
+    "label": "piecewise_merit_order_oracle_torrens_sa1_oct_2024",
+    "profit": -2852067.5121881175,
+    "energy": -3047072.8375549484,
+    "fcas": 240856.14351453114,
+    "deg": 45850.818147700236,
+    "steps": 3744,
+    "time_s": 0.4670452909776941
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_torrens_sa1_oct_2024",
+    "profit": 5184927.249190971,
+    "energy": 4644198.98306202,
+    "fcas": 540728.26612895,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_torrens_sa1_oct_2024",
+    "profit": -68118.4008746717,
+    "energy": -117255.5035752431,
+    "fcas": 58643.48344078164,
+    "deg": 9506.380740210236,
+    "steps": 3744,
+    "time_s": 59.12150276399916
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 251202.03652788218,
+    "energy": 129238.53551232316,
+    "fcas": 126534.13147564775,
+    "deg": 4570.630460088718,
+    "steps": 3744,
+    "time_s": 59.51360513397958
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 116407.79301717695,
+    "energy": 21892.33794168496,
+    "fcas": 99623.33616530821,
+    "deg": 5107.88108981622,
+    "steps": 3744,
+    "time_s": 59.821538001007866
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 297900.58436751226,
+    "energy": 197534.88204238928,
+    "fcas": 104905.0749261132,
+    "deg": 4539.372600990228,
+    "steps": 3744,
+    "time_s": 59.721189700008836
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 474581.5873760482,
+    "energy": 384093.84108704317,
+    "fcas": 94623.45066208499,
+    "deg": 4135.704373079947,
+    "steps": 3744,
+    "time_s": 59.73307760898024
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_torrens_sa1_oct_2024",
+    "profit": -939184.4768911325,
+    "energy": -938777.1151567459,
+    "fcas": 71136.41504093294,
+    "deg": 71543.7767753196,
+    "steps": 3744,
+    "time_s": 0.5311007020063698
+  },
+  {
+    "label": "piecewise_merit_order_ppo_torrens_sa1_oct_2024",
+    "profit": 94399.1614593723,
+    "energy": 43198.994485545496,
+    "fcas": 51907.60076788132,
+    "deg": 707.4337940545153,
+    "steps": 3744,
+    "time_s": 1.8476965029840358
+  },
+  {
+    "label": "piecewise_merit_order_oracle_small_sa1_nov_2024",
+    "profit": -103852.5004677783,
+    "energy": 1066.9750989386494,
+    "fcas": 42824.69752787041,
+    "deg": 147744.17309458737,
+    "steps": 3744,
+    "time_s": 0.46451489301398396
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_small_sa1_nov_2024",
+    "profit": 182472.84758296053,
+    "energy": 101351.72260901546,
+    "fcas": 81121.124973945,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_small_sa1_nov_2024",
+    "profit": 21537.018308734136,
+    "energy": 785.7058961421718,
+    "fcas": 26859.709607839435,
+    "deg": 6108.397195247472,
+    "steps": 3744,
+    "time_s": 58.99130434502149
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_small_sa1_nov_2024",
+    "profit": 28831.83680041858,
+    "energy": -1322.0457772223153,
+    "fcas": 30868.87272349421,
+    "deg": 714.9901458533132,
+    "steps": 3744,
+    "time_s": 59.64570064202417
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_small_sa1_nov_2024",
+    "profit": 29306.498242023117,
+    "energy": 1563.8236234541625,
+    "fcas": 29238.69814433047,
+    "deg": 1496.0235257615127,
+    "steps": 3744,
+    "time_s": 59.65633578202687
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_small_sa1_nov_2024",
+    "profit": 18663.1724887631,
+    "energy": 1098.9748054407041,
+    "fcas": 18749.560064278852,
+    "deg": 1185.3623809564542,
+    "steps": 3744,
+    "time_s": 59.751000077987555
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_small_sa1_nov_2024",
+    "profit": 20285.18136477661,
+    "energy": 1617.2161561764265,
+    "fcas": 19676.4165155412,
+    "deg": 1008.4513069410159,
+    "steps": 3744,
+    "time_s": 59.66581264795968
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_small_sa1_nov_2024",
+    "profit": -253821.44287780533,
+    "energy": -13196.203288435121,
+    "fcas": 12493.709379555223,
+    "deg": 253118.94896892543,
+    "steps": 3744,
+    "time_s": 0.5416052669752389
+  },
+  {
+    "label": "piecewise_merit_order_ppo_small_sa1_nov_2024",
+    "profit": 9143.281287403834,
+    "energy": 1365.2314204044058,
+    "fcas": 9373.701460727832,
+    "deg": 1595.651593728404,
+    "steps": 3744,
+    "time_s": 1.867383303004317
+  },
+  {
+    "label": "piecewise_merit_order_oracle_hornsdale_sa1_nov_2024",
+    "profit": -292243.4225286952,
+    "energy": -375981.0619924354,
+    "fcas": 118839.90755229305,
+    "deg": 35102.26808855281,
+    "steps": 3744,
+    "time_s": 0.46241870400262997
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_hornsdale_sa1_nov_2024",
+    "profit": 2256722.453806998,
+    "energy": 1922211.750708102,
+    "fcas": 334510.703098895,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 13422.774862771199,
+    "energy": -14784.88776625104,
+    "fcas": 35214.243153718395,
+    "deg": 7006.580524696153,
+    "steps": 3744,
+    "time_s": 58.994963153032586
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 63911.592392231934,
+    "energy": -29000.17723546196,
+    "fcas": 93419.69719625822,
+    "deg": 507.9275685643203,
+    "steps": 3744,
+    "time_s": 59.56928886700189
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 102184.1765920633,
+    "energy": 21379.88255670697,
+    "fcas": 81364.26182852419,
+    "deg": 559.9677931678611,
+    "steps": 3744,
+    "time_s": 59.90669680002611
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": -13631.378686997148,
+    "energy": -72600.00360779674,
+    "fcas": 60017.213164630426,
+    "deg": 1048.5882438308363,
+    "steps": 3744,
+    "time_s": 59.612013475969434
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": -745.6029169444399,
+    "energy": -61362.36854857275,
+    "fcas": 61361.81262250058,
+    "deg": 745.0469908722761,
+    "steps": 3744,
+    "time_s": 59.88685858703684
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_hornsdale_sa1_nov_2024",
+    "profit": -150207.3249874427,
+    "energy": -128218.55217051665,
+    "fcas": 36961.50966804967,
+    "deg": 58950.28248497572,
+    "steps": 3744,
+    "time_s": 0.5408164649852552
+  },
+  {
+    "label": "piecewise_merit_order_ppo_hornsdale_sa1_nov_2024",
+    "profit": 56315.84185143519,
+    "energy": 28133.773843988398,
+    "fcas": 28964.460998517585,
+    "deg": 782.392991070795,
+    "steps": 3744,
+    "time_s": 1.8356277449638583
+  },
+  {
+    "label": "piecewise_merit_order_oracle_torrens_sa1_nov_2024",
+    "profit": -2742535.678939266,
+    "energy": -2866513.7711791485,
+    "fcas": 167508.91364878262,
+    "deg": 43530.82140890041,
+    "steps": 3744,
+    "time_s": 0.46107878803741187
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_torrens_sa1_nov_2024",
+    "profit": 5185499.542587148,
+    "energy": 4644109.50493166,
+    "fcas": 541390.0376555,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 95924.43610129924,
+    "energy": 27900.337269421616,
+    "fcas": 69830.43749925948,
+    "deg": 1806.3386673818427,
+    "steps": 3744,
+    "time_s": 58.89259065303486
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 86547.44859950329,
+    "energy": -44737.57405358588,
+    "fcas": 131801.48541402313,
+    "deg": 516.4627609339655,
+    "steps": 3744,
+    "time_s": 59.65463192097377
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 101344.07581776229,
+    "energy": -12313.566298151358,
+    "fcas": 114322.63559155224,
+    "deg": 664.9934756385951,
+    "steps": 3744,
+    "time_s": 59.798740039987024
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 42351.92490541798,
+    "energy": -40553.60739671899,
+    "fcas": 83664.28063243121,
+    "deg": 758.7483302942387,
+    "steps": 3744,
+    "time_s": 59.91790195903741
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_torrens_sa1_nov_2024",
+    "profit": -50595.26887818976,
+    "energy": -132688.2029379137,
+    "fcas": 83109.82621481785,
+    "deg": 1016.8921550938944,
+    "steps": 3744,
+    "time_s": 59.74756695999531
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_torrens_sa1_nov_2024",
+    "profit": -1205532.6146019027,
+    "energy": -1186218.7100472022,
+    "fcas": 54325.58045533038,
+    "deg": 73639.48501003085,
+    "steps": 3744,
+    "time_s": 0.5463007329963148
+  },
+  {
+    "label": "piecewise_merit_order_ppo_torrens_sa1_nov_2024",
+    "profit": 65845.44773286494,
+    "energy": 27528.160958965687,
+    "fcas": 39168.8874505587,
+    "deg": 851.6006766594438,
+    "steps": 3744,
+    "time_s": 1.8562027290463448
+  },
+  {
+    "label": "piecewise_merit_order_oracle_small_vic1_oct_2024",
+    "profit": -107119.71322195714,
+    "energy": 2042.4059718394221,
+    "fcas": 44439.87550664196,
+    "deg": 153601.99470043852,
+    "steps": 3744,
+    "time_s": 0.48041462199762464
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_small_vic1_oct_2024",
+    "profit": 162161.81470470648,
+    "energy": 84085.85427630291,
+    "fcas": 78075.96042840421,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_small_vic1_oct_2024",
+    "profit": 8762.10395622435,
+    "energy": 38.91211132745348,
+    "fcas": 9203.375376155052,
+    "deg": 480.1835312581575,
+    "steps": 3744,
+    "time_s": 58.917288154014386
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_small_vic1_oct_2024",
+    "profit": 12911.32762245628,
+    "energy": -53.66311368889025,
+    "fcas": 17053.555552605212,
+    "deg": 4088.564816460043,
+    "steps": 3744,
+    "time_s": 59.82053514197469
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_small_vic1_oct_2024",
+    "profit": 8299.80985638899,
+    "energy": 255.31008744794187,
+    "fcas": 17101.07481104038,
+    "deg": 9056.575042099332,
+    "steps": 3744,
+    "time_s": 59.77357703895541
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_small_vic1_oct_2024",
+    "profit": 11410.678548891332,
+    "energy": 363.44819116647517,
+    "fcas": 17930.670973246957,
+    "deg": 6883.440615522099,
+    "steps": 3744,
+    "time_s": 59.894931162009016
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_small_vic1_oct_2024",
+    "profit": 21242.8368290068,
+    "energy": 67.4800844734124,
+    "fcas": 23841.34138303375,
+    "deg": 2665.984638500361,
+    "steps": 3744,
+    "time_s": 59.81137072399724
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_small_vic1_oct_2024",
+    "profit": -239932.22745833392,
+    "energy": -822.2286245032068,
+    "fcas": 11056.225889092377,
+    "deg": 250166.2247229231,
+    "steps": 3744,
+    "time_s": 0.5519044380052947
+  },
+  {
+    "label": "piecewise_merit_order_ppo_small_vic1_oct_2024",
+    "profit": 12144.820160256184,
+    "energy": 40.51812758711392,
+    "fcas": 12774.01644652671,
+    "deg": 669.7144138576398,
+    "steps": 3744,
+    "time_s": 1.8050375690218061
+  },
+  {
+    "label": "piecewise_merit_order_oracle_hornsdale_vic1_oct_2024",
+    "profit": 97031.92034137397,
+    "energy": 33897.153112661246,
+    "fcas": 99810.14608347198,
+    "deg": 36675.37885475925,
+    "steps": 3744,
+    "time_s": 0.4676657530362718
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_hornsdale_vic1_oct_2024",
+    "profit": 1187081.0044270838,
+    "energy": 809939.4033156077,
+    "fcas": 377141.60111148003,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 37298.75640755654,
+    "energy": -347.32594859730574,
+    "fcas": 48172.49329742818,
+    "deg": 10526.410941274333,
+    "steps": 3744,
+    "time_s": 59.06204811501084
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 81442.30169029397,
+    "energy": 18749.291824712534,
+    "fcas": 66659.48869352511,
+    "deg": 3966.4788279436784,
+    "steps": 3744,
+    "time_s": 59.88126593304332
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 76899.83775348609,
+    "energy": 14326.080674989193,
+    "fcas": 66210.45547386704,
+    "deg": 3636.6983953701447,
+    "steps": 3744,
+    "time_s": 59.82929043198237
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 56879.29578535983,
+    "energy": 1043.1162018781201,
+    "fcas": 56952.296819092764,
+    "deg": 1116.1172356110576,
+    "steps": 3744,
+    "time_s": 59.87814205203904
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 56740.81597752809,
+    "energy": 1060.8119455349213,
+    "fcas": 56590.93947909339,
+    "deg": 910.9354471002246,
+    "steps": 3744,
+    "time_s": 59.75792459503282
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_hornsdale_vic1_oct_2024",
+    "profit": -32369.8319933884,
+    "energy": -1438.9662958947529,
+    "fcas": 29629.889164537602,
+    "deg": 60560.75486203125,
+    "steps": 3744,
+    "time_s": 0.5500683790305629
+  },
+  {
+    "label": "piecewise_merit_order_ppo_hornsdale_vic1_oct_2024",
+    "profit": 38034.40464914319,
+    "energy": 919.3427629831913,
+    "fcas": 37570.30186794789,
+    "deg": 455.23998178789464,
+    "steps": 3744,
+    "time_s": 1.8374155290075578
+  },
+  {
+    "label": "piecewise_merit_order_oracle_torrens_vic1_oct_2024",
+    "profit": 64768.68252829184,
+    "energy": -12131.889113898069,
+    "fcas": 121960.14074984503,
+    "deg": 45059.569107655116,
+    "steps": 3744,
+    "time_s": 0.5867551430128515
+  },
+  {
+    "label": "piecewise_merit_order_oraclemi_torrens_vic1_oct_2024",
+    "profit": 1843932.0912271743,
+    "energy": 1203802.1628876547,
+    "fcas": 640129.928339514,
+    "deg": 0.0,
+    "steps": 3744,
+    "time_s": 0.0
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 50879.974985156354,
+    "energy": -1597.134467573437,
+    "fcas": 66011.95004039563,
+    "deg": 13534.840587665847,
+    "steps": 3744,
+    "time_s": 58.977684815006796
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 90555.03948631395,
+    "energy": 21834.244093153407,
+    "fcas": 73060.33464396214,
+    "deg": 4339.539250801596,
+    "steps": 3744,
+    "time_s": 59.61088191601448
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 92735.0083673869,
+    "energy": 19798.806131587666,
+    "fcas": 77144.0705526232,
+    "deg": 4207.86831682398,
+    "steps": 3744,
+    "time_s": 59.83502505696379
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 67789.66378869936,
+    "energy": 1462.2442013638324,
+    "fcas": 67639.56832562333,
+    "deg": 1312.148738287812,
+    "steps": 3744,
+    "time_s": 59.68199538998306
+  },
+  {
+    "label": "piecewise_merit_order_dt_impact_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 67394.54974599619,
+    "energy": 1356.809158593858,
+    "fcas": 67084.8650041052,
+    "deg": 1047.1244167028703,
+    "steps": 3744,
+    "time_s": 59.808166406990495
+  },
+  {
+    "label": "piecewise_merit_order_fcasrule_torrens_vic1_oct_2024",
+    "profit": -78382.57961355828,
+    "energy": -42403.096767372546,
+    "fcas": 37699.98647549892,
+    "deg": 73679.46932168465,
+    "steps": 3744,
+    "time_s": 0.5547650560038164
+  },
+  {
+    "label": "piecewise_merit_order_ppo_torrens_vic1_oct_2024",
+    "profit": 48277.028770214085,
+    "energy": 1154.678166944517,
+    "fcas": 47546.25607393185,
+    "deg": 423.905470662282,
+    "steps": 3744,
+    "time_s": 1.8526218589977361
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_small_sa1_oct_2024",
+    "profit": 18945.853735107165,
+    "energy": 139.08778137624208,
+    "fcas": 19186.860432438938,
+    "deg": 380.0944787080165,
+    "steps": 3744,
+    "time_s": 58.225124627992045
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_small_sa1_oct_2024",
+    "profit": 17772.295245703284,
+    "energy": 369.2825130037127,
+    "fcas": 17782.526243930668,
+    "deg": 379.5135112310968,
+    "steps": 3744,
+    "time_s": 59.79477042699
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_small_sa1_oct_2024",
+    "profit": 33606.52785038284,
+    "energy": 381.16754008666777,
+    "fcas": 33603.938590651414,
+    "deg": 378.5782803552446,
+    "steps": 3744,
+    "time_s": 60.06638508901233
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_small_sa1_oct_2024",
+    "profit": 15627.849000393255,
+    "energy": 380.93008478518504,
+    "fcas": 15625.50433657602,
+    "deg": 378.58542096794935,
+    "steps": 3744,
+    "time_s": 60.24076655803947
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_small_sa1_oct_2024",
+    "profit": 14836.359554160153,
+    "energy": 366.7985385330371,
+    "fcas": 14848.1551458684,
+    "deg": 378.59413024128446,
+    "steps": 3744,
+    "time_s": 60.257789535971824
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 86708.74289576983,
+    "energy": 9366.200015640368,
+    "fcas": 77811.68872992872,
+    "deg": 469.1458497992574,
+    "steps": 3744,
+    "time_s": 58.123547600989696
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 92535.66386729528,
+    "energy": 15411.430450877222,
+    "fcas": 77584.17363565721,
+    "deg": 459.94021923914124,
+    "steps": 3744,
+    "time_s": 59.463547513005324
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 76970.28493979824,
+    "energy": 794.1374625317491,
+    "fcas": 76632.14009598055,
+    "deg": 455.99261871407253,
+    "steps": 3744,
+    "time_s": 59.584392990975175
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 87508.20634586601,
+    "energy": 9016.78803942853,
+    "fcas": 78870.06668807143,
+    "deg": 378.64838163394506,
+    "steps": 3744,
+    "time_s": 59.72617567901034
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 82971.25850369089,
+    "energy": 8824.9944073627,
+    "fcas": 74524.9290191742,
+    "deg": 378.66492284601065,
+    "steps": 3744,
+    "time_s": 59.79397536703618
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 144401.65826019784,
+    "energy": 15277.83087521152,
+    "fcas": 129584.90241086835,
+    "deg": 461.07502588203323,
+    "steps": 3744,
+    "time_s": 59.67833492101636
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 143195.05647781256,
+    "energy": 11502.872641807306,
+    "fcas": 132152.874373925,
+    "deg": 460.69053791975125,
+    "steps": 3744,
+    "time_s": 59.543833517993335
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 149782.56049470647,
+    "energy": 21655.546534427518,
+    "fcas": 128586.6498739445,
+    "deg": 459.635913665544,
+    "steps": 3744,
+    "time_s": 59.77930783102056
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 143812.38531070182,
+    "energy": 11551.736201108048,
+    "fcas": 132639.280985922,
+    "deg": 378.6318763282301,
+    "steps": 3744,
+    "time_s": 59.7685113120242
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 135715.89125831862,
+    "energy": 11721.257611948715,
+    "fcas": 124373.28142607579,
+    "deg": 378.64777970587454,
+    "steps": 3744,
+    "time_s": 59.76086241600569
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_small_sa1_nov_2024",
+    "profit": 29376.274010318262,
+    "energy": 372.6472258688692,
+    "fcas": 29382.199650881288,
+    "deg": 378.5728664318959,
+    "steps": 3744,
+    "time_s": 59.62431638495764
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_small_sa1_nov_2024",
+    "profit": 12079.797907583115,
+    "energy": 371.59605527801835,
+    "fcas": 12097.08835264821,
+    "deg": 388.88650034311354,
+    "steps": 3744,
+    "time_s": 59.86785903398413
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_small_sa1_nov_2024",
+    "profit": 22946.121361159916,
+    "energy": 369.68309943310646,
+    "fcas": 22955.00607984308,
+    "deg": 378.5678181162685,
+    "steps": 3744,
+    "time_s": 59.75712481403025
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_small_sa1_nov_2024",
+    "profit": 11908.442782402388,
+    "energy": 375.064571516443,
+    "fcas": 11911.95312290791,
+    "deg": 378.57491202196525,
+    "steps": 3744,
+    "time_s": 59.871335948002525
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_small_sa1_nov_2024",
+    "profit": 10448.581442410527,
+    "energy": 340.6136091257621,
+    "fcas": 11450.116116404832,
+    "deg": 1342.1482831200656,
+    "steps": 3744,
+    "time_s": 59.699296583014075
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 94790.65920683215,
+    "energy": 12829.187333765636,
+    "fcas": 82429.99896772526,
+    "deg": 468.52709465875216,
+    "steps": 3744,
+    "time_s": 59.70046467799693
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 94105.66407144244,
+    "energy": 10411.900303505856,
+    "fcas": 84152.20490906699,
+    "deg": 458.44114113040655,
+    "steps": 3744,
+    "time_s": 59.62792092200834
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 123880.67972923191,
+    "energy": 7495.880360742619,
+    "fcas": 116763.4090276277,
+    "deg": 378.60965913840755,
+    "steps": 3744,
+    "time_s": 59.80899857199984
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 66823.5274121986,
+    "energy": 7283.036967076194,
+    "fcas": 59919.113698282315,
+    "deg": 378.62325315990705,
+    "steps": 3744,
+    "time_s": 59.755857933021616
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 64805.381484212834,
+    "energy": 7006.705089119076,
+    "fcas": 58177.34447569398,
+    "deg": 378.6680806002204,
+    "steps": 3744,
+    "time_s": 59.76935026596766
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 125458.00316561527,
+    "energy": -10301.914610106669,
+    "fcas": 136254.3270674306,
+    "deg": 494.409291708656,
+    "steps": 3744,
+    "time_s": 59.65612393798074
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 164272.58577236783,
+    "energy": 25391.756896600236,
+    "fcas": 139339.63593508166,
+    "deg": 458.8070593140775,
+    "steps": 3744,
+    "time_s": 59.764922917005606
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 147899.1981349799,
+    "energy": 9212.111163849762,
+    "fcas": 139165.20830289225,
+    "deg": 478.1213317621247,
+    "steps": 3744,
+    "time_s": 59.84474077599589
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 109429.9994558683,
+    "energy": 9533.653877863188,
+    "fcas": 100274.9557356216,
+    "deg": 378.6101576164921,
+    "steps": 3744,
+    "time_s": 59.73077112197643
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 105618.31071568953,
+    "energy": 9172.915971006145,
+    "fcas": 96824.04393108272,
+    "deg": 378.6491863993409,
+    "steps": 3744,
+    "time_s": 59.77147823001724
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_small_vic1_oct_2024",
+    "profit": 18533.22850642935,
+    "energy": 518.7213594009282,
+    "fcas": 18395.706662932782,
+    "deg": 381.19951590436335,
+    "steps": 3744,
+    "time_s": 59.89512129302602
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_small_vic1_oct_2024",
+    "profit": 17938.037296163337,
+    "energy": 372.7504237483324,
+    "fcas": 17944.777934086676,
+    "deg": 379.491061671675,
+    "steps": 3744,
+    "time_s": 59.650763273006305
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_small_vic1_oct_2024",
+    "profit": 33342.56778933714,
+    "energy": 336.5657042299993,
+    "fcas": 33384.58144901283,
+    "deg": 378.57936390569455,
+    "steps": 3744,
+    "time_s": 59.759896803006995
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_small_vic1_oct_2024",
+    "profit": 15447.563270184775,
+    "energy": 335.945619948478,
+    "fcas": 15490.203942103655,
+    "deg": 378.58629186735766,
+    "steps": 3744,
+    "time_s": 59.6511681220145
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_small_vic1_oct_2024",
+    "profit": 14789.93087560629,
+    "energy": 324.2950894884582,
+    "fcas": 14844.231824066337,
+    "deg": 378.5960379485059,
+    "steps": 3744,
+    "time_s": 59.70513477403438
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 86638.87781222916,
+    "energy": 9221.464041131718,
+    "fcas": 77889.69872044526,
+    "deg": 472.28494934783015,
+    "steps": 3744,
+    "time_s": 59.62418260500999
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 92343.39233458648,
+    "energy": 15603.961409454081,
+    "fcas": 77199.20779344624,
+    "deg": 459.7768683138482,
+    "steps": 3744,
+    "time_s": 59.767875400953926
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 175704.40486773397,
+    "energy": 7652.454445467291,
+    "fcas": 168430.79073504574,
+    "deg": 378.84031277907593,
+    "steps": 3744,
+    "time_s": 59.921850283048116
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 85488.74016857478,
+    "energy": 7860.367906191846,
+    "fcas": 78007.02322737963,
+    "deg": 378.6509649967116,
+    "steps": 3744,
+    "time_s": 59.77290445601102
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 81820.51235835484,
+    "energy": 7693.463882260148,
+    "fcas": 74505.71717731518,
+    "deg": 378.6687012204728,
+    "steps": 3744,
+    "time_s": 59.61923833703622
+  },
+  {
+    "label": "identity_dt_v2_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 141042.73425975037,
+    "energy": 11992.225674443598,
+    "fcas": 129524.01242299563,
+    "deg": 473.503837688853,
+    "steps": 3744,
+    "time_s": 59.79024035297334
+  },
+  {
+    "label": "identity_dt_v2_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 146111.06591662884,
+    "energy": 16930.440681634107,
+    "fcas": 129640.8241885238,
+    "deg": 460.19895352907616,
+    "steps": 3744,
+    "time_s": 59.65182708099019
+  },
+  {
+    "label": "identity_dt_v2_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 148440.57971242975,
+    "energy": 21002.381675290697,
+    "fcas": 127897.64486719237,
+    "deg": 459.44683005333167,
+    "steps": 3744,
+    "time_s": 59.64034560800064
+  },
+  {
+    "label": "identity_dt_v2_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 140477.7566966696,
+    "energy": 10151.91351241648,
+    "fcas": 130704.47740722816,
+    "deg": 378.6342229750481,
+    "steps": 3744,
+    "time_s": 59.69040435098577
+  },
+  {
+    "label": "identity_dt_v2_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 134202.95972137628,
+    "energy": 10193.566149298538,
+    "fcas": 124388.0447875904,
+    "deg": 378.65121551267663,
+    "steps": 3744,
+    "time_s": 59.7883326439769
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_small_sa1_oct_2024",
+    "profit": 14473.525404999056,
+    "energy": 1925.2202259892022,
+    "fcas": 12958.74074426597,
+    "deg": 410.43556525611524,
+    "steps": 3744,
+    "time_s": 59.8090008799918
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_small_sa1_oct_2024",
+    "profit": 13952.27377837972,
+    "energy": 1877.2530661733833,
+    "fcas": 12468.411428119422,
+    "deg": 393.390715913084,
+    "steps": 3744,
+    "time_s": 59.73850953695364
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_small_sa1_oct_2024",
+    "profit": 22138.836378111137,
+    "energy": 1863.845908582682,
+    "fcas": 20653.56881110286,
+    "deg": 378.5783415744097,
+    "steps": 3744,
+    "time_s": 59.78612990502734
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_small_sa1_oct_2024",
+    "profit": 12958.016654693494,
+    "energy": 1872.9879323105743,
+    "fcas": 11463.614129995083,
+    "deg": 378.5854076121629,
+    "steps": 3744,
+    "time_s": 59.86966004403075
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_small_sa1_oct_2024",
+    "profit": 12607.868168931926,
+    "energy": 1888.847578100541,
+    "fcas": 11097.614710862115,
+    "deg": 378.5941200307317,
+    "steps": 3744,
+    "time_s": 59.874978154024575
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 29003.6251821325,
+    "energy": -14097.04166719475,
+    "fcas": 43614.89332937484,
+    "deg": 514.2264800475934,
+    "steps": 3744,
+    "time_s": 59.62045490904711
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 3759.0684627366463,
+    "energy": -37214.92294455093,
+    "fcas": 41356.494982026044,
+    "deg": 382.5035747384645,
+    "steps": 3744,
+    "time_s": 59.78772992303129
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 16088.724963580033,
+    "energy": -48669.89317421612,
+    "fcas": 65139.56424440888,
+    "deg": 380.9461066127264,
+    "steps": 3744,
+    "time_s": 59.64501171297161
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 16967.215038161205,
+    "energy": -17543.56521738401,
+    "fcas": 34890.776755447565,
+    "deg": 379.9964999023493,
+    "steps": 3744,
+    "time_s": 59.65343901398592
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 77382.52894909628,
+    "energy": 42563.25350660543,
+    "fcas": 35197.93895422873,
+    "deg": 378.6635117378911,
+    "steps": 3744,
+    "time_s": 59.903325363004114
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 68392.36094041353,
+    "energy": 1712.67436919754,
+    "fcas": 67171.00814276676,
+    "deg": 491.32157155077454,
+    "steps": 3744,
+    "time_s": 59.77138885698514
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_torrens_sa1_oct_2024",
+    "profit": -8951.235209953393,
+    "energy": -67981.17136009847,
+    "fcas": 59412.481089712695,
+    "deg": 382.54493956762286,
+    "steps": 3744,
+    "time_s": 59.63285643002018
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_torrens_sa1_oct_2024",
+    "profit": -60710.936685963694,
+    "energy": -129179.733864039,
+    "fcas": 69448.83229427227,
+    "deg": 980.0351161969757,
+    "steps": 3744,
+    "time_s": 59.80706211098004
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 17844.83602515301,
+    "energy": -52505.17715926291,
+    "fcas": 70807.37586418269,
+    "deg": 457.36267976676817,
+    "steps": 3744,
+    "time_s": 59.65392818197142
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_torrens_sa1_oct_2024",
+    "profit": -27833.870484402098,
+    "energy": -72852.57074367374,
+    "fcas": 45399.47118048307,
+    "deg": 380.7709212114291,
+    "steps": 3744,
+    "time_s": 59.72389938199194
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_small_sa1_nov_2024",
+    "profit": 13904.436594904231,
+    "energy": 1400.7101311080949,
+    "fcas": 13279.292949533337,
+    "deg": 775.5664857372011,
+    "steps": 3744,
+    "time_s": 59.648455345013645
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_small_sa1_nov_2024",
+    "profit": 9784.403699766628,
+    "energy": 1401.8382669123926,
+    "fcas": 8761.133860637161,
+    "deg": 378.5684277829261,
+    "steps": 3744,
+    "time_s": 59.78651849296875
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_small_sa1_nov_2024",
+    "profit": 15326.75140673296,
+    "energy": 1400.222797463858,
+    "fcas": 14305.096428302722,
+    "deg": 378.56781903361957,
+    "steps": 3744,
+    "time_s": 59.77452561503742
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_small_sa1_nov_2024",
+    "profit": 9704.343519981032,
+    "energy": 1408.4600268146048,
+    "fcas": 8674.458397431503,
+    "deg": 378.57490426507553,
+    "steps": 3744,
+    "time_s": 59.92727882997133
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_small_sa1_nov_2024",
+    "profit": 8642.180151982739,
+    "energy": 1545.131761436805,
+    "fcas": 8520.353127146172,
+    "deg": 1423.3047366002384,
+    "steps": 3744,
+    "time_s": 59.69710579997627
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 164038.78272692522,
+    "energy": 122212.40654964812,
+    "fcas": 43287.937147450684,
+    "deg": 1461.560970173593,
+    "steps": 3744,
+    "time_s": 59.628318963048514
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 53007.21420419111,
+    "energy": 8839.440094474132,
+    "fcas": 44663.05650267181,
+    "deg": 495.282392954836,
+    "steps": 3744,
+    "time_s": 59.54656593996333
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": -2922.5987469402226,
+    "energy": -41082.07806194742,
+    "fcas": 38539.95258131106,
+    "deg": 380.473266303865,
+    "steps": 3744,
+    "time_s": 59.83747092599515
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 71321.84938502262,
+    "energy": 26079.616844383298,
+    "fcas": 45701.442293078784,
+    "deg": 459.2097524394687,
+    "steps": 3744,
+    "time_s": 59.72918074997142
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 53747.02053220768,
+    "energy": 27606.8880605514,
+    "fcas": 26518.79840625506,
+    "deg": 378.665934598778,
+    "steps": 3744,
+    "time_s": 59.818228573014494
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 71173.93717964791,
+    "energy": 7843.821059386824,
+    "fcas": 63878.22549709921,
+    "deg": 548.1093768381295,
+    "steps": 3744,
+    "time_s": 59.696897891990375
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 69514.57723870153,
+    "energy": 7026.822524829273,
+    "fcas": 63081.762274014545,
+    "deg": 594.00756014228,
+    "steps": 3744,
+    "time_s": 59.89908523095073
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 16808.95567775482,
+    "energy": -35235.08307738802,
+    "fcas": 52513.0478844581,
+    "deg": 469.00912931525835,
+    "steps": 3744,
+    "time_s": 59.659146132995375
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 92069.39704849062,
+    "energy": 29372.019531489714,
+    "fcas": 63165.387172693954,
+    "deg": 468.00965569305345,
+    "steps": 3744,
+    "time_s": 59.801446544996
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 68478.04191941711,
+    "energy": 33158.093971835566,
+    "fcas": 35698.59499585752,
+    "deg": 378.6470482759723,
+    "steps": 3744,
+    "time_s": 59.827502842992544
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_small_vic1_oct_2024",
+    "profit": 13764.231708783986,
+    "energy": 85.77630641273808,
+    "fcas": 14059.701235510474,
+    "deg": 381.24583313922597,
+    "steps": 3744,
+    "time_s": 59.78430960403057
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_small_vic1_oct_2024",
+    "profit": 13419.498797859782,
+    "energy": 57.47250300005478,
+    "fcas": 13741.425176475004,
+    "deg": 379.39888161527847,
+    "steps": 3744,
+    "time_s": 59.836403078981675
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_small_vic1_oct_2024",
+    "profit": 21827.702660008643,
+    "energy": 39.89322330662181,
+    "fcas": 22166.38879012702,
+    "deg": 378.57935342500025,
+    "steps": 3744,
+    "time_s": 59.91134160698857
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_small_vic1_oct_2024",
+    "profit": 11923.162471911442,
+    "energy": 39.734364928429706,
+    "fcas": 12262.01440152772,
+    "deg": 378.5862945447087,
+    "steps": 3744,
+    "time_s": 59.71694503602339
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_small_vic1_oct_2024",
+    "profit": 11664.826419597011,
+    "energy": 39.31213027355958,
+    "fcas": 12004.11032902976,
+    "deg": 378.59603970630883,
+    "steps": 3744,
+    "time_s": 59.85719705896918
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 39272.68726308592,
+    "energy": -1116.9867694572824,
+    "fcas": 41013.624071364946,
+    "deg": 623.9500388217389,
+    "steps": 3744,
+    "time_s": 59.84648574097082
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 40900.37572359484,
+    "energy": 1026.1427972638521,
+    "fcas": 40253.20378646393,
+    "deg": 378.97086013293546,
+    "steps": 3744,
+    "time_s": 59.85424855095334
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 53920.13021736173,
+    "energy": 904.902004195344,
+    "fcas": 53393.87966495059,
+    "deg": 378.65145178419965,
+    "steps": 3744,
+    "time_s": 59.76391842600424
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 39122.94169921476,
+    "energy": 899.4894121670292,
+    "fcas": 38602.10364588227,
+    "deg": 378.6513588345405,
+    "steps": 3744,
+    "time_s": 59.91329214599682
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 38913.86530212542,
+    "energy": 893.6318401805538,
+    "fcas": 38398.902369991476,
+    "deg": 378.6689080466119,
+    "steps": 3744,
+    "time_s": 59.75807800103212
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 53431.83084709226,
+    "energy": -1187.6739703550093,
+    "fcas": 55299.63465016896,
+    "deg": 680.1298327216952,
+    "steps": 3744,
+    "time_s": 59.800990386051126
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 51796.074766695,
+    "energy": 1356.7248791082698,
+    "fcas": 50818.34728244759,
+    "deg": 378.9973948608589,
+    "steps": 3744,
+    "time_s": 59.75186667701928
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 64699.35664072995,
+    "energy": 1163.334885405897,
+    "fcas": 63914.65331039816,
+    "deg": 378.63155507410636,
+    "steps": 3744,
+    "time_s": 59.85143395001069
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 51454.89393185577,
+    "energy": 1154.1069353761304,
+    "fcas": 50679.421758829274,
+    "deg": 378.6347623496409,
+    "steps": 3744,
+    "time_s": 59.908505362982396
+  },
+  {
+    "label": "piecewise_merit_order_dt_v2_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 51385.162080087925,
+    "energy": 1148.0408414234855,
+    "fcas": 50615.77270493026,
+    "deg": 378.65146626582435,
+    "steps": 3744,
+    "time_s": 59.79087924299529
+  },
+  {
+    "label": "identity_dispatch_small_sa1_oct_2024",
+    "profit": 9901.074777033002,
+    "energy": 10883.289348405922,
+    "fcas": 4090.0586636269754,
+    "deg": 5072.273234999896,
+    "steps": 3744,
+    "time_s": 0.46413887199014425
+  },
+  {
+    "label": "identity_dispatch_hornsdale_sa1_oct_2024",
+    "profit": 21665.067719102146,
+    "energy": 14044.760678125065,
+    "fcas": 8635.842518673206,
+    "deg": 1015.5354776961232,
+    "steps": 3744,
+    "time_s": 0.42414138303138316
+  },
+  {
+    "label": "identity_dispatch_torrens_sa1_oct_2024",
+    "profit": 21739.23212341201,
+    "energy": 14044.759901912852,
+    "fcas": 8635.842575891777,
+    "deg": 941.370354392615,
+    "steps": 3744,
+    "time_s": 0.4351573479943909
+  },
+  {
+    "label": "identity_dispatch_small_sa1_nov_2024",
+    "profit": 8648.503799576727,
+    "energy": 9961.393150906437,
+    "fcas": 2402.0597925194006,
+    "deg": 3714.9491438491104,
+    "steps": 3744,
+    "time_s": 0.4296458170283586
+  },
+  {
+    "label": "identity_dispatch_hornsdale_sa1_nov_2024",
+    "profit": 13401.92784153693,
+    "energy": 9415.101975526013,
+    "fcas": 4981.469030448677,
+    "deg": 994.6431644377583,
+    "steps": 3744,
+    "time_s": 0.41898909502197057
+  },
+  {
+    "label": "identity_dispatch_torrens_sa1_nov_2024",
+    "profit": 13485.739511276011,
+    "energy": 9415.1015320215,
+    "fcas": 4981.469075959606,
+    "deg": 910.831096705095,
+    "steps": 3744,
+    "time_s": 0.42259734601248056
+  },
+  {
+    "label": "piecewise_merit_order_dispatch_small_sa1_oct_2024",
+    "profit": 21203.27115240478,
+    "energy": 22828.315069039578,
+    "fcas": 3447.2293183650977,
+    "deg": 5072.273234999896,
+    "steps": 3744,
+    "time_s": 0.4839142599957995
+  },
+  {
+    "label": "piecewise_merit_order_dispatch_hornsdale_sa1_oct_2024",
+    "profit": 24709.528176261254,
+    "energy": 19012.413727233554,
+    "fcas": 6712.649926723824,
+    "deg": 1015.5354776961232,
+    "steps": 3744,
+    "time_s": 0.4841787749901414
+  },
+  {
+    "label": "piecewise_merit_order_dispatch_torrens_sa1_oct_2024",
+    "profit": 24783.69207015659,
+    "energy": 19012.41246996209,
+    "fcas": 6712.649954587116,
+    "deg": 941.370354392615,
+    "steps": 3744,
+    "time_s": 0.4891236600233242
+  },
+  {
+    "label": "piecewise_merit_order_dispatch_small_sa1_nov_2024",
+    "profit": 20217.317840891712,
+    "energy": 21860.38195547971,
+    "fcas": 2071.8850292611123,
+    "deg": 3714.9491438491104,
+    "steps": 3744,
+    "time_s": 0.4808768560178578
+  },
+  {
+    "label": "piecewise_merit_order_dispatch_hornsdale_sa1_nov_2024",
+    "profit": 15848.949105099957,
+    "energy": 12848.087953601229,
+    "fcas": 3995.504315936488,
+    "deg": 994.6431644377583,
+    "steps": 3744,
+    "time_s": 0.5036515879910439
+  },
+  {
+    "label": "piecewise_merit_order_dispatch_torrens_sa1_nov_2024",
+    "profit": 15932.760647684043,
+    "energy": 12848.087399256081,
+    "fcas": 3995.5043451330557,
+    "deg": 910.831096705095,
+    "steps": 3744,
+    "time_s": 0.48112784104887396
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_small_sa1_oct_2024",
+    "profit": 63514.767115584626,
+    "energy": 6930.437317699662,
+    "fcas": 64292.398371590454,
+    "deg": 7708.068573705498,
+    "steps": 3744,
+    "time_s": 61.46667016390711
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_small_sa1_oct_2024",
+    "profit": 56240.67222701363,
+    "energy": 9852.507769721607,
+    "fcas": 52619.53629503526,
+    "deg": 6231.371837743228,
+    "steps": 3744,
+    "time_s": 63.12667617702391
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_small_sa1_oct_2024",
+    "profit": 55564.091610555304,
+    "energy": 10413.46652450368,
+    "fcas": 51672.957836840345,
+    "deg": 6522.3327507887225,
+    "steps": 3744,
+    "time_s": 63.370389748946764
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_small_sa1_oct_2024",
+    "profit": 55441.70375611941,
+    "energy": 10471.59526585654,
+    "fcas": 51468.04499766516,
+    "deg": 6497.9365074022835,
+    "steps": 3744,
+    "time_s": 63.19472598703578
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_small_sa1_oct_2024",
+    "profit": 55388.68117252522,
+    "energy": 10523.298400076745,
+    "fcas": 51349.98850742141,
+    "deg": 6484.60573497294,
+    "steps": 3744,
+    "time_s": 63.30754153104499
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 401247.45137592935,
+    "energy": 32998.53862526743,
+    "fcas": 369873.9863727596,
+    "deg": 1625.0736220977517,
+    "steps": 3744,
+    "time_s": 63.2232181209838
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 404789.12209339463,
+    "energy": 33613.29553427872,
+    "fcas": 372856.5794736511,
+    "deg": 1680.7529145351536,
+    "steps": 3744,
+    "time_s": 63.10846038593445
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 404780.91984732455,
+    "energy": 27702.91325561246,
+    "fcas": 378729.73915055266,
+    "deg": 1651.732558840602,
+    "steps": 3744,
+    "time_s": 63.21447414497379
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 364241.83527510246,
+    "energy": 49268.73583180155,
+    "fcas": 315977.35931069875,
+    "deg": 1004.2598673978443,
+    "steps": 3744,
+    "time_s": 62.525441667065024
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 363986.2068004174,
+    "energy": 48593.139900673756,
+    "fcas": 316436.70605742506,
+    "deg": 1043.6391576814306,
+    "steps": 3744,
+    "time_s": 63.20060914300848
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 662864.4053005661,
+    "energy": 63763.74039413642,
+    "fcas": 601131.7490761043,
+    "deg": 2031.0841696745183,
+    "steps": 3744,
+    "time_s": 63.04550776700489
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 666347.3841263248,
+    "energy": 62393.74251227835,
+    "fcas": 605994.9608874156,
+    "deg": 2041.3192733691742,
+    "steps": 3744,
+    "time_s": 63.08397411194164
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 666837.9888652647,
+    "energy": 61606.19874163337,
+    "fcas": 607251.5003677143,
+    "deg": 2019.7102440829196,
+    "steps": 3744,
+    "time_s": 63.13580671802629
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 579533.9026411714,
+    "energy": 67286.70612319944,
+    "fcas": 513457.9111111299,
+    "deg": 1210.7145931580162,
+    "steps": 3744,
+    "time_s": 63.30269572802354
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 582349.3981027218,
+    "energy": 66712.13664991305,
+    "fcas": 516857.1509428935,
+    "deg": 1219.889490084891,
+    "steps": 3744,
+    "time_s": 63.227303295978345
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_small_sa1_nov_2024",
+    "profit": 71726.37973757618,
+    "energy": 3459.762114677128,
+    "fcas": 74255.05833890356,
+    "deg": 5988.440716004515,
+    "steps": 3744,
+    "time_s": 63.02709005295765
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_small_sa1_nov_2024",
+    "profit": 45673.871357013544,
+    "energy": 7626.6771687147,
+    "fcas": 45336.758965147616,
+    "deg": 7289.564776848771,
+    "steps": 3744,
+    "time_s": 62.42954109609127
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_small_sa1_nov_2024",
+    "profit": 45332.50978735552,
+    "energy": 7757.540779320281,
+    "fcas": 45027.970800579424,
+    "deg": 7453.001792544185,
+    "steps": 3744,
+    "time_s": 63.11216186406091
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_small_sa1_nov_2024",
+    "profit": 45209.542923111134,
+    "energy": 7822.694968061671,
+    "fcas": 44914.44570337375,
+    "deg": 7527.597748324286,
+    "steps": 3744,
+    "time_s": 63.2259253290249
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_small_sa1_nov_2024",
+    "profit": 45216.90458547233,
+    "energy": 7850.488054533438,
+    "fcas": 44887.87840089543,
+    "deg": 7521.461869956539,
+    "steps": 3744,
+    "time_s": 63.24779288005084
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 417110.9505016507,
+    "energy": 18639.255262296996,
+    "fcas": 399869.47547767794,
+    "deg": 1397.7802383242326,
+    "steps": 3744,
+    "time_s": 63.13373803801369
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 420534.9831598478,
+    "energy": 21681.136629009736,
+    "fcas": 400321.5382128916,
+    "deg": 1467.6916820535725,
+    "steps": 3744,
+    "time_s": 62.999781026970595
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 422360.03881986806,
+    "energy": 20398.935455077957,
+    "fcas": 403350.6703686893,
+    "deg": 1389.5670038992102,
+    "steps": 3744,
+    "time_s": 63.09351143799722
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 301787.1125664073,
+    "energy": 29120.333530601547,
+    "fcas": 273680.4058672138,
+    "deg": 1013.6268314079821,
+    "steps": 3744,
+    "time_s": 63.095228319987655
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 301993.4136181284,
+    "energy": 29232.37217028577,
+    "fcas": 273818.0363846115,
+    "deg": 1056.994936768923,
+    "steps": 3744,
+    "time_s": 63.13496231299359
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 692632.6742722307,
+    "energy": 32073.42060002922,
+    "fcas": 662205.5964305958,
+    "deg": 1646.3427583942548,
+    "steps": 3744,
+    "time_s": 62.71855008194689
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 693022.3016764402,
+    "energy": 32271.10839122592,
+    "fcas": 662467.7862893116,
+    "deg": 1716.5930040973417,
+    "steps": 3744,
+    "time_s": 62.92404353804886
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 724818.9272307206,
+    "energy": 61541.77108752985,
+    "fcas": 665133.1629626843,
+    "deg": 1856.006819493478,
+    "steps": 3744,
+    "time_s": 63.18907391501125
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 517292.35174610326,
+    "energy": 46423.90249891147,
+    "fcas": 472150.32885173126,
+    "deg": 1281.8796045395134,
+    "steps": 3744,
+    "time_s": 63.2477459339425
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 517696.39293740294,
+    "energy": 46571.76625887648,
+    "fcas": 472413.4515367945,
+    "deg": 1288.8248582680326,
+    "steps": 3744,
+    "time_s": 63.18469207501039
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_small_vic1_oct_2024",
+    "profit": 62615.80850171869,
+    "energy": 5210.697978340356,
+    "fcas": 63540.47496376967,
+    "deg": 6135.364440391342,
+    "steps": 3744,
+    "time_s": 63.13769249804318
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_small_vic1_oct_2024",
+    "profit": 46618.3877146739,
+    "energy": 4451.112604383728,
+    "fcas": 45942.16618863933,
+    "deg": 3774.8910783491524,
+    "steps": 3744,
+    "time_s": 63.11641342798248
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_small_vic1_oct_2024",
+    "profit": 46447.48748001268,
+    "energy": 4584.494347061982,
+    "fcas": 45616.683545020955,
+    "deg": 3753.6904120702616,
+    "steps": 3744,
+    "time_s": 63.259842219995335
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_small_vic1_oct_2024",
+    "profit": 46269.17641910025,
+    "energy": 4688.8012764811465,
+    "fcas": 45341.31486771896,
+    "deg": 3760.9397250998536,
+    "steps": 3744,
+    "time_s": 63.15560733608436
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_small_vic1_oct_2024",
+    "profit": 46135.30847872318,
+    "energy": 4766.214603610013,
+    "fcas": 45131.78890089392,
+    "deg": 3762.695025780744,
+    "steps": 3744,
+    "time_s": 63.15008315094747
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 363720.9644413632,
+    "energy": 21971.044103622346,
+    "fcas": 343340.2192688586,
+    "deg": 1590.2989311177482,
+    "steps": 3744,
+    "time_s": 62.76171983103268
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 368003.42513810773,
+    "energy": 21763.232602122225,
+    "fcas": 347900.15794965107,
+    "deg": 1659.9654136656018,
+    "steps": 3744,
+    "time_s": 63.402857161010616
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 386039.0830328108,
+    "energy": 38691.034955065195,
+    "fcas": 348998.8069049689,
+    "deg": 1650.7588272232417,
+    "steps": 3744,
+    "time_s": 63.19498237001244
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 301821.42934041825,
+    "energy": 7386.015566813774,
+    "fcas": 295129.1220604316,
+    "deg": 693.7082868270643,
+    "steps": 3744,
+    "time_s": 63.337892841082066
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 302507.7494485537,
+    "energy": 7456.210429855022,
+    "fcas": 295741.4192961269,
+    "deg": 689.8802774281669,
+    "steps": 3744,
+    "time_s": 63.37000783905387
+  },
+  {
+    "label": "identity_sdp_mixed_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 601468.2146352212,
+    "energy": 37931.34825491268,
+    "fcas": 565397.8142544238,
+    "deg": 1860.9478741153423,
+    "steps": 3744,
+    "time_s": 63.23979143204633
+  },
+  {
+    "label": "identity_sdp_mixed_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 608115.0617385312,
+    "energy": 37554.81948098633,
+    "fcas": 572467.7593034504,
+    "deg": 1907.5170459054677,
+    "steps": 3744,
+    "time_s": 63.21640170691535
+  },
+  {
+    "label": "identity_sdp_mixed_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 608940.3561084146,
+    "energy": 36880.48422601341,
+    "fcas": 573972.4464796316,
+    "deg": 1912.5745972303828,
+    "steps": 3744,
+    "time_s": 63.3716180579504
+  },
+  {
+    "label": "identity_sdp_mixed_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 511511.10239744355,
+    "energy": 18996.63899697131,
+    "fcas": 493340.76432978886,
+    "deg": 826.3009293165891,
+    "steps": 3744,
+    "time_s": 63.40053045400418
+  },
+  {
+    "label": "identity_sdp_mixed_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 517053.32991553337,
+    "energy": 19606.98787782977,
+    "fcas": 498253.77862637094,
+    "deg": 807.4365886673186,
+    "steps": 3744,
+    "time_s": 63.38890497596003
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_small_sa1_oct_2024",
+    "profit": 46119.2694478201,
+    "energy": 12925.729587043648,
+    "fcas": 42614.50081128379,
+    "deg": 9420.96095050734,
+    "steps": 3744,
+    "time_s": 63.30282258207444
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_small_sa1_oct_2024",
+    "profit": 39205.91992250016,
+    "energy": 11746.476449560198,
+    "fcas": 33680.72961747009,
+    "deg": 6221.2861445301305,
+    "steps": 3744,
+    "time_s": 63.060540308011696
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_small_sa1_oct_2024",
+    "profit": 39216.43476273474,
+    "energy": 12622.074336201707,
+    "fcas": 33117.4282796084,
+    "deg": 6523.067853075375,
+    "steps": 3744,
+    "time_s": 63.446630769991316
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_small_sa1_oct_2024",
+    "profit": 39206.62152403756,
+    "energy": 12729.165603706842,
+    "fcas": 32975.49862447365,
+    "deg": 6498.042704142939,
+    "steps": 3744,
+    "time_s": 63.467139126965776
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_small_sa1_oct_2024",
+    "profit": 39229.71821264985,
+    "energy": 12817.962035040553,
+    "fcas": 32896.37544838511,
+    "deg": 6484.61927077581,
+    "steps": 3744,
+    "time_s": 63.54465745307971
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 232308.87447635792,
+    "energy": 61610.467456171755,
+    "fcas": 172381.29579543445,
+    "deg": 1682.8887752482701,
+    "steps": 3744,
+    "time_s": 63.48109996505082
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 232901.00242389826,
+    "energy": 61157.01464577981,
+    "fcas": 173533.25016923933,
+    "deg": 1789.2623911208925,
+    "steps": 3744,
+    "time_s": 63.379468154977076
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 187343.82214417885,
+    "energy": 58785.87798687109,
+    "fcas": 129583.31797635122,
+    "deg": 1025.3738190434456,
+    "steps": 3744,
+    "time_s": 63.63015758700203
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 188153.83769526388,
+    "energy": 56784.42442965585,
+    "fcas": 132372.80069002724,
+    "deg": 1003.3874244192277,
+    "steps": 3744,
+    "time_s": 63.480626552016474
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 187683.63924288552,
+    "energy": 55950.85925961042,
+    "fcas": 132776.4114447492,
+    "deg": 1043.6314614740775,
+    "steps": 3744,
+    "time_s": 63.62328931095544
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 361493.4493222545,
+    "energy": 103929.47528713309,
+    "fcas": 259577.11988228036,
+    "deg": 2013.1458471589133,
+    "steps": 3744,
+    "time_s": 63.41008836601395
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 344220.8289680063,
+    "energy": 79616.95645274667,
+    "fcas": 266425.5993046064,
+    "deg": 1821.7267893467656,
+    "steps": 3744,
+    "time_s": 63.41459646099247
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 269349.1409982426,
+    "energy": 84945.21142983432,
+    "fcas": 185664.77064573963,
+    "deg": 1260.8410773313626,
+    "steps": 3744,
+    "time_s": 63.478574009030126
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 268602.5380185919,
+    "energy": 82010.5941471976,
+    "fcas": 187802.20622695764,
+    "deg": 1210.2623555633652,
+    "steps": 3744,
+    "time_s": 63.39638788602315
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 268748.29924272647,
+    "energy": 80405.71628083575,
+    "fcas": 189562.46872536975,
+    "deg": 1219.8857634790736,
+    "steps": 3744,
+    "time_s": 63.08258333709091
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_small_sa1_nov_2024",
+    "profit": 37873.68263746593,
+    "energy": 613.4258879107203,
+    "fcas": 43450.82244575754,
+    "deg": 6190.565696202337,
+    "steps": 3744,
+    "time_s": 63.42888715793379
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_small_sa1_nov_2024",
+    "profit": 31812.45617112948,
+    "energy": 11808.098299465739,
+    "fcas": 27290.158970901608,
+    "deg": 7285.801099237871,
+    "steps": 3744,
+    "time_s": 63.42733496206347
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_small_sa1_nov_2024",
+    "profit": 31707.493577941503,
+    "energy": 12008.317148118502,
+    "fcas": 27150.07482053191,
+    "deg": 7450.898390708906,
+    "steps": 3744,
+    "time_s": 63.443426512996666
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_small_sa1_nov_2024",
+    "profit": 31718.98768674957,
+    "energy": 12142.541127126326,
+    "fcas": 27103.935048478645,
+    "deg": 7527.4884888554,
+    "steps": 3744,
+    "time_s": 63.42734360101167
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_small_sa1_nov_2024",
+    "profit": 31792.98602333939,
+    "energy": 12212.528874270358,
+    "fcas": 27101.883124441294,
+    "deg": 7521.425975372262,
+    "steps": 3744,
+    "time_s": 63.37835900799837
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 134252.07634259507,
+    "energy": 2258.955774806585,
+    "fcas": 133466.78793349612,
+    "deg": 1473.667365707637,
+    "steps": 3744,
+    "time_s": 63.21196553797927
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 136577.72534423243,
+    "energy": 4383.003846076894,
+    "fcas": 133710.29496091823,
+    "deg": 1515.5734627626973,
+    "steps": 3744,
+    "time_s": 63.34499018092174
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 162772.28222691696,
+    "energy": 30313.288336607984,
+    "fcas": 134044.48393100707,
+    "deg": 1585.4900406980769,
+    "steps": 3744,
+    "time_s": 63.36400834308006
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 164191.28881506601,
+    "energy": 71576.26443855696,
+    "fcas": 93675.17183985354,
+    "deg": 1060.1474633444652,
+    "steps": 3744,
+    "time_s": 63.576243531075306
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 164453.35634199955,
+    "energy": 71775.74206218634,
+    "fcas": 93725.89331417932,
+    "deg": 1048.2790343661454,
+    "steps": 3744,
+    "time_s": 63.46324697090313
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 205371.8622436124,
+    "energy": 17807.29440496085,
+    "fcas": 189461.4114526641,
+    "deg": 1896.843614012518,
+    "steps": 3744,
+    "time_s": 63.467734873062
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 204034.46135571503,
+    "energy": 16368.568669341132,
+    "fcas": 189606.39479814732,
+    "deg": 1940.5021117734184,
+    "steps": 3744,
+    "time_s": 63.293890043045394
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 201377.14800355223,
+    "energy": 14481.472015538,
+    "fcas": 188641.66248543048,
+    "deg": 1745.9864974162556,
+    "steps": 3744,
+    "time_s": 63.23970823304262
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 238599.91027017808,
+    "energy": 107215.63048874933,
+    "fcas": 132671.70946351468,
+    "deg": 1287.4296820859222,
+    "steps": 3744,
+    "time_s": 63.4346598709235
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 238813.81855856988,
+    "energy": 107381.23918059026,
+    "fcas": 132721.3828592983,
+    "deg": 1288.8034813186555,
+    "steps": 3744,
+    "time_s": 62.963441340019926
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_small_vic1_oct_2024",
+    "profit": 32273.45885653244,
+    "energy": 1029.3102387546585,
+    "fcas": 37433.08659264857,
+    "deg": 6188.937974870791,
+    "steps": 3744,
+    "time_s": 63.40876495500561
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_small_vic1_oct_2024",
+    "profit": 24840.466660439357,
+    "energy": 808.0357046568855,
+    "fcas": 27810.519265287607,
+    "deg": 3778.0883095051354,
+    "steps": 3744,
+    "time_s": 63.6351390510099
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_small_vic1_oct_2024",
+    "profit": 24809.209760331556,
+    "energy": 892.1119627754149,
+    "fcas": 27670.163019505086,
+    "deg": 3753.065221948947,
+    "steps": 3744,
+    "time_s": 63.565968525013886
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_small_vic1_oct_2024",
+    "profit": 24723.672693450448,
+    "energy": 933.913456295406,
+    "fcas": 27550.90955708839,
+    "deg": 3761.150319933349,
+    "steps": 3744,
+    "time_s": 63.63867014006246
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_small_vic1_oct_2024",
+    "profit": 24660.14135169298,
+    "energy": 959.8571026850392,
+    "fcas": 27463.027574000418,
+    "deg": 3762.7433249924798,
+    "steps": 3744,
+    "time_s": 63.498120834934525
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 99142.98814932324,
+    "energy": 2976.1644715420057,
+    "fcas": 97839.30302778917,
+    "deg": 1672.4793500079327,
+    "steps": 3744,
+    "time_s": 63.46036454406567
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 78022.02626100338,
+    "energy": 1623.584991282743,
+    "fcas": 77136.20601582005,
+    "deg": 737.7647460994028,
+    "steps": 3744,
+    "time_s": 63.65356809203513
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 79513.83610405184,
+    "energy": 1673.2168476562426,
+    "fcas": 78523.83325721452,
+    "deg": 683.2140008189193,
+    "steps": 3744,
+    "time_s": 63.469527422916144
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 79722.70395459588,
+    "energy": 1701.4054347510175,
+    "fcas": 78698.15351517606,
+    "deg": 676.8549953312042,
+    "steps": 3744,
+    "time_s": 63.68182471895125
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 79890.4342424162,
+    "energy": 1738.4193412138911,
+    "fcas": 78832.95350907277,
+    "deg": 680.9386078704623,
+    "steps": 3744,
+    "time_s": 63.59526873298455
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 123765.62218588682,
+    "energy": 5577.319802024541,
+    "fcas": 120143.57041845137,
+    "deg": 1955.2680345891029,
+    "steps": 3744,
+    "time_s": 63.634353182977065
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 92003.16192820438,
+    "energy": 2762.2852149091154,
+    "fcas": 90066.94477114057,
+    "deg": 826.0680578452968,
+    "steps": 3744,
+    "time_s": 62.886414785985835
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 95456.73991467858,
+    "energy": 3078.1290083543445,
+    "fcas": 93188.45677887351,
+    "deg": 809.845872549277,
+    "steps": 3744,
+    "time_s": 63.35435493197292
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 97218.9033775348,
+    "energy": 3288.540216880168,
+    "fcas": 94755.83765743271,
+    "deg": 825.4744967780659,
+    "steps": 3744,
+    "time_s": 63.43186481297016
+  },
+  {
+    "label": "piecewise_merit_order_sdp_mixed_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 98208.44084455848,
+    "energy": 3437.7500668271578,
+    "fcas": 95576.823587708,
+    "deg": 806.1328099766721,
+    "steps": 3744,
+    "time_s": 63.33476969599724
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_small_sa1_oct_2024",
+    "profit": 54293.707991038835,
+    "energy": 856.3006629560114,
+    "fcas": 55667.17568365127,
+    "deg": 2229.7683555684507,
+    "steps": 3744,
+    "time_s": 64.19679914799053
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_small_sa1_oct_2024",
+    "profit": 55376.276513827055,
+    "energy": 6307.937584010791,
+    "fcas": 54374.986634598084,
+    "deg": 5306.647704781818,
+    "steps": 3744,
+    "time_s": 64.88812004600186
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_small_sa1_oct_2024",
+    "profit": 52235.96745103303,
+    "energy": 8796.37130379026,
+    "fcas": 49595.60819274396,
+    "deg": 6156.0120455011875,
+    "steps": 3744,
+    "time_s": 63.688617655890994
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_small_sa1_oct_2024",
+    "profit": 50812.11887938401,
+    "energy": 11484.498609554861,
+    "fcas": 46705.50043732259,
+    "deg": 7377.88016749344,
+    "steps": 3744,
+    "time_s": 63.79698905092664
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_small_sa1_oct_2024",
+    "profit": 41886.25839683178,
+    "energy": 8249.375227481814,
+    "fcas": 43260.65767936234,
+    "deg": 9623.774510012374,
+    "steps": 3744,
+    "time_s": 65.1272384650074
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 318004.27783882734,
+    "energy": 20969.603170535316,
+    "fcas": 298297.87225788797,
+    "deg": 1263.1975895959206,
+    "steps": 3744,
+    "time_s": 65.27069051703438
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 349692.2940306497,
+    "energy": 39921.19835570222,
+    "fcas": 310973.6007256436,
+    "deg": 1202.5050506961318,
+    "steps": 3744,
+    "time_s": 65.05277188902255
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 347327.24645723245,
+    "energy": 42152.02997454737,
+    "fcas": 306328.0459804714,
+    "deg": 1152.8294977863711,
+    "steps": 3744,
+    "time_s": 65.06432364298962
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 464666.11757943645,
+    "energy": 191560.4065928291,
+    "fcas": 276398.09654847445,
+    "deg": 3292.385561867104,
+    "steps": 3744,
+    "time_s": 65.0654469949659
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 552663.9569666707,
+    "energy": 326122.875414447,
+    "fcas": 233241.0674584914,
+    "deg": 6699.985906267664,
+    "steps": 3744,
+    "time_s": 65.03884696611203
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 512630.11463256023,
+    "energy": 27710.981341631235,
+    "fcas": 486198.2468644648,
+    "deg": 1279.1135735357632,
+    "steps": 3744,
+    "time_s": 65.03924135805573
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 570928.5333432448,
+    "energy": 60516.19664667184,
+    "fcas": 511670.5310435884,
+    "deg": 1258.194347015449,
+    "steps": 3744,
+    "time_s": 64.21085400192533
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 564230.0093069455,
+    "energy": 56631.237880810935,
+    "fcas": 508837.6537836909,
+    "deg": 1238.8823575564152,
+    "steps": 3744,
+    "time_s": 63.014459120924585
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 588922.0821505797,
+    "energy": 98050.872509807,
+    "fcas": 492136.23943687906,
+    "deg": 1265.029796106338,
+    "steps": 3744,
+    "time_s": 63.730834812973626
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 737467.8176558086,
+    "energy": 342377.5418497972,
+    "fcas": 401874.30283464515,
+    "deg": 6784.027028633579,
+    "steps": 3744,
+    "time_s": 65.37388223491143
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_small_sa1_nov_2024",
+    "profit": 64371.44668065597,
+    "energy": -469.4181385910864,
+    "fcas": 67709.6416658023,
+    "deg": 2868.776846555232,
+    "steps": 3744,
+    "time_s": 65.00392659497447
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_small_sa1_nov_2024",
+    "profit": 68217.65775169813,
+    "energy": 129.88491284138763,
+    "fcas": 72225.23545549893,
+    "deg": 4137.462616642182,
+    "steps": 3744,
+    "time_s": 63.55241608095821
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_small_sa1_nov_2024",
+    "profit": 70626.47462166306,
+    "energy": -84.41810470889526,
+    "fcas": 74917.92173260363,
+    "deg": 4207.029006231673,
+    "steps": 3744,
+    "time_s": 64.78508772002533
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_small_sa1_nov_2024",
+    "profit": 66761.8807230758,
+    "energy": 1575.8412397930717,
+    "fcas": 70539.05638458599,
+    "deg": 5353.01690130326,
+    "steps": 3744,
+    "time_s": 65.36381874792278
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_small_sa1_nov_2024",
+    "profit": 49742.759393054796,
+    "energy": 7290.644696724005,
+    "fcas": 51042.062700576804,
+    "deg": 8589.948004246013,
+    "steps": 3744,
+    "time_s": 65.31843973998912
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 353352.34756615956,
+    "energy": -300.1745995427507,
+    "fcas": 354766.135899826,
+    "deg": 1113.613734123714,
+    "steps": 3744,
+    "time_s": 65.267686777981
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 360593.57326303393,
+    "energy": 1216.5461956785573,
+    "fcas": 360522.79755267093,
+    "deg": 1145.7704853155121,
+    "steps": 3744,
+    "time_s": 65.11535957898013
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 431103.1500048985,
+    "energy": 1688.774917148864,
+    "fcas": 431066.6410772329,
+    "deg": 1652.2659894832775,
+    "steps": 3744,
+    "time_s": 64.10643532092217
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 403809.93773416034,
+    "energy": 118291.95141131271,
+    "fcas": 291152.46534633473,
+    "deg": 5634.479023487045,
+    "steps": 3744,
+    "time_s": 64.03117820201442
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 422612.17603236495,
+    "energy": 121295.52663681489,
+    "fcas": 306743.2072088358,
+    "deg": 5426.55781328572,
+    "steps": 3744,
+    "time_s": 63.57943824399263
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 582360.7440540686,
+    "energy": -3069.6566754911473,
+    "fcas": 586671.5375440388,
+    "deg": 1241.1368144791609,
+    "steps": 3744,
+    "time_s": 65.15279822400771
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 587328.086950297,
+    "energy": -571.2478651122163,
+    "fcas": 589141.1609924558,
+    "deg": 1241.8261770464883,
+    "steps": 3744,
+    "time_s": 65.2883062500041
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 622983.5347558185,
+    "energy": 29660.541935699683,
+    "fcas": 594478.7089953579,
+    "deg": 1155.716175238935,
+    "steps": 3744,
+    "time_s": 65.23030766809825
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 654401.8070753331,
+    "energy": 182516.69446456115,
+    "fcas": 477618.13664374046,
+    "deg": 5733.024032968563,
+    "steps": 3744,
+    "time_s": 65.24471753905527
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 675994.867933685,
+    "energy": 203283.70144439003,
+    "fcas": 477999.9596118548,
+    "deg": 5288.793122559885,
+    "steps": 3744,
+    "time_s": 64.3043635369977
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_small_vic1_oct_2024",
+    "profit": 55885.88928264191,
+    "energy": 989.584016063058,
+    "fcas": 56991.519448749386,
+    "deg": 2095.2141821705395,
+    "steps": 3744,
+    "time_s": 65.13182128500193
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_small_vic1_oct_2024",
+    "profit": 53055.51524379097,
+    "energy": 7091.362808293167,
+    "fcas": 52375.88398482658,
+    "deg": 6411.731549328772,
+    "steps": 3744,
+    "time_s": 65.24498780991416
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_small_vic1_oct_2024",
+    "profit": 49661.40388742076,
+    "energy": 8285.948436656969,
+    "fcas": 48284.74157678689,
+    "deg": 6909.286126023094,
+    "steps": 3744,
+    "time_s": 65.38078769296408
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_small_vic1_oct_2024",
+    "profit": 42676.48561853961,
+    "energy": 7807.731662550642,
+    "fcas": 42939.64400064402,
+    "deg": 8070.890044655046,
+    "steps": 3744,
+    "time_s": 65.24292638502084
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_small_vic1_oct_2024",
+    "profit": 38897.94332495562,
+    "energy": 7621.926442029456,
+    "fcas": 40004.577650779516,
+    "deg": 8728.560767853358,
+    "steps": 3744,
+    "time_s": 64.60049793496728
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 329601.9423784868,
+    "energy": 24403.091046455917,
+    "fcas": 306370.5687223769,
+    "deg": 1171.7173903460111,
+    "steps": 3744,
+    "time_s": 63.63427152403165
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 342395.8027567403,
+    "energy": 30255.52019540264,
+    "fcas": 313194.95327842794,
+    "deg": 1054.6707170903258,
+    "steps": 3744,
+    "time_s": 65.01366726495326
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 350981.8919270859,
+    "energy": 42291.762585064775,
+    "fcas": 309907.38817121973,
+    "deg": 1217.2588291985753,
+    "steps": 3744,
+    "time_s": 65.03670237201732
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 470823.3014059576,
+    "energy": 253141.72717901252,
+    "fcas": 223742.9977131539,
+    "deg": 6061.423486208828,
+    "steps": 3744,
+    "time_s": 63.52806163998321
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 500161.9824164442,
+    "energy": 285280.889865274,
+    "fcas": 221970.60712059608,
+    "deg": 7089.514569425846,
+    "steps": 3744,
+    "time_s": 64.48097637598403
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 527050.324386896,
+    "energy": 33979.953171311536,
+    "fcas": 494494.7883905283,
+    "deg": 1424.4171749437858,
+    "steps": 3744,
+    "time_s": 64.97754266101401
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 544499.0198297146,
+    "energy": 37068.47597751844,
+    "fcas": 508706.4529993055,
+    "deg": 1275.9091471093245,
+    "steps": 3744,
+    "time_s": 63.88609142799396
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 574623.2355449676,
+    "energy": 61485.342324076584,
+    "fcas": 514415.73568918655,
+    "deg": 1277.8424682955397,
+    "steps": 3744,
+    "time_s": 63.53193126793485
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 575644.5451220012,
+    "energy": 63722.05374062358,
+    "fcas": 513182.4518619731,
+    "deg": 1259.9604805954611,
+    "steps": 3744,
+    "time_s": 63.42153594002593
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 636428.0278594996,
+    "energy": 281107.79166072723,
+    "fcas": 361292.1375120649,
+    "deg": 5971.901313292541,
+    "steps": 3744,
+    "time_s": 64.15645952301566
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_small_sa1_oct_2024",
+    "profit": 36307.825714582345,
+    "energy": 4457.1281550648055,
+    "fcas": 37150.68382497106,
+    "deg": 5299.986265453525,
+    "steps": 3744,
+    "time_s": 64.89808480406646
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_small_sa1_oct_2024",
+    "profit": 36242.15872919736,
+    "energy": 4353.68290696504,
+    "fcas": 37175.22542155162,
+    "deg": 5286.749599319298,
+    "steps": 3744,
+    "time_s": 64.06031897501089
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_small_sa1_oct_2024",
+    "profit": 35189.68043707004,
+    "energy": 8031.88556500276,
+    "fcas": 33311.823409529854,
+    "deg": 6154.028537462575,
+    "steps": 3744,
+    "time_s": 63.504249099991284
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_small_sa1_oct_2024",
+    "profit": 34972.573588077394,
+    "energy": 11392.022934988692,
+    "fcas": 30956.028189916728,
+    "deg": 7375.477536828022,
+    "steps": 3744,
+    "time_s": 63.52925909298938
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_small_sa1_oct_2024",
+    "profit": 27722.624258572567,
+    "energy": 8962.960952305903,
+    "fcas": 28405.71335428789,
+    "deg": 9646.050048021225,
+    "steps": 3744,
+    "time_s": 64.53434107697103
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 206216.45329975963,
+    "energy": 55273.226429804796,
+    "fcas": 152120.84468847417,
+    "deg": 1177.6178185193173,
+    "steps": 3744,
+    "time_s": 64.89511060109362
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 207850.3324582337,
+    "energy": 56967.444765296634,
+    "fcas": 152082.82423079695,
+    "deg": 1199.9365378599111,
+    "steps": 3744,
+    "time_s": 64.77695509197656
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 224554.2262269188,
+    "energy": 80535.31249409253,
+    "fcas": 145432.9800719864,
+    "deg": 1414.0663391601265,
+    "steps": 3744,
+    "time_s": 65.02859058906324
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 206854.75630206027,
+    "energy": 98262.30526328171,
+    "fcas": 113620.28648378802,
+    "deg": 5027.835445009455,
+    "steps": 3744,
+    "time_s": 64.77406982006505
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 24247.366600367666,
+    "energy": -73352.91476740703,
+    "fcas": 104526.45724571185,
+    "deg": 6926.175877937156,
+    "steps": 3744,
+    "time_s": 64.87587758700829
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 273452.6027756821,
+    "energy": 57836.91177048633,
+    "fcas": 216866.37845944017,
+    "deg": 1250.687454244379,
+    "steps": 3744,
+    "time_s": 64.55619468807708
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 289363.6807467005,
+    "energy": 59529.9868382054,
+    "fcas": 231055.6104776563,
+    "deg": 1221.9165691612031,
+    "steps": 3744,
+    "time_s": 64.85692153696436
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 264943.0721286537,
+    "energy": 45980.43065724743,
+    "fcas": 220624.19046912706,
+    "deg": 1661.5489977207471,
+    "steps": 3744,
+    "time_s": 64.65908365603536
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_torrens_sa1_oct_2024",
+    "profit": -202124.2934726955,
+    "energy": -349937.85385730624,
+    "fcas": 153938.02272114216,
+    "deg": 6124.462336531425,
+    "steps": 3744,
+    "time_s": 64.84035132697318
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_torrens_sa1_oct_2024",
+    "profit": -50555.12934519398,
+    "energy": -201901.06982842693,
+    "fcas": 157430.20515926825,
+    "deg": 6084.264676035299,
+    "steps": 3744,
+    "time_s": 65.04781686107162
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_small_sa1_nov_2024",
+    "profit": 33512.09936951467,
+    "energy": -4337.784049322048,
+    "fcas": 41878.030722512296,
+    "deg": 4028.147303675579,
+    "steps": 3744,
+    "time_s": 64.70663394406438
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_small_sa1_nov_2024",
+    "profit": 33558.26186785624,
+    "energy": -4295.927308235246,
+    "fcas": 41997.00170829353,
+    "deg": 4142.812532202045,
+    "steps": 3744,
+    "time_s": 64.84593584400136
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_small_sa1_nov_2024",
+    "profit": 33871.108469222745,
+    "energy": -5434.098413673775,
+    "fcas": 43880.933676697656,
+    "deg": 4575.726793801138,
+    "steps": 3744,
+    "time_s": 64.74250131798908
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_small_sa1_nov_2024",
+    "profit": 36849.36342108936,
+    "energy": 551.5066307410359,
+    "fcas": 41654.99137609412,
+    "deg": 5357.134585745803,
+    "steps": 3744,
+    "time_s": 64.95563009893522
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_small_sa1_nov_2024",
+    "profit": 20889.39585722432,
+    "energy": -1002.3181841656113,
+    "fcas": 30479.787642038573,
+    "deg": 8588.07360064864,
+    "steps": 3744,
+    "time_s": 64.3330696709454
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 90905.74812438495,
+    "energy": -36179.781353954626,
+    "fcas": 128608.6797055994,
+    "deg": 1523.1502272598307,
+    "steps": 3744,
+    "time_s": 64.82294950296637
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 92248.21432668589,
+    "energy": -34980.29965635653,
+    "fcas": 128758.43968665208,
+    "deg": 1529.9257036096635,
+    "steps": 3744,
+    "time_s": 64.51582193910144
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 98545.4266364649,
+    "energy": -43219.78777151865,
+    "fcas": 143446.4830309639,
+    "deg": 1681.268622980352,
+    "steps": 3744,
+    "time_s": 63.64472264004871
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": -304506.6423565045,
+    "energy": -413802.4142732807,
+    "fcas": 113754.02856832021,
+    "deg": 4458.256651544035,
+    "steps": 3744,
+    "time_s": 63.62792530504521
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": -346420.13532720966,
+    "energy": -446357.03729609423,
+    "fcas": 105362.903186234,
+    "deg": 5426.001217349459,
+    "steps": 3744,
+    "time_s": 63.65521063096821
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 113926.93926182222,
+    "energy": -58200.31987705943,
+    "fcas": 173811.981387557,
+    "deg": 1684.7222486753506,
+    "steps": 3744,
+    "time_s": 65.05334589595441
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 115540.62653234605,
+    "energy": -56821.918176468505,
+    "fcas": 174023.03715199302,
+    "deg": 1660.4924431784586,
+    "steps": 3744,
+    "time_s": 64.91785337904003
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 120018.42238309715,
+    "energy": -76626.8931693515,
+    "fcas": 198565.4758095721,
+    "deg": 1920.160257123446,
+    "steps": 3744,
+    "time_s": 65.14462323707994
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_torrens_sa1_nov_2024",
+    "profit": -127492.82384323879,
+    "energy": -293518.42947123107,
+    "fcas": 168677.00814621258,
+    "deg": 2651.4025182202968,
+    "steps": 3744,
+    "time_s": 64.8201003340073
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_torrens_sa1_nov_2024",
+    "profit": -252071.19575053226,
+    "energy": -389630.0459273893,
+    "fcas": 141957.27761814668,
+    "deg": 4398.427441289647,
+    "steps": 3744,
+    "time_s": 65.03730818501208
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_small_vic1_oct_2024",
+    "profit": 30687.709044770552,
+    "energy": 377.3124002528154,
+    "fcas": 32721.11535533496,
+    "deg": 2410.7187108172247,
+    "steps": 3744,
+    "time_s": 65.0573961440241
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_small_vic1_oct_2024",
+    "profit": 27067.04050415363,
+    "energy": 695.7570083581325,
+    "fcas": 32772.798407058355,
+    "deg": 6401.514911262855,
+    "steps": 3744,
+    "time_s": 64.53688797005452
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_small_vic1_oct_2024",
+    "profit": 24000.983658565427,
+    "energy": 618.4117948222435,
+    "fcas": 30277.8013812836,
+    "deg": 6895.229517540416,
+    "steps": 3744,
+    "time_s": 65.12114447099157
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_small_vic1_oct_2024",
+    "profit": 19388.926284339617,
+    "energy": 437.7632635070014,
+    "fcas": 27025.024738903106,
+    "deg": 8073.8617180704905,
+    "steps": 3744,
+    "time_s": 64.32503278099466
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_small_vic1_oct_2024",
+    "profit": 16670.757809318824,
+    "energy": 491.85048793537976,
+    "fcas": 24920.64743156352,
+    "deg": 8741.740110180075,
+    "steps": 3744,
+    "time_s": 65.14920380793046
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 86801.95334649122,
+    "energy": 3175.154615563193,
+    "fcas": 84799.55026155991,
+    "deg": 1172.7515306318762,
+    "steps": 3744,
+    "time_s": 65.04735484393314
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 103301.57961907916,
+    "energy": 24470.076183155055,
+    "fcas": 82924.05371713033,
+    "deg": 4092.550281206237,
+    "steps": 3744,
+    "time_s": 64.95165306597482
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 86781.86146540065,
+    "energy": 26434.131603441245,
+    "fcas": 66861.33253460248,
+    "deg": 6513.602672643073,
+    "steps": 3744,
+    "time_s": 65.17420735396445
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 87746.93590981705,
+    "energy": 26533.728296395784,
+    "fcas": 67852.65153969279,
+    "deg": 6639.443926271521,
+    "steps": 3744,
+    "time_s": 65.03397977002896
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 78979.04643419829,
+    "energy": 20284.161682579805,
+    "fcas": 65790.89187573503,
+    "deg": 7096.007124116546,
+    "steps": 3744,
+    "time_s": 65.26975270896219
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 107003.28589587653,
+    "energy": 4994.928549139962,
+    "fcas": 103626.16663227527,
+    "deg": 1617.8092855387006,
+    "steps": 3744,
+    "time_s": 64.90185341297183
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 109946.13002738383,
+    "energy": 26179.86252083155,
+    "fcas": 88410.997687015,
+    "deg": 4644.730180462714,
+    "steps": 3744,
+    "time_s": 65.16143743495923
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 105160.29275847312,
+    "energy": 23642.484905796013,
+    "fcas": 88252.5915317406,
+    "deg": 6734.7836790634965,
+    "steps": 3744,
+    "time_s": 64.80601310299244
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 93258.3492117841,
+    "energy": 20449.79692502457,
+    "fcas": 79184.21494857012,
+    "deg": 6375.6626618105975,
+    "steps": 3744,
+    "time_s": 65.19151166605297
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 85466.93430224377,
+    "energy": 15741.137192602824,
+    "fcas": 75696.19558712296,
+    "deg": 5970.39847748201,
+    "steps": 3744,
+    "time_s": 64.83867252303753
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 61.634491245029494
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.09453365299851
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.08684287103824
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.10957831796259
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.18422465806361
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.20140920695849
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.2326428120723
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.04500220203772
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.339700795011595
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.05053789401427
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.18394331098534
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 61.98339621699415
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.28833956096787
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.170010352972895
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.13914124201983
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.12069888401311
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.16301397292409
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.13818933907896
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.162490066024475
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.08191389706917
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.18195027299225
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.130191046977416
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.32846256298944
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.0845982740866
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.08582784002647
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.024199131992646
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.076625781017356
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.051675872993656
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.10380490694661
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.07619171903934
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.204422185895965
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.14069082203787
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.289483881089836
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.089067477034405
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.19345501495991
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.10702251200564
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.13102615799289
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.214677801937796
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.13010971294716
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.15289281704463
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.074071472045034
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.294073197990656
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.18712121201679
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.08785374194849
+  },
+  {
+    "label": "identity_stagec_jtsoc_rtgjtsoc_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.1953783800127
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_small_sa1_oct_2024",
+    "profit": 26056.266567903614,
+    "energy": 7284.108119674738,
+    "fcas": 28014.03446256472,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.20110596297309
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_small_sa1_oct_2024",
+    "profit": 26056.266567903614,
+    "energy": 7284.108119674738,
+    "fcas": 28014.03446256472,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.252141645993106
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_small_sa1_oct_2024",
+    "profit": 26056.266567903614,
+    "energy": 7284.108119674738,
+    "fcas": 28014.03446256472,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.193459350964986
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_small_sa1_oct_2024",
+    "profit": 26056.266567903614,
+    "energy": 7284.108119674738,
+    "fcas": 28014.03446256472,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.12122521898709
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_small_sa1_oct_2024",
+    "profit": 26056.266567903614,
+    "energy": 7284.108119674738,
+    "fcas": 28014.03446256472,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.16511778102722
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 11060.201033357127,
+    "energy": -88065.93881148139,
+    "fcas": 105431.31992137714,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.18824115104508
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 11060.201033357127,
+    "energy": -88065.93881148139,
+    "fcas": 105431.31992137714,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.14284539106302
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 11060.201033357127,
+    "energy": -88065.93881148139,
+    "fcas": 105431.31992137714,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.270168973947875
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 11060.201033357127,
+    "energy": -88065.93881148139,
+    "fcas": 105431.31992137714,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.11806455196347
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 11060.201033357127,
+    "energy": -88065.93881148139,
+    "fcas": 105431.31992137714,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 62.19626692705788
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_torrens_sa1_oct_2024",
+    "profit": -222152.46945741866,
+    "energy": -373528.30706343,
+    "fcas": 157426.52072642365,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.149067917023785
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_torrens_sa1_oct_2024",
+    "profit": -222152.46945741866,
+    "energy": -373528.30706343,
+    "fcas": 157426.52072642365,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.06558817799669
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_torrens_sa1_oct_2024",
+    "profit": -222152.46945741866,
+    "energy": -373528.30706343,
+    "fcas": 157426.52072642365,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.06932428793516
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_torrens_sa1_oct_2024",
+    "profit": -222152.46945741866,
+    "energy": -373528.30706343,
+    "fcas": 157426.52072642365,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.3052757140249
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_torrens_sa1_oct_2024",
+    "profit": -222152.46945741866,
+    "energy": -373528.30706343,
+    "fcas": 157426.52072642365,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 62.114928629947826
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_small_sa1_nov_2024",
+    "profit": 18640.33188867197,
+    "energy": -2695.0247841536484,
+    "fcas": 30725.186410264923,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.14261116099078
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_small_sa1_nov_2024",
+    "profit": 18640.33188867197,
+    "energy": -2695.0247841536484,
+    "fcas": 30725.186410264923,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.30792612791993
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_small_sa1_nov_2024",
+    "profit": 18640.33188867197,
+    "energy": -2695.0247841536484,
+    "fcas": 30725.186410264923,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.25281939597335
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_small_sa1_nov_2024",
+    "profit": 18640.33188867197,
+    "energy": -2695.0247841536484,
+    "fcas": 30725.186410264923,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.119095303001814
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_small_sa1_nov_2024",
+    "profit": 18640.33188867197,
+    "energy": -2695.0247841536484,
+    "fcas": 30725.186410264923,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 62.11155042506289
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": -517730.62817921943,
+    "energy": -586180.5249807679,
+    "fcas": 75687.19369179706,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.1332733950112
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": -517730.62817921943,
+    "energy": -586180.5249807679,
+    "fcas": 75687.19369179706,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.29118669801392
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": -517730.62817921943,
+    "energy": -586180.5249807679,
+    "fcas": 75687.19369179706,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.056149366893806
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": -517730.62817921943,
+    "energy": -586180.5249807679,
+    "fcas": 75687.19369179706,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.06761830300093
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": -517730.62817921943,
+    "energy": -586180.5249807679,
+    "fcas": 75687.19369179706,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 62.13636980205774
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_torrens_sa1_nov_2024",
+    "profit": -910920.8890172873,
+    "energy": -1026602.2643842127,
+    "fcas": 121423.85808243274,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.14955986989662
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_torrens_sa1_nov_2024",
+    "profit": -910920.8890172873,
+    "energy": -1026602.2643842127,
+    "fcas": 121423.85808243274,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.13249245798215
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_torrens_sa1_nov_2024",
+    "profit": -910920.8890172873,
+    "energy": -1026602.2643842127,
+    "fcas": 121423.85808243274,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.200601923977956
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_torrens_sa1_nov_2024",
+    "profit": -910920.8890172873,
+    "energy": -1026602.2643842127,
+    "fcas": 121423.85808243274,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.14592564001214
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_torrens_sa1_nov_2024",
+    "profit": -910920.8890172873,
+    "energy": -1026602.2643842127,
+    "fcas": 121423.85808243274,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 62.16500234801788
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_small_vic1_oct_2024",
+    "profit": 15942.947811712651,
+    "energy": 503.35188191731083,
+    "fcas": 24717.61884232303,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.12349649902899
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_small_vic1_oct_2024",
+    "profit": 15942.947811712651,
+    "energy": 503.35188191731083,
+    "fcas": 24717.61884232303,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.13906853902154
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_small_vic1_oct_2024",
+    "profit": 15942.947811712651,
+    "energy": 503.35188191731083,
+    "fcas": 24717.61884232303,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.09580317803193
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_small_vic1_oct_2024",
+    "profit": 15942.947811712651,
+    "energy": 503.35188191731083,
+    "fcas": 24717.61884232303,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.11027584702242
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_small_vic1_oct_2024",
+    "profit": 15942.947811712651,
+    "energy": 503.35188191731083,
+    "fcas": 24717.61884232303,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 62.24363763304427
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 78698.75280446069,
+    "energy": 20259.434323271216,
+    "fcas": 65677.9465217443,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.17246654396877
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 78698.75280446069,
+    "energy": 20259.434323271216,
+    "fcas": 65677.9465217443,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.13580205501057
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 78698.75280446069,
+    "energy": 20259.434323271216,
+    "fcas": 65677.9465217443,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.16351763997227
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 78698.75280446069,
+    "energy": 20259.434323271216,
+    "fcas": 65677.9465217443,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.30028486601077
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 78698.75280446069,
+    "energy": 20259.434323271216,
+    "fcas": 65677.9465217443,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 62.17964904999826
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 89598.60480484049,
+    "energy": 15636.421456981314,
+    "fcas": 80408.81335357064,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.15620047703851
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 89598.60480484049,
+    "energy": 15636.421456981314,
+    "fcas": 80408.81335357064,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.1188774430193
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 89598.60480484049,
+    "energy": 15636.421456981314,
+    "fcas": 80408.81335357064,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.1685850659851
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 89598.60480484049,
+    "energy": 15636.421456981314,
+    "fcas": 80408.81335357064,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.139336314983666
+  },
+  {
+    "label": "piecewise_merit_order_stagec_jtsoc_rtgjtsoc_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 89598.60480484049,
+    "energy": 15636.421456981314,
+    "fcas": 80408.81335357064,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 62.13669553096406
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 62.05772580800112
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 63.193991638021544
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 63.142754351953045
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 63.62535124202259
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_small_sa1_oct_2024",
+    "profit": 40771.18265965815,
+    "energy": 7491.520545144958,
+    "fcas": 42521.53812884904,
+    "deg": 9241.876014335847,
+    "steps": 3744,
+    "time_s": 63.84964156290516
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 63.47535193199292
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 63.455987173947506
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 63.502617298974656
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 63.503858380019665
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 437249.8986171656,
+    "energy": 208308.60119829222,
+    "fcas": 235246.47749541205,
+    "deg": 6305.180076538624,
+    "steps": 3744,
+    "time_s": 63.48528679704759
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 63.48855931102298
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 63.47452858800534
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 63.442692343960516
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 63.53253749094438
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 759324.7712107558,
+    "energy": 373067.42223010986,
+    "fcas": 392308.0321010582,
+    "deg": 6050.6831204122955,
+    "steps": 3744,
+    "time_s": 63.34159901808016
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 63.41280365991406
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 63.415859663975425
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 63.320486306911334
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 63.43653786298819
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_small_sa1_nov_2024",
+    "profit": 47470.709113644814,
+    "energy": 5849.236849656811,
+    "fcas": 51011.302001427306,
+    "deg": 9389.829737439304,
+    "steps": 3744,
+    "time_s": 63.42435398802627
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 63.36883750499692
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 63.382509185001254
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 63.54505141894333
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 63.508149172062986
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 440238.5720646082,
+    "energy": 212166.1383110427,
+    "fcas": 235309.73064381414,
+    "deg": 7237.296890248657,
+    "steps": 3744,
+    "time_s": 63.46884141792543
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 63.47581066109706
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 63.377663735998794
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 63.43829455797095
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 63.37627554603387
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 595100.927319245,
+    "energy": 141042.31485232266,
+    "fcas": 459801.0951824297,
+    "deg": 5742.482715507395,
+    "steps": 3744,
+    "time_s": 63.443580782972276
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 63.29456122301053
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 82.72749492200091
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 128.28208157303743
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 128.28383422794286
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_small_vic1_oct_2024",
+    "profit": 38290.08365476527,
+    "energy": 7951.870387914438,
+    "fcas": 39616.236179378524,
+    "deg": 9278.022912527691,
+    "steps": 3744,
+    "time_s": 128.14657014596742
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 128.07374377700035
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 141.08599213999696
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 189.69515224907082
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 190.5843050610274
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 499155.4994844806,
+    "energy": 285097.79066107515,
+    "fcas": 221296.33686396026,
+    "deg": 7238.6280405548305,
+    "steps": 3744,
+    "time_s": 190.5610036230646
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 190.44856416108087
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 190.6197304999223
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 189.93019049300347
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 190.34205604402814
+  },
+  {
+    "label": "identity_stagec_h3h1_auto_20260821_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 668844.0576209552,
+    "energy": 297215.18093707226,
+    "fcas": 378075.50668959436,
+    "deg": 6446.630005711479,
+    "steps": 3744,
+    "time_s": 190.98170161200687
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_small_sa1_oct_2024",
+    "profit": 36307.825714582345,
+    "energy": 4457.1281550648055,
+    "fcas": 37150.68382497106,
+    "deg": 5299.986265453525,
+    "steps": 3744,
+    "time_s": 188.28122387698386
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_small_sa1_oct_2024",
+    "profit": 36242.15872919736,
+    "energy": 4353.68290696504,
+    "fcas": 37175.22542155162,
+    "deg": 5286.749599319298,
+    "steps": 3744,
+    "time_s": 188.17261839704588
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_small_sa1_oct_2024",
+    "profit": 35189.68043707004,
+    "energy": 8031.88556500276,
+    "fcas": 33311.823409529854,
+    "deg": 6154.028537462575,
+    "steps": 3744,
+    "time_s": 187.7280285289744
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_small_sa1_oct_2024",
+    "profit": 34972.573588077394,
+    "energy": 11392.022934988692,
+    "fcas": 30956.028189916728,
+    "deg": 7375.477536828022,
+    "steps": 3744,
+    "time_s": 187.33963342709467
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_small_sa1_oct_2024",
+    "profit": 27722.624258572567,
+    "energy": 8962.960952305903,
+    "fcas": 28405.71335428789,
+    "deg": 9646.050048021225,
+    "steps": 3744,
+    "time_s": 187.77406895009335
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 206216.45329975963,
+    "energy": 55273.226429804796,
+    "fcas": 152120.84468847417,
+    "deg": 1177.6178185193173,
+    "steps": 3744,
+    "time_s": 188.15024905500468
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 207850.3324582337,
+    "energy": 56967.444765296634,
+    "fcas": 152082.82423079695,
+    "deg": 1199.9365378599111,
+    "steps": 3744,
+    "time_s": 188.2184384779539
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 224554.2262269188,
+    "energy": 80535.31249409253,
+    "fcas": 145432.9800719864,
+    "deg": 1414.0663391601265,
+    "steps": 3744,
+    "time_s": 188.22796533198562
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 206854.75630206027,
+    "energy": 98262.30526328171,
+    "fcas": 113620.28648378802,
+    "deg": 5027.835445009455,
+    "steps": 3744,
+    "time_s": 187.65428763697855
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 24247.366600367666,
+    "energy": -73352.91476740703,
+    "fcas": 104526.45724571185,
+    "deg": 6926.175877937156,
+    "steps": 3744,
+    "time_s": 187.20224865502678
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 273452.6027756821,
+    "energy": 57836.91177048633,
+    "fcas": 216866.37845944017,
+    "deg": 1250.687454244379,
+    "steps": 3744,
+    "time_s": 187.13097341300454
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 289363.6807467005,
+    "energy": 59529.9868382054,
+    "fcas": 231055.6104776563,
+    "deg": 1221.9165691612031,
+    "steps": 3744,
+    "time_s": 188.00126886402722
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 264943.0721286537,
+    "energy": 45980.43065724743,
+    "fcas": 220624.19046912706,
+    "deg": 1661.5489977207471,
+    "steps": 3744,
+    "time_s": 187.9828547729412
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_torrens_sa1_oct_2024",
+    "profit": -202124.2934726955,
+    "energy": -349937.85385730624,
+    "fcas": 153938.02272114216,
+    "deg": 6124.462336531425,
+    "steps": 3744,
+    "time_s": 187.83938356593717
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_torrens_sa1_oct_2024",
+    "profit": -50555.12934519398,
+    "energy": -201901.06982842693,
+    "fcas": 157430.20515926825,
+    "deg": 6084.264676035299,
+    "steps": 3744,
+    "time_s": 187.61096882994752
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_small_sa1_nov_2024",
+    "profit": 33512.09936951467,
+    "energy": -4337.784049322048,
+    "fcas": 41878.030722512296,
+    "deg": 4028.147303675579,
+    "steps": 3744,
+    "time_s": 186.53073218895588
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_small_sa1_nov_2024",
+    "profit": 33558.26186785624,
+    "energy": -4295.927308235246,
+    "fcas": 41997.00170829353,
+    "deg": 4142.812532202045,
+    "steps": 3744,
+    "time_s": 186.8133217350114
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_small_sa1_nov_2024",
+    "profit": 33871.108469222745,
+    "energy": -5434.098413673775,
+    "fcas": 43880.933676697656,
+    "deg": 4575.726793801138,
+    "steps": 3744,
+    "time_s": 188.10041834099684
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_small_sa1_nov_2024",
+    "profit": 36849.36342108936,
+    "energy": 551.5066307410359,
+    "fcas": 41654.99137609412,
+    "deg": 5357.134585745803,
+    "steps": 3744,
+    "time_s": 188.22620745003223
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_small_sa1_nov_2024",
+    "profit": 20889.39585722432,
+    "energy": -1002.3181841656113,
+    "fcas": 30479.787642038573,
+    "deg": 8588.07360064864,
+    "steps": 3744,
+    "time_s": 188.39994036895223
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 90905.74812438495,
+    "energy": -36179.781353954626,
+    "fcas": 128608.6797055994,
+    "deg": 1523.1502272598307,
+    "steps": 3744,
+    "time_s": 187.86552451294847
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 92248.21432668589,
+    "energy": -34980.29965635653,
+    "fcas": 128758.43968665208,
+    "deg": 1529.9257036096635,
+    "steps": 3744,
+    "time_s": 187.28867319098208
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 98545.4266364649,
+    "energy": -43219.78777151865,
+    "fcas": 143446.4830309639,
+    "deg": 1681.268622980352,
+    "steps": 3744,
+    "time_s": 188.04383514495566
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": -304506.6423565045,
+    "energy": -413802.4142732807,
+    "fcas": 113754.02856832021,
+    "deg": 4458.256651544035,
+    "steps": 3744,
+    "time_s": 188.3984300289303
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": -346420.13532720966,
+    "energy": -446357.03729609423,
+    "fcas": 105362.903186234,
+    "deg": 5426.001217349459,
+    "steps": 3744,
+    "time_s": 188.6074017540086
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 113926.93926182222,
+    "energy": -58200.31987705943,
+    "fcas": 173811.981387557,
+    "deg": 1684.7222486753506,
+    "steps": 3744,
+    "time_s": 188.60335341398604
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 115540.62653234605,
+    "energy": -56821.918176468505,
+    "fcas": 174023.03715199302,
+    "deg": 1660.4924431784586,
+    "steps": 3744,
+    "time_s": 188.07009447400924
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 120018.42238309715,
+    "energy": -76626.8931693515,
+    "fcas": 198565.4758095721,
+    "deg": 1920.160257123446,
+    "steps": 3744,
+    "time_s": 187.6601107370807
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_torrens_sa1_nov_2024",
+    "profit": -127492.82384323879,
+    "energy": -293518.42947123107,
+    "fcas": 168677.00814621258,
+    "deg": 2651.4025182202968,
+    "steps": 3744,
+    "time_s": 187.93101275200024
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_torrens_sa1_nov_2024",
+    "profit": -252071.19575053226,
+    "energy": -389630.0459273893,
+    "fcas": 141957.27761814668,
+    "deg": 4398.427441289647,
+    "steps": 3744,
+    "time_s": 188.68121708801482
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_small_vic1_oct_2024",
+    "profit": 30687.709044770552,
+    "energy": 377.3124002528154,
+    "fcas": 32721.11535533496,
+    "deg": 2410.7187108172247,
+    "steps": 3744,
+    "time_s": 188.76849479496013
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_small_vic1_oct_2024",
+    "profit": 27067.04050415363,
+    "energy": 695.7570083581325,
+    "fcas": 32772.798407058355,
+    "deg": 6401.514911262855,
+    "steps": 3744,
+    "time_s": 188.9217251879163
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_small_vic1_oct_2024",
+    "profit": 24000.983658565427,
+    "energy": 618.4117948222435,
+    "fcas": 30277.8013812836,
+    "deg": 6895.229517540416,
+    "steps": 3744,
+    "time_s": 188.5160000200849
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_small_vic1_oct_2024",
+    "profit": 19388.926284339617,
+    "energy": 437.7632635070014,
+    "fcas": 27025.024738903106,
+    "deg": 8073.8617180704905,
+    "steps": 3744,
+    "time_s": 187.8654331190046
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_small_vic1_oct_2024",
+    "profit": 16670.757809318824,
+    "energy": 491.85048793537976,
+    "fcas": 24920.64743156352,
+    "deg": 8741.740110180075,
+    "steps": 3744,
+    "time_s": 188.21575407800265
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 86801.95334649122,
+    "energy": 3175.154615563193,
+    "fcas": 84799.55026155991,
+    "deg": 1172.7515306318762,
+    "steps": 3744,
+    "time_s": 188.67618603492156
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 103301.57961907916,
+    "energy": 24470.076183155055,
+    "fcas": 82924.05371713033,
+    "deg": 4092.550281206237,
+    "steps": 3744,
+    "time_s": 189.06153289310168
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 86781.86146540065,
+    "energy": 26434.131603441245,
+    "fcas": 66861.33253460248,
+    "deg": 6513.602672643073,
+    "steps": 3744,
+    "time_s": 189.0436865040101
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 87746.93590981705,
+    "energy": 26533.728296395784,
+    "fcas": 67852.65153969279,
+    "deg": 6639.443926271521,
+    "steps": 3744,
+    "time_s": 188.7679890319705
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 78979.04643419829,
+    "energy": 20284.161682579805,
+    "fcas": 65790.89187573503,
+    "deg": 7096.007124116546,
+    "steps": 3744,
+    "time_s": 188.1850734850159
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 107003.28589587653,
+    "energy": 4994.928549139962,
+    "fcas": 103626.16663227527,
+    "deg": 1617.8092855387006,
+    "steps": 3744,
+    "time_s": 157.95947191200685
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 109946.13002738383,
+    "energy": 26179.86252083155,
+    "fcas": 88410.997687015,
+    "deg": 4644.730180462714,
+    "steps": 3744,
+    "time_s": 126.27345390093978
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 105160.29275847312,
+    "energy": 23642.484905796013,
+    "fcas": 88252.5915317406,
+    "deg": 6734.7836790634965,
+    "steps": 3744,
+    "time_s": 126.62399348302279
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 93258.3492117841,
+    "energy": 20449.79692502457,
+    "fcas": 79184.21494857012,
+    "deg": 6375.6626618105975,
+    "steps": 3744,
+    "time_s": 126.63616352097597
+  },
+  {
+    "label": "piecewise_merit_order_stagec_h3h1_auto_20260821_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 85466.93430224377,
+    "energy": 15741.137192602824,
+    "fcas": 75696.19558712296,
+    "deg": 5970.39847748201,
+    "steps": 3744,
+    "time_s": 125.49164955189917
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_small_sa1_oct_2024",
+    "profit": 56690.21485365961,
+    "energy": 4508.17223590946,
+    "fcas": 56040.00997001855,
+    "deg": 3857.9673522684043,
+    "steps": 3744,
+    "time_s": 64.09470034297556
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_small_sa1_oct_2024",
+    "profit": 56690.21485365961,
+    "energy": 4508.17223590946,
+    "fcas": 56040.00997001855,
+    "deg": 3857.9673522684043,
+    "steps": 3744,
+    "time_s": 65.0673979180865
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_small_sa1_oct_2024",
+    "profit": 56690.21485365961,
+    "energy": 4508.17223590946,
+    "fcas": 56040.00997001855,
+    "deg": 3857.9673522684043,
+    "steps": 3744,
+    "time_s": 65.1472220949363
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_small_sa1_oct_2024",
+    "profit": 56690.21485365961,
+    "energy": 4508.17223590946,
+    "fcas": 56040.00997001855,
+    "deg": 3857.9673522684043,
+    "steps": 3744,
+    "time_s": 65.22248520608991
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_small_sa1_oct_2024",
+    "profit": 56690.21485365961,
+    "energy": 4508.17223590946,
+    "fcas": 56040.00997001855,
+    "deg": 3857.9673522684043,
+    "steps": 3744,
+    "time_s": 65.23638521600515
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 431340.5083714214,
+    "energy": 100307.1114175779,
+    "fcas": 334122.5813722635,
+    "deg": 3089.1844184199686,
+    "steps": 3744,
+    "time_s": 65.10485004098155
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 431340.5083714214,
+    "energy": 100307.1114175779,
+    "fcas": 334122.5813722635,
+    "deg": 3089.1844184199686,
+    "steps": 3744,
+    "time_s": 65.32431650813669
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 431340.5083714214,
+    "energy": 100307.1114175779,
+    "fcas": 334122.5813722635,
+    "deg": 3089.1844184199686,
+    "steps": 3744,
+    "time_s": 65.38511362182908
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 431340.5083714214,
+    "energy": 100307.1114175779,
+    "fcas": 334122.5813722635,
+    "deg": 3089.1844184199686,
+    "steps": 3744,
+    "time_s": 64.92562450119294
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 431340.5083714214,
+    "energy": 100307.1114175779,
+    "fcas": 334122.5813722635,
+    "deg": 3089.1844184199686,
+    "steps": 3744,
+    "time_s": 64.10631557297893
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 675433.583676293,
+    "energy": 107603.96278588177,
+    "fcas": 569470.8431624961,
+    "deg": 1641.2222720847979,
+    "steps": 3744,
+    "time_s": 64.31647907104343
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 675433.583676293,
+    "energy": 107603.96278588177,
+    "fcas": 569470.8431624961,
+    "deg": 1641.2222720847979,
+    "steps": 3744,
+    "time_s": 64.99919596710242
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 675433.583676293,
+    "energy": 107603.96278588177,
+    "fcas": 569470.8431624961,
+    "deg": 1641.2222720847979,
+    "steps": 3744,
+    "time_s": 65.11930505302735
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 675433.583676293,
+    "energy": 107603.96278588177,
+    "fcas": 569470.8431624961,
+    "deg": 1641.2222720847979,
+    "steps": 3744,
+    "time_s": 65.14912028284743
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 675433.583676293,
+    "energy": 107603.96278588177,
+    "fcas": 569470.8431624961,
+    "deg": 1641.2222720847979,
+    "steps": 3744,
+    "time_s": 65.25167141691782
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_small_sa1_nov_2024",
+    "profit": 66876.61939936645,
+    "energy": 208.37368082002735,
+    "fcas": 69843.60836408581,
+    "deg": 3175.3626455394,
+    "steps": 3744,
+    "time_s": 65.34296115697362
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_small_sa1_nov_2024",
+    "profit": 66876.61939936645,
+    "energy": 208.37368082002735,
+    "fcas": 69843.60836408581,
+    "deg": 3175.3626455394,
+    "steps": 3744,
+    "time_s": 65.33767706295475
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_small_sa1_nov_2024",
+    "profit": 66876.61939936645,
+    "energy": 208.37368082002735,
+    "fcas": 69843.60836408581,
+    "deg": 3175.3626455394,
+    "steps": 3744,
+    "time_s": 65.20863121002913
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_small_sa1_nov_2024",
+    "profit": 66876.61939936645,
+    "energy": 208.37368082002735,
+    "fcas": 69843.60836408581,
+    "deg": 3175.3626455394,
+    "steps": 3744,
+    "time_s": 65.1772560540121
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_small_sa1_nov_2024",
+    "profit": 66876.61939936645,
+    "energy": 208.37368082002735,
+    "fcas": 69843.60836408581,
+    "deg": 3175.3626455394,
+    "steps": 3744,
+    "time_s": 65.2150667028036
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 373803.82957543025,
+    "energy": 2476.5785444121375,
+    "fcas": 372678.7044957925,
+    "deg": 1351.4534647743924,
+    "steps": 3744,
+    "time_s": 64.82654567807913
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 373803.82957543025,
+    "energy": 2476.5785444121375,
+    "fcas": 372678.7044957925,
+    "deg": 1351.4534647743924,
+    "steps": 3744,
+    "time_s": 64.44492548517883
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 373803.82957543025,
+    "energy": 2476.5785444121375,
+    "fcas": 372678.7044957925,
+    "deg": 1351.4534647743924,
+    "steps": 3744,
+    "time_s": 64.48871532618068
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 373803.82957543025,
+    "energy": 2476.5785444121375,
+    "fcas": 372678.7044957925,
+    "deg": 1351.4534647743924,
+    "steps": 3744,
+    "time_s": 64.8386406141799
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 373803.82957543025,
+    "energy": 2476.5785444121375,
+    "fcas": 372678.7044957925,
+    "deg": 1351.4534647743924,
+    "steps": 3744,
+    "time_s": 65.69423684803769
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 622201.2340328477,
+    "energy": 3834.352307712043,
+    "fcas": 619909.2328140456,
+    "deg": 1542.3510889100012,
+    "steps": 3744,
+    "time_s": 65.33208541595377
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 622201.2340328477,
+    "energy": 3834.352307712043,
+    "fcas": 619909.2328140456,
+    "deg": 1542.3510889100012,
+    "steps": 3744,
+    "time_s": 65.27307310490869
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 622201.2340328477,
+    "energy": 3834.352307712043,
+    "fcas": 619909.2328140456,
+    "deg": 1542.3510889100012,
+    "steps": 3744,
+    "time_s": 65.34106600983068
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 622201.2340328477,
+    "energy": 3834.352307712043,
+    "fcas": 619909.2328140456,
+    "deg": 1542.3510889100012,
+    "steps": 3744,
+    "time_s": 65.29806849989109
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 622201.2340328477,
+    "energy": 3834.352307712043,
+    "fcas": 619909.2328140456,
+    "deg": 1542.3510889100012,
+    "steps": 3744,
+    "time_s": 65.47275875206105
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_small_vic1_oct_2024",
+    "profit": 57866.88782981795,
+    "energy": 4094.4333433489082,
+    "fcas": 57625.65139270429,
+    "deg": 3853.196906235254,
+    "steps": 3744,
+    "time_s": 64.17422134103253
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_small_vic1_oct_2024",
+    "profit": 57866.88782981795,
+    "energy": 4094.4333433489082,
+    "fcas": 57625.65139270429,
+    "deg": 3853.196906235254,
+    "steps": 3744,
+    "time_s": 62.47990851895884
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_small_vic1_oct_2024",
+    "profit": 57866.88782981795,
+    "energy": 4094.4333433489082,
+    "fcas": 57625.65139270429,
+    "deg": 3853.196906235254,
+    "steps": 3744,
+    "time_s": 62.43317864695564
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_small_vic1_oct_2024",
+    "profit": 57866.88782981795,
+    "energy": 4094.4333433489082,
+    "fcas": 57625.65139270429,
+    "deg": 3853.196906235254,
+    "steps": 3744,
+    "time_s": 62.50812650285661
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_small_vic1_oct_2024",
+    "profit": 57866.88782981795,
+    "energy": 4094.4333433489082,
+    "fcas": 57625.65139270429,
+    "deg": 3853.196906235254,
+    "steps": 3744,
+    "time_s": 62.535958314081654
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 495504.94801557605,
+    "energy": 217171.55912949517,
+    "fcas": 282290.98538488767,
+    "deg": 3957.5964988068117,
+    "steps": 3744,
+    "time_s": 62.476096918806434
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 495504.94801557605,
+    "energy": 217171.55912949517,
+    "fcas": 282290.98538488767,
+    "deg": 3957.5964988068117,
+    "steps": 3744,
+    "time_s": 65.03494620183483
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 495504.94801557605,
+    "energy": 217171.55912949517,
+    "fcas": 282290.98538488767,
+    "deg": 3957.5964988068117,
+    "steps": 3744,
+    "time_s": 65.84289703099057
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 495504.94801557605,
+    "energy": 217171.55912949517,
+    "fcas": 282290.98538488767,
+    "deg": 3957.5964988068117,
+    "steps": 3744,
+    "time_s": 65.64510306506418
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 495504.94801557605,
+    "energy": 217171.55912949517,
+    "fcas": 282290.98538488767,
+    "deg": 3957.5964988068117,
+    "steps": 3744,
+    "time_s": 66.37599986093119
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 752965.5569625186,
+    "energy": 181000.9542589255,
+    "fcas": 573913.5680327112,
+    "deg": 1948.9653291180286,
+    "steps": 3744,
+    "time_s": 66.30412300489843
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 752965.5569625186,
+    "energy": 181000.9542589255,
+    "fcas": 573913.5680327112,
+    "deg": 1948.9653291180286,
+    "steps": 3744,
+    "time_s": 66.63138542487286
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 752965.5569625186,
+    "energy": 181000.9542589255,
+    "fcas": 573913.5680327112,
+    "deg": 1948.9653291180286,
+    "steps": 3744,
+    "time_s": 66.38684589508921
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 752965.5569625186,
+    "energy": 181000.9542589255,
+    "fcas": 573913.5680327112,
+    "deg": 1948.9653291180286,
+    "steps": 3744,
+    "time_s": 66.32308872509748
+  },
+  {
+    "label": "identity_stagec_fix_20260913_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 752965.5569625186,
+    "energy": 181000.9542589255,
+    "fcas": 573913.5680327112,
+    "deg": 1948.9653291180286,
+    "steps": 3744,
+    "time_s": 66.57393403002061
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_small_sa1_oct_2024",
+    "profit": 29283.921239804426,
+    "energy": 1351.3115681305505,
+    "fcas": 30919.559619249034,
+    "deg": 2986.9499475751595,
+    "steps": 3744,
+    "time_s": 64.05071327183396
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_small_sa1_oct_2024",
+    "profit": 29284.482790525748,
+    "energy": 1351.8510257170303,
+    "fcas": 30919.54235015086,
+    "deg": 2986.9105853421415,
+    "steps": 3744,
+    "time_s": 64.03435457893647
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_small_sa1_oct_2024",
+    "profit": 29389.161502410912,
+    "energy": 1356.7620763408174,
+    "fcas": 30922.72186864643,
+    "deg": 2890.322442576333,
+    "steps": 3744,
+    "time_s": 64.04015654395334
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_small_sa1_oct_2024",
+    "profit": 29261.44064519912,
+    "energy": 1365.9831100905092,
+    "fcas": 30928.805282804497,
+    "deg": 3033.3477476958874,
+    "steps": 3744,
+    "time_s": 63.986182634020224
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_small_sa1_oct_2024",
+    "profit": 29339.3022313104,
+    "energy": 1389.455198164006,
+    "fcas": 30947.440109772288,
+    "deg": 2997.593076625894,
+    "steps": 3744,
+    "time_s": 64.20103198499419
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_hornsdale_sa1_oct_2024",
+    "profit": 115636.21920443105,
+    "energy": 47520.63609611586,
+    "fcas": 69226.20156409628,
+    "deg": 1110.6184557810743,
+    "steps": 3744,
+    "time_s": 64.04903276194818
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_hornsdale_sa1_oct_2024",
+    "profit": 115639.81737414966,
+    "energy": 47524.6660540323,
+    "fcas": 69225.73164814601,
+    "deg": 1110.5803280286539,
+    "steps": 3744,
+    "time_s": 64.01287289196625
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_hornsdale_sa1_oct_2024",
+    "profit": 115574.90574050455,
+    "energy": 47468.77674835151,
+    "fcas": 69215.94526637612,
+    "deg": 1109.8162742230832,
+    "steps": 3744,
+    "time_s": 63.38158187712543
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_hornsdale_sa1_oct_2024",
+    "profit": 116013.23613064502,
+    "energy": 47843.96531122223,
+    "fcas": 69285.78369046586,
+    "deg": 1116.5128710430743,
+    "steps": 3744,
+    "time_s": 63.689119901973754
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_hornsdale_sa1_oct_2024",
+    "profit": 116531.07871427787,
+    "energy": 48296.954128896934,
+    "fcas": 69360.0833228508,
+    "deg": 1125.9587374698572,
+    "steps": 3744,
+    "time_s": 64.03474440099671
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_torrens_sa1_oct_2024",
+    "profit": 124597.75582023068,
+    "energy": 51719.050379500506,
+    "fcas": 74158.93346826597,
+    "deg": 1280.2280275357905,
+    "steps": 3744,
+    "time_s": 63.936270996928215
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_torrens_sa1_oct_2024",
+    "profit": 124597.70701903722,
+    "energy": 51719.2644590359,
+    "fcas": 74158.66140999229,
+    "deg": 1280.218849990963,
+    "steps": 3744,
+    "time_s": 63.92896465398371
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_torrens_sa1_oct_2024",
+    "profit": 124512.38655288836,
+    "energy": 51652.6732019717,
+    "fcas": 74149.21586546433,
+    "deg": 1289.502514547668,
+    "steps": 3744,
+    "time_s": 64.1366114038974
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_torrens_sa1_oct_2024",
+    "profit": 125046.62265412376,
+    "energy": 52127.4322031469,
+    "fcas": 74217.23615786512,
+    "deg": 1298.0457068882572,
+    "steps": 3744,
+    "time_s": 64.07486279215664
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_torrens_sa1_oct_2024",
+    "profit": 125675.09062920477,
+    "energy": 52664.62686893674,
+    "fcas": 74295.26143941258,
+    "deg": 1284.79767914455,
+    "steps": 3744,
+    "time_s": 64.06553800799884
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_small_sa1_nov_2024",
+    "profit": 32946.21669781442,
+    "energy": -2553.398686465278,
+    "fcas": 37944.54291124389,
+    "deg": 2444.9275269641867,
+    "steps": 3744,
+    "time_s": 63.96894191694446
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_small_sa1_nov_2024",
+    "profit": 32946.334792180045,
+    "energy": -2553.499420921773,
+    "fcas": 37944.66338530856,
+    "deg": 2444.8291722067383,
+    "steps": 3744,
+    "time_s": 64.07799037708901
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_small_sa1_nov_2024",
+    "profit": 32936.706570389266,
+    "energy": -2554.534544004877,
+    "fcas": 37947.67808563152,
+    "deg": 2456.436971237381,
+    "steps": 3744,
+    "time_s": 64.04594082199037
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_small_sa1_nov_2024",
+    "profit": 32938.78330855127,
+    "energy": -2556.564842951292,
+    "fcas": 37953.72522967225,
+    "deg": 2458.377078169686,
+    "steps": 3744,
+    "time_s": 64.15443033003248
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_small_sa1_nov_2024",
+    "profit": 33150.97379038077,
+    "energy": -2563.333666566302,
+    "fcas": 37972.231657060576,
+    "deg": 2257.924200113504,
+    "steps": 3744,
+    "time_s": 64.14772616117261
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_hornsdale_sa1_nov_2024",
+    "profit": 83123.8281472309,
+    "energy": 9225.45009232796,
+    "fcas": 74903.27009511963,
+    "deg": 1004.8920402166791,
+    "steps": 3744,
+    "time_s": 64.08011900587007
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_hornsdale_sa1_nov_2024",
+    "profit": 83124.92995143485,
+    "energy": 9226.626717557587,
+    "fcas": 74903.19235044165,
+    "deg": 1004.88911656439,
+    "steps": 3744,
+    "time_s": 64.149103108095
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_hornsdale_sa1_nov_2024",
+    "profit": 87436.66672590819,
+    "energy": 12744.533211703229,
+    "fcas": 75686.4002110575,
+    "deg": 994.2666968525305,
+    "steps": 3744,
+    "time_s": 64.0960613519419
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_hornsdale_sa1_nov_2024",
+    "profit": 137455.13883964962,
+    "energy": 68801.87409719707,
+    "fcas": 69535.37643868124,
+    "deg": 882.1116962286904,
+    "steps": 3744,
+    "time_s": 64.04924621805549
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_hornsdale_sa1_nov_2024",
+    "profit": 144015.80354684818,
+    "energy": 75353.346574103,
+    "fcas": 69652.67695201488,
+    "deg": 990.2199792697047,
+    "steps": 3744,
+    "time_s": 64.12409722292796
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_torrens_sa1_nov_2024",
+    "profit": 70218.04811113742,
+    "energy": -9430.32393780518,
+    "fcas": 80717.48946065565,
+    "deg": 1069.1174117130427,
+    "steps": 3744,
+    "time_s": 64.0923737580888
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_torrens_sa1_nov_2024",
+    "profit": 70219.31132597775,
+    "energy": -9429.036012105242,
+    "fcas": 80717.48105345543,
+    "deg": 1069.1337153724396,
+    "steps": 3744,
+    "time_s": 64.03447952284478
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_torrens_sa1_nov_2024",
+    "profit": 70526.06563276435,
+    "energy": -9131.549540144611,
+    "fcas": 80726.47740129149,
+    "deg": 1068.8622283825264,
+    "steps": 3744,
+    "time_s": 63.68759146379307
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_torrens_sa1_nov_2024",
+    "profit": 71266.05331824321,
+    "energy": -8365.302281236147,
+    "fcas": 80755.19569484172,
+    "deg": 1123.840095362365,
+    "steps": 3744,
+    "time_s": 63.21933137695305
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_torrens_sa1_nov_2024",
+    "profit": 73632.37033785497,
+    "energy": -6134.137748873509,
+    "fcas": 80820.42004209977,
+    "deg": 1053.9119553712837,
+    "steps": 3744,
+    "time_s": 63.09915796597488
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_small_vic1_oct_2024",
+    "profit": 43569.84521410042,
+    "energy": 1034.3139808857056,
+    "fcas": 46358.30854838172,
+    "deg": 3822.777315167007,
+    "steps": 3744,
+    "time_s": 63.110136293107644
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_small_vic1_oct_2024",
+    "profit": 43529.34974188458,
+    "energy": 1035.4883902291986,
+    "fcas": 46363.752783492215,
+    "deg": 3869.8914318368365,
+    "steps": 3744,
+    "time_s": 63.10005273600109
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_small_vic1_oct_2024",
+    "profit": 43523.48824688222,
+    "energy": 1036.2146227707094,
+    "fcas": 46366.74779079349,
+    "deg": 3879.474166681984,
+    "steps": 3744,
+    "time_s": 63.059606313938275
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_small_vic1_oct_2024",
+    "profit": 43668.36584726791,
+    "energy": 1037.6321543009083,
+    "fcas": 46374.07295527439,
+    "deg": 3743.339262307388,
+    "steps": 3744,
+    "time_s": 63.10985347814858
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_small_vic1_oct_2024",
+    "profit": 43672.89811788675,
+    "energy": 1041.9264449738205,
+    "fcas": 46398.02991564988,
+    "deg": 3767.058242736952,
+    "steps": 3744,
+    "time_s": 63.11655801697634
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_hornsdale_vic1_oct_2024",
+    "profit": 179437.98044339547,
+    "energy": 7117.457138395477,
+    "fcas": 173594.45257146464,
+    "deg": 1273.9292664646537,
+    "steps": 3744,
+    "time_s": 63.01351268286817
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_hornsdale_vic1_oct_2024",
+    "profit": 179437.57439495757,
+    "energy": 7116.630485898652,
+    "fcas": 173595.19896408982,
+    "deg": 1274.255055030888,
+    "steps": 3744,
+    "time_s": 62.94459336483851
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_hornsdale_vic1_oct_2024",
+    "profit": 179479.6859421716,
+    "energy": 7102.270964322604,
+    "fcas": 173652.98810935474,
+    "deg": 1275.573131505744,
+    "steps": 3744,
+    "time_s": 63.004599374951795
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_hornsdale_vic1_oct_2024",
+    "profit": 179460.3571366262,
+    "energy": 7039.72647877027,
+    "fcas": 173698.72081644295,
+    "deg": 1278.090158586988,
+    "steps": 3744,
+    "time_s": 63.082538487855345
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_hornsdale_vic1_oct_2024",
+    "profit": 179475.77921083395,
+    "energy": 6954.9595255345475,
+    "fcas": 173802.3800932487,
+    "deg": 1281.5604079492855,
+    "steps": 3744,
+    "time_s": 63.08752106013708
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg0.0_torrens_vic1_oct_2024",
+    "profit": 222828.59813888028,
+    "energy": 8381.598872312088,
+    "fcas": 215917.48981352584,
+    "deg": 1470.490546957649,
+    "steps": 3744,
+    "time_s": 63.031306634889916
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg5.0_torrens_vic1_oct_2024",
+    "profit": 222826.03984372033,
+    "energy": 8378.882684764649,
+    "fcas": 215917.61911134524,
+    "deg": 1470.4619523895533,
+    "steps": 3744,
+    "time_s": 63.02212167484686
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg10.0_torrens_vic1_oct_2024",
+    "profit": 218667.29970176646,
+    "energy": 10237.660656912522,
+    "fcas": 209898.236618119,
+    "deg": 1468.5975732650465,
+    "steps": 3744,
+    "time_s": 62.89953119191341
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg20.0_torrens_vic1_oct_2024",
+    "profit": 218748.47780739464,
+    "energy": 10261.633340281027,
+    "fcas": 209952.23292608146,
+    "deg": 1465.3884589678444,
+    "steps": 3744,
+    "time_s": 62.96259486605413
+  },
+  {
+    "label": "piecewise_merit_order_stagec_fix_20260913_rtg50.0_torrens_vic1_oct_2024",
+    "profit": 220570.09172367374,
+    "energy": 10573.527005634594,
+    "fcas": 211464.1722284546,
+    "deg": 1467.6075104154515,
+    "steps": 3744,
+    "time_s": 63.177936318097636
+  }
+]

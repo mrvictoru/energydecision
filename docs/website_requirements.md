@@ -216,7 +216,9 @@ over-trading on large batteries in some months.
 under impact" story (hornsdale −$142.7k, torrens −$347.8k) was a
 `phase3_impact_eval.py` `return_scale` bug (`report.md §8.2.10`,
 `docs/known_issues.md` B8), not a property of the prompt. The corrected gate
-passes (DT beats PPO on 9/9 cells; small 3.2×, Hornsdale 2.6×, Torrens 2.0×).
+passes (DT beats PPO on 9/9 cells; shipped physics-v2 fixed fallback small 4.4×,
+Hornsdale 4.7×, Torrens 4.7×; the earlier v1 run was small 3.2×, Hornsdale 2.6×,
+Torrens 2.0×).
 Message: *"prompts should be state-dependent; the constant fallback is a
 robustness trade-off."* The before/after chart data must be regenerated before
 publishing.
