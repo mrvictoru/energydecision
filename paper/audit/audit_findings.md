@@ -224,7 +224,38 @@ from `reference_cache`, deterministic DT forward pass, stats fitted from the sam
 data). A single-surface re-run of **standard** from the frozen tag reproduced
 `heldout_metrics_by_scenario.csv` **byte-for-byte** (`cmp -s` identical; DT mean
 16208.586198 in both). Artifact: `paper/audit/artifacts/spotcheck_standard.txt`,
-script `paper/audit/spotcheck_standard.sh`. The dispatch/expanded/2025 re-runs are
-therefore **skipped as redundant** (same code path, checkpoint, and cached
-reference policy) and this decision is recorded rather than silently omitted.
-Cost of the skipped full re-run would have been ~35–40 min, not days.
+script `paper/audit/spotcheck_standard.sh`. Cost of the full re-run would have been
+~35–40 min, not days.
+
+> **Correction (2026-09-22, later the same day).** The "skip expanded/2025 as
+> redundant" conclusion below was **wrong**. The spot-check reused the canonical
+> `tier_standard` cache, so byte-identical output proves determinism *given the same
+> cache*, not correctness. A fresh-cache audit then found the canonical expanded and
+> 2025 caches are **stale** (see §7). Standard is genuinely unaffected, but expanded
+> and 2025 required fresh re-runs.
+
+## 7. Phase 1 (cont.) — stale caches, extended surfaces, final numbers
+
+**Reference-cache / processed-data staleness (critical).** Cache keys omit a content
+hash of the PPO checkpoint and processed data, so canonical surfaces reused
+pre-fix baselines. Full write-up:
+`paper/audit/artifacts/cache_data_staleness_finding.md`. Key deltas:
+- standard Oct PPO: cached 2,352.70 vs fresh 2,354.82 (+0.09%) → **A1 stands**
+- expanded PPO mean: cached 19,503.53 vs fresh 4,349.79 (**−78%**; a $361k stale
+  outlier at `nsw1_may`) → **A3 superseded**
+- 2025 OOD PPO mean: cached 6,497.51 vs fresh 4,817.02 (−26%)
+- DT is deterministic; PPO/fcas-rule are **not** bit-reproducible on long episodes
+  (~0.7% / ~10% run-to-run under identical config and data).
+
+**Extended surfaces (fresh, frozen release).** `standard` 5→30, `dispatch` 6→12,
+`expanded` 27→30, `2025` re-run fresh at n=6. Significance:
+`paper/audit/artifacts/stagec_v2cal_extended_significance.json`; results table in
+`paper/audit/small_n_assessment.md`. **All four surfaces now have paired-difference
+95% CIs excluding zero** (standard 3.84×, dispatch 1.80×, expanded 6.70×, 2025 6.39×).
+Configs: `configs/aemo_autoresearch_evaluator.sdp_teacher_{standard_year,
+dispatch_year,expanded_full}.json`. Artifacts:
+`eval_output/physics_v2/{standard_year,dispatch_year,expanded_full,2025_v2cal_fresh}_v2cal*`.
+
+**Open decision for the user:** whether to make the extended (fresh) surfaces the
+preprint headline and demote the canonical single-month / n=27 surfaces to named
+sub-surfaces. The doc tables still show the canonical numbers pending that call.

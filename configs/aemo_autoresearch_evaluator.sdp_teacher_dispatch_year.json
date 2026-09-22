@@ -1,0 +1,141 @@
+{
+  "track": "aemo",
+  "target_return": 0.0,
+  "bootstrap_iterations": 500,
+  "bootstrap_seed": 42,
+  "reference_policy": "ppo_reference",
+  "reference_cache_dir": "eval_output/reference_cache/tier_dispatch_year",
+  "comparison": {
+    "use_dispatch_asset_sizing": true,
+    "dispatch_reference_policy_name": "dispatch_dalrymple_north"
+  },
+  "condition_thresholds": {
+    "negative_price_threshold": 0.0,
+    "price_spike_threshold": 150.0,
+    "low_soc_ratio": 0.2,
+    "high_soc_ratio": 0.8
+  },
+  "heldout": {
+    "cache_dir": "data/aemo",
+    "step_duration": 0.083333,
+    "episode_hours": 144.0,
+    "action_mode": "full_fcas",
+    "degradation_mode": "real_world",
+    "degradation_chemistry": "LFP",
+    "degradation_temperature": 30.0,
+    "episodes_per_variant": 1,
+    "random_episode_start": false,
+    "fit_global_stats": true,
+    "parallel_workers": 8,
+    "parallelize_candidate_dt": false,
+    "battery_variants": [
+      {
+        "name": "dispatch_asset_template",
+        "capacity_mwh": 10.0,
+        "max_power_mw": 5.0,
+        "init_soc_ratio": 0.5
+      }
+    ],
+    "scenarios": [
+      {
+        "label": "sa1_jan_2024",
+        "region": "SA1",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-14"
+      },
+      {
+        "label": "sa1_feb_2024",
+        "region": "SA1",
+        "start_date": "2024-02-01",
+        "end_date": "2024-02-14"
+      },
+      {
+        "label": "sa1_mar_2024",
+        "region": "SA1",
+        "start_date": "2024-03-01",
+        "end_date": "2024-03-14"
+      },
+      {
+        "label": "sa1_apr_2024",
+        "region": "SA1",
+        "start_date": "2024-04-01",
+        "end_date": "2024-04-14"
+      },
+      {
+        "label": "sa1_may_2024",
+        "region": "SA1",
+        "start_date": "2024-05-01",
+        "end_date": "2024-05-14"
+      },
+      {
+        "label": "sa1_jun_2024",
+        "region": "SA1",
+        "start_date": "2024-06-01",
+        "end_date": "2024-06-14"
+      },
+      {
+        "label": "sa1_jul_2024",
+        "region": "SA1",
+        "start_date": "2024-07-01",
+        "end_date": "2024-07-14"
+      },
+      {
+        "label": "sa1_aug_2024",
+        "region": "SA1",
+        "start_date": "2024-08-01",
+        "end_date": "2024-08-14"
+      },
+      {
+        "label": "sa1_sep_2024",
+        "region": "SA1",
+        "start_date": "2024-09-01",
+        "end_date": "2024-09-14"
+      },
+      {
+        "label": "sa1_oct_2024",
+        "region": "SA1",
+        "start_date": "2024-10-01",
+        "end_date": "2024-10-14"
+      },
+      {
+        "label": "sa1_nov_2024",
+        "region": "SA1",
+        "start_date": "2024-11-01",
+        "end_date": "2024-11-14"
+      },
+      {
+        "label": "sa1_dec_2024",
+        "region": "SA1",
+        "start_date": "2024-12-01",
+        "end_date": "2024-12-14"
+      }
+    ]
+  },
+  "policies": [
+    {
+      "name": "candidate_dt",
+      "kind": "dt",
+      "rtg_value": 0.0,
+      "rtg_mode": "j_t_soc"
+    },
+    {
+      "name": "dispatch_dalrymple_north",
+      "kind": "dispatch",
+      "station_name": "dalrymple_north",
+      "dispatch_index": 0
+    },
+    {
+      "name": "ppo_reference",
+      "kind": "sb3",
+      "algorithm": "PPO",
+      "model_path": "models/aemo_sb3/ppo_aemo_fcas_model.zip",
+      "deterministic": true,
+      "device": "auto"
+    },
+    {
+      "name": "fcas_rule",
+      "kind": "rule",
+      "algorithm": "fcas_rule"
+    }
+  ]
+}

@@ -43,6 +43,14 @@ SURFACE_SETS = {
         "expanded_broad_2024": "eval_output/stagec_jtsoc_expanded_rtgjtsoc",
         "2025_ood": "eval_output/stagec_jtsoc_2025_rtgjtsoc",
     },
+    # Small-n fix (2026-09-22): extended temporal/asset surfaces, shipped v2cal.
+    # standard 5 -> 30, dispatch 6 -> 12, expanded 27 -> 30; 2025 OOD unchanged.
+    "v2cal_extended": {
+        "standard_year_2024": "eval_output/physics_v2/standard_year_v2cal",
+        "dispatch_year_2024": "eval_output/physics_v2/dispatch_year_v2cal",
+        "expanded_broad_2024": "eval_output/physics_v2/expanded_full_v2cal",
+        "2025_ood": "eval_output/physics_v2/2025_v2cal_fresh",
+    },
 }
 
 

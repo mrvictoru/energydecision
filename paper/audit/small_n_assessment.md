@@ -86,3 +86,29 @@ The bootstrap already resamples scenario cells, which is the correct unit, but a
 reviewer should be told that temporal cells within a region are correlated. The
 paired-difference CI remains the primary evidence; Wilcoxon is indicative at
 n<10 and becomes usable once standard/dispatch exceed 10.
+
+---
+
+## Implemented (2026-09-22) — results
+
+All three extended configs were run at the frozen release with **fresh reference
+caches** (so DT and PPO share the same data/physics). Significance regenerated in
+`paper/audit/artifacts/stagec_v2cal_extended_significance.json`
+(bootstrap 10k, seed 42, paired Wilcoxon over scenario cells):
+
+| Surface | n | DT | PPO | ratio | Δ (DT−PPO) | 95% CI on Δ | win | CI excl 0 | Wilcoxon p |
+|---|---:|---:|---:|---:|---:|---|---:|---|---:|
+| standard_year_2024 | 30 | 16,501 | 4,303 | 3.84× | +12,198 | [9,181, 14,738] | 97% | yes | 2.3e-6 |
+| dispatch_year_2024 | 12 | 33,791 | 18,818 | 1.80× | +14,973 | [4,794, 22,663] | 83% | yes | 0.027 |
+| expanded_broad_2024 | 30 | 29,124 | 4,350 | 6.70× | +24,775 | [13,509, 41,434] | 97% | yes | 3.7e-9 |
+| 2025_ood | 6 | 30,791 | 4,817 | 6.39× | +25,974 | [12,708, 49,850] | 100% | yes | 0.031 |
+
+**All four surfaces now have paired-difference CIs excluding zero** (the canonical
+n=27 expanded surface was marginal). Runtime: standard_year ~18 min, dispatch_year
+~23 min (includes dispatch-replay fetch), expanded_full ~2 h 40 m (whole config
+re-run, not incremental).
+
+**Critical caveat discovered during this run:** the canonical surfaces reused
+**stale reference caches / processed data** (see
+`artifacts/cache_data_staleness_finding.md`). The canonical `expanded_v2cal`
+PPO baseline is superseded; the numbers above come from self-consistent fresh runs.
