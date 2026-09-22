@@ -62,10 +62,10 @@ fetch them at runtime.
 - **Title:** "Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch"
 - **Subtitle:** A degradation-aware AEMO/NEM benchmark: planner-distilled Decision Transformer vs online RL vs real-world dispatch replay.
 - **Key stat callouts** (large numbers, animated count-up on scroll):
-  - **6.9×** profit vs PPO on standard surface ($16,209 vs $2,353 /ep; physics-v2 `v2cal` checkpoint)
+  - **3.84×** profit vs PPO on the standard-2024 surface ($16,501 vs $4,303 /ep, n=30; physics-v2 `v2cal` checkpoint)
   - **4/4** identity surfaces won (+ impact gate passed)
   - **0** solver at inference (fully deployable standalone transformer)
-  - **3/4** identity-surface 95% bootstrap CIs exclude zero (expanded broad-2024 is marginal; the v1 six-comparison result is in §8.2.10)
+  - **4/4** identity-surface 95% bootstrap CIs exclude zero (extended surfaces; the v1 six-comparison result is in §8.2.10)
 - **Primary CTA buttons:** "Read the report" → `https://github.com/mrvictoru/energydecision/blob/main/report.md`; "Get the model" → `https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp`
 
 ### 3.2 What is this? (plain-language intro)
@@ -97,16 +97,16 @@ Four identity surfaces, profit per episode (USD, net of degradation),
 
 ```js
 const HEADLINE = [
-  { surface: "Standard Oct",        dt: 16209, ppo: 2353,  n: 5,  winRate: "5/5",   wilcoxonP: 0.0625 },
-  { surface: "Dispatch-matched",    dt: 40039, ppo: 22530, n: 6,  winRate: "5/6",   wilcoxonP: 0.0625 },
-  { surface: "Expanded broad-2024", dt: 32146, ppo: 19504, n: 27, winRate: "25/27", wilcoxonP: 0.0004 },
-  { surface: "2025 OOD",            dt: 30791, ppo: 6498,  n: 6,  winRate: "6/6",   wilcoxonP: 0.0312 },
+  { surface: "Standard 2024",       dt: 16501, ppo: 4303,  n: 30, winRate: "29/30", wilcoxonP: 2.3e-6 },
+  { surface: "Dispatch-matched",    dt: 33791, ppo: 18818, n: 12, winRate: "10/12", wilcoxonP: 0.027 },
+  { surface: "Expanded broad-2024", dt: 29124, ppo: 4350,  n: 30, winRate: "29/30", wilcoxonP: 3.7e-9 },
+  { surface: "2025 OOD",            dt: 30791, ppo: 4817,  n: 6,  winRate: "6/6",   wilcoxonP: 0.031 },
 ];
-// Impact gate (piecewise merit-order impact): DT passes on all 3 grid-scale batteries
+// Impact gate (piecewise merit-order impact): DT passes on all 3 grid-scale batteries (fixed rtg0.0 fallback)
 const IMPACT_GATE = [
-  { battery: "Small (~8 MWh)",          dt: 35404,  ppo: 11031 },
-  { battery: "Hornsdale-class (150 MW)", dt: 146676, ppo: 56540 },
-  { battery: "Torrens-class (250 MWh)", dt: 140712, ppo: 69507 },
+  { battery: "Small (~8 MWh)",          dt: 48098,  ppo: 11031 },
+  { battery: "Hornsdale-class (150 MW)", dt: 266007, ppo: 56540 },
+  { battery: "Torrens-class (250 MWh)", dt: 324269, ppo: 69507 },
 ];
 ```
 

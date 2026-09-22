@@ -4,7 +4,7 @@
 
 Optimal operation of grid-scale battery energy storage (BESS) in wholesale electricity markets requires simultaneous energy arbitrage and co-optimized bidding across multiple ancillary-service markets, under non-linear degradation and strict physical constraints. This report asks whether a **decision transformer (DT)** trained purely offline from logged trajectories can match or exceed online reinforcement learning (RL) and real-world dispatch for this problem. We answer this on a unified, degradation-aware benchmark built around Australia's NEM market (AEMO), supporting both a household solar–battery environment and a utility-scale BESS trading environment with full 9-dimensional FCAS bidding.
 
-Our central result is that the **standalone AEMO Decision Transformer is the preferred control policy**, shipped with **surface-aware `rtg_mode="auto"`**: on the 4 canonical identity surfaces it beats PPO everywhere — **$16,209/ep on standard Oct** (PPO $2,353, 6.9×), **$40,039/ep on dispatch-matched** (PPO $22,530), **$32,146/ep on expanded broad-2024** (PPO $19,504), and **$30,791/ep on 2025 OOD** (PPO $6,498) — while under market impact it falls back to constant RTG and passes the impact-gate on 9/9 grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.71×, torrens 4.67×; §8.2.11).
+Our central result is that the **standalone AEMO Decision Transformer is the preferred control policy**, shipped with **surface-aware `rtg_mode="auto"`**: on the 4 canonical identity surfaces it beats PPO everywhere — **$16,501/ep on standard 2024** (PPO $4,303, 3.84×, n=30), **$33,791/ep on dispatch-matched** (PPO $18,818, 1.80×, n=12), **$29,124/ep on expanded broad-2024** (PPO $4,350, 6.70×, n=30), and **$30,791/ep on 2025 OOD** (PPO $4,817, 6.39×, n=6); all four paired-difference 95% CIs exclude zero — while under market impact it falls back to constant RTG and passes the impact-gate on 9/9 grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.71×, torrens 4.67×; §8.2.11).
 
 Reaching this result required breaking a ceiling that had capped every prior DT variant (§8.2.1a): behaviour cloning cannot output skills absent from logged data, so FCAS spike bidding below online RL survived every attempt to prompt, re-weight, re-compose, or fine-tune it away. The fix was two-fold. First, we stopped cloning market history and instead **distilled an honest planner**: a stochastic-dynamic-programming teacher (seasonal-forecast SDP, degradation-aware, non-clairvoyant) generates near-optimal energy+FCAS trajectories across the corpus, and a standalone transformer trained on those trajectories inherits the planning skill with **no solver at inference** — the FCAS-cloning ceiling is broken by construction. Second, we replaced the hand-tuned scalar return-to-go prompt with a **state-dependent cost-to-go J_t(soc)** ("how much value remains from this battery level?"), which fixed the distilled model's residual energy-arbitrage under-trading. The one failure mode found — the price-taking J_t(soc) table over-prompts arbitrage at grid scale under merit-order impact, collapsing hornsdale/torrens — is resolved by impact-aware table pricing plus automatic fallback to constant RTG when the environment carries an impact model; this surface-aware selection *is* the shipped `auto` mode.
 
@@ -457,7 +457,7 @@ This section presents the empirical evaluation of the Decision Transformer (DT) 
 | Environment | Best DT Result | Key Advantage |
 |-------------|---------------|---------------|
 | Household — legacy Ausgrid (SolarBatteryEnv) | **Best mean return** (-2408) vs Oracle on the legacy benchmark | 1D action, degradation-aware cycling; the modern 2019+ rebuild reverses the Oracle ordering (§8.1.1, §8.1.2) |
-| AEMO utility-scale (AEMOBatteryTradingEnv) | **Best profit/ep on all 4 identity surfaces + impact gate** ($16.2k standard / $40.0k dispatch-matched / $32.1k expanded / $30.8k 2025 OOD vs PPO $2.4k / $22.5k / $19.5k / $6.5k), via SDP-teacher distillation + J_t(soc) prompting under `rtg_mode="auto"` (§8.2.11) | 9D full-fcas bidding, planner-distilled training data, state-dependent RTG, modern architecture (GQA/RMSNorm) |
+| AEMO utility-scale (AEMOBatteryTradingEnv) | **Best profit/ep on all 4 identity surfaces + impact gate** ($16.5k standard-2024 / $33.8k dispatch-matched / $29.1k expanded-2024 / $30.8k 2025 OOD vs PPO $4.3k / $18.8k / $4.4k / $4.8k; n=30/12/30/6, all four paired CIs exclude zero), via SDP-teacher distillation + J_t(soc) prompting under `rtg_mode="auto"` (§8.2.11) | 9D full-fcas bidding, planner-distilled training data, state-dependent RTG, modern architecture (GQA/RMSNorm) |
 
 ### 8.1 Household Solar-Battery Control (Legacy Ausgrid Benchmark)
 
@@ -724,15 +724,15 @@ The AEMO environment evaluates grid-scale battery trading in Australia's Nationa
 
 **Current recommended policy (shipped):** the standalone physics-v2 Stage C Decision Transformer (`models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt`) run with **`rtg_mode="auto"`** — wear-calibrated SDP-teacher distillation plus state-dependent `J_t(soc)` prompting, falling back to constant RTG under market impact. It is the only verified setting that beats PPO on all four identity surfaces *and* passes the market-impact gate. (The earlier v1 checkpoint `aemo_dt_sdp_jtsoc_fullcorpus.pt` and its numbers are superseded; §8.2.11.)
 
-| Surface | Stage C DT (`auto`, physics-v2) | PPO | Ratio |
-|---|---:|---:|---:|
-| Standard Oct | **$16,209** | $2,353 | 6.9× |
-| Dispatch-matched | **$40,039** | $22,530 | 1.78× |
-| Expanded broad-2024 | **$32,146** | $19,504 | 1.65× |
-| 2025 OOD | **$30,791** | $6,498 | 4.74× |
-| Impact gate (piecewise merit-order, fixed `rtg0.0` fallback) | **4.36× / 4.71× / 4.67× PPO (9/9 cells)** | — | PASS |
+| Surface | Stage C DT (`auto`, physics-v2) | PPO | Ratio | n |
+|---|---:|---:|---:|---:|
+| Standard 2024 (5 regions × 6 periods) | **$16,501** | $4,303 | 3.84× | 30 |
+| Dispatch-matched (SA1 full-year) | **$33,791** | $18,818 | 1.80× | 12 |
+| Expanded broad-2024 | **$29,124** | $4,350 | 6.70× | 30 |
+| 2025 OOD | **$30,791** | $4,817 | 6.39× | 6 |
+| Impact gate (piecewise merit-order, fixed `rtg0.0` fallback) | **4.36× / 4.71× / 4.67× PPO (9/9 cells)** | — | PASS | 9 |
 
-On physics-v2 v2cal, three of the four identity-surface paired-difference 95% bootstrap CIs exclude zero (expanded broad-2024 is marginal, CI ≈ −$0.6k–$23.9k) with 25/27 wins (p=0.0004). The v1 Stage C paired-statistics run (which reported all six comparisons excluding zero) is in §8.2.10. Full derivation and the impact-mode failure analysis: **§8.2.10**; the shipped physics-v2 numbers: **§8.2.11**.
+On the fresh physics-v2 v2cal surfaces, **all four** identity-surface paired-difference 95% bootstrap CIs exclude zero (Δ = +$12,198 [9,181, 14,738] standard; +$14,973 [4,794, 22,663] dispatch; +$24,775 [13,509, 41,434] expanded; +$25,974 [12,708, 49,850] 2025 OOD; paired Wilcoxon p = 2.3e-6 / 0.027 / 3.7e-9 / 0.031). These extended surfaces (standard n=30, dispatch n=12, expanded n=30) supersede the earlier small-n single-month surfaces; see §8.2.11 and `paper/audit/small_n_assessment.md`. The v1 Stage C paired-statistics run is in §8.2.10. Full derivation and the impact-mode failure analysis: **§8.2.10**; the shipped physics-v2 numbers: **§8.2.11**.
 
 **How to read this section.** The subsections are ordered chronologically, because the failed attempts and negative results are themselves evidence. The status of each:
 
@@ -984,7 +984,7 @@ The following table traces the DT's progression from the original pilot model th
 | 5. Modern v2 pretrained | 8×768 GQA | 2,401 episodes (realistic bat) | +$10,138 | $10,068 | $187 | Architecture improvement |
 | **6. Hierarchical DT+LP** | 8×768 waypoint-DT (K=8 SOC) | Oracle-LP SOC paths (1,200 eps) | +$291,841* | — | $176/MWh* | Decomposition: DT plans SOC, LP executes |
 | **7. Honest SDP executor** | same waypoint-DT + SDP executor | seasonal forecast only | +$59,091* | — | $163/MWh* | Foresight caveat lifted |
-| **8. Standalone J_t(soc) DT (shipped, physics-v2 v2cal)** | 8×768 mixed-head, `rtg_mode="auto"` | Wear-calibrated SDP-teacher trajectories (320 eps) | +$40,039 | $105k+ | $145/MWh | Planner distillation + state-dependent prompts |
+| **8. Standalone J_t(soc) DT (shipped, physics-v2 v2cal)** | 8×768 mixed-head, `rtg_mode="auto"` | Wear-calibrated SDP-teacher trajectories (320 eps) | +$33,791 (SA1 full-year) | $105k+ | $145/MWh | Planner distillation + state-dependent prompts |
 
 \* Stages 6–7 use a solver at inference and are not directly comparable to
 stages 1–5 (the LP stage's $291,841 exploits perfect foresight). Stage 8 is
@@ -1506,7 +1506,9 @@ the strongest attainable result at that sample size. **All six v1-Stage-C
 paired-difference 95% CIs exclude zero** (physics-v2 v2cal: 3/4 identity-surface
 CIs exclude zero, expanded broad-2024 marginal), so "DT > PPO" holds at 95% confidence on every surface,
 with the expanded broad-2024 surface additionally significant under a
-conventional test.
+conventional test. The **extended fresh surfaces** (§8.2.11; standard n=30,
+dispatch n=12, expanded n=30, 2025 n=6) supersede these small-n numbers and now
+have **all four** paired-difference CIs excluding zero.
 
 Two secondary observations from the same analysis: (a) per-cell bootstrap
 P(DT>PPO) ≥ 0.9998 on every identity surface; (b) after the B8 fix the
@@ -1586,20 +1588,35 @@ per-step wear to the environment's realized per-cycle wear (B4;
 The AEMO checkpoint `aemo_dt_sdp_jtsoc_v2cal.pt` (`rtg_mode="auto"`) supersedes
 `aemo_dt_sdp_jtsoc_fullcorpus.pt`:
 
-| Surface | physics-v2 (shipped) | v1 (previous) | PPO | ratio vs PPO |
+| Surface | physics-v2 (shipped, fresh) | PPO | ratio vs PPO | n |
 |---|---:|---:|---:|---:|
-| Standard Oct | **$16,209** | $11,573 | $2,353 | 6.9× |
-| Dispatch-matched | **$40,039** | $35,320 | $22,530 | 1.78× |
-| 2025 OOD | **$30,791** | $25,862 | $6,498 | 4.74× |
-| Expanded broad-2024 | $32,146 | $34,761 | $19,504 | 1.65× |
-| Impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.71× / torrens 4.67× (paired Δ +$167,099, 95% CI [$101k, $227k], p=0.0039) | v1 ran best-RTG-per-cell (3.21×/2.59×/2.02×) | — | passes |
+| Standard 2024 (5 regions × 6 periods) | **$16,501** | $4,303 | 3.84× | 30 |
+| Dispatch-matched (SA1 full-year) | **$33,791** | $18,818 | 1.80× | 12 |
+| Expanded broad-2024 | **$29,124** | $4,350 | 6.70× | 30 |
+| 2025 OOD | **$30,791** | $4,817 | 6.39× | 6 |
+| Impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.71× / torrens 4.67× (paired Δ +$167,099, 95% CI [$101k, $227k], p=0.0039) | — | passes | 9 |
 
-The impact numbers above are the **shipped fixed constant-RTG fallback** and were produced
-by the provenance audit on 2026-09-21 (`paper/audit/run_v2cal_impact.sh`; analysis in
-`paper/audit/artifacts/stagec_v2cal_impact_analysis.json`). Prior to that run the report's
-impact multipliers were v1 `stagec_fix_20260913` numbers selected best-RTG-per-cell; for
-v2cal the fixed fallback is within ~1% of best-per-cell, so no prompt selection is required.
-Test suite at this commit: 387 passed.
+**All four identity-surface paired-difference 95% bootstrap CIs exclude zero**
+(standard Δ+$12,198 [9,181, 14,738] p=2.3e-6; dispatch Δ+$14,973 [4,794, 22,663]
+p=0.027; expanded Δ+$24,775 [13,509, 41,434] p=3.7e-9; 2025 OOD Δ+$25,974
+[12,708, 49,850] p=0.031; paired Wilcoxon). Artifact:
+`paper/audit/artifacts/stagec_v2cal_extended_significance.json`; full table in
+`paper/audit/small_n_assessment.md`.
+
+The extended surfaces (standard 5→30, dispatch 6→12, expanded 27→30; 2025 OOD
+re-run fresh at n=6) supersede the earlier small-n single-month surfaces. The
+canonical `Standard Oct` surface (n=5, $16,209 vs $2,353, 6.9×) is unaffected and
+retained as a narrow sub-surface, but the canonical dispatch and expanded baselines
+had reused **stale pre-fix reference caches** and are superseded — see
+`paper/audit/artifacts/cache_data_staleness_finding.md` (the evaluator cache key
+now includes model + processed-data content hashes; no retraining was involved).
+
+The impact numbers are the **shipped fixed constant-RTG fallback**, produced by the
+provenance audit (`paper/audit/run_v2cal_impact.sh`; analysis in
+`paper/audit/artifacts/stagec_v2cal_impact_analysis.json`). Prior to that run the
+report's impact multipliers were v1 `stagec_fix_20260913` numbers selected
+best-RTG-per-cell; for v2cal the fixed fallback is within ~1% of best-per-cell, so
+no prompt selection is required. Test suite at this commit: 387 passed.
 
 Weights + card: `mrvictoru/energydecision-dt-v2-sdp`
 (`aemo_dt_sdp_jtsoc_v2cal.pt`); corpus: `mrvictoru/AEMO_simulated_trade_sdp`
@@ -1625,7 +1642,7 @@ H4.x re-runs are tracked in `docs/FUTURE_PLAN.md`.
 
 ### 8.3 Key Takeaways
 
-1. **The standalone AEMO Decision Transformer is the preferred shipped policy when run in surface-aware `rtg_mode="auto"`.** On identity surfaces, `auto` resolves to `j_t_soc` and matches the best DT results on standard Oct, dispatch-matched, expanded broad-2024, and 2025 OOD; under market impact, it falls back to a conservative constant RTG and passes the impact gate on **9/9 grid-scale cells** (fixed `rtg0.0` fallback: small **4.36×**, hornsdale **4.71×**, torrens **4.67×** vs PPO; §8.2.11). Note: the earlier claim that explicit `j_t_soc` "collapses" under impact was an evaluation artifact (`return_scale` bug; §8.2.10 and `docs/known_issues.md` B8) — explicit j_t_soc is viable, but the constant fallback remains the robust default.
+1. **The standalone AEMO Decision Transformer is the preferred shipped policy when run in surface-aware `rtg_mode="auto"`.** On the extended fresh identity surfaces (standard-2024 $16,501 vs $4,303, n=30; dispatch-matched $33,791 vs $18,818, n=12; expanded broad-2024 $29,124 vs $4,350, n=30; 2025 OOD $30,791 vs $4,817, n=6) `auto` resolves to `j_t_soc` and **all four paired-difference CIs exclude zero**; under market impact, it falls back to a conservative constant RTG and passes the impact gate on **9/9 grid-scale cells** (fixed `rtg0.0` fallback: small **4.36×**, hornsdale **4.71×**, torrens **4.67×** vs PPO; §8.2.11). Note: the earlier claim that explicit `j_t_soc` "collapses" under impact was an evaluation artifact (`return_scale` bug; §8.2.10 and `docs/known_issues.md` B8) — explicit j_t_soc is viable, but the constant fallback remains the robust default.
 
 2. **Teacher quality breaks cloning ceilings; architecture matters within a fixed data source.** Offline data quality (2,401-episode FCAS-rich corpus), realistic battery configurations, and modern architecture each contributed to stages 1–5. But the decisive jump — beating PPO on all four identity surfaces — came from changing the *data source* itself: distilling an honest SDP-planning teacher rather than cloning market behaviour (§8.2.10). GRPO does not help the modern model.
 
@@ -1706,8 +1723,8 @@ This phase drove two research lines to completion:
   (J_t(soc) cost-to-go prompting), plus hierarchical SDP+DT inference
   (`dt_soc_oracle`/`dt_soc_sdp` executors, Stages A–B of §8.2.10).
 - ✅ **Success criteria exceeded:** target was >$12,000/ep dispatch-matched or
-  >$6,000/ep standard; shipped physics-v2 v2cal result is $40,039 dispatch-matched
-  and $16,209 standard under `rtg_mode="auto"`, both far above target.
+  >$6,000/ep standard; shipped physics-v2 v2cal result is $33,791 dispatch-matched
+  and $16,501 standard under `rtg_mode="auto"`, both far above target.
 
 The current direction moves to **Phase 4's sim-to-real readiness**: safety wrappers,
 hardware-in-the-loop validation where available, and artifact provenance — the DT
@@ -1737,7 +1754,7 @@ This repository introduces a unified framework for learning and planning in batt
 **Key empirical findings:**
 
 - **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: the forecast arms are re-baselined under corrected physics (the pre-fix TTM > persistence advantage does not survive — the three arms are statistically indistinguishable at the shared prompt), only the unconstrained 7 d real-OOD DT is net-positive, and the DT trails an RTE-matched perfect-foresight oracle (+$293 vs +$690/yr gross) while over-cycling on long horizons; throughput budgeting and price gating do not make the long-horizon surfaces net-positive (§8.1.1, §8.1.2).
-- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is the standalone physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`) with **surface-aware `rtg_mode="auto"`**. On identity surfaces — standard **$16,209/ep**, dispatch-matched **$40,039/ep**, expanded broad-2024 **$32,146/ep**, and **2025 OOD $30,791/ep** — all ahead of PPO (3/4 paired 95% CIs exclude zero; expanded broad-2024 marginal). Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on **9/9** canonical grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.71×, torrens 4.67×; paired Δ +$167,099, 95% CI [$101k, $227k]), avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
+- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is the standalone physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`) with **surface-aware `rtg_mode="auto"`**. On the extended identity surfaces — standard-2024 **$16,501/ep** (n=30), dispatch-matched **$33,791/ep** (n=12), expanded broad-2024 **$29,124/ep** (n=30), and **2025 OOD $30,791/ep** (n=6) — all ahead of PPO with **all four paired 95% CIs excluding zero**. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on **9/9** canonical grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.71×, torrens 4.67×; paired Δ +$167,099, 95% CI [$101k, $227k]), avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
 - **AEMO utility-scale (the ceiling was real, then broken):** A systematic attempt to close the DT-vs-PPO gap *within* behaviour cloning — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, architecture changes — all failed to exceed the offline data's FCAS bidding. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver at inference), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. It has evolved from a hand-tuned scalar (architecture-dependent: modern peaks at 0.0, legacy at 0.5) to a state-dependent J_t(soc) cost-to-go table — with automatic fallback to constant RTG under market impact, since optimistic prompts self-suppress at grid scale (§8.2.10).

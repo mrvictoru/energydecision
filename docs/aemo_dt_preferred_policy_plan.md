@@ -1,9 +1,10 @@
 # AEMO DT as Preferred Policy — Plan, Checklist & Session Diary — **ARCHIVED**
 
 > **STATUS:** Stages A–C are **DONE** and the shipped recommendation is now settled:
-> use **`rtg_mode="auto"`**. It reproduces the `j_t_soc` wins on **all 4 identity
-> surfaces** (physics-v2 v2cal: standard 6.9×, dispatch 1.78×, 2025 OOD 4.74×,
-> expanded 1.65×) while preserving the **impact-gate pass** on every grid-scale battery by
+> use **`rtg_mode="auto"`**. It reproduces the `j_t_soc` wins on **all 4 extended
+> identity surfaces** (physics-v2 v2cal, fresh: standard 3.84× n=30, dispatch 1.80× n=12,
+> expanded 6.70× n=30, 2025 OOD 6.39× n=6; all four paired CIs exclude zero) while
+> preserving the **impact-gate pass** on every grid-scale battery by
 > falling back to constant RTG under merit-order impact. This file is **ARCHIVED** —
 > the final session was 2026-08-23; **all numbers in the diary below are historical
 > and must not be cited** (the shipped numbers are in `report.md §8.2.11`). The
@@ -1104,9 +1105,10 @@ fails the impact gate — pending the impact-aware J_t(soc) fix (H1/H3 in §INVE
 ### Final project verdict
 **Superseded.** The v1 numbers in this archived diary are historical. The shipped
 result is the physics-v2 v2cal checkpoint (`aemo_dt_sdp_jtsoc_v2cal.pt`,
-`rtg_mode="auto"`): standard $16,209 (6.9× PPO), dispatch-matched $40,039
-(1.78×), expanded broad-2024 $32,146 (1.65×), 2025 OOD $30,791 (4.74×), impact
-gate passed. See `report.md §8.2.11`.
+`rtg_mode="auto"`) on the extended fresh surfaces: standard-2024 $16,501 (3.84× PPO,
+n=30), dispatch-matched $33,791 (1.80×, n=12), expanded broad-2024 $29,124 (6.70×,
+n=30), 2025 OOD $30,791 (6.39×, n=6) — all four paired CIs exclude zero — and the
+impact gate passes 9/9. See `report.md §8.2.11`.
 
 ### 2026-08-18 — Final checklist
 - [x] Exp 0 — PPO-only DT eval (2025 OOD, dispatch-matched, standard) **DONE**

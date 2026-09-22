@@ -256,9 +256,9 @@ DT earns **$4.6k/ep vs PPO's $15.0k** — the DT's "SOTA" was **surface-specific
 (it won Oct-standard, dispatch-matched, and mild months like Jan, but lost
 broadly to PPO in FCAS-spike months due to FCAS under-bidding). **This finding
 was superseded by the Stage C standalone DT** (see `report.md §8.2.10`), which
-distilled an honest SDP-planning teacher and now beats PPO on **all 4 identity
-surfaces** (physics-v2 v2cal: standard 6.9×, dispatch 1.78×, expanded 1.65×, 2025
-OOD 4.74×) and passes the impact gate (see `report.md §8.2.11`).
+distilled an honest SDP-planning teacher and now beats PPO on **all 4 extended
+identity surfaces** (physics-v2 v2cal: standard 3.84×, dispatch 1.80×, expanded 6.70×, 2025
+OOD 6.39×; all four paired CIs exclude zero) and passes the impact gate (see `report.md §8.2.11`).
 
 **Conclusion (updated Aug 2026):** the Stage C DT with `rtg_mode="auto"` now
 passes all required gates: standard, expanded, 2025 OOD, and impact. The

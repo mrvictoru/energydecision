@@ -705,8 +705,8 @@ footer strong { color: var(--ink); }
         <canvas id="headlineChart" role="img" aria-label="Grouped bar chart: Decision Transformer versus PPO profit across four identity surfaces"></canvas>
       </div>
       <div class="no-chart-msg" data-chart-fallback>Chart unavailable (offline). Exact values are in the table below.</div>
-      <p class="chart-caption">Standard Oct: 5 regions × 144 h · Dispatch-matched: same-asset Dalrymple North (8 MWh / 30 MW) SA1 ·
-        Expanded broad-2024: 5 regions × 6 periods · 2025 OOD: NSW1/SA1/QLD1 × Jan/Feb (unseen year).</p>
+      <p class="chart-caption">Standard 2024: 5 regions × 6 periods (n=30) · Dispatch-matched: same-asset Dalrymple North (8 MWh / 30 MW) SA1 full-year (n=12) ·
+        Expanded broad-2024: 5 regions × 6 periods (n=30) · 2025 OOD: NSW1/SA1/QLD1 × Jan/Feb (unseen year, n=6).</p>
       <div class="legend-note">
         <span class="ln-dt">Decision Transformer (shipped)</span>
         <span class="ln-ppo">PPO reference (online RL)</span>
@@ -986,10 +986,10 @@ footer strong { color: var(--ink); }
 <section id="evidence">
   <div class="container reveal">
     <span class="section-kicker">Statistical rigor</span>
-    <h2>Three of four identity CIs exclude zero; impact gate 9/9</h2>
+    <h2>All four identity CIs exclude zero; impact gate 9/9</h2>
     <p class="section-sub">Bootstrap resampling (10,000 draws) over matched cells plus paired Wilcoxon signed-rank tests
-      (physics-v2 v2cal; regenerated in <code>paper/audit/artifacts/stagec_v2cal_significance.json</code>).
-      Expanded broad-2024 is marginal (CI spans zero). The paired-difference CI is the primary evidence at small n.</p>
+      (extended fresh surfaces; regenerated in <code>paper/audit/artifacts/stagec_v2cal_extended_significance.json</code>).
+      Standard 5→30, dispatch 6→12, expanded 27→30; 2025 OOD n=6. The paired-difference CI is the primary evidence.</p>
     <div class="table-wrap">
       <table>
         <thead><tr>
@@ -997,16 +997,16 @@ footer strong { color: var(--ink); }
           <th scope="col" class="num">95% CI</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Wilcoxon p</th>
         </tr></thead>
         <tbody>
-          <tr><td>Standard Oct</td><td class="num">5</td><td class="num pos">+$13,856</td><td class="num">[+$12,908, +$14,966]</td><td class="num">5/5</td><td class="num">0.0625*</td></tr>
-          <tr><td>Dispatch-matched</td><td class="num">6</td><td class="num pos">+$17,509</td><td class="num">[+$6,090, +$25,825]</td><td class="num">5/6</td><td class="num">0.0625*</td></tr>
-          <tr><td>Expanded broad-2024</td><td class="num">27</td><td class="num pos">+$12,643</td><td class="num">[−$622, +$23,926]</td><td class="num">25/27</td><td class="num"><strong>0.0004</strong></td></tr>
-          <tr><td>2025 OOD</td><td class="num">6</td><td class="num pos">+$24,294</td><td class="num">[+$12,780, +$44,663]</td><td class="num">6/6</td><td class="num">0.0312*</td></tr>
-          <tr><td>Impact gate (piecewise, fixed fallback)</td><td class="num">9</td><td class="num pos">+$167,099</td><td class="num">[+$101,213, +$227,362]</td><td class="num">9/9</td><td class="num">0.0039*</td></tr>
+          <tr><td>Standard 2024</td><td class="num">30</td><td class="num pos">+$12,198</td><td class="num">[+$9,181, +$14,738]</td><td class="num">29/30</td><td class="num"><strong>2.3e-6</strong></td></tr>
+          <tr><td>Dispatch-matched</td><td class="num">12</td><td class="num pos">+$14,973</td><td class="num">[+$4,794, +$22,663]</td><td class="num">10/12</td><td class="num"><strong>0.027</strong></td></tr>
+          <tr><td>Expanded broad-2024</td><td class="num">30</td><td class="num pos">+$24,775</td><td class="num">[+$13,509, +$41,434]</td><td class="num">29/30</td><td class="num"><strong>3.7e-9</strong></td></tr>
+          <tr><td>2025 OOD</td><td class="num">6</td><td class="num pos">+$25,974</td><td class="num">[+$12,708, +$49,850]</td><td class="num">6/6</td><td class="num"><strong>0.031</strong></td></tr>
+          <tr><td>Impact gate (piecewise, fixed fallback)</td><td class="num">9</td><td class="num pos">+$167,099</td><td class="num">[+$101,213, +$227,362]</td><td class="num">9/9</td><td class="num"><strong>0.0039</strong></td></tr>
         </tbody>
       </table>
     </div>
-    <p class="footnote">* Bounded Wilcoxon minimum at small n (see note on the results table). Scenario-level pairing: each cell is one deterministic episode;
-      statistical treatment resamples cells, not episodes. Point estimates on low-n surfaces should be read alongside their intervals.</p>
+    <p class="footnote">Scenario-level pairing: each cell is one deterministic episode; the statistical treatment resamples cells, not episodes.
+      DT inference is deterministic; PPO/fcas-rule baselines carry ~1% run-to-run noise on long episodes (see report §8.2.11).</p>
   </div>
 </section>
 
@@ -1435,10 +1435,10 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
    ===================================================================== */
 var DATA = {
   headline: [
-    { surface: "Standard Oct",        dt: 16209, ppo: 2353,  diff: "+$13,856", ciLo: 12908, ciHi: 14966,  n: 5,  winRate: "5/5",   p: "0.0625*" },
-    { surface: "Dispatch-matched",    dt: 40039, ppo: 22530, diff: "+$17,509", ciLo: 6090,  ciHi: 25825,  n: 6,  winRate: "5/6",   p: "0.0625*" },
-    { surface: "Expanded broad-2024", dt: 32146, ppo: 19504, diff: "+$12,643", ciLo: -622,  ciHi: 23926,  n: 27, winRate: "25/27", p: "0.0004" },
-    { surface: "2025 OOD",            dt: 30791, ppo: 6498,  diff: "+$24,294", ciLo: 12780, ciHi: 44663,  n: 6,  winRate: "6/6",   p: "0.0312*" }
+    { surface: "Standard 2024",       dt: 16501, ppo: 4303,  diff: "+$12,198", ciLo: 9181,  ciHi: 14738, n: 30, winRate: "29/30", p: "2.3e-6" },
+    { surface: "Dispatch-matched",    dt: 33791, ppo: 18818, diff: "+$14,973", ciLo: 4794,  ciHi: 22663, n: 12, winRate: "10/12", p: "0.027" },
+    { surface: "Expanded broad-2024", dt: 29124, ppo: 4350,  diff: "+$24,775", ciLo: 13509, ciHi: 41434, n: 30, winRate: "29/30", p: "3.7e-9" },
+    { surface: "2025 OOD",            dt: 30791, ppo: 4817,  diff: "+$25,974", ciLo: 12708, ciHi: 49850, n: 6,  winRate: "6/6",   p: "0.031" }
   ],
   impactGate: [
     { battery: "Small (~8 MWh)",            dt: 48098,  ppo: 11031 },
@@ -1460,8 +1460,8 @@ var DATA = {
       desc: "Structural decomposition: a waypoint-DT predicts a coarse target-SOC trajectory; an LP executor co-optimizes energy + all 8 FCAS within each segment. First policy to beat PPO on all four identity surfaces ($291,841/ep dispatch-matched). Fatal flaw: the LP sees full-episode prices — perfect foresight, not deployable." },
     { stage: 7, name: "Honest SDP executor", arch: "waypoint-DT + SDP", data: "seasonal forecast only", dm: 59091, solver: true,
       desc: "Replacing the clairvoyant LP with a non-clairvoyant SDP planner (seasonal forecast, degradation-aware) lifted the foresight caveat — and beat the LP out-of-distribution ($59,091 DM, wins on expanded and 2025 OOD). Honest planners generalize better than clairvoyant ones. A solver still runs at inference." },
-    { stage: 8, name: "Standalone J_t(soc) DT — SHIPPED", arch: "8×768 mixed-head", data: "SDP teacher trajs (640 eps, wear-calibrated)", dm: 40039,
-      desc: "The teacher distilled into a standalone transformer with no solver at inference. Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped (physics-v2, aemo_dt_sdp_jtsoc_v2cal.pt) with rtg_mode=\"auto\": beats PPO on all four identity surfaces and passes the market-impact gate." }
+    { stage: 8, name: "Standalone J_t(soc) DT — SHIPPED", arch: "8×768 mixed-head", data: "SDP teacher trajs (320 eps, wear-calibrated)", dm: 33791,
+      desc: "The teacher distilled into a standalone transformer with no solver at inference. Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped (physics-v2, aemo_dt_sdp_jtsoc_v2cal.pt) with rtg_mode=\"auto\": beats PPO on all four extended identity surfaces (n=30/12/30/6, all paired CIs exclude zero) and passes the market-impact gate." }
   ],
   failedFixes: [
     { fix: "RTG prompt sweep (0–50)", result: "Flat — not a prompting artifact.", tag: "negative" },

@@ -36,7 +36,7 @@
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 identity surfaces + the market-impact gate**: standard $16.2k vs $2.35k (6.9×), dispatch-matched $40.0k vs $22.5k (1.78×), expanded 2024 $32.1k vs $19.5k (1.65×), 2025 OOD $30.8k vs $6.5k (4.74×). Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is re-baselined (buckets A+B, 2026-09-20):** calibrated `h4_v2c` teacher, RTE-matched oracle, retrained forecast arms and 9 SB3 checkpoints. Open household work is bucket C only (live shadow, spot pass-through, broader telemetry).
+**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 extended identity surfaces + the market-impact gate**: standard-2024 $16.5k vs $4.3k (3.84×, n=30), dispatch-matched $33.8k vs $18.8k (1.80×, n=12), expanded 2024 $29.1k vs $4.4k (6.70×, n=30), 2025 OOD $30.8k vs $4.8k (6.39×, n=6) — all four paired CIs exclude zero. Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is re-baselined (buckets A+B, 2026-09-20):** calibrated `h4_v2c` teacher, RTE-matched oracle, retrained forecast arms and 9 SB3 checkpoints. Open household work is bucket C only (live shadow, spot pass-through, broader telemetry).
 
 **What we don't have (the open problems):**
 

@@ -33,15 +33,15 @@ pipeline_tag: reinforcement-learning
 
 ## Results (physics-v2 shipped model, `aemo_dt_sdp_jtsoc_v2cal.pt`, `rtg_mode="auto"`)
 
-| Surface | This model | PPO | Ratio vs PPO |
-|---|---:|---:|---:|
-| Standard Oct | **$16,209/ep** | $2,353 | **6.9×** |
-| Dispatch-matched | **$40,039/ep** | $22,530 | 1.78× |
-| 2025 OOD | **$30,791/ep** | $6,498 | 4.74× |
-| Expanded broad-2024 | **$32,146/ep** | $19,504 | 1.65× |
-| Market impact (piecewise merit-order) | **DT well above PPO** (e.g. Hornsdale-class SA1 Oct ≈ $362k vs PPO ≈ $75k) | — | passes |
+| Surface | This model | PPO | Ratio vs PPO | n |
+|---|---:|---:|---:|---:|
+| Standard 2024 (5 regions × 6 periods) | **$16,501/ep** | $4,303 | **3.84×** | 30 |
+| Dispatch-matched (SA1 full-year) | **$33,791/ep** | $18,818 | 1.80× | 12 |
+| Expanded broad-2024 | **$29,124/ep** | $4,350 | 6.70× | 30 |
+| 2025 OOD | **$30,791/ep** | $4,817 | 6.39× | 6 |
+| Market impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.71× / torrens 4.67× | — | passes | 9 |
 
-All four identity surfaces beat PPO. Methodology, the physics fixes, and the full experiment ladder: [report.md §8.2.10/§8.2.11](https://github.com/mrvictoru/energydecision/blob/main/report.md) and [docs/known_issues.md](https://github.com/mrvictoru/energydecision/blob/main/docs/known_issues.md).
+All four identity surfaces beat PPO with paired-difference 95% CIs excluding zero. Methodology, the physics fixes, and the full experiment ladder: [report.md §8.2.10/§8.2.11](https://github.com/mrvictoru/energydecision/blob/main/report.md) and [docs/known_issues.md](https://github.com/mrvictoru/energydecision/blob/main/docs/known_issues.md).
 
 ## Provenance: what changed in physics-v2
 
