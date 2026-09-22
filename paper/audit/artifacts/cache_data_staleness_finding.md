@@ -73,3 +73,22 @@ On the 144 h standard surface they matched to <0.1%.
 Artifacts: `probe_fresh_standard.log`, `probe_fresh_2025.log`, `det_test.log`,
 `artifacts/spotcheck_standard.txt`; configs `sdp_teacher_standard_freshprobe.json`,
 `sdp_teacher_2025_fresh.json`, `det_nsw1may_{a,b}.json`.
+
+---
+
+## Fix implemented (2026-09-22)
+
+`scripts/autoresearch_evaluator.py::_reference_rollout_cache_path` now includes, in
+the cache key payload:
+- `model_sha256` — SHA-256 of the policy's model file (so new PPO weights invalidate);
+- `data_fingerprint` — content fingerprint of the processed price/FCAS frame
+  (shape + columns + `hash_rows` sum), so regenerated `processed_*.parquet` invalidate;
+- schema bumped to `...rollout_cache.v2`.
+
+Validation: re-running the standard surface with the **old cache files present in the
+same directory** produced **0 hits / 10 misses** and wrote new-key files; the resulting
+numbers are identical to the independent fresh run (DT 16208.5862, PPO 2354.8169).
+Old-schema files are left on disk but are now unreachable.
+
+**No retraining was involved** — the DT checkpoint was already correct; only the cached
+baselines were stale.

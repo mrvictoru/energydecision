@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -394,6 +395,45 @@ def _cache_slug(value: str) -> str:
     return slug or "cache"
 
 
+@lru_cache(maxsize=None)
+def _file_sha256(path_str: str) -> str | None:
+    """Content hash of a file, or None if it does not exist. Cached per path."""
+    path = Path(path_str)
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _model_sha256(policy_cfg: dict[str, Any]) -> str | None:
+    """Hash the policy's model file so cache entries invalidate when weights change."""
+    model_path = policy_cfg.get("model_path")
+    if not model_path:
+        return None
+    path = Path(str(model_path))
+    if not path.is_absolute():
+        path = repo_root() / path
+    return _file_sha256(str(path))
+
+
+def _processed_data_fingerprint(processed_data: pl.DataFrame) -> str:
+    """Cheap content fingerprint of the processed price/FCAS data.
+
+    Prevents reuse of rollouts computed against a different data version (the
+    evaluator rewrites data/aemo/processed_*.parquet between runs)."""
+    digest = hashlib.sha256()
+    digest.update(str(processed_data.shape).encode())
+    digest.update(",".join(processed_data.columns).encode())
+    try:
+        digest.update(str(processed_data.hash_rows(seed=0).sum()).encode())
+    except Exception:
+        pass
+    return digest.hexdigest()[:16]
+
+
 def _reference_rollout_cache_path(
     *,
     reference_cache_dir: Path,
@@ -401,10 +441,13 @@ def _reference_rollout_cache_path(
     scenario: dict[str, Any],
     battery_variant: dict[str, Any],
     heldout_cfg: dict[str, Any],
+    processed_data: pl.DataFrame,
 ) -> tuple[Path, str]:
     payload = {
-        "schema": "energydecision.autoresearch_rollout_cache.v1",
+        "schema": "energydecision.autoresearch_rollout_cache.v2",
         "policy": {key: value for key, value in policy_cfg.items() if key != "cache_rollouts"},
+        "model_sha256": _model_sha256(policy_cfg),
+        "data_fingerprint": _processed_data_fingerprint(processed_data),
         "scenario": {
             "label": scenario["label"],
             "region": scenario["region"],
@@ -1158,6 +1201,7 @@ def evaluate_aemo_heldout(
                 scenario=item["runtime_scenario"],
                 battery_variant=item["battery_variant"],
                 heldout_cfg=heldout_cfg,
+                processed_data=item["processed_data"],
             )
             if cache_path.is_file():
                 tagged = _split_episode_logs(pl.read_parquet(cache_path))
