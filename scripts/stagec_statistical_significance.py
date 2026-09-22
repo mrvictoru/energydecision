@@ -1,4 +1,14 @@
-"""Statistical significance for the Stage C DT headlines (report.md §8.2.10).
+"""Statistical significance for the **v1** Stage C DT headlines (report.md §8.2.10).
+
+> **SUPERSEDED (2026-09-22).** This script's `SURFACES` dict hardcodes the v1
+> `stagec_jtsoc_*_rtgjtsoc` directories, so its output
+> (`eval_output/stagec_statistical_significance.json`) describes the v1
+> `aemo_dt_sdp_jtsoc_fullcorpus.pt` checkpoint, **not** the shipped physics-v2
+> `aemo_dt_sdp_jtsoc_v2cal.pt`. For the shipped/extended surfaces use
+> `paper/audit/reproduce_significance.py`, which emits
+> `paper/audit/artifacts/stagec_v2cal_extended_significance.json`
+> (standard n=30, dispatch n=12, expanded n=30, 2025 n=6). Retained for v1
+> provenance.
 
 Part A — identity surfaces: pairs candidate_dt vs ppo_reference per scenario from
 the autoresearch evaluator's heldout_metrics_by_scenario.csv (_rtgjtsoc runs,
