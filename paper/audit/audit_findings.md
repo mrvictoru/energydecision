@@ -213,6 +213,18 @@ and the `medium_1c` battery class (in-distribution by design, not leakage).
 - Shipped checkpoint sha256 `73fe14bd…e09f`; corpus
   `dt_trajectories_jtsoc_v2cal_conservative.parquet`.
 
-**Still open for Phase 1:** independent re-run of the four identity surfaces
-(existing CSVs trusted so far) and the small-n decision (standard n=5,
-dispatch n=6, 2025 n=6).
+**Still open for Phase 1:** the small-n decision (standard n=5, dispatch n=6,
+2025 n=6).
+
+**Identity-surface reproduction — SPOT-CHECK PASS (full re-run skipped).**
+No AEMO eval-path source file changed after the v2cal artifacts were produced
+(2026-09-14/15); the only `src/`/`scripts/` commits since are household-only.
+The evaluator is deterministic (fixed scenarios, `deterministic=True` PPO served
+from `reference_cache`, deterministic DT forward pass, stats fitted from the same
+data). A single-surface re-run of **standard** from the frozen tag reproduced
+`heldout_metrics_by_scenario.csv` **byte-for-byte** (`cmp -s` identical; DT mean
+16208.586198 in both). Artifact: `paper/audit/artifacts/spotcheck_standard.txt`,
+script `paper/audit/spotcheck_standard.sh`. The dispatch/expanded/2025 re-runs are
+therefore **skipped as redundant** (same code path, checkpoint, and cached
+reference policy) and this decision is recorded rather than silently omitted.
+Cost of the skipped full re-run would have been ~35–40 min, not days.

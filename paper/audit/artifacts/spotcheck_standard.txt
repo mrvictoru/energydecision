@@ -1,0 +1,34 @@
+Phase 1 reproducibility spot-check — standard identity surface
+==============================================================
+
+Date:     2026-09-22
+Frozen:   commit c815c51 (tag preprint-v1)
+Command:  paper/audit/spotcheck_standard.sh
+          python3 scripts/autoresearch_evaluator.py \
+            --surface-manifest-path models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal_loss_surface_manifest.json \
+            --evaluation-config configs/aemo_autoresearch_evaluator.sdp_teacher_standard.json \
+            --output-dir eval_output/physics_v2/standard_v2cal_spotcheck
+Env:      AEMO_CACHE_ONLY=1, distrobox energydecision-gpu
+
+Result:   heldout_metrics_by_scenario.csv is IDENTICAL (byte-for-byte, cmp -s)
+          to the stored eval_output/physics_v2/standard_v2cal artifact.
+
+          policy          stored mean      spot-check mean
+          candidate_dt    16208.586198     16208.586198
+          ppo_reference    2352.701767      2352.701767
+          fcas_rule      -56095.360774    -56095.360774
+
+Interpretation
+--------------
+The evaluator is deterministic (fixed scenarios, PPO deterministic=True and
+served from reference_cache, DT action selection is a deterministic forward
+pass, global stats fitted from the same data). Combined with the finding that
+no AEMO eval-path source file changed after the v2cal artifacts were produced
+(2026-09-14/15), this establishes that the stored identity-surface numbers are
+reproducible from the frozen release.
+
+Decision: the full four-surface re-run is therefore SKIPPED as redundant. The
+dispatch, expanded, and 2025 surfaces use the same evaluator code path, the same
+checkpoint, and the same cached reference policy; the standard surface is a
+representative bit-identical reproduction. This is documented rather than
+silently omitted.
