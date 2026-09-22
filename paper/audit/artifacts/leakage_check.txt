@@ -1,0 +1,66 @@
+== Training source files (per region) ==
+  NSW1  2021-01-01 00:05:00  ->  2023-04-01 00:00:00   (data/aemo/processed_NSW1_2021-01-01_2023-04-01_0.0833h.parquet)
+  QLD1  2021-01-01 00:05:00  ->  2023-04-01 00:00:00   (data/aemo/processed_QLD1_2021-01-01_2023-04-01_0.0833h.parquet)
+  SA1   2022-04-01 00:05:00  ->  2023-12-01 00:00:00   (data/aemo/processed_SA1_2022-04-01_2023-12-01_0.0833h.parquet)
+  TAS1  2021-01-01 00:05:00  ->  2023-04-01 00:00:00   (data/aemo/processed_TAS1_2021-01-01_2023-04-01_0.0833h.parquet)
+  VIC1  2021-04-01 00:05:00  ->  2023-12-01 00:00:00   (data/aemo/processed_VIC1_2021-04-01_2023-12-01_0.0833h.parquet)
+
+== Eval windows (from configs) ==
+  NSW1  2024-10-01 -> 2024-10-14
+  SA1   2024-10-01 -> 2024-10-14
+  QLD1  2024-10-01 -> 2024-10-14
+  VIC1  2024-10-01 -> 2024-10-14
+  TAS1  2024-10-01 -> 2024-10-14
+  SA1   2024-07-01 -> 2024-07-14
+  SA1   2024-08-01 -> 2024-08-14
+  SA1   2024-09-01 -> 2024-09-14
+  SA1   2024-11-01 -> 2024-11-14
+  SA1   2024-12-01 -> 2024-12-14
+  NSW1  2024-01-01 -> 2024-01-14
+  NSW1  2024-03-01 -> 2024-03-14
+  NSW1  2024-05-01 -> 2024-05-14
+  NSW1  2024-07-01 -> 2024-07-14
+  NSW1  2024-09-01 -> 2024-09-14
+  NSW1  2024-11-01 -> 2024-11-14
+  QLD1  2024-01-01 -> 2024-01-14
+  QLD1  2024-03-01 -> 2024-03-14
+  QLD1  2024-05-01 -> 2024-05-14
+  QLD1  2024-07-01 -> 2024-07-14
+  QLD1  2024-09-01 -> 2024-09-14
+  QLD1  2024-11-01 -> 2024-11-14
+  SA1   2024-01-01 -> 2024-01-14
+  SA1   2024-03-01 -> 2024-03-14
+  SA1   2024-05-01 -> 2024-05-14
+  VIC1  2024-01-01 -> 2024-01-14
+  VIC1  2024-03-01 -> 2024-03-14
+  VIC1  2024-05-01 -> 2024-05-14
+  VIC1  2024-07-01 -> 2024-07-14
+  VIC1  2024-09-01 -> 2024-09-14
+  VIC1  2024-11-01 -> 2024-11-14
+  TAS1  2024-01-01 -> 2024-01-14
+  TAS1  2024-03-01 -> 2024-03-14
+  TAS1  2024-05-01 -> 2024-05-14
+  NSW1  2025-01-01 -> 2025-01-14
+  NSW1  2025-02-01 -> 2025-02-14
+  SA1   2025-01-01 -> 2025-01-14
+  SA1   2025-02-01 -> 2025-02-14
+  QLD1  2025-01-01 -> 2025-01-14
+  QLD1  2025-02-01 -> 2025-02-14
+
+== Overlap verdict ==
+  latest training-source timestamp across regions: 2023-12-01 00:00:00
+  earliest eval window start: 2024-01-01
+  NO temporal overlap. Gap between latest training source and earliest eval: 31 days.
+
+== J_t(soc) seasonal-profile source ==
+  NSW1  profile cache: present
+  QLD1  profile cache: present
+  SA1   profile cache: present
+  TAS1  profile cache: present
+  VIC1  profile cache: present
+  build_seasonal_rrp_profile() calls find_training_parquet() -> pre-2024 only
+  (src/aemo_sdp_executor.py:81-114). No eval-period prices enter the prompt.
+
+== Dimensions note ==
+  Training slices are within-region windows from the files above; eval scenarios
+  are the 2024/2025 windows listed. Disjoint in time by construction.

@@ -178,5 +178,41 @@ fallback is a fixed constant RTG.
 - [x] Checkpoint/corpus provenance pinned (A5–A6)
 - [x] v2cal significance regenerated and saved (B1)
 - [x] v2cal impact gate run and reported with a defensible selection rule (C1–C4)
-- [ ] `report.md` single canonical number set; §8.2.11 resolved (D1, E1)
+- [x] `report.md` single canonical number set; §8.2.11 resolved (D1, E1) — commit `c7abb82`
 - [ ] Preprint table built only from `paper/audit/provenance.tsv` rows marked `TRACED`
+
+## 6. Phase 1 — release freeze and leakage check
+
+**Leakage check (reviewer question #1): PASS.** `paper/audit/check_leakage.py`
+(artifact: `paper/audit/artifacts/leakage_check.txt`) confirms, from the source
+parquets themselves, that every training slice is pre-2024:
+
+| Region | Training source span |
+|---|---|
+| NSW1 | 2021-01-01 → 2023-04-01 |
+| QLD1 | 2021-01-01 → 2023-04-01 |
+| SA1 | 2022-04-01 → 2023-12-01 |
+| TAS1 | 2021-01-01 → 2023-04-01 |
+| VIC1 | 2021-04-01 → 2023-12-01 |
+
+Latest training timestamp **2023-12-01**; earliest eval window **2024-01-01**
+(31-day gap). Eval windows are 2024 (identity/dispatch/expanded) and 2025 (OOD).
+No temporal overlap in any region. The J_t(soc) prompt's seasonal-RRP profile is
+built by `build_seasonal_rrp_profile()` from `find_training_parquet()` (pre-2024
+only; `src/aemo_sdp_executor.py:81-114`), so no eval-period prices enter the
+prompt. **Caveat to state in the paper:** the trajectory corpus stores no
+timestamps, so this is verified at the *source-frame* level (the generator's
+`REGION_FILES`), not per-row in the corpus; and train/eval share the same regions
+and the `medium_1c` battery class (in-distribution by design, not leakage).
+
+**Release freeze.**
+- Environment pinned: `paper/environment.txt` (Python 3.10.12, torch 2.9.0+cu130,
+  CUDA 13.0, RTX 2080 Ti driver 595.91.07, full `pip freeze`).
+- Reproduce with `paper/audit/freeze_env.sh`.
+- Tag `preprint-v1` marks the frozen commit.
+- Shipped checkpoint sha256 `73fe14bd…e09f`; corpus
+  `dt_trajectories_jtsoc_v2cal_conservative.parquet`.
+
+**Still open for Phase 1:** independent re-run of the four identity surfaces
+(existing CSVs trusted so far) and the small-n decision (standard n=5,
+dispatch n=6, 2025 n=6).
