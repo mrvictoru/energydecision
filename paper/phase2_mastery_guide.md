@@ -271,22 +271,30 @@ parens.
    **answer:** It was tuned with a 10 trial optuna search over a bunch of hyper-parameter such as lr, dicount facotr, model size. then trained for up to 4 million steps on 2021-2023 data across 5 region.
 2. **"Isn't distilling the same env's planner circular?"** (honest executor ≠
    foresight; §8.2.10 Stage A/B; leakage check)
+   **answer:** Not circular as we are trying to learn the planner behaviour but the training data doesnt contain eval data for the model
 3. **"It's all simulator — does any of this transfer?"** (sim-to-real is the stated
    open item; §9 Phase 4)
+   **answer:** The sim result on 2024 and 2025 data shows the model can generalize across helout market period, included test with modeled market impact. while simulation is not the same as real hardware testing, it is resonable to believe it can transfer over (and it is the next stage of the evaluation)
 4. **"Why does the DT beat a planner teacher that's supposedly better?"**
    (standalone vs solver-in-the-loop; §8.2.10)
+   **answer:** The student doesnt outperform the teacher consistantly. it is about transferring useful planner behaviour efficently
 5. **"n=30/12/30/6 — is that enough?"** (bootstrap over cells; paired CI primary;
    small-n assessment)
+   **answer:** There are supportive evidence but not solid proof, more could improve.
 6. **"Your Wilcoxon p is bounded at small n."** (n=6 → min 0.031; explain sign)
+   **answer:** Yes, given there are only 6 testing. there is a lower bound of p
 7. **"You changed the physics and the numbers moved a lot."** (A1–A8; v1 vs v2cal;
    own it)
+   **answer:** Error were found in the degradation model and planner's wear calculation. so it was corrected, and new data was regenerated and used to retrained the model. all evaluation was reran. evaluation surfaces were expanded and stale reference caches were fixed, so not every shift in the headline numbers is caused by physics alone.
 8. **"Why not IQL/CQL — why decision transformer at all?"** (§8.2.10 positioning;
    FUTURE_PLAN 2.2)
+   **answer:** We we are testing DT for this application as it is the new ML model architecture that seems to be able to generalise
 9. **"What are the market-impact model's assumptions?"**
    (`PiecewiseMeritOrderImpact`; price-taker vs endogenous)
+   **answer:** Without impact, the battery is treated as a price-taker: it uses the historical RRP and FCAS prices, and its own dispatch doesn’t change them. With impact enabled, the model approximates an endogenous effect: charging adds demand and can raise the energy price; discharging adds supply and can lower it. FCAS prices are reduced according to the battery’s share of an estimated market depth. This is a simplified, per-interval market model—not a full AEMO market re-clear.
 10. **"You said PPO isn't reproducible — is your comparison fair?"** (~1% noise;
     wide CIs; fixed cache keys)
-
+    **answer:** The extended runs used fresh caches and consistent data/physics, and the paired confidence intervals excluded zero on all four reported surfaces. PPO did show small run-to-run variation on a long-episode probe (~0.7%), so the result isn’t bit-for-bit reproducible—but that’s different from the comparison being unfair. I’d describe it as strong comparative evidence with a reproducibility caveat, not definitive proof that PPO will always lose.
 **Pass bar:** no note-lookups, and for each you cite a concrete artifact.
 
 ---
