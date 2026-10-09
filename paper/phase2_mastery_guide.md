@@ -73,6 +73,8 @@ a peeking oracle? Does `deg_calibration` change the *policy* or just the reporte
 cost? What does "honest executor" mean vs the LP (perfect-foresight) stage?
 
 ---
+**Summary:** The AEMO SDP solver represents the battery using a grid of SOC states and candidate charge/discharge actions. It works backward through time: for each SOC, it compares each feasible action’s forecast energy cost and wear cost plus the future cost of the resulting SOC. In waypoint dispatch, a terminal penalty encourages the plan to reach a specified SOC target; after building the policy, the solver rolls it forward from the starting SOC to produce actions. The price forecast is normally a month-and-hour average from pre-2024 data, not the episode’s actual future RRP. Separately, the free-terminal cost-to-go table estimates remaining cost for each time/SOC and supplies RTG = -cost_to_go as a DT prompt—it does not itself choose the dispatch path. FCAS bids are added by a separate greedy rule, not optimized by the energy SDP.
+---
 
 ## Module 2 — Teacher → trajectory corpus (~60–75 min)
 
@@ -106,6 +108,8 @@ the corpus stores **no timestamps** (the leakage caveat).
 (`episode_id, step, norm_observation, action, reward, source_policy, rtg_value`)
 and how `rtg_value` is computed.
 
+---
+***Summary:** generate_sdp_dt_trajectories.py samples historical episode windows by region, horizon, and battery. It requires a previously trained waypoint DT, whose SOC-waypoint labels came from offline Oracle LP trajectories. That model proposes coarse SOC targets; the SDP plans energy between them, and a greedy rule adds FCAS bids. The simulated episode produces observation, action, and reward rows for a new, standalone DT to learn from. With --rtg-mode j_t_soc, the script also adds a per-step cost-to-go-derived RTG value. Thus, this is a hybrid teacher pipeline—not a pure SDP generator—and its waypoint predictions are learned estimates, not guaranteed optima for each sampled episode. The waypoint-label and training history is documented in aemo_dt_preferred_policy_plan.md.
 ---
 
 ## Module 3 — Training the student (~75–90 min)
@@ -147,6 +151,14 @@ evaluation once "collapse"? (Loader passed a state dict, so the model kept
 Read `docs/known_issues.md` B8 and `report.md` §8.2.10.
 
 ---
+**Summary:** Training is a forward pass, loss calculation, backpropagation, and optimizer update. Same training loop as pretraining for LLM; each training batch, the dataset supplies short trajectory windows: observations, actions, RTGs, timesteps, and a mask for padding. the model reads the them as RTG, state and acction tokens and predicts actions with auxiliary state and RTG predictions. The loop compares those predictions with the recorded value using masked mean-square error.
+total loss =
+    action_loss_weight × action MSE
+  + state_loss_weight  × state MSE
+  + return_loss_weight × RTG MSE
+These are default as 1.0, 0,01 and 0.002 respectively and can be override
+return_scale normalise the RTG before it goes into the transformer. The checkpoint we created should store a checkpoint specific value that is pre-calculated from the training data.
+---
 
 ## Module 4 — Inference: `rtg_mode="auto"` (~60 min)
 
@@ -178,6 +190,8 @@ and `paper/audit/artifacts/cache_data_staleness_finding.md`.
 impact. Then explain why `auto` under impact is a *robustness* choice, not a
 collapse fix.
 
+---
+**Summary:** the auto rtg mode identify if the sim is in impact mode (which means if the demand will be impact by the action we take) it will use constant rtg rather than dynamic j_t(soc) to prompt the model, switching to j_t_soc will use impact-aware dynamic rtg from J_t(soc)
 ---
 
 ## Module 5 — Evaluation & statistics (~60–75 min)
@@ -212,6 +226,8 @@ primary at n<10; Wilcoxon is bounded (n=5 → 0.0625)."
 windows; no retraining) and why n=30 standard / 12 dispatch / 30 expanded / 6 OOD.
 
 ---
+**Summary:** The evaluator tests the trained checkpoint on a set of predefined scenario-and-battery cells. In each cell, it runs the DT and reference policy, such as PPO, on the same conditions and records their profits. Subtracting PPO’s profit from the DT’s profit gives a paired difference for that cell. The mean of those differences summarizes the DT’s average advantage across the tested cells. To estimate uncertainty, the analysis repeatedly resamples the paired cell differences with replacement and recalculates their mean; the 2.5th and 97.5th percentiles of 10,000 bootstrap means form the 95% confidence interval. If the interval excludes zero, that supports an average advantage on the tested surface—not a guarantee of winning on every case or on untested markets. The reported extended surfaces contain 30 standard, 12 dispatch-matched, 30 expanded, and 6 OOD cells. Months within the same region may be correlated, so cell count is not the same as independent-region count. The small-n expansion added evaluation cases; it did not retrain the model.
+---
 
 ## Module 6 — Provenance, leakage, and the ceiling story (~45 min)
 
@@ -233,6 +249,8 @@ one result a reviewer will attack first?*
 strength/tuning).
 
 ---
+**Summary:** The evaluation is traceable with defined config, fixed checkpoint and saved singificance analysis. Training was on pre 2024 data while evaluation is done on data from 2024. However the biggest weakness is that it is still simulation only.
+---
 
 ## Synthesis task — the one-pager (do last, closed-book)
 
@@ -250,6 +268,7 @@ parens.
 
 1. **"How well-tuned is your PPO baseline?"** (eval sweep logs under
    `eval_output/opt_sweep*`, `baseline_*`; `report.md` §8.2.5)
+   **answer:** It was tuned with a 10 trial optuna search over a bunch of hyper-parameter such as lr, dicount facotr, model size. then trained for up to 4 million steps on 2021-2023 data across 5 region.
 2. **"Isn't distilling the same env's planner circular?"** (honest executor ≠
    foresight; §8.2.10 Stage A/B; leakage check)
 3. **"It's all simulator — does any of this transfer?"** (sim-to-real is the stated
