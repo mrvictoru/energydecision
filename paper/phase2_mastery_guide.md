@@ -156,7 +156,7 @@ total loss =
     action_loss_weight × action MSE
   + state_loss_weight  × state MSE
   + return_loss_weight × RTG MSE
-These are default as 1.0, 0,01 and 0.002 respectively and can be override
+The current latest model uses 0.999, 0,002 and 0.0001 respectively and can be override
 return_scale normalise the RTG before it goes into the transformer. The checkpoint we created should store a checkpoint specific value that is pre-calculated from the training data.
 ---
 
@@ -268,27 +268,27 @@ parens.
 
 1. **"How well-tuned is your PPO baseline?"** (eval sweep logs under
    `eval_output/opt_sweep*`, `baseline_*`; `report.md` §8.2.5)
-   **answer:** It was tuned with a 10 trial optuna search over a bunch of hyper-parameter such as lr, dicount facotr, model size. then trained for up to 4 million steps on 2021-2023 data across 5 region.
+   **answer:** It was tuned with a 10 trial optuna search over a bunch of hyper-parameter such as lr, dicount facotr, model size. then trained for up to 4 million steps on 2021-2023 data across 5 region and the shipped model as teacher all use 9-dim one.
 2. **"Isn't distilling the same env's planner circular?"** (honest executor ≠
    foresight; §8.2.10 Stage A/B; leakage check)
-   **answer:** Not circular as we are trying to learn the planner behaviour but the training data doesnt contain eval data for the model
+   **answer:** the teacher sint clairvoyant - as it see seasonal mean for its own forecast rather than real future RRP; also no train/eval overlap; we also conduct 2025 OOD and impact check to see if student can generalise which it can.
 3. **"It's all simulator — does any of this transfer?"** (sim-to-real is the stated
    open item; §9 Phase 4)
    **answer:** The sim result on 2024 and 2025 data shows the model can generalize across helout market period, included test with modeled market impact. while simulation is not the same as real hardware testing, it is resonable to believe it can transfer over (and it is the next stage of the evaluation)
 4. **"Why does the DT beat a planner teacher that's supposedly better?"**
    (standalone vs solver-in-the-loop; §8.2.10)
-   **answer:** The student doesnt outperform the teacher consistantly. it is about transferring useful planner behaviour efficently
+   **answer:** The student doesnt outperform the teacher. it is about transferring useful planner behaviour efficently
 5. **"n=30/12/30/6 — is that enough?"** (bootstrap over cells; paired CI primary;
    small-n assessment)
    **answer:** There are supportive evidence but not solid proof, more could improve.
 6. **"Your Wilcoxon p is bounded at small n."** (n=6 → min 0.031; explain sign)
-   **answer:** Yes, given there are only 6 testing. there is a lower bound of p
+   **answer:** Yes, given there are only 6 testing (n=6 -> p ~ 0.031). there is a lower bound of p, and all paired diffs share a sign so what we got is the strongest attainable. the bootstrap pair-difference CI is the primary evidence.
 7. **"You changed the physics and the numbers moved a lot."** (A1–A8; v1 vs v2cal;
    own it)
    **answer:** Error were found in the degradation model and planner's wear calculation. so it was corrected, and new data was regenerated and used to retrained the model. all evaluation was reran. evaluation surfaces were expanded and stale reference caches were fixed, so not every shift in the headline numbers is caused by physics alone.
 8. **"Why not IQL/CQL — why decision transformer at all?"** (§8.2.10 positioning;
    FUTURE_PLAN 2.2)
-   **answer:** We we are testing DT for this application as it is the new ML model architecture that seems to be able to generalise
+   **answer:** DT is trained with offline data and gives sequence modeling plus RTG-conditioned controllability at inference; IQL/CQL are the natural offline-RL alternative and are planned comparison.
 9. **"What are the market-impact model's assumptions?"**
    (`PiecewiseMeritOrderImpact`; price-taker vs endogenous)
    **answer:** Without impact, the battery is treated as a price-taker: it uses the historical RRP and FCAS prices, and its own dispatch doesn’t change them. With impact enabled, the model approximates an endogenous effect: charging adds demand and can raise the energy price; discharging adds supply and can lower it. FCAS prices are reduced according to the battery’s share of an estimated market depth. This is a simplified, per-interval market model—not a full AEMO market re-clear.
