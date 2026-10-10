@@ -277,7 +277,7 @@ parens.
    **answer:** The sim result on 2024 and 2025 data shows the model can generalize across helout market period, included test with modeled market impact. while simulation is not the same as real hardware testing, it is resonable to believe it can transfer over (and it is the next stage of the evaluation)
 4. **"Why does the DT beat a planner teacher that's supposedly better?"**
    (standalone vs solver-in-the-loop; §8.2.10)
-   **answer:** The student doesnt outperform the teacher. it is about transferring useful planner behaviour efficently
+   **answer:** The student doesnt outperform the teacher. it is about transferring useful planner behaviour efficently, and it does outpeform model trained with onlineRL (PPO).
 5. **"n=30/12/30/6 — is that enough?"** (bootstrap over cells; paired CI primary;
    small-n assessment)
    **answer:** There are supportive evidence but not solid proof, more could improve.
