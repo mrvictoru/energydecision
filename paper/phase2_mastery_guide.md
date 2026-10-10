@@ -299,6 +299,25 @@ parens.
 
 ---
 
+## Harder drill pass
+
+1. **Loss weight selection**
+    return_loss_weight ≈ 0.0001. What is the behavioural consequence for the policy, and where in the report is that consequence used as evidence (not just a setting)?
+   **answer:** Model is trained to copy the dataset's action, rather than to make its return predictions accurate. The market-impact-aware evaluation it points to the DT's impact-resilience results.
+
+2. **Prompt mode behaviour**
+    Auto falls back to a constant RTG under impact — but also that the J_t(soc) table is impact-aware. If it's impact-aware, why not use it under impact?
+   **answer:** An impact-aware (J_t(soc)) is a useful approximation, not a guarantee of the best prompt: it depends on forecasts and a simplified impact model. After fixing an evaluation-scale bug, explicit (J_t(soc)) stopped collapsing, but it still over-traded in some scenario/battery cells. Since constant RTG was slightly better overall in that test, auto uses it under impact as a conservative robustness choice; it does not mean impact-aware (J_t(soc)) is unusable.
+
+3. **Leaks**
+    The teacher uses a pre-2024 monthxhour price profile. name the one thing it does smuggle in / assume.
+   **answer:** It doesn’t leak the evaluation prices, but it assumes the pre-2024 month-and-hour price pattern is informative for the evaluation period. In other words, it gets the calendar, and assumes seasonality is stable; it does not foresee that period’s actual prices or spikes
+
+4. **Retention**
+    Retention spans 51–91%: which surface is the 51% end, and what does that imply about where the standalone DT is weakest? (You can name the surface even if you don't have the number to hand.)
+   **answer:** The 51% case is Standard Oct 2024: that’s where the standalone DT preserves the least of the teacher’s profit. But that retention ratio isn’t the same as ‘worst versus PPO.’ The broader behavioral weakness the report calls out is energy arbitrage on the expanded broad-2024 surface
+---
+
 ## Self-assessment gate (all must be YES before leaving Phase 2)
 
 - [ ] I can explain what `J_t(soc)` is, its units, and how it's built
