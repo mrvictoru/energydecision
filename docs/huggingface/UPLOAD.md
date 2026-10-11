@@ -54,7 +54,37 @@ hf upload "$REPO" README.md README.md --repo-type dataset
 Keep the existing `dt_trajectories_jtsoc_combined.parquet` / `_full` /
 `_aggressive` files; the card marks them historical.
 
-## 3. Verify after upload
+## 3. Waypoint repo: `mrvictoru/energydecision-waypoint-dt`
+
+Corpus-generation helper (**not** the shipped policy). Required by
+`scripts/generate_sdp_dt_trajectories.py` to rebuild the SDP-teacher corpus
+(the hierarchical teacher predicts SOC waypoints with this model, then the SDP
+executor plans between them).
+
+| Local path | Path in repo | Size | sha256 |
+|---|---|---:|---|
+| `models/aemo/dt/soc_waypoint_dt_best.pt` | `soc_waypoint_dt_best.pt` | 603,209,936 B | `ca082bbd363f8b2040a927741b899eeebc15f4e7ff3cb26da08c9d8962737f07` |
+| `models/aemo/dt/soc_waypoint_dt_best.pt.meta.json` | `soc_waypoint_dt_best.pt.meta.json` | 214 B | (arch sidecar) |
+| `models/aemo/dt/soc_waypoint_dt_best.pt.metrics.json` | `soc_waypoint_dt_best.pt.metrics.json` | 203 B | (best val loss) |
+| `models/aemo/dt/soc_waypoint_dt_loss_surface_manifest.json` | `soc_waypoint_dt_loss_surface_manifest.json` | 5.4 KB | (full arch + training kwargs) |
+| `docs/huggingface/energydecision-waypoint-dt_README.md` | `README.md` | — | (card) |
+
+```bash
+REPO=mrvictoru/energydecision-waypoint-dt
+hf upload "$REPO" soc_waypoint_dt_best.pt soc_waypoint_dt_best.pt --repo-type model
+hf upload "$REPO" soc_waypoint_dt_best.pt.meta.json soc_waypoint_dt_best.pt.meta.json --repo-type model
+hf upload "$REPO" soc_waypoint_dt_best.pt.metrics.json soc_waypoint_dt_best.pt.metrics.json --repo-type model
+hf upload "$REPO" soc_waypoint_dt_loss_surface_manifest.json soc_waypoint_dt_loss_surface_manifest.json --repo-type model
+hf upload "$REPO" README.md README.md --repo-type model
+```
+
+**Minimal scope — deliberately NOT uploaded:** the ~1.3 GB SOC-waypoint label
+parquet `data/aemo_dt_soc_oracle/aemo_soc_waypoints.parquet` and the 1.78 GB
+training checkpoint `soc_waypoint_dt_ckpt.pt`. The label generator stays in
+GitHub: `scripts/generate_soc_waypoint_targets.py` (the label data is regenerated
+from the repo + cached AEMO data).
+
+## 4. Verify after upload
 
 ```bash
 python3 - <<'PY'
