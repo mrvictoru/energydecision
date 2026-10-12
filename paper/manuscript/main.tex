@@ -32,6 +32,7 @@
 \usepackage{nicefrac}
 \usepackage{microtype}
 \usepackage{graphicx}
+\usepackage{float}   % [H] = pin floats exactly where written
 \usepackage{xcolor}
 
 % Placeholder box for figures not yet regenerated (Phase 4).
@@ -125,7 +126,7 @@
 
 \subsection{Headline Results}
 % [FACT] table — do not retype; mirror paper/audit/artifacts/stagec_v2cal_extended_significance.json
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{Extended identity surfaces (shipped physics-v2 checkpoint,
   \texttt{rtg\_mode="auto"}). \textbf{All four paired-difference 95\% CIs exclude
@@ -144,7 +145,7 @@
   \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
   \centering
   \figph{Figure 1 placeholder — \texttt{fig1\_main\_results}: DT vs PPO per surface.
     Regenerate in Phase 4 from the extended-surface artifacts.}
