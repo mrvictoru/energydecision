@@ -66,18 +66,23 @@ If a figure/table floats to a weird place, that's normal — LaTeX places floats
 
 ---
 
-## 4. Figures (Phase 4)
+## 4. Figures
 
-The six figures currently in `eval_output/paper_figures/` were generated for the
-**pre-extended** surfaces and must be **regenerated** before publication. In
-Phase 4 we will:
-- regenerate each figure from the extended-surface artifacts
-  (`eval_output/physics_v2/{standard_year,dispatch_year,expanded_full,2025_v2cal_fresh}_v2cal*`),
-- export PDF + PNG into `paper/manuscript/figures/`,
-- replace the `\figph{...}` placeholders with `\includegraphics`.
+Generated from the **extended-surface** artifacts by
+`scripts/stagec_paper_figures_v2.py` (supersedes the v1 `stagec_paper_figures.py`):
 
-Planned figures: (1) DT vs PPO per surface with CIs; (2) J_t(soc) heatmap;
-(3) revenue decomposition; (4) impact-resilience; (5) behaviour/RTG; (6) ceiling-break.
+| File | Content |
+|---|---|
+| `figures/fig1_main_results.pdf` | DT vs PPO across the 4 surfaces + paired-Δ forest plot |
+| `figures/fig5_revenue_decomposition.pdf` | energy / FCAS / degradation decomposition (DT vs PPO) |
+| `figures/fig4_impact_resilience.pdf` | market-impact gate, per-battery DT vs PPO |
+
+Regenerate with `python3 scripts/stagec_paper_figures_v2.py`.
+`main.tex` now uses `\includegraphics{figures/...}`, so **upload the whole
+`figures/` folder to Overleaf**, or compilation will fail with "file not found".
+
+Optional / not yet made: a J_t(soc) heatmap (needs a cost-to-go table build) and a
+ceiling-break figure (historical stage ladder). Add only if space allows.
 
 ---
 

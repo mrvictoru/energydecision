@@ -147,10 +147,20 @@
 
 \begin{figure}[htbp]
   \centering
-  \figph{Figure 1 placeholder — \texttt{fig1\_main\_results}: DT vs PPO per surface.
-    Regenerate in Phase 4 from the extended-surface artifacts.}
-  \caption{Decision Transformer vs PPO across the four identity surfaces.}
+  \includegraphics[width=\linewidth]{figures/fig1_main_results.pdf}
+  \caption{Decision Transformer vs PPO across the four extended identity
+  surfaces. Left: per-episode profit with 95\% bootstrap CIs. Right: the paired
+  difference (DT $-$ PPO) with its 95\% CI; all four exclude zero.}
   \label{fig:main}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/fig5_revenue_decomposition.pdf}
+  \caption{Revenue decomposition (energy, FCAS, degradation) per surface for the
+  DT (solid) and PPO (hatched); the annotated number is net profit per episode.
+  The DT's advantage is dominated by FCAS capture.}
+  \label{fig:revenue}
 \end{figure}
 
 % =============================================================================
@@ -162,7 +172,15 @@
 %   per-battery ratios small 4.36x / hornsdale 4.71x / torrens 4.67x;
 %   paired diff +167,099 USD, 95% CI [101,213, 227,362], p=0.0039.
 %   Key point: value-based prompts must be gated by market power (auto mode).
-% Figure placeholder: impact resilience. See paper/audit/artifacts/stagec_v2cal_impact_analysis.json
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/fig4_impact_resilience.pdf}
+  \caption{Market-impact gate (piecewise merit-order). Mean profit per episode
+  for the shipped DT (fixed \texttt{rtg0.0} fallback) vs PPO across three
+  grid-scale batteries; the DT wins all 9 scenario$\times$battery cells.}
+  \label{fig:impact}
+\end{figure}
 
 % =============================================================================
 \section{Limitations}
