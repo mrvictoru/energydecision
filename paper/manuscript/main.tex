@@ -76,6 +76,17 @@
 %  - One-paragraph summary of results with [FACT] numbers.
 %  \cite{chen2021decision} \cite{ross2011reduction}
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/fig6_ceiling_break.pdf}
+  \caption{The behaviour-cloning ceiling and how it is broken. Within the
+  cloning paradigm (grey) profit improves then plateaus; solver-in-the-loop
+  planners (orange) exceed it but are not deployable; the distilled standalone
+  student (teal) keeps the ceiling broken with no solver at inference. Values are
+  per-stage evaluation surfaces (report \S8.2.7).}
+  \label{fig:ceiling}
+\end{figure}
+
 % =============================================================================
 \section{Related Work}
 % TODO(author): four short paragraphs (see report.md §Related Work / positioning):
@@ -99,18 +110,44 @@
 % =============================================================================
 \section{Method}
 \label{sec:method}
-% TODO(author): the method spine. Subsections:
-%  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
-%      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
-%  4.2 Trajectory generation — teacher rollouts -> (obs, action, reward) triples;
-%      the J_t(soc) cost-to-go column.
-%  4.3 Student DT — architecture, loss:
-%        L = w_a * MSE_action + w_s * MSE_state + w_r * MSE_return
-%      with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal].
-%  4.4 Return-to-go prompting — RTG = -J_t(soc); return_scale calibration;
-%      \texttt{auto} mode = j_t_soc on price-taking surfaces, constant under
-%      market impact (robustness, not collapse-avoidance).
-%  Figure placeholder: pipeline schematic.
+
+\subsection{Honest SDP teacher}
+% TODO(author): 3 paragraphs.
+%  (1) What the teacher sees: cached preprocessed 5-min AEMO data (RRP, demand,
+%      8 FCAS prices, gen mix). Forecast = seasonal month x hour mean RRP from
+%      pre-2024 only; NO realized future prices enter the loop.
+%  (2) The three-stage hierarchy: SOC-waypoint DT (K=8) -> SDP backward induction
+%      (degradation-aware per-step wear, deg_calibration) -> greedy current-price
+%      FCAS bidder.
+%  (3) The free-terminal recursion yields J_t(soc); that becomes the RTG prompt.
+%  Pitfall: it is a HYBRID pipeline, not a pure SDP solver.
+
+\subsection{Trajectory corpus}
+% TODO(author): random windows (5 regions x short ~14d / medium ~8wk x 4 batteries
+%  x 8) -> self-consistent (obs 18-dim, action 9-dim, reward) triples; shipped
+%  corpus 320 eps / 3.13M rows; no timestamps stored (leakage caveat).
+%  Cite scripts/generate_sdp_dt_trajectories.py.
+
+\subsection{Student Decision Transformer}
+% TODO(author): 8x768 GQA, ctx 210, mixed head; loss
+%   L = w_a*MSE_a + w_s*MSE_s + w_r*MSE_r
+%  with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal]. return_scale is
+%  auto-calibrated (p90(|J_t|)/scale ~ 10); shipped 23,284.83.
+%  Pitfall: quote the SHIPPED weights, not the function defaults.
+
+\subsection{Return-to-go prompting and \texttt{auto} mode}
+% TODO(author): RTG = -J_t(soc) looked up per step; auto = j_t_soc on price-taking
+%  surfaces, constant rtg0.0 under market impact (robustness, not collapse-avoidance).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/fig3_jtsoc_heatmap.pdf}
+  \caption{The $J_t(\mathrm{soc})$ return-to-go prompt for a representative window
+  (NSW1, October 2024, seasonal forecast). Value rises with stored energy and
+  decays as the remaining episode shortens; this table supplies the DT's
+  state-dependent RTG prompt.}
+  \label{fig:jtsoc}
+\end{figure}
 
 % =============================================================================
 \section{Experiments}
