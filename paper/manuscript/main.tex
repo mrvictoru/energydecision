@@ -110,34 +110,49 @@
 % =============================================================================
 \section{Method}
 \label{sec:method}
+% TODO(author): the method spine. Subsections:
+%  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
+%      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
+\subsection{SDP}
+% FIXME(author): the sentence below cites "our prior paper" for the SDP
+% formulation — there is no such prior paper. Either write a 2-3 sentence inline
+% formulation, or cite a real, verified reference. Do not cite a non-existent paper.
+Stochastic dynamic programming (SDP) is a finite-horizon planning method that solves sequential decision problems by backward induction: at each state, it selects the action that minimizes immediate cost plus the cost-to-go under a forecast model. In our setting, the state is the battery state of charge and time, the action is charge/discharge, and the objective combines energy cost/revenue with degradation and constraint handling. We do not re-derive the full SDP formulation here; instead, we refer readers to our prior paper for the complete algorithmic treatment and focus on the specific non-clairvoyant teacher used in this work.
+\subsection{SDP Planner/Teacher}
+The teacher uses a hybrid, non-clairvoyant control pipeline. For energy
+dispatch, it constructs a Regional Reference Price (RRP) forecast by averaging
+historical RRP within month-of-year and hour-of-day bins. The profile is estimated from pre-2024 processed data and mapped to the settlement times
+in each episode. Thus, the energy planner receives a seasonal estimate of
+future RRP rather than the episode's realized future prices. Frequency Control Ancillary Services (FCAS) is treated separately: the bidding rule uses
+the prices available at the current step, without forecasting future FCAS prices.
+We use ``honest'' to distinguish this information set from a perfect-foresight 
+planner given realized future prices.
 
-\subsection{Honest SDP teacher}
-% TODO(author): 3 paragraphs.
-%  (1) What the teacher sees: cached preprocessed 5-min AEMO data (RRP, demand,
-%      8 FCAS prices, gen mix). Forecast = seasonal month x hour mean RRP from
-%      pre-2024 only; NO realized future prices enter the loop.
-%  (2) The three-stage hierarchy: SOC-waypoint DT (K=8) -> SDP backward induction
-%      (degradation-aware per-step wear, deg_calibration) -> greedy current-price
-%      FCAS bidder.
-%  (3) The free-terminal recursion yields J_t(soc); that becomes the RTG prompt.
-%  Pitfall: it is a HYBRID pipeline, not a pure SDP solver.
+The control pipeline has three stages. First, a learned State of Charge (SOC) waypoint
+model proposes a sequence of target states of charge; it is a helper that
+sets intermediate targets, not an optimizer. Second, for each interval
+between waypoints, a discretized dynamic program performs backward
+induction over SOC and candidate charge/discharge actions. It minimizes
+forecast energy cost plus an estimated degradation cost and a soft
+terminal penalty for deviation from the segment's target SOC. The wear
+estimate combines the planner's degradation estimator with a linear
+throughput surrogate, scaled by the calibration parameter
+\texttt{deg\_calibration}. Third, after the energy action is selected, a
+greedy bidder assigns available raise and lower headroom to the
+highest-priced eligible FCAS service in each direction, using current
+FCAS prices. Consequently, this is a hybrid energy-planning and
+rule-based FCAS pipeline, not a pure SDP solver or a joint optimizer
+over energy and FCAS.
 
-\subsection{Trajectory corpus}
-% TODO(author): random windows (5 regions x short ~14d / medium ~8wk x 4 batteries
-%  x 8) -> self-consistent (obs 18-dim, action 9-dim, reward) triples; shipped
-%  corpus 320 eps / 3.13M rows; no timestamps stored (leakage caveat).
-%  Cite scripts/generate_sdp_dt_trajectories.py.
-
-\subsection{Student Decision Transformer}
-% TODO(author): 8x768 GQA, ctx 210, mixed head; loss
-%   L = w_a*MSE_a + w_s*MSE_s + w_r*MSE_r
-%  with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal]. return_scale is
-%  auto-calibrated (p90(|J_t|)/scale ~ 10); shipped 23,284.83.
-%  Pitfall: quote the SHIPPED weights, not the function defaults.
-
-\subsection{Return-to-go prompting and \texttt{auto} mode}
-% TODO(author): RTG = -J_t(soc) looked up per step; auto = j_t_soc on price-taking
-%  surfaces, constant rtg0.0 under market impact (robustness, not collapse-avoidance).
+Separately, we compute a free-terminal cost-to-go table
+$J_t(s)$ over time $t$ and discretized battery SOC $s$. Its backward
+recursion estimates the remaining forecast energy and degradation cost
+from each time--SOC pair, with zero terminal cost by default; it is not
+conditioned on reaching a waypoint. At inference, the table is looked up
+at the current time and SOC, and the Decision Transformer receives
+$-J_t(s)$ as its return-to-go prompt. This converts estimated remaining
+cost to a return-valued conditioning signal; it does not give the student
+the SDP policy or run the SDP optimizer at inference.
 
 \begin{figure}[htbp]
   \centering
@@ -148,6 +163,15 @@
   state-dependent RTG prompt.}
   \label{fig:jtsoc}
 \end{figure}
+%  4.2 Trajectory generation — teacher rollouts -> (obs, action, reward) triples;
+%      the J_t(soc) cost-to-go column.
+%  4.3 Student DT — architecture, loss:
+%        L = w_a * MSE_action + w_s * MSE_state + w_r * MSE_return
+%      with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal].
+%  4.4 Return-to-go prompting — RTG = -J_t(soc); return_scale calibration;
+%      \texttt{auto} mode = j_t_soc on price-taking surfaces, constant under
+%      market impact (robustness, not collapse-avoidance).
+%  Figure placeholder: pipeline schematic.
 
 % =============================================================================
 \section{Experiments}
