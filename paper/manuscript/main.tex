@@ -182,9 +182,12 @@ where $\mathcal{A}(s)$ is the set of feasible actions at SOC $s$, $s'$ is
 the resulting next SOC, and $c_t$ includes forecast energy cost and the
 degradation surrogate. Unlike the waypoint-constrained dispatch plan, this
 table has no terminal SOC target. At inference, the table is queried at the
-current time and SOC; the Decision Transformer receives $-J_t(s)$ as its
-return-to-go prompt. The table provides a value-conditioning signal, not
-the SDP policy, and the SDP optimizer is not run during student inference.
+current time and SOC, and the Decision Transformer receives $-J_t(s)$ as its
+return-to-go prompt. The table provides a value-conditioning signal rather than
+the SDP policy: the student selects actions in a single forward pass, with no
+solver in the action-selection loop. The table itself is built by the same
+seasonal dynamic program; because it uses no realized prices, it can be
+precomputed and cached per region, season, and battery.
 
 \begin{figure}[htbp]
   \centering
@@ -246,11 +249,8 @@ weighted combination of action, state, and return prediction losses:
 The loss is therefore dominated by action prediction, while state and return
 prediction provide lower-weight auxiliary objectives. To keep the RTG inputs
 numerically scaled for training, we use an automatically calibrated
-\texttt{return\_scale}. The scale is chosen at training time so that the 90th
-percentile of $|J_t|$ maps to about 10, i.e.\ $\texttt{return\_scale} \approx
-\mathrm{p90}(|J_t|)/10$, computed from the training episodes and then frozen into
-the checkpoint; it is therefore a checkpoint-specific constant rather than a
-universal default. The shipped checkpoint stores 23{,}284.83.
+\texttt{return\_scale}; for the shipped checkpoint it is 23{,}284.83, which maps
+return-to-go values to order-10 magnitudes for the network.
 % NOTE(author): the shipped return_scale (23,284.83) does NOT exactly equal
 % p90(|J_t|)/10 of the released corpus. Recomputing from
 % dt_trajectories_jtsoc_v2cal_conservative.parquet (seed-42 episode split) gives
@@ -260,6 +260,26 @@ universal default. The shipped checkpoint stores 23{,}284.83.
 %      \texttt{auto} mode = j_t_soc on price-taking surfaces, constant under
 %      market impact (robustness, not collapse-avoidance).
 %  Figure placeholder: pipeline schematic.
+\subsection{Return-to-go prompting and \texttt{auto} mode}
+
+At inference time, the Decision Transformer is conditioned on a return-to-go
+(RTG) prompt derived from the teacher's free-terminal value table. Specifically,
+we set $\mathrm{RTG} = -J_t(s)$, normalized by the checkpoint's
+\texttt{return\_scale}, so that higher remaining value corresponds to a larger
+prompt token. This turns the SDP cost-to-go into a value-conditioning signal
+while keeping the action-selection loop solver-free: the student selects actions
+with a single forward pass, and the value table is a function only of the
+seasonal forecast and the SOC grid, so it can be precomputed and cached.
+
+For price-taking evaluation surfaces, the shipped inference mode \texttt{auto}
+resolves to the state-dependent \texttt{j\_t\_soc} prompt: the agent computes
+$J_t(s)$ from the seasonal RRP forecast and the current battery SOC, then feeds
+its negative to the transformer as RTG. Under market-impact evaluation,
+\texttt{auto} instead falls back to a constant \texttt{rtg0.0} prompt. This is
+a robustness choice rather than a failure mode: on large batteries, impact-aware
+value prompts can over-trade energy and self-suppress realized prices, so the
+conservative constant prompt is used when the battery is no longer a negligible
+price taker.
 
 % =============================================================================
 \section{Experiments}
