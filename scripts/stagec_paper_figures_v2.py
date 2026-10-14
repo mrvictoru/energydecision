@@ -244,6 +244,51 @@ def fig6_ceiling_break(out_dir: Path) -> None:
     _save(fig, out_dir, "fig6_ceiling_break")
 
 
+def fig2_pipeline_schematic(out_dir: Path) -> None:
+    from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+    fig, ax = plt.subplots(figsize=(11.0, 4.2))
+    ax.axis("off")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+
+    def box(x, y, w, h, text, fc="#eef2f7", fs=8):
+        ax.add_patch(FancyBboxPatch((x, y), w, h,
+                     boxstyle="round,pad=0.008,rounding_size=0.02",
+                     linewidth=1.0, facecolor=fc, edgecolor="#4a5568"))
+        ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=fs)
+
+    def arrow(x1, y1, x2, y2, ls="-"):
+        ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
+                     mutation_scale=10, linewidth=1.0, linestyle=ls, color="#4a5568"))
+
+    ax.text(0.02, 0.93, "Forecast", fontsize=9, style="italic")
+    ax.text(0.02, 0.62, "Teacher (honest, hybrid)", fontsize=9, style="italic")
+    ax.text(0.02, 0.28, "Distillation", fontsize=9, style="italic")
+
+    box(0.02, 0.74, 0.24, 0.14, "cached pre-2024\nAEMO data")
+    box(0.32, 0.74, 0.30, 0.14, "seasonal RRP profile\n(month$\\times$hour mean)")
+    arrow(0.26, 0.81, 0.32, 0.81)
+
+    box(0.02, 0.40, 0.18, 0.14, "SOC-waypoint DT\n($K{=}8$ targets)", fc="#e8f0fe")
+    box(0.26, 0.40, 0.28, 0.14, "discretised DP\n(energy/SOC,\ndegradation-aware)", fc="#e8f0fe")
+    box(0.60, 0.40, 0.16, 0.14, "greedy FCAS\nbidder", fc="#e8f0fe")
+    box(0.80, 0.40, 0.18, 0.14, "teacher\ntrajectories")
+    arrow(0.20, 0.47, 0.26, 0.47)
+    arrow(0.54, 0.47, 0.60, 0.47)
+    arrow(0.76, 0.47, 0.80, 0.47)
+    arrow(0.45, 0.74, 0.40, 0.54)
+
+    box(0.26, 0.06, 0.20, 0.14, "free-terminal\n$J_t(s)$")
+    box(0.52, 0.06, 0.20, 0.14, "RTG prompt\n$=-J_t(s)$", fc="#e6f4ea")
+    box(0.80, 0.06, 0.18, 0.14, "student DT\n(offline)", fc="#e6f4ea")
+    arrow(0.46, 0.13, 0.52, 0.13)
+    arrow(0.89, 0.40, 0.89, 0.20)
+    arrow(0.72, 0.13, 0.80, 0.13, ls="--")
+    arrow(0.34, 0.40, 0.36, 0.20, ls="--")
+    _save(fig, out_dir, "fig2_pipeline_schematic")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="paper/manuscript/figures")
@@ -251,6 +296,7 @@ def main() -> None:
     out = ROOT / args.out
     print("writing figures to", out)
     fig1_main_results(out)
+    fig2_pipeline_schematic(out)
     fig3_jtsoc_heatmap(out)
     fig4_impact_resilience(out)
     fig5_revenue_decomposition(out)

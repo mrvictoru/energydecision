@@ -110,6 +110,17 @@
 % =============================================================================
 \section{Method}
 \label{sec:method}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.98\linewidth]{figures/fig2_pipeline_schematic.pdf}
+  \caption{The planner-distillation pipeline. A non-clairvoyant, hybrid teacher
+  (seasonal forecast; SOC-waypoint model; degradation-aware dynamic program;
+  greedy FCAS bidder) generates trajectories for offline Decision-Transformer
+  training. Separately, the free-terminal cost-to-go $J_t(s)$ supplies the
+  state-dependent RTG prompt at inference (dashed). No solver runs at inference.}
+  \label{fig:pipeline}
+\end{figure}
 % TODO(author): the method spine. Subsections:
 %  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
 %      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
@@ -129,29 +140,41 @@ in each episode. Thus, the energy planner receives a seasonal estimate of
 future RRP rather than the episode's realized future prices. Frequency Control Ancillary Services (FCAS) is treated separately: the bidding rule uses
 the prices available at the current step, without forecasting future FCAS prices.
 We use ``honest'' to distinguish this information set from a perfect-foresight 
-planner given realized future prices.
+planner given realized future prices. For example, the NSW1 October profile gives
+roughly \$77/MWh at 07:00 and \$184/MWh at 18:00, so the planner expects cheap
+morning charging and expensive evening discharging; the realized prices on any
+given day may differ, and the teacher plans only against these seasonal means.
 
-The control pipeline has three stages. First, a learned State of Charge (SOC) waypoint
-model proposes a sequence of target states of charge; it is a helper that
-sets intermediate targets, not an optimizer. Second, for each interval
-between waypoints, a discretized dynamic program performs backward
-induction over SOC and candidate charge/discharge actions. It minimizes
-forecast energy cost plus an estimated degradation cost and a soft
-terminal penalty for deviation from the segment's target SOC. The wear
-estimate combines the planner's degradation estimator with a linear
-throughput surrogate, scaled by the calibration parameter
-\texttt{deg\_calibration}. Third, after the energy action is selected, a
-greedy bidder assigns available raise and lower headroom to the
-highest-priced eligible FCAS service in each direction, using current
-FCAS prices. Consequently, this is a hybrid energy-planning and
-rule-based FCAS pipeline, not a pure SDP solver or a joint optimizer
-over energy and FCAS.
+The control pipeline has three stages (Figure~\ref{fig:pipeline}):
+\begin{enumerate}
+  \item \textbf{Waypoint target.} A learned State-of-Charge (SOC) waypoint model
+  proposes a sequence of target states of charge; it is a helper that sets
+  intermediate targets, not an optimizer.
+  \item \textbf{Energy plan.} For each interval between waypoints, a discretized
+  dynamic program performs backward induction over SOC and candidate
+  charge/discharge actions. It minimizes forecast energy cost plus an estimated
+  degradation cost and a soft terminal penalty for deviation from the segment's
+  target SOC. The wear estimate combines the planner's degradation estimator
+  with a linear throughput surrogate, scaled by the calibration parameter
+  \texttt{deg\_calibration}.
+  \item \textbf{FCAS bids.} After the energy action is selected, a greedy bidder
+  assigns available raise and lower headroom to the highest-priced eligible FCAS
+  service in each direction, using current FCAS prices.
+\end{enumerate}
+Consequently, this is a hybrid energy-planning and rule-based FCAS pipeline, not
+a pure SDP solver or a joint optimizer over energy and FCAS.
 
 Separately, we compute a free-terminal cost-to-go table
 $J_t(s)$ over time $t$ and discretized battery SOC $s$. Its backward
-recursion estimates the remaining forecast energy and degradation cost
-from each time--SOC pair, with zero terminal cost by default; it is not
-conditioned on reaching a waypoint. At inference, the table is looked up
+recursion,
+\begin{equation}
+  J_t(s) \;=\; \min_{a \in \mathcal{A}(s)} \Big[\, c_t(s,a) + J_{t+1}(s') \,\Big],
+  \qquad J_T(\cdot) = 0,
+\end{equation}
+estimates the remaining forecast energy and degradation cost from each time--SOC
+pair, where $c_t$ combines the forecast energy cost and the degradation
+surrogate; the terminal cost is zero by default and the table is not conditioned
+on reaching a waypoint. At inference, the table is looked up
 at the current time and SOC, and the Decision Transformer receives
 $-J_t(s)$ as its return-to-go prompt. This converts estimated remaining
 cost to a return-valued conditioning signal; it does not give the student

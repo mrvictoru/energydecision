@@ -74,13 +74,14 @@ Generated from the **extended-surface** artifacts by
 | File | Content |
 |---|---|
 | `figures/fig1_main_results.pdf` | DT vs PPO across the 4 surfaces + paired-Δ forest plot |
+| `figures/fig2_pipeline_schematic.pdf` | the planner-distillation pipeline (method overview) |
 | `figures/fig3_jtsoc_heatmap.pdf` | J_t(soc) return-to-go prompt (RTG table) |
 | `figures/fig5_revenue_decomposition.pdf` | energy / FCAS / degradation decomposition (DT vs PPO) |
 | `figures/fig4_impact_resilience.pdf` | market-impact gate, per-battery DT vs PPO |
 | `figures/fig6_ceiling_break.pdf` | the behaviour-cloning ceiling vs distillation (stage ladder) |
 
 Regenerate with `python3 scripts/stagec_paper_figures_v2.py`.
-`main.tex` now uses `\includegraphics{figures/...}` for all five, so **upload the
+`main.tex` now uses `\includegraphics{figures/...}` for all six, so **upload the
 whole `figures/` folder to Overleaf**, or compilation will fail with "file not found".
 
 ---
