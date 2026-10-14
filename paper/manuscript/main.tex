@@ -124,61 +124,63 @@
 % TODO(author): the method spine. Subsections:
 %  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
 %      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
-\subsection{SDP}
-% NOTE(author): \citet{abdulla2016optimal} is a THIRD-PARTY paper (Abdulla et al.,
-% not ours). VERIFIED 2026-10-14 against docs/references/: it presents stochastic
-% dynamic programming over a receding horizon with a battery-degradation model
-% inside the DP, so attributing the energy/SDP part to it is appropriate. Keep the
-% attribution to the ENERGY/SDP part only — the hybrid waypoint-DT + greedy-FCAS
-% pipeline is not in that paper.
-Stochastic dynamic programming (SDP) is a finite-horizon planning method that solves sequential decision problems by backward induction: at each state, it selects the action that minimizes immediate cost plus the cost-to-go under a forecast model. In our setting, the state is the battery state of charge and time, the action is charge/discharge, and the objective combines energy cost/revenue with degradation and constraint handling. We do not re-derive the full SDP formulation here; instead, we refer readers to \citet{abdulla2016optimal} for a detailed degradation-aware storage-planning treatment and focus on the specific non-clairvoyant teacher used in this work.
-\subsection{SDP Planner/Teacher}
-The teacher uses a hybrid, non-clairvoyant control pipeline. For energy
-dispatch, it constructs a Regional Reference Price (RRP) forecast by averaging
-historical RRP within month-of-year and hour-of-day bins. The profile is estimated from pre-2024 processed data and mapped to the settlement times
-in each episode. Thus, the energy planner receives a seasonal estimate of
-future RRP rather than the episode's realized future prices. Frequency Control Ancillary Services (FCAS) is treated separately: the bidding rule uses
-the prices available at the current step, without forecasting future FCAS prices.
-We use ``honest'' to distinguish this information set from a perfect-foresight 
-planner given realized future prices. For example, the NSW1 October profile gives
-roughly \$77/MWh at 07:00 and \$184/MWh at 18:00, so the planner expects cheap
-morning charging and expensive evening discharging; the realized prices on any
-given day may differ, and the teacher plans only against these seasonal means.
 
-The control pipeline has three stages (Figure~\ref{fig:pipeline}):
+\subsection{SDP planner as teacher}
+
+Dynamic programming solves a finite-horizon control problem by working
+backward from a terminal cost. At each time and state, it selects a feasible
+action that minimizes the immediate cost plus the cost-to-go of the resulting
+state. In battery dispatch, the state includes the battery's state of charge
+(SOC), and the actions control charging or discharging. The general
+battery-planning formulation is related to prior work on SDP-based storage
+scheduling \citep{abdulla2016optimal}; here, we describe the specific
+non-clairvoyant teacher used to generate our trajectories.
+
+For energy dispatch, the teacher constructs a regional reference price (RRP)
+forecast by averaging historical RRP within month-of-year and hour-of-day
+bins. The profile is estimated from pre-2024 processed data and indexed by
+the settlement times in each episode. The energy planner therefore uses
+seasonal mean prices, not the episode's realized future RRP. FCAS is handled
+separately: the bidding rule uses prices available at the current step and
+does not forecast future FCAS prices. We use ``non-clairvoyant'' to describe
+this restricted information set, in contrast to a planner given realized
+future prices.
+
+The teacher is a three-stage pipeline (Figure~\ref{fig:pipeline}):
 \begin{enumerate}
-  \item \textbf{Waypoint target.} A learned State-of-Charge (SOC) waypoint model
-  proposes a sequence of target states of charge; it is a helper that sets
-  intermediate targets, not an optimizer.
-  \item \textbf{Energy plan.} For each interval between waypoints, a discretized
-  dynamic program performs backward induction over SOC and candidate
-  charge/discharge actions. It minimizes forecast energy cost plus an estimated
-  degradation cost and a soft terminal penalty for deviation from the segment's
-  target SOC. The wear estimate combines the planner's degradation estimator
-  with a linear throughput surrogate, scaled by the calibration parameter
+  \item \textbf{SOC waypoints.} A learned model proposes a sequence of
+  intermediate SOC targets. It supplies targets to the planner but does not
+  optimize the dispatch actions.
+  \item \textbf{Energy dispatch.} For each interval between waypoints, a
+  discretized dynamic program performs backward induction over SOC states
+  and candidate charge/discharge actions. It minimizes forecast energy cost
+  plus estimated degradation cost, with a soft terminal penalty that
+  encourages the final SOC to approach the interval's target. The wear
+  estimate combines the planner's degradation estimator with a linear
+  throughput surrogate; the estimator is scaled by
   \texttt{deg\_calibration}.
-  \item \textbf{FCAS bids.} After the energy action is selected, a greedy bidder
-  assigns available raise and lower headroom to the highest-priced eligible FCAS
+  \item \textbf{FCAS bidding.} Given the energy action, a greedy rule
+  allocates residual raise and lower headroom to the highest-priced eligible
   service in each direction, using current FCAS prices.
 \end{enumerate}
-Consequently, this is a hybrid energy-planning and rule-based FCAS pipeline, not
-a pure SDP solver or a joint optimizer over energy and FCAS.
+Thus, the teacher combines learned waypoint selection, dynamic-programming
+energy planning, and rule-based FCAS bidding. It is not a pure SDP solver
+or a joint optimizer of energy and FCAS.
 
-Separately, we compute a free-terminal cost-to-go table
-$J_t(s)$ over time $t$ and discretized battery SOC $s$. Its backward
-recursion,
+We also compute a free-terminal cost-to-go table $J_t(s)$ over time $t$ and
+discretized SOC $s$:
 \begin{equation}
-  J_t(s) \;=\; \min_{a \in \mathcal{A}(s)} \Big[\, c_t(s,a) + J_{t+1}(s') \,\Big],
-  \qquad J_T(\cdot) = 0,
+  J_t(s) \;=\; \min_{a \in \mathcal{A}(s)}
+  \left[ c_t(s,a) + J_{t+1}(s') \right],
+  \qquad J_T(s) = 0,
 \end{equation}
-estimates the remaining forecast energy and degradation cost from each time--SOC
-pair, where $c_t$ combines the forecast energy cost and the degradation
-surrogate; the terminal cost is zero by default and the table is not conditioned
-on reaching a waypoint. At inference, the table is looked up
-at the current time and SOC, and the Decision Transformer receives
-$-J_t(s)$ as its return-to-go prompt. This converts estimated remaining
-cost to a return-valued conditioning signal; it does not give the student
-the SDP policy or run the SDP optimizer at inference.
+where $\mathcal{A}(s)$ is the set of feasible actions at SOC $s$, $s'$ is
+the resulting next SOC, and $c_t$ includes forecast energy cost and the
+degradation surrogate. Unlike the waypoint-constrained dispatch plan, this
+table has no terminal SOC target. At inference, the table is queried at the
+current time and SOC; the Decision Transformer receives $-J_t(s)$ as its
+return-to-go prompt. The table provides a value-conditioning signal, not
+the SDP policy, and the SDP optimizer is not run during student inference.
 
 \begin{figure}[htbp]
   \centering
@@ -191,6 +193,29 @@ the SDP policy or run the SDP optimizer at inference.
 \end{figure}
 %  4.2 Trajectory generation — teacher rollouts -> (obs, action, reward) triples;
 %      the J_t(soc) cost-to-go column.
+\subsection{Trajectory corpus}
+
+We generated the student-training corpus by sampling random, fixed-length
+windows from cached, preprocessed five-minute AEMO data and rolling out the
+hybrid teacher described above. The corpus spans five NEM regions, two
+episode horizons (3,456 steps, or 12 days; and 16,128 steps, or 8 weeks),
+and four battery configurations, with eight episodes per region--horizon--battery
+combination. This yields 320 episodes. The shipped conservative, wear-calibrated
+corpus contains approximately 3.13 million per-step rows. Each episode is
+generated by running the waypoint model, SDP energy planner, and greedy FCAS
+bidder in the environment, so its observations, teacher actions, and rewards
+come from the same rollout rather than being assembled from separate sources
+\cite{generate_sdp_dt_trajectories}.
+
+Each row stores the normalized 18-dimensional observation, the 9-dimensional
+action (one energy-dispatch component and eight FCAS bids), and the resulting
+per-step reward, together with episode and step identifiers and metadata.
+For the shipped corpus, a per-step \texttt{rtg\_value} is also provided:
+it is computed as $-J_t(s)$ from the free-terminal cost-to-go table, not as
+a logged discounted sum of future rewards. The exported rows do not retain
+timestamps. Accordingly, temporal non-overlap between training and evaluation
+was checked against the source data windows, rather than by auditing
+timestamps stored in each corpus row.
 %  4.3 Student DT — architecture, loss:
 %        L = w_a * MSE_action + w_s * MSE_state + w_r * MSE_return
 %      with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal].
