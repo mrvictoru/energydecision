@@ -268,18 +268,23 @@ we set $\mathrm{RTG} = -J_t(s)$, normalized by the checkpoint's
 \texttt{return\_scale}, so that higher remaining value corresponds to a larger
 prompt token. This turns the SDP cost-to-go into a value-conditioning signal
 while keeping the action-selection loop solver-free: the student selects actions
-with a single forward pass, and the value table is a function only of the
-seasonal forecast and the SOC grid, so it can be precomputed and cached.
+with a single forward pass. The value table is produced by a single
+backward-induction pass per episode, not per decision, and because it is a
+function only of the seasonal forecast and the SOC grid (no realized prices), it
+can be precomputed offline and cached per region, season, and battery, leaving
+only a constant-time lookup at each step.
 
 For price-taking evaluation surfaces, the shipped inference mode \texttt{auto}
-resolves to the state-dependent \texttt{j\_t\_soc} prompt: the agent computes
-$J_t(s)$ from the seasonal RRP forecast and the current battery SOC, then feeds
-its negative to the transformer as RTG. Under market-impact evaluation,
-\texttt{auto} instead falls back to a constant \texttt{rtg0.0} prompt. This is
-a robustness choice rather than a failure mode: on large batteries, impact-aware
-value prompts can over-trade energy and self-suppress realized prices, so the
-conservative constant prompt is used when the battery is no longer a negligible
-price taker.
+resolves to the state-dependent \texttt{j\_t\_soc} prompt: the agent looks up
+$J_t(s)$ for the current time and SOC and feeds its negative, scaled by
+\texttt{return\_scale}, to the transformer as RTG. Under a market-impact model
+(Section~\ref{sec:impact}), where the battery's own dispatch moves prices,
+\texttt{auto} instead falls back to a constant \texttt{rtg0.0} prompt. This is a
+robustness choice rather than a failure mode: on large batteries, a value prompt
+that is too optimistic can over-trade energy and self-suppress realized prices,
+so the conservative constant prompt is used once the battery is no longer a
+negligible price taker. Using the state-dependent prompt directly in this regime,
+rather than falling back to a constant, remains an open item.
 
 % =============================================================================
 \section{Experiments}
