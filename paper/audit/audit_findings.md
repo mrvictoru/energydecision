@@ -259,3 +259,46 @@ dispatch_year,expanded_full}.json`. Artifacts:
 **Open decision for the user:** whether to make the extended (fresh) surfaces the
 preprint headline and demote the canonical single-month / n=27 surfaces to named
 sub-surfaces. The doc tables still show the canonical numbers pending that call.
+
+## 8. `return_scale` provenance — shipped value does not reproduce
+
+`return_scale` is set at training time by `--auto-return-scale` as
+`p90(|J_t| over TRAIN episodes) / 10` (`scripts/pretrain_decision_transformer.py:1256-1266`),
+then frozen into the checkpoint sidecar. The shipped v2cal checkpoint records
+**23,284.83**; the formula is documented in
+`docs/aemo_dt_preferred_policy_plan.md` ("~25,990 for full corpus").
+
+Reproduction from the released corpora (seed-42 episode split, `val_split=0.1`):
+
+| run | shipped `return_scale` | p90(\|J_t\|)/10, all rows | p90(\|J_t\|)/10, train split |
+|---|---:|---:|---:|
+| v1 `fullcorpus` (640 eps combined) | 25,988.19 | 25,818.77 | 25,310.26 |
+| **v2cal (shipped, 320 eps conservative)** | **23,284.83** | **21,192.92** | **21,067.00** |
+| v2 (uncalibrated, 320 eps) | 20,173.33 | 20,294.97 | **20,184.97** |
+
+**Findings.**
+1. The formula **validates on the v2 run** (train-split 20,184.97 vs shipped
+   20,173.33, 0.06%) — so the reproduction method (episode split, seed 42,
+   `p90/10`) is correct.
+2. The **v2cal value does not reproduce**: 23,284.83 is ~10% above the released
+   corpus (21,067–21,193). No single released corpus or simple mixture
+   (v2cal+aggressive 25,662; v2cal+v1-conservative 21,349) matches.
+3. Therefore the shipped checkpoint's scale was computed on a **corpus variant
+   that is not in the repo** (e.g. a different `deg_calibration`, a
+   conservative+aggressive mixture, or a pre-regeneration version), later
+   replaced by the released `dt_trajectories_jtsoc_v2cal_conservative.parquet`.
+4. The run's `canonical_command` records only `--surface-preset legacy` (no
+   `--dataset-path`/`--rtg-source`/`--auto-return-scale`), and no training log
+   captured the `[auto-return-scale] … (90th pct |rtg|=…)` line. The exact input
+   is unrecoverable from available artifacts.
+
+**Impact.** Inference must still use the checkpoint's 23,284.83 (the weights are
+calibrated to it). The paper should state the value as the checkpoint's
+auto-calibrated scale and **not** claim `p90(|J_t|)/scale ≈ 10` on the released
+corpus (§4.3 reworded accordingly, commit `0eda805`). It also means the released
+corpus may not be the exact file the shipped checkpoint trained on — a corpus-level
+reproducibility caveat.
+
+**Process fix.** Record the auto-scale's p90 and a hash of the calibration corpus
+in the loss-surface manifest; log the auto-scale line to the run output; when a
+corpus is regenerated, re-derive and reconcile `return_scale`.
