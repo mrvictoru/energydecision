@@ -223,6 +223,36 @@ timestamps stored in each corpus row.
 %  4.3 Student DT — architecture, loss:
 %        L = w_a * MSE_action + w_s * MSE_state + w_r * MSE_return
 %      with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal].
+\subsection{Student Decision Transformer}
+
+The student is a causal Decision Transformer trained on the teacher-generated
+sequences described above. At each step, it embeds the return-to-go, normalized
+observation, and action as an ordered sequence and uses the preceding context
+to predict actions. The shipped model has 8 Transformer blocks with hidden
+dimension 768, grouped-query attention with 12 query heads and 6 key--value
+heads, QK-Norm, rotary positional embeddings, and SwiGLU feed-forward layers.
+Its context covers 210 time steps. A mixed action head applies a hyperbolic
+tangent to the energy-dispatch output, which lies in $[-1,1]$, and a sigmoid to
+the eight FCAS-bid outputs, which lie in $[0,1]$. Training minimizes a
+weighted combination of action, state, and return prediction losses:
+\begin{equation}
+  \mathcal{L}
+  = w_a\,\mathrm{MSE}_a
+  + w_s\,\mathrm{MSE}_s
+  + w_r\,\mathrm{MSE}_r,
+  \qquad
+  (w_a,w_s,w_r)=(0.999,\,0.002,\,0.0001).
+\end{equation}
+The loss is therefore dominated by action prediction, while state and return
+prediction provide lower-weight auxiliary objectives. To keep the RTG inputs
+numerically scaled for training, we use an automatically calibrated
+\texttt{return\_scale}; for the shipped checkpoint it is 23{,}284.83, which maps
+return-to-go values to order-10 magnitudes for the network.
+% NOTE(author): the shipped return_scale (23,284.83) does NOT exactly equal
+% p90(|J_t|)/10 of the released corpus. Recomputing from
+% dt_trajectories_jtsoc_v2cal_conservative.parquet (seed-42 episode split) gives
+% p90(train)=210,670 -> 21,067, i.e. ratio ~9.1, not 10. Confirmed 2026-10-14.
+% Revisit wording once the provenance of 23,284.83 is confirmed.
 %  4.4 Return-to-go prompting — RTG = -J_t(soc); return_scale calibration;
 %      \texttt{auto} mode = j_t_soc on price-taking surfaces, constant under
 %      market impact (robustness, not collapse-avoidance).
