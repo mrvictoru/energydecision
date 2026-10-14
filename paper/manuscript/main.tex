@@ -114,10 +114,14 @@
 %  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
 %      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
 \subsection{SDP}
-% FIXME(author): the sentence below cites "our prior paper" for the SDP
-% formulation — there is no such prior paper. Either write a 2-3 sentence inline
-% formulation, or cite a real, verified reference. Do not cite a non-existent paper.
-Stochastic dynamic programming (SDP) is a finite-horizon planning method that solves sequential decision problems by backward induction: at each state, it selects the action that minimizes immediate cost plus the cost-to-go under a forecast model. In our setting, the state is the battery state of charge and time, the action is charge/discharge, and the objective combines energy cost/revenue with degradation and constraint handling. We do not re-derive the full SDP formulation here; instead, we refer readers to our prior paper for the complete algorithmic treatment and focus on the specific non-clairvoyant teacher used in this work.
+% NOTE(author): \citet{abdulla2016optimal} is a THIRD-PARTY paper (de Hoog et al.),
+% not ours. Two things to check before submitting:
+%  (1) verify it actually presents the dynamic-programming/storage-planning
+%      formulation you use (read it; don't cite on reputation);
+%  (2) keep the attribution to the ENERGY/SDP part only — the hybrid
+%      waypoint-DT + greedy-FCAS pipeline is not in that paper.
+% If it doesn't match, drop the citation and give a 2-3 sentence inline recurrence.
+Stochastic dynamic programming (SDP) is a finite-horizon planning method that solves sequential decision problems by backward induction: at each state, it selects the action that minimizes immediate cost plus the cost-to-go under a forecast model. In our setting, the state is the battery state of charge and time, the action is charge/discharge, and the objective combines energy cost/revenue with degradation and constraint handling. We do not re-derive the full SDP formulation here; instead, we refer readers to \citet{abdulla2016optimal} for a detailed degradation-aware storage-planning treatment and focus on the specific non-clairvoyant teacher used in this work.
 \subsection{SDP Planner/Teacher}
 The teacher uses a hybrid, non-clairvoyant control pipeline. For energy
 dispatch, it constructs a Regional Reference Price (RRP) forecast by averaging
