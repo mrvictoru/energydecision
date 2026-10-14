@@ -1767,7 +1767,7 @@ This report documents the system and experimental protocol; results can be itera
 
 [1] K. Abdulla, J. De Hoog, et al., "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation," *IEEE Transactions on Smart Grid*, 2016.
 
-[2] V. Muenzel, J. De Hoog, et al., "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management," *IEEE Transactions on Industrial Electronics*, 2015.
+[2] V. Muenzel, J. De Hoog, et al., "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management," *Proceedings of the 2015 ACM Sixth International Conference on Future Energy Systems (e-Energy '15)*, 2015.
 
 [3] A. Kampker et al., "Modelling of Battery Energy Storage Systems Under Real-World Conditions," *Batteries*, vol. 11, no. 3, 2025, doi:10.3390/batteries11010392. (Real-world calendar + cycle aging model with Arrhenius temperature dependence and NMC/LFP presets, used by `RealWorldBESSDegradationModel`.)
 
