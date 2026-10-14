@@ -144,7 +144,11 @@ seasonal mean prices, not the episode's realized future RRP. FCAS is handled
 separately: the bidding rule uses prices available at the current step and
 does not forecast future FCAS prices. We use ``non-clairvoyant'' to describe
 this restricted information set, in contrast to a planner given realized
-future prices.
+future prices. For example, the NSW1 October seasonal profile gives mean RRP
+values of about A\$77/MWh at 07:00 and A\$184/MWh at 18:00. The teacher
+therefore expects lower-priced morning energy and higher-priced evening energy,
+while actual prices on any particular day may differ substantially from those
+historical means.
 
 The teacher is a three-stage pipeline (Figure~\ref{fig:pipeline}):
 \begin{enumerate}
