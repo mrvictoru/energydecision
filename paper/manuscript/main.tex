@@ -114,13 +114,12 @@
 %  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
 %      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
 \subsection{SDP}
-% NOTE(author): \citet{abdulla2016optimal} is a THIRD-PARTY paper (de Hoog et al.),
-% not ours. Two things to check before submitting:
-%  (1) verify it actually presents the dynamic-programming/storage-planning
-%      formulation you use (read it; don't cite on reputation);
-%  (2) keep the attribution to the ENERGY/SDP part only — the hybrid
-%      waypoint-DT + greedy-FCAS pipeline is not in that paper.
-% If it doesn't match, drop the citation and give a 2-3 sentence inline recurrence.
+% NOTE(author): \citet{abdulla2016optimal} is a THIRD-PARTY paper (Abdulla et al.,
+% not ours). VERIFIED 2026-10-14 against docs/references/: it presents stochastic
+% dynamic programming over a receding horizon with a battery-degradation model
+% inside the DP, so attributing the energy/SDP part to it is appropriate. Keep the
+% attribution to the ENERGY/SDP part only — the hybrid waypoint-DT + greedy-FCAS
+% pipeline is not in that paper.
 Stochastic dynamic programming (SDP) is a finite-horizon planning method that solves sequential decision problems by backward induction: at each state, it selects the action that minimizes immediate cost plus the cost-to-go under a forecast model. In our setting, the state is the battery state of charge and time, the action is charge/discharge, and the objective combines energy cost/revenue with degradation and constraint handling. We do not re-derive the full SDP formulation here; instead, we refer readers to \citet{abdulla2016optimal} for a detailed degradation-aware storage-planning treatment and focus on the specific non-clairvoyant teacher used in this work.
 \subsection{SDP Planner/Teacher}
 The teacher uses a hybrid, non-clairvoyant control pipeline. For energy
