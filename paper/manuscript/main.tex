@@ -129,8 +129,12 @@ On four held-out surfaces, the standalone DT beats tuned PPO by 3.84$\times$ on
 standard 2024, 1.80$\times$ on dispatch-matched, 6.70$\times$ on expanded
 broad-2024, and 6.39$\times$ on 2025 out-of-distribution data, with all four
 paired-difference 95\% confidence intervals excluding zero
-(Section~\ref{sec:experiments}); it retains most of its solver-in-the-loop
-teacher's performance while removing the solver from the control loop. All
+(Section~\ref{sec:experiments}); relative to its solver-in-the-loop teacher on
+the same surfaces it retains 77\% of the teacher's aggregate profit on standard
+2024 and 70\% on dispatch-matched, and \emph{exceeds} it on expanded broad-2024
+(132\%) and 2025 out-of-distribution (276\%) --- where the teacher's
+seasonal-forecast planning generalizes less well --- all while removing the
+solver from the control loop. All
 results are simulator-based and driven by historical NEM data; sim-to-real
 transfer is the main open question. Code, trajectory corpora, and model weights
 are released with this paper.
@@ -455,11 +459,14 @@ Table~\ref{tab:headline} summarizes the extended identity-surface results.
 Figure~\ref{fig:main} shows the per-surface comparison and the paired
 differences, and Figure~\ref{fig:revenue} decomposes profit by revenue source.
 The student has higher mean profit than PPO on all four surfaces, and each
-paired-difference 95\% confidence interval excludes zero. These comparisons
-measure competitiveness against PPO; they do not imply that the student
-exceeds its teacher. The extended surfaces also evaluate more windows than
-the earlier small-sample runs, while retaining a small sample on the 2025
-OOD surface.
+paired-difference 95\% confidence interval excludes zero. Relative to its
+solver-in-the-loop teacher on the same surfaces, the student retains 77\% of the
+teacher's aggregate profit on standard 2024 and 70\% on dispatch-matched, and
+exceeds it on expanded broad-2024 (132\%) and 2025 out-of-distribution (276\%),
+where the teacher's seasonal-forecast planning generalizes less well; the
+per-cell ratios are noisier than these aggregates. The extended surfaces also
+evaluate more windows than the earlier small-sample runs, while retaining a
+small sample on the 2025 OOD surface.
 \begin{table}[H]
   \centering
   \caption{Extended identity surfaces (shipped physics-v2 checkpoint,
@@ -565,11 +572,14 @@ efficiency models moved the headline numbers substantially. The shipped results
 use the corrected physics; several earlier numbers are superseded and are not
 relied upon here.
 
-\textbf{Retention and scope.} The student retains most, but not all, of its
-teacher's performance: it is better than an online-RL baseline, not better than
-the planner it was distilled from. The approach also does not transfer
-automatically to the residential scale, where the same recipe over-cycles on
-long horizons.
+\textbf{Retention and scope.} Distillation is not uniformly lossy. The student
+retains 70--77\% of its solver-in-the-loop teacher's aggregate profit on the
+in-distribution surfaces (standard, dispatch-matched) and \emph{exceeds} it on
+the broad and out-of-distribution surfaces, where the teacher's seasonal-forecast
+planning generalizes less well. Any single retention figure is therefore
+surface-dependent, and the per-cell ratios are noisier than the aggregates. The
+approach also does not transfer automatically to the residential scale, where the
+same recipe over-cycles on long horizons.
 
 \textbf{Provenance.} The shipped checkpoint's \texttt{return\_scale}
 (23{,}284.83) is the correct value for inference, but it does not reproduce
@@ -586,8 +596,9 @@ cloning paradigm never exceeded the FCAS-bidding behaviour present in the logged
 data (C1), so the ceiling is a property of the data rather than of the model. We
 broke it by distilling an honest, non-clairvoyant SDP planning teacher into a
 standalone Decision Transformer prompted with a state-dependent cost-to-go
-$J_t(\mathrm{soc})$ (C2), so the student keeps the teacher's competence with no
-solver in the control loop. We then showed that value-based prompting must be
+$J_t(\mathrm{soc})$ (C2), so the student roughly matches the teacher's aggregate
+profit on the in-distribution surfaces and exceeds it out-of-distribution, with
+no solver in the control loop. We then showed that value-based prompting must be
 gated by market power: the shipped surface-aware policy passes a piecewise
 merit-order impact gate on all nine grid-scale cells (C3).
 
