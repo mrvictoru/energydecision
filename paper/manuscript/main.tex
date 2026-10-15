@@ -99,14 +99,58 @@
 % =============================================================================
 \section{Experimental Framework}
 \label{sec:setup}
-% TODO(author): describe, no results yet:
-%  - AEMO/NEM environment: 5-min steps, energy spot + 8 FCAS services,
-%    9-dim action (full_fcas).
-%  - Degradation model: real-world calendar + cycle aging (Arrhenius), LFP/NMC
-%    presets \cite{kampker2025modelling,muenzel2015multifactor}.
-%  - Data: historical AEMO dispatch + prices; train on pre-2024, evaluate
-%    2024 (identity) and 2025 (OOD). State the no-overlap fact
-%    (paper/audit/artifacts/leakage_check.txt).
+
+\subsection{Market environment}
+
+We model a grid-scale battery participating in Australia's National Electricity
+Market (NEM), using the repository's \texttt{AEMOBatteryTradingEnv}. The
+environment advances in five-minute intervals and exposes an 18-dimensional
+observation: calendar features (hour-of-day and day-of-year sine/cosine
+encodings and a peak-period indicator), the regional reference price (RRP),
+total regional demand, the eight FCAS prices, the solar and wind generation
+fractions, and the battery state of charge. The action is nine-dimensional: one
+energy-dispatch command in $[-1,1]$ (positive charges, negative discharges) and
+eight FCAS bids in $[0,1]$, one per service (raise and lower regulation, and the
+6-second, 60-second, and 5-minute contingency services). The reward is the
+per-step profit in dollars: energy revenue plus FCAS revenue minus degradation
+cost.
+
+\subsection{Battery and degradation model}
+
+Each battery is specified by an energy capacity, a power limit, and an initial
+state of charge. Training uses four configurations spanning 2--50\,MWh, at a
+constant cell temperature of $30^\circ$C. Battery wear is modelled with a
+real-world calendar-and-cycle aging model: calendar aging from
+solid-electrolyte-interphase growth with Arrhenius temperature dependence, and
+cycle aging that scales as a power law in depth of discharge and C-rate. We use
+the LFP preset; the combined calendar-plus-cycle formulation follows
+\citet{kampker2025modelling}, and the multi-factor cycle-life component follows
+\citet{muenzel2015multifactor}. Wear is charged to the policy as part of the
+environment reward and reported as a cost per unit of throughput.
+
+\subsection{Market-impact model}
+
+By default the battery is a price taker: it trades at the observed historical
+RRP and FCAS prices, which its own dispatch does not move. For impact-aware
+evaluation we use a piecewise-merit-order model in which the battery's dispatch
+changes the realised prices --- charging adds demand and raises the energy price,
+discharging adds supply and lowers it --- and each FCAS price is reduced in
+proportion to the battery's share of an estimated service depth. This is a
+per-interval approximation of an endogenous market rather than a full market
+re-clear. We call evaluations without this model \emph{identity} surfaces and
+those with it \emph{impact} surfaces; Section~\ref{sec:impact} reports the impact
+gate.
+
+\subsection{Data}
+
+The simulator is driven by historical AEMO market data: dispatch prices for
+energy and the eight FCAS services, regional demand, and generation by fuel
+type. Training trajectories and the seasonal price profile are drawn from
+pre-2024 windows; evaluation uses 2024 (identity surfaces) and 2025
+(out-of-distribution) windows that are held out by date. Because the exported
+trajectory corpus does not store timestamps, the training/evaluation separation
+was verified against the source data windows rather than by auditing per-row
+timestamps.
 
 % =============================================================================
 \section{Method}
