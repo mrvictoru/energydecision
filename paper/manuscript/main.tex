@@ -403,7 +403,8 @@ with a single forward pass. The value table is produced by a single
 backward-induction pass per episode, not per decision, and because it is a
 function only of the seasonal forecast and the SOC grid (no realized prices), it
 can be precomputed offline and cached per region, season, and battery, leaving
-only a constant-time lookup at each step.
+only a constant-time lookup at each step. Figure~\ref{fig:jtsoc} shows the table
+for a representative window.
 
 For price-taking evaluation surfaces, the shipped inference mode \texttt{auto}
 resolves to the state-dependent \texttt{j\_t\_soc} prompt: the agent looks up
@@ -451,6 +452,8 @@ rollouts can vary slightly run-to-run (see Table~\ref{tab:headline}).
 \subsection{Headline Results}
 
 Table~\ref{tab:headline} summarizes the extended identity-surface results.
+Figure~\ref{fig:main} shows the per-surface comparison and the paired
+differences, and Figure~\ref{fig:revenue} decomposes profit by revenue source.
 The student has higher mean profit than PPO on all four surfaces, and each
 paired-difference 95\% confidence interval excludes zero. These comparisons
 measure competitiveness against PPO; they do not imply that the student
@@ -522,7 +525,7 @@ These results support a mode-selection rule, not a claim that one prompt is
 best in every regime: use the state-dependent value prompt when the battery
 is approximately price-taking, and the conservative constant prompt when
 its dispatch can materially affect prices. In this sense, market power is
-a gate on value-based prompting.
+a gate on value-based prompting. Figure~\ref{fig:impact} summarizes the gate.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.8\linewidth]{figures/fig4_impact_resilience.pdf}
