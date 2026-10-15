@@ -290,17 +290,43 @@ rather than falling back to a constant, remains an open item.
 % =============================================================================
 \section{Experiments}
 \label{sec:experiments}
-% TODO(author):
-%  - Surfaces: standard 2024 (5 regions x 6 periods), dispatch-matched (SA1
-%    full-year), expanded broad-2024, 2025 OOD. State the cell counts.
-%  - Baselines: tuned PPO (Optuna 10 trials, up to 4M steps), fcas_rule,
-%    dispatch replay.
-%  - Protocol: 5-min steps, one deterministic episode per (scenario, battery)
-%    cell; bootstrap 10k over cells + paired Wilcoxon; paired-difference CI is
-%    primary. Note PPO run-to-run noise (~1%) as a caveat, and DT determinism.
+We evaluate the student on four held-out surfaces. The \emph{standard 2024}
+surface contains six periods from each of five regions ($n=30$ scenario
+cells). The \emph{dispatch-matched} surface covers all twelve months of
+SA1 2024 ($n=12$). The \emph{expanded broad-2024} surface spans five
+regions and six periods ($n=30$). Finally, the \emph{2025 OOD} surface
+evaluates six NSW1, QLD1, and SA1 scenario cells from January and February
+($n=6$). Training data and the seasonal price profile use pre-2024 source
+windows; the evaluation windows are held out by date.
+
+We compare the Decision Transformer with a tuned PPO policy, an
+\texttt{fcas\_rule} policy, and dispatch replay (the latter only on the
+dispatch-matched surface). PPO is tuned using an
+Optuna search over ten trials and trained for up to four million
+environment steps. Evaluation uses five-minute steps and one rollout per
+scenario--battery cell. PPO and rule-policy reference rollouts are run
+against the same evaluation scenarios as the student, with fresh reference
+caches to keep the comparisons consistent.
+
+We report mean episode profit and paired differences between the student
+and PPO. Uncertainty in the paired differences is estimated by bootstrap
+resampling the matched scenario cells with 10{,}000 replicates; paired
+Wilcoxon tests are reported as a complementary analysis. We treat the
+paired-difference confidence interval as the primary inferential result.
+Scenario cells from the same region may be correlated, so the cell count
+should not be interpreted as an equal number of independent regions.
+The student is deterministic at evaluation time; baseline reference
+rollouts can vary slightly run-to-run (see Table~\ref{tab:headline}).
 
 \subsection{Headline Results}
-% [FACT] table — do not retype; mirror paper/audit/artifacts/stagec_v2cal_extended_significance.json
+
+Table~\ref{tab:headline} summarizes the extended identity-surface results.
+The student has higher mean profit than PPO on all four surfaces, and each
+paired-difference 95\% confidence interval excludes zero. These comparisons
+measure competitiveness against PPO; they do not imply that the student
+exceeds its teacher. The extended surfaces also evaluate more windows than
+the earlier small-sample runs, while retaining a small sample on the 2025
+OOD surface.
 \begin{table}[H]
   \centering
   \caption{Extended identity surfaces (shipped physics-v2 checkpoint,
