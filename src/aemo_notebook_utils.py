@@ -784,6 +784,7 @@ def run_dt_soc_oracle_episodes(
     base_seed: int = 8964,
     device: str = "auto",
     deg_cost_per_mwh: float = 50.0,
+    deg_calibration: float = 1.0,
     executor: str = "lp",
 ) -> list[pl.DataFrame]:
     """Roll out the hierarchical DT+LP policy (dt_soc_oracle).
@@ -824,6 +825,7 @@ def run_dt_soc_oracle_episodes(
             dt_gamma=dt_gamma,
             reset_seed=base_seed + episode_idx if random_episode_start else None,
             deg_cost_per_mwh=deg_cost_per_mwh,
+            deg_calibration=deg_calibration,
             executor=executor,
         )
         episode_df, _ = agent.run_episode()

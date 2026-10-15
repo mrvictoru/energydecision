@@ -720,6 +720,7 @@ def run_policy_episodes(
             rtg_value=_dt_rtg_value(policy_cfg, training_summary),
             base_seed=base_seed,
             deg_cost_per_mwh=float(policy_cfg.get("deg_cost_per_mwh", 50.0)),
+            deg_calibration=float(policy_cfg.get("deg_calibration", 1.0)),
             executor=str(policy_cfg.get("executor", "lp")),
         )
 
