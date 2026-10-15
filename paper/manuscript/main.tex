@@ -114,7 +114,7 @@ energy-dispatch command in $[-1,1]$ (positive charges, negative discharges) and
 eight FCAS bids in $[0,1]$, one per service (raise and lower regulation, and the
 6-second, 60-second, and 5-minute contingency services). The reward is the
 per-step profit in dollars: energy revenue plus FCAS revenue minus degradation
-cost.
+cost, with a small penalty for any state-of-charge-limit violation.
 
 \subsection{Battery and degradation model}
 
