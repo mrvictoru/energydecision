@@ -251,12 +251,10 @@ timestamps.
   (seasonal forecast; SOC-waypoint model; degradation-aware dynamic program;
   greedy FCAS bidder) generates trajectories for offline Decision-Transformer
   training. Separately, the free-terminal cost-to-go $J_t(s)$ supplies the
-  state-dependent RTG prompt at inference (dashed). No solver runs at inference.}
+  state-dependent RTG prompt at inference (dashed). No solver runs in the
+  control loop; the value table is precomputed.}
   \label{fig:pipeline}
 \end{figure}
-% TODO(author): the method spine. Subsections:
-%  4.1 Honest SDP teacher — seasonal month x hour profile (no future prices),
-%      backward induction for energy/SOC, greedy FCAS bids. Explain "honest".
 
 \subsection{SDP planner as teacher}
 
@@ -651,14 +649,40 @@ of prompting, re-weighting, or fine-tuning creates it. Section~\ref{sec:method}
 breaks it by changing the data source.
 
 \section{Provenance and Reproducibility}
-% TODO(author): point to:
-%  - paper/audit/provenance.tsv (every headline number -> artifact + command)
-%  - paper/environment.txt (frozen environment), tag preprint-v1
-%  - HF artifacts: model mrvictoru/energydecision-dt-v2-sdp, dataset
-%    mrvictoru/AEMO_simulated_trade_sdp, waypoint helper mrvictoru/energydecision-waypoint-dt
-%  - identity-surface significance: paper/audit/artifacts/stagec_v2cal_extended_significance.json
-%  - impact-gate analysis: paper/audit/artifacts/stagec_v2cal_impact_analysis.json
-%  - leakage check, determinism probe, cache-key fix
-%  - test suite: 387 passing
+
+We release the code, the training corpora, and the model weights, together with a
+provenance record that maps every headline number in this paper to the artifact
+and command that produced it.
+
+\begin{itemize}
+  \item \textbf{Code and environment.} Source code:
+  \url{https://github.com/mrvictoru/energydecision}. The evaluation environment is
+  pinned in \texttt{paper/environment.txt} (Python 3.10.12, PyTorch 2.9.0+cu130,
+  CUDA 13.0), and all reported results correspond to the \texttt{preprint-v1}
+  release tag, at which the test suite (387 tests) passes.
+  \item \textbf{Models and data.} The shipped checkpoint
+  (\texttt{aemo\_dt\_sdp\_jtsoc\_v2cal.pt}) and its training corpus
+  (\texttt{dt\_trajectories\_jtsoc\_v2cal\_conservative.parquet}) are hosted at
+  \url{https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp} and
+  \url{https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp}.
+  Reproducing the corpus additionally requires the SOC-waypoint teacher helper
+  \url{https://huggingface.co/mrvictoru/energydecision-waypoint-dt}.
+  \item \textbf{Headline numbers.} Every reported value is traced in
+  \texttt{paper/audit/provenance.tsv}; the identity-surface statistics are in
+  \texttt{paper/audit/artifacts/stagec\_v2cal\_extended\_significance.json}, and
+  the impact-gate analysis in
+  \texttt{paper/audit/artifacts/stagec\_v2cal\_impact\_analysis.json}.
+  \item \textbf{Validation.} Train/evaluation temporal separation was checked
+  against the source data windows
+  (\texttt{paper/audit/artifacts/leakage\_check.txt}); the student's determinism
+  and the baselines' run-to-run variation were measured with a two-run probe; and
+  the reference-rollout cache key was versioned to include model and data content
+  hashes after a stale-cache issue was identified
+  (\texttt{paper/audit/artifacts/cache\_data\_staleness\_finding.md}).
+  \item \textbf{Provenance caveat.} The shipped \texttt{return\_scale}
+  (23{,}284.83) is the correct value for inference but does not reproduce exactly
+  as $\mathrm{p90}(|J_t|)/10$ of the released corpus; the discrepancy is
+  documented in the audit notes above.
+\end{itemize}
 
 \end{document}
