@@ -22,7 +22,7 @@ corpus.
 
 > **This is NOT the shipped policy.** The shipped standalone policy is
 > [energydecision-dt-v2-sdp](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp)
-> (`aemo_dt_sdp_jtsoc_v2cal.pt`), which needs **no** solver and **not** this model
+> (`aemo_dt_sdp_jtsoc_v2cal.pt`), which needs **no solver in the control loop** (its J_t(soc) prompt is precomputed) and **not** this model
 > at inference. This checkpoint is a **corpus-generation input** only.
 
 ## What it does

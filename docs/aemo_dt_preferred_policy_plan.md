@@ -10,6 +10,13 @@
 > and must not be cited** (the shipped numbers are in `report.md §8.2.11`). The
 > forward plan is now in **`docs/FUTURE_PLAN.md`**.
 >
+> **PRECISION NOTE (2026-10-15):** where the diary below says "no solver at inference",
+> read *no solver in the control loop*. The `J_t(soc)` RTG prompt is produced by one
+> backward-induction pass per episode (`AEMOAgent._init_jtsoc_table` →
+> `compute_cost_to_go_table` → `AEMOSDPSolver`) and, because it depends only on the
+> seasonal forecast and the SOC grid, is precomputable/cacheable. Under market impact
+> `auto` uses the constant prompt, which is genuinely DP-free.
+>
 > **SHIPPED MODEL (2026-09):** `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` (physics-v2,
 > wear-calibrated SDP teacher, `--deg-calibration 0.12`) supersedes the v1
 > `aemo_dt_sdp_jtsoc_fullcorpus.pt` referenced throughout the diary below; see

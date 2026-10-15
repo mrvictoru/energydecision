@@ -58,8 +58,9 @@
 %  (2) what we do: distil an honest (non-clairvoyant) SDP planning teacher into a
 %      standalone Decision Transformer with state-dependent J_t(soc) RTG prompts;
 %  (3) headline [FACT]: beats tuned PPO on all four extended identity surfaces
-%      (n=30/12/30/6; all paired 95% CIs exclude zero) with no solver at inference,
-%      and passes a market-impact gate on 9/9 grid-scale cells.
+%      (n=30/12/30/6; all paired 95% CIs exclude zero) with no solver in the
+%      control loop (the J_t(soc) prompt is precomputed), and passes a
+%      market-impact gate on 9/9 grid-scale cells.
 %  (4) one honest caveat: results are simulator-based (AEMO/NEM data).
 \end{abstract}
 

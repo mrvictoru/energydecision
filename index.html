@@ -522,23 +522,23 @@ footer strong { color: var(--ink); }
     <h1>Offline decision transformers outperform online RL for utility-scale battery dispatch</h1>
     <p class="tagline">A degradation-aware benchmark for battery trading in Australia's National Electricity Market:
       a planner-distilled Decision Transformer beats online RL (PPO) and real-world dispatch replay on
-      every evaluation surface tested — with no solver at inference time.</p>
+      every evaluation surface tested — with no solver in the control loop.</p>
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-num"><span data-countup data-end="6.9" data-decimals="1" data-suffix="×">0</span></div>
-        <div class="stat-label">Profit vs PPO on the standard surface ($16,209 vs $2,353 per episode)</div>
+        <div class="stat-num"><span data-countup data-end="3.8" data-decimals="1" data-suffix="×">0</span></div>
+        <div class="stat-label">Profit vs PPO on the standard-2024 surface ($16,501 vs $4,303 per episode)</div>
       </div>
       <div class="stat-card">
         <div class="stat-num">4/4 + GATE</div>
         <div class="stat-label">Identity surfaces won, plus the market-impact gate passed on all grid-scale batteries</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num">0 SOLVER</div>
-        <div class="stat-label">Nothing but a standalone transformer at inference — fully deployable</div>
+        <div class="stat-num">0 SOLVERS</div>
+        <div class="stat-label">In the control loop — a standalone transformer at deployment (the J_t(soc) prompt is precomputed)</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num">3/4 CIs</div>
-        <div class="stat-label">Identity-surface DT-vs-PPO paired 95% bootstrap intervals excluding zero (expanded broad-2024 is marginal)</div>
+        <div class="stat-num">4/4 CIs</div>
+        <div class="stat-label">Identity-surface DT-vs-PPO paired 95% bootstrap intervals excluding zero</div>
       </div>
     </div>
     <div class="cta-row">
@@ -552,8 +552,8 @@ footer strong { color: var(--ink); }
 <!-- ==================== MARQUEE ==================== -->
 <div class="marquee" aria-hidden="true">
   <div class="marquee-track">
-    <span>Offline DT &gt; online RL</span><span>★</span><span>Beats real-world dispatch replay</span><span>★</span><span>4/4 identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver at inference</span><span>★</span>
-    <span>Offline DT &gt; online RL</span><span>★</span><span>Beats real-world dispatch replay</span><span>★</span><span>4/4 identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver at inference</span><span>★</span>
+    <span>Offline DT &gt; online RL</span><span>★</span><span>Beats real-world dispatch replay</span><span>★</span><span>4/4 identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver in the control loop</span><span>★</span>
+    <span>Offline DT &gt; online RL</span><span>★</span><span>Beats real-world dispatch replay</span><span>★</span><span>4/4 identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver in the control loop</span><span>★</span>
   </div>
 </div>
 
@@ -573,7 +573,7 @@ footer strong { color: var(--ink); }
         This project shows that belief was an artifact of the <em>teacher</em>, not the student:
         by distilling an honest stochastic-dynamic-programming (SDP) planning agent into a standalone
         Decision Transformer, the offline-data ceiling breaks entirely — no clairvoyance,
-        no solver at deployment, and better than PPO everywhere it was tested.</p>
+        no solver in the control loop, and better than PPO everywhere it was tested.</p>
     </div>
   </div>
 </section>
@@ -643,8 +643,8 @@ footer strong { color: var(--ink); }
         <ul>
           <li>Modern v2: 8×768, GQA (12Q/6KV), RMSNorm+QK-norm, SwiGLU</li>
           <li>Mixed action head (tanh energy / sigmoid FCAS)</li>
-          <li>Trained on 640 honest SDP-teacher episodes — not market logs</li>
-          <li>J_t(soc) prompts via rtg_mode="auto"; no solver at inference</li>
+          <li>Trained on 320 wear-calibrated honest SDP-teacher episodes — not market logs</li>
+          <li>J_t(soc) prompts via rtg_mode="auto"; no solver in the control loop</li>
         </ul>
       </div>
       <div class="env-card" tabindex="0" title="Earlier DT generations kept for comparison: behaviour-cloned and GRPO-tuned variants.">
@@ -940,7 +940,7 @@ footer strong { color: var(--ink); }
         <div class="pipe-node"><b>J_t(soc) cost-to-go table</b><br><span class="sub">remaining value per (timestep, SOC)<br>under the seasonal forecast</span></div>
       </div>
       <div class="pipe-arrow">↓&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓</div>
-      <div class="pipe-node accent"><b>Standalone Decision Transformer</b> <span class="sub">modern v2 · 8×768 GQA · mixed action head · no solver at inference</span></div>
+      <div class="pipe-node accent"><b>Standalone Decision Transformer</b> <span class="sub">modern v2 · 8×768 GQA · mixed action head · no solver in the control loop</span></div>
       <div class="pipe-arrow">↓</div>
       <div class="pipe-node"><b>Inference: rtg_mode="auto"</b><br><span class="sub">identity (price-taking) surfaces → J_t(soc) state-dependent prompt&nbsp;&nbsp;·&nbsp;&nbsp;impact surfaces → conservative constant RTG</span></div>
     </div>
@@ -1461,7 +1461,7 @@ var DATA = {
     { stage: 7, name: "Honest SDP executor", arch: "waypoint-DT + SDP", data: "seasonal forecast only", dm: 59091, solver: true,
       desc: "Replacing the clairvoyant LP with a non-clairvoyant SDP planner (seasonal forecast, degradation-aware) lifted the foresight caveat — and beat the LP out-of-distribution ($59,091 DM, wins on expanded and 2025 OOD). Honest planners generalize better than clairvoyant ones. A solver still runs at inference." },
     { stage: 8, name: "Standalone J_t(soc) DT — SHIPPED", arch: "8×768 mixed-head", data: "SDP teacher trajs (320 eps, wear-calibrated)", dm: 33791,
-      desc: "The teacher distilled into a standalone transformer with no solver at inference. Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped (physics-v2, aemo_dt_sdp_jtsoc_v2cal.pt) with rtg_mode=\"auto\": beats PPO on all four extended identity surfaces (n=30/12/30/6, all paired CIs exclude zero) and passes the market-impact gate." }
+      desc: "The teacher distilled into a standalone transformer with no solver in the control loop (the J_t(soc) prompt is precomputed). Replacing the hand-tuned scalar RTG with the state-dependent J_t(soc) cost-to-go recovered the energy-arbitrage gap. Shipped (physics-v2, aemo_dt_sdp_jtsoc_v2cal.pt) with rtg_mode=\"auto\": beats PPO on all four extended identity surfaces (n=30/12/30/6, all paired CIs exclude zero) and passes the market-impact gate." }
   ],
   failedFixes: [
     { fix: "RTG prompt sweep (0–50)", result: "Flat — not a prompting artifact.", tag: "negative" },

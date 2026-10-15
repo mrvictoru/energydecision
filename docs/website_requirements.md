@@ -64,7 +64,7 @@ fetch them at runtime.
 - **Key stat callouts** (large numbers, animated count-up on scroll):
   - **3.84×** profit vs PPO on the standard-2024 surface ($16,501 vs $4,303 /ep, n=30; physics-v2 `v2cal` checkpoint)
   - **4/4** identity surfaces won (+ impact gate passed)
-  - **0** solver at inference (fully deployable standalone transformer)
+  - **0** solvers in the control loop (standalone transformer at deployment; the `J_t(soc)` prompt is precomputed)
   - **4/4** identity-surface 95% bootstrap CIs exclude zero (extended surfaces; the v1 six-comparison result is in §8.2.10)
 - **Primary CTA buttons:** "Read the report" → `https://github.com/mrvictoru/energydecision/blob/main/report.md`; "Get the model" → `https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp`
 
@@ -74,7 +74,7 @@ Explain in ~150 words, for a technically literate but non-specialist reader:
 - Grid-scale batteries in Australia's NEM earn money two ways: energy arbitrage (buy low / sell high on 5-minute spot prices) and FCAS ancillary services (8 markets).
 - The control problem: decide dispatch + FCAS bids every 5 minutes, net of battery degradation.
 - Prior belief: online RL (PPO) was needed to capture FCAS spikes; offline behaviour cloning couldn't exceed its training data.
-- This project's result: distilling an honest stochastic-dynamic-programming (SDP) planning teacher into a standalone Decision Transformer breaks that ceiling — no clairvoyance, no solver at inference, better than PPO everywhere tested.
+- This project's result: distilling an honest stochastic-dynamic-programming (SDP) planning teacher into a standalone Decision Transformer breaks that ceiling — no clairvoyance, no solver in the control loop, better than PPO everywhere tested.
 
 ### 3.3 Environment explainer (interactive diagram)
 

@@ -119,7 +119,7 @@ comparative claims, but are not a safety prerequisite.
 
 | ID | Task | Target | Status |
 |---|---|---|---|
-| 3.1 | **Impact-aware J_t(soc) table (H1)** — recompute cost-to-go with `realized_energy_price` (post-impact) inside `compute_cost_to_go_table`; validate on `stagec_jtsoc_dispatch` + impact surface | Fix the price-taking over-prompt that collapses Hornsdale/Torrens under merit-order | Open — H1 in preferred policy plan |
+| 3.1 | **Impact-aware J_t(soc) table (H1)** — the mechanism is present: `compute_cost_to_go_table` accepts an `impact_model` and re-prices each candidate action via `realized_energy_price`, and `_init_jtsoc_table` passes `env._impact`, so the table is already impact-aware. Remaining: validate on the dispatch/impact surfaces and fix residual over-trading on large batteries so explicit `j_t_soc` (not only the constant fallback) passes the impact gate | Make the state-dependent prompt usable directly under merit-order impact | 🟡 Partial (mechanism in code; needs validation/refinement) |
 | 3.2 | **Surface-aware mode gating (H3)** — `rtg_mode="auto"` already ships; validate fallback RTG=0.0 is conservative enough; sweep fallback RTG on impact surface | Already shipped; just needs validation sweep | 🟡 Partial (shipped, needs validation) |
 | 3.3 | **Oracle_MI numerical fix** — the fixed-point solve exceeds 100% PT at 150 MW+ (unreliable ceiling). Diagnose: supply-curve step granularity? convergence tolerance? | Reliable impact-aware ceiling for eval | Open |
 | 3.4 | **Dynamic RTG prompting** — match training-time decaying RTG at inference (start at target, discount per step). Test fixed vs decaying RTG on expanded 5-min surface. | RTG-distribution finding in research plan §RTG-distribution | Open |

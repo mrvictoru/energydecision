@@ -18,7 +18,7 @@ pipeline_tag: reinforcement-learning
 
 # AEMO SDP-Teacher Decision Transformer (planner-distilled, physics-v2)
 
-**The shipped / preferred model of the [energydecision](https://github.com/mrvictoru/energydecision) benchmark.** A standalone Decision Transformer distilled from an honest (non-clairvoyant), **degradation-aware** SDP-planning teacher — no solver at inference — that beats the PPO reference on **all four identity surfaces** and remains strong under the **market-impact** benchmark.
+**The shipped / preferred model of the [energydecision](https://github.com/mrvictoru/energydecision) benchmark.** A standalone Decision Transformer distilled from an honest (non-clairvoyant), **degradation-aware** SDP-planning teacher — no solver in the control loop (the J_t(soc) prompt is precomputed) — that beats the PPO reference on **all four identity surfaces** and remains strong under the **market-impact** benchmark.
 
 > **2026-09 update (physics-v2):** this model was retrained on the corrected degradation/efficiency physics (round-trip efficiency 0.80, calendar aging, corrected rainflow C-rate units) and a **wear-calibrated teacher** (`--deg-calibration 0.12`, aligning the planner's per-step wear with the environment's realized per-cycle wear). See *Provenance* below. It supersedes the earlier `aemo_dt_sdp_jtsoc_fullcorpus.pt`.
 
@@ -108,7 +108,7 @@ agent = AEMOAgent(env, algorithm="dt", model=model, rtg_mode="auto")
 ## Inference prerequisites (what else you need)
 
 1. **Source code.** The `DecisionTransformer` model, `AEMOAgent`, and the `AEMOBatteryTradingEnv` live in the [energydecision](https://github.com/mrvictoru/energydecision) repo, not in this model repo.
-2. **Seasonal RRP profiles (bundled here).** For `rtg_mode="j_t_soc"` / `"auto"` on identity surfaces, the agent builds a J_t(soc) cost-to-go table from a seasonal price forecast, cached to `data/aemo_sdp/seasonal_rrp_<REGION>.json`. The five profiles are included in this repo under `data/aemo_sdp/` — copy them to `data/aemo_sdp/` in the repo checkout (otherwise the `j_t_soc` path has to rebuild them from raw AEMO parquets, which the simulation environment fetches separately).
+2. **Seasonal RRP profiles (bundled here).** For `rtg_mode="j_t_soc"` / `"auto"` on identity surfaces, the agent builds a J_t(soc) cost-to-go table from a seasonal price forecast, cached to `data/aemo_sdp/seasonal_rrp_<REGION>.json`. The five profiles are included in this repo under `data/aemo_sdp/` — copy them to `data/aemo_sdp/` in the repo checkout (otherwise the `j_t_soc` path has to rebuild them from raw AEMO parquets, which the simulation environment fetches separately). Building the table runs **one backward-induction pass per episode** (not per step); because it depends only on the seasonal forecast and the SOC grid, it can be precomputed or cached, after which each step is a constant-time lookup.
 3. **Alternative without profiles.** `rtg_mode="constant"` (with a prompt value) needs no seasonal profile, but it is not the shipped setting and under-performs on identity surfaces.
 
 ## Intended use
