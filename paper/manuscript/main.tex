@@ -102,7 +102,8 @@ Our contributions are threefold:
 
 \begin{itemize}
   \item \textbf{Diagnosis.} We isolate the behaviour-cloning ceiling and show
-  that no within-cloning lever removes it (Figure~\ref{fig:ceiling}).
+  that no within-cloning lever removes it (Figure~\ref{fig:ceiling};
+  Appendix~\ref{app:ceiling}).
   \item \textbf{Method.} We break it by distilling an \emph{honest},
   non-clairvoyant stochastic-dynamic-programming (SDP) planning teacher
   \citep{abdulla2016optimal} into a standalone DT, following the imitation-learning
@@ -139,11 +140,39 @@ are released with this paper.
 
 % =============================================================================
 \section{Related Work}
-% TODO(author): four short paragraphs (see report.md §Related Work / positioning):
-%  1. Decision Transformer / offline RL            \cite{chen2021decision,janner2021offline,zheng2022online,li2023qdt}
-%  2. Offline-Q alternatives (IQL/CQL)             \cite{kostrikov2022iql,kumar2020cql}
-%  3. Planner distillation / imitation              \cite{ross2011reduction}
-%  4. BESS scheduling, degradation, benchmarks      \cite{abdulla2016optimal,muenzel2015multifactor,kampker2025modelling,subramanya2022review}
+
+Sequence modeling reframes control as autoregressive prediction over
+(return, state, action) tokens. The Decision Transformer conditions on a target
+return-to-go and predicts actions, matching or exceeding online RL on several
+offline benchmarks \citep{chen2021decision}; related work applies the recipe
+online \citep{zheng2022online}, to value-based relabeling \citep{li2023qdt}, and
+to whole-trajectory modeling \citep{janner2021offline}. We adopt the Decision
+Transformer and, unlike prior work, derive its RTG prompt from a planner's
+cost-to-go and gate it by market power.
+
+Offline value-based RL instead constrains or re-weights the value function to
+avoid over-estimating unseen actions, as in conservative Q-learning
+\citep{kumar2020cql} and implicit Q-learning \citep{kostrikov2022iql}. These are
+the natural alternatives to sequence modeling; we chose the Decision Transformer
+for its inference-time RTG conditioning, and leave a direct IQL/CQL comparison to
+future work.
+
+Distilling a planner into a reactive policy is classical in imitation learning,
+where DAgger aggregates expert corrections under the student's own state
+distribution \citep{ross2011reduction}. Our teacher is an honest, non-clairvoyant
+stochastic-dynamic-programming planner over a seasonal price forecast
+\citep{abdulla2016optimal}. Because it never sees realized future prices, the
+distilled policy is more robust out-of-distribution than one trained on a
+perfect-foresight planner.
+
+Battery scheduling is a mature application area: dynamic-programming and
+model-predictive approaches optimize operation against forecasts and
+degradation \citep{abdulla2016optimal}, and detailed aging models quantify the
+wear those schedules induce \citep{muenzel2015multifactor,kampker2025modelling};
+reinforcement learning has been applied to storage in a range of settings
+\citep{subramanya2022review}. Our setting differs in scope: a nine-dimensional
+co-optimization over energy and eight FCAS services, evaluated across multiple
+held-out surfaces with an explicit market-impact gate.
 
 % =============================================================================
 \section{Experimental Framework}
@@ -500,16 +529,44 @@ a gate on value-based prompting.
 % =============================================================================
 \section{Limitations}
 \label{sec:limitations}
-% TODO(author): be explicit and unprompted:
-%  - Simulator-based (sim-to-real is the top open item).
-%  - Same-simulator teacher + evaluation: residual circularity (mitigated, not
-%    removed, by 2025 OOD + impact gate).
-%  - Baseline strength: PPO is tuned (Optuna, 4M steps) but retains noise; the
-%    DT is deterministic.
-%  - Small n on some surfaces; cells within a region are correlated.
-%  - Physics-sensitivity: numbers moved between physics-v1 and v2cal.
-%  - Retention: the student keeps 51-91% of the teacher (not >100%).
-%  - Stale-cache provenance issue and its fix (paper/audit/artifacts/cache_data_staleness_finding.md).
+
+\textbf{Simulator-based.} All results come from the in-repository simulator
+driven by historical NEM data; sim-to-real transfer is the main open item. The
+market-impact model is a per-interval merit-order approximation, not a full
+market re-clear.
+
+\textbf{Same-simulator teacher and evaluation.} The teacher and the evaluation
+share the simulator, so the student may inherit environment-specific behaviour.
+Held-out 2025 data and the endogenous-price impact gate mitigate this, but the
+circularity is reduced, not removed.
+
+\textbf{Baseline strength and noise.} The PPO reference is tuned (Optuna, up to
+four million steps), but its rollouts vary slightly run-to-run at long horizons
+($\sim$1\%), whereas the student is deterministic. We therefore treat the
+paired-difference confidence interval as the primary evidence and report cell
+counts honestly.
+
+\textbf{Sample size.} Some surfaces have few cells (as few as six), and cells
+from the same region are correlated, so the cell count overstates the number of
+independent regions. The paired-difference bootstrap is the primary inferential
+tool; the Wilcoxon test is indicative at these sizes.
+
+\textbf{Sensitivity to physics.} Correcting the shared degradation and
+efficiency models moved the headline numbers substantially. The shipped results
+use the corrected physics; several earlier numbers are superseded and are not
+relied upon here.
+
+\textbf{Retention and scope.} The student retains most, but not all, of its
+teacher's performance: it is better than an online-RL baseline, not better than
+the planner it was distilled from. The approach also does not transfer
+automatically to the residential scale, where the same recipe over-cycles on
+long horizons.
+
+\textbf{Provenance.} The shipped checkpoint's \texttt{return\_scale}
+(23{,}284.83) is the correct value for inference, but it does not reproduce
+exactly as $\mathrm{p90}(|J_t|)/10$ of the released corpus, suggesting the
+released corpus may differ slightly from the file used at training; the
+discrepancy is documented in the released audit notes.
 
 % =============================================================================
 \section{Conclusion}
@@ -527,6 +584,48 @@ a gate on value-based prompting.
 
 % =============================================================================
 \appendix
+\section{Within-Cloning Levers that Did Not Break the Ceiling}
+\label{app:ceiling}
+
+Figure~\ref{fig:ceiling} shows that the ceiling breaks only when the training
+data changes. Table~\ref{tab:cloning} lists the levers we varied within the
+behaviour-cloning paradigm; none removes it, across architectures and across
+single-month and broad surfaces. All are evaluated at five-minute resolution on
+the broad (expanded-2024) surface unless noted.
+
+\begin{table}[H]
+  \centering
+  \caption{Within-cloning levers and their outcomes. None closes the
+  FCAS-bidding gap to PPO; the ceiling is a property of the logged data.}
+  \label{tab:cloning}
+  \small
+  \begin{tabular}{p{0.36\linewidth}p{0.58\linewidth}}
+    \toprule
+    Lever & Outcome \\
+    \midrule
+    RTG prompt sweep (0--100) & Flat --- not a prompting artifact \\
+    PPO-only training data (legacy and modern architectures) & Energy-heavy
+    ($\sim$\$17.6--17.8k profit, $\sim$\$2.1k FCAS); architecture is not the
+    determinant \\
+    FCAS-heavy-policy subset (A2C/TD3/SAC/DDPG episodes) & FCAS capture
+    $+23\%$ (\$4.8k$\,\to\,$\$5.9k) but still $1.7\times$ below PPO \\
+    FCAS-weighted action loss & No effect --- no higher-FCAS behaviour in the
+    data to amplify \\
+    Mixed action head (sigmoid FCAS dims) & Ambiguous: helps 2025 OOD
+    ($+22\%$), hurts in-distribution \\
+    Online fine-tuning (GRPO; full-PPO value critic) & Flat-to-negative; the
+    legacy GRPO champion was a narrow overfit (\$8{,}242 $\to$ \$1{,}533) \\
+    Explicit forecast tokens (48-step TTM) & Negative: \$4{,}564 vs \$4{,}991
+    for the modern v2 baseline \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+These results show the ceiling to be a property of the logged data: the
+FCAS-bidding behaviour the student must learn is absent from it, and no amount
+of prompting, re-weighting, or fine-tuning creates it. Section~\ref{sec:method}
+breaks it by changing the data source.
+
 \section{Provenance and Reproducibility}
 % TODO(author): point to:
 %  - paper/audit/provenance.tsv (every headline number -> artifact + command)
