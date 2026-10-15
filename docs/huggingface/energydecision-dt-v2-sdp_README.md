@@ -65,7 +65,7 @@ The model card's numbers above are from the corrected pipeline. Prior household 
 | Weight tying | Enabled |
 | State / action dim | 18 / 9 (`full_fcas`) |
 | Action head | Mixed (Tanh energy, Sigmoid FCAS) |
-| `return_scale` | **23,284.83** (auto-calibrated) |
+| `return_scale` | **23,284.83** — auto-calibrated at training time (the `p90(\|J_t\|)/10` heuristic), **checkpoint-specific**; must be applied at inference |
 
 Action space: dim 0 energy dispatch in [-1, 1]; dims 1–8 FCAS bids in [0, 1] (RAISEREG, LOWERREG, RAISE6SEC, LOWER6SEC, RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN). State space: 18-dim normalized market observations (time features, RRP, demand, 8 FCAS prices, generation mix, SOC).
 
