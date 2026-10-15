@@ -413,13 +413,32 @@ OOD surface.
 % =============================================================================
 \section{Market-Impact Gate}
 \label{sec:impact}
-% TODO(author): C3. Describe the piecewise merit-order impact model, the 9
-% grid-scale cells, and the result [FACT]:
-%   fixed rtg0.0 fallback beats PPO on 9/9 cells;
-%   per-battery ratios small 4.36x / hornsdale 4.71x / torrens 4.67x;
-%   paired diff +167,099 USD, 95% CI [101,213, 227,362], p=0.0039.
-%   Key point: value-based prompts must be gated by market power (auto mode).
 
+To test robustness to endogenous prices we use the piecewise-merit-order model
+of Section~\ref{sec:setup}: energy prices shift with the battery's net dispatch
+(charging raises demand, discharging raises supply), and FCAS prices are
+attenuated by the battery's share of estimated service depth. This is a
+per-interval approximation of price impact, not a full market re-clear.
+
+The gate comprises nine matched scenario--battery cells: three grid-scale
+batteries (small, Hornsdale-class, and Torrens Island-class) in three scenarios
+(SA1 October and November, VIC1 October). Under market impact, \texttt{auto}
+uses the fixed \texttt{rtg0.0} prompt rather than the state-dependent
+$J_t(s)$ prompt, and we compare this shipped fallback with PPO on the same
+cells. The Decision Transformer earns more than PPO in all nine cells. Across
+the nine paired differences, its mean advantage is \$167{,}099 per episode
+(95\% bootstrap confidence interval [\$101{,}213, \$227{,}362]). At $n=9$ the
+two-sided Wilcoxon minimum is $0.0039$, which the paired test attains; the
+bootstrap interval is the primary evidence. The ratio of mean profits is
+4.36$\times$ for the small battery, 4.71$\times$ for Hornsdale, and
+4.67$\times$ for Torrens Island. For the price-taking counterpart, see the
+identity-surface comparisons in Section~\ref{sec:experiments}.
+
+These results support a mode-selection rule, not a claim that one prompt is
+best in every regime: use the state-dependent value prompt when the battery
+is approximately price-taking, and the conservative constant prompt when
+its dispatch can materially affect prices. In this sense, market power is
+a gate on value-based prompting.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.8\linewidth]{figures/fig4_impact_resilience.pdf}
@@ -464,7 +483,9 @@ OOD surface.
 %  - paper/audit/provenance.tsv (every headline number -> artifact + command)
 %  - paper/environment.txt (frozen environment), tag preprint-v1
 %  - HF artifacts: model mrvictoru/energydecision-dt-v2-sdp, dataset
-%    mrvictoru/AEMO_simulated_trade_sdp
+%    mrvictoru/AEMO_simulated_trade_sdp, waypoint helper mrvictoru/energydecision-waypoint-dt
+%  - identity-surface significance: paper/audit/artifacts/stagec_v2cal_extended_significance.json
+%  - impact-gate analysis: paper/audit/artifacts/stagec_v2cal_impact_analysis.json
 %  - leakage check, determinism probe, cache-key fix
 %  - test suite: 387 passing
 
