@@ -66,16 +66,65 @@
 
 % =============================================================================
 \section{Introduction}
-% TODO(author): ~1 page. Structure:
-%  - Why BESS dispatch is hard: co-optimise energy + 8 FCAS, degradation matters,
-%    online exploration is expensive/risky -> offline learning is attractive.
-%  - The catch: offline behaviour cloning is bounded by logged behaviour (C1).
-%  - Contribution list (3 bullets = the three claims):
-%      C1 diagnose the behaviour-cloning ceiling (and show which levers fail);
-%      C2 break it via planner distillation + J_t(soc) prompting;
-%      C3 pass a market-impact gate (prompt must be gated by market power).
-%  - One-paragraph summary of results with [FACT] numbers.
-%  \cite{chen2021decision} \cite{ross2011reduction}
+Grid-scale batteries are now a material part of Australia's National Electricity
+Market (NEM), earning revenue both from energy arbitrage and from Frequency
+Control Ancillary Services (FCAS) --- eight reserve markets that a single
+controller must bid into simultaneously. Every five minutes the controller
+chooses a nine-dimensional action: how much to charge or discharge, and how much
+capacity to offer into each reserve service, while accounting for the wear each
+cycle imposes on the battery. This is a sequential decision problem under
+uncertainty, and it is in principle well suited to reinforcement learning
+\citep{subramanya2022review}.
+
+The practical obstacle is that online reinforcement learning learns by
+exploration. In a live market, exploration is expensive, risky, and slow to
+converge, and the value is concentrated in rare events --- energy price spikes
+and FCAS scarcity prices --- that a learner must experience to price. Learning
+from logged data avoids exploration entirely. The Decision Transformer (DT) is
+the leading offline sequence-modeling approach: it is trained on fixed
+trajectories with no environment interaction, and it conditions its actions on a
+return-to-go (RTG) prompt describing how much value should remain
+\citep{chen2021decision}. Offline learning, however, inherits the behaviour of
+its data: a model trained by behaviour cloning cannot reliably produce actions
+it has never seen.
+
+We study whether that limitation is fundamental for multi-market battery
+dispatch, and show that it is not. We first document a
+\emph{behaviour-cloning ceiling} (Figure~\ref{fig:ceiling}): across a systematic
+search within the cloning paradigm --- larger and better-curated offline
+datasets, RTG prompting, loss re-weighting, mixed action heads, architectural
+changes, and online fine-tuning --- the DT never exceeds the FCAS-bidding
+behaviour present in its logged data, and stays well below a tuned
+proximal-policy-optimization (PPO) baseline on broad and out-of-distribution
+surfaces. The ceiling is a property of the data, not of the model.
+
+Our contributions are threefold:
+
+\begin{itemize}
+  \item \textbf{Diagnosis.} We isolate the behaviour-cloning ceiling and show
+  that no within-cloning lever removes it (Figure~\ref{fig:ceiling}).
+  \item \textbf{Method.} We break it by distilling an \emph{honest},
+  non-clairvoyant stochastic-dynamic-programming (SDP) planning teacher
+  \citep{abdulla2016optimal} into a standalone DT, following the imitation-learning
+  recipe of \citet{ross2011reduction}, and conditioning the student on a
+  \emph{state-dependent} RTG prompt derived from the planner's cost-to-go
+  $J_t(\mathrm{soc})$ (Section~\ref{sec:method}). No solver runs in the control
+  loop at deployment.
+  \item \textbf{Evaluation.} We introduce a market-impact gate that re-prices the
+  battery's own dispatch endogenously, and show that the value prompt must be
+  gated by market power: the shipped policy passes the gate on all nine
+  grid-scale cells (Section~\ref{sec:impact}).
+\end{itemize}
+
+On four held-out surfaces, the standalone DT beats tuned PPO by 3.84$\times$ on
+standard 2024, 1.80$\times$ on dispatch-matched, 6.70$\times$ on expanded
+broad-2024, and 6.39$\times$ on 2025 out-of-distribution data, with all four
+paired-difference 95\% confidence intervals excluding zero
+(Section~\ref{sec:experiments}); it retains most of its solver-in-the-loop
+teacher's performance while removing the solver from the control loop. All
+results are simulator-based and driven by historical NEM data; sim-to-real
+transfer is the main open question. Code, trajectory corpora, and model weights
+are released with this paper.
 
 \begin{figure}[htbp]
   \centering
