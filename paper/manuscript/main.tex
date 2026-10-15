@@ -107,7 +107,8 @@ Market (NEM), using the repository's \texttt{AEMOBatteryTradingEnv}. The
 environment advances in five-minute intervals and exposes an 18-dimensional
 observation: calendar features (hour-of-day and day-of-year sine/cosine
 encodings and a peak-period indicator), the regional reference price (RRP),
-total regional demand, the eight FCAS prices, the solar and wind generation
+total regional demand, the eight frequency-control ancillary service (FCAS)
+prices, the solar and wind generation
 fractions, and the battery state of charge. The action is nine-dimensional: one
 energy-dispatch command in $[-1,1]$ (positive charges, negative discharges) and
 eight FCAS bids in $[0,1]$, one per service (raise and lower regulation, and the
@@ -120,12 +121,13 @@ cost.
 Each battery is specified by an energy capacity, a power limit, and an initial
 state of charge. Training uses four configurations spanning 2--50\,MWh, at a
 constant cell temperature of $30^\circ$C. Battery wear is modelled with a
-real-world calendar-and-cycle aging model: calendar aging from
-solid-electrolyte-interphase growth with Arrhenius temperature dependence, and
-cycle aging that scales as a power law in depth of discharge and C-rate. We use
-the LFP preset; the combined calendar-plus-cycle formulation follows
-\citet{kampker2025modelling}, and the multi-factor cycle-life component follows
-\citet{muenzel2015multifactor}. Wear is charged to the policy as part of the
+real-world calendar-and-cycle aging model: calendar aging from time- and
+temperature-driven solid-electrolyte-interphase growth (Arrhenius temperature
+dependence), and cycle aging that grows as a power law in depth of discharge and
+increases with the C-rate (charge/discharge rate). We use the
+lithium-iron-phosphate (LFP) preset; the combined calendar-plus-cycle
+formulation follows \citet{kampker2025modelling}, and the multi-factor
+cycle-life component follows \citet{muenzel2015multifactor}. Wear is charged to the policy as part of the
 environment reward and reported as a cost per unit of throughput.
 
 \subsection{Market-impact model}
