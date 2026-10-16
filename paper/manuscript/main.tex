@@ -1,19 +1,8 @@
 % =============================================================================
 %  Planner-Distilled Decision Transformers for Multi-Market BESS Dispatch
-%  ArXiv preprint — NeurIPS-style.  SCAFFOLD ONLY.
-% -----------------------------------------------------------------------------
-%  HOW TO USE (author):
-%   - This file is a SKELETON. Every `% TODO(author):` marks text YOU must write.
-%   - Numbers marked [FACT] are traced in paper/audit/provenance.tsv — keep them
-%     consistent with that table; do not retype from memory.
-%   - Figures use \figph{} placeholders until Phase 4 regenerates them from the
-%     extended-surface artifacts. Replace with \includegraphics when ready.
-%
-%  CLAIM MAP
-%   C1 (diagnosis/negative) -> Sec. intro + Sec. cloning-ceiling
-%   C2 (method/positive)    -> Sec. method + Sec. results
-%   C3 (robustness)         -> Sec. market-impact
-%  Evidence: report.md §8.2.10 (v1 ladder), §8.2.11 (shipped), paper/audit/*
+%  ArXiv preprint — NeurIPS-style.
+%  Claim map: C1 diagnosis (§1, App. A); C2 method (§4); C3 impact gate (§6).
+%  All headline numbers are traced in paper/audit/provenance.tsv.
 % =============================================================================
 \documentclass{article}
 
@@ -34,11 +23,6 @@
 \usepackage{graphicx}
 \usepackage{float}   % [H] = pin floats exactly where written
 \usepackage{xcolor}
-
-% Placeholder box for figures not yet regenerated (Phase 4).
-\newcommand{\figph}[1]{%
-  \fbox{\parbox[c][4.5cm][c]{0.86\linewidth}{\centering\small #1}}%
-}
 
 \title{Planner-Distilled Decision Transformers Break the\\ Behaviour-Cloning Ceiling in Multi-Market BESS Dispatch}
 
@@ -64,8 +48,8 @@ in its logs. We break the ceiling by distilling an honest, non-clairvoyant
 stochastic-dynamic-programming planning teacher into a standalone Decision
 Transformer, conditioned on a state-dependent return-to-go prompt derived from
 the planner's cost-to-go. The resulting policy beats a tuned PPO baseline on four
-held-out surfaces --- standard, dispatch-matched, expanded broad-2024, and 2025
-out-of-distribution --- by $3.84\times$, $1.80\times$, $6.70\times$, and
+held-out surfaces (standard, dispatch-matched, expanded broad-2024, and 2025
+out-of-distribution) by $3.84\times$, $1.80\times$, $6.70\times$, and
 $6.39\times$, with all four paired-difference 95\% confidence intervals excluding
 zero, and passes a market-impact gate on all nine grid-scale cells with no solver
 in the control loop. Results are simulator-based; sim-to-real transfer is the
@@ -76,7 +60,7 @@ main open question.
 \section{Introduction}
 Grid-scale batteries are now a material part of Australia's National Electricity
 Market (NEM), earning revenue both from energy arbitrage and from Frequency
-Control Ancillary Services (FCAS) --- eight reserve markets that a single
+Control Ancillary Services (FCAS), eight reserve markets that a single
 controller must bid into simultaneously. Every five minutes the controller
 chooses a nine-dimensional action: how much to charge or discharge, and how much
 capacity to offer into each reserve service, while accounting for the wear each
@@ -86,10 +70,10 @@ uncertainty, and it is in principle well suited to reinforcement learning
 
 The practical obstacle is that online reinforcement learning learns by
 exploration. In a live market, exploration is expensive, risky, and slow to
-converge, and the value is concentrated in rare events --- energy price spikes
-and FCAS scarcity prices --- that a learner must experience to price. Learning
+converge, and the value is concentrated in rare events (energy price spikes
+and FCAS scarcity prices) that a learner must experience to price. Learning
 from logged data avoids exploration entirely. The Decision Transformer (DT) is
-the leading offline sequence-modeling approach: it is trained on fixed
+the leading offline sequence-modelling approach: it is trained on fixed
 trajectories with no environment interaction, and it conditions its actions on a
 return-to-go (RTG) prompt describing how much value should remain
 \citep{chen2021decision}. Offline learning, however, inherits the behaviour of
@@ -99,11 +83,11 @@ it has never seen.
 We study whether that limitation is fundamental for multi-market battery
 dispatch, and show that it is not. We first document a
 \emph{behaviour-cloning ceiling} (Figure~\ref{fig:ceiling}): across a systematic
-search within the cloning paradigm --- larger and better-curated offline
-datasets, RTG prompting, loss re-weighting, mixed action heads, architectural
-changes, and online fine-tuning --- the DT never exceeds the FCAS-bidding
+search within the cloning paradigm (larger and better-curated offline
+datasets; RTG prompting; loss re-weighting; mixed action heads; architectural
+changes; and online fine-tuning), the DT never exceeds the FCAS-bidding
 behaviour present in its logged data, and stays well below a tuned
-proximal-policy-optimization (PPO) baseline on broad and out-of-distribution
+proximal-policy-optimisation (PPO) baseline on broad and out-of-distribution
 surfaces. The ceiling is a property of the data, not of the model.
 
 Our contributions are threefold:
@@ -132,8 +116,8 @@ paired-difference 95\% confidence intervals excluding zero
 (Section~\ref{sec:experiments}); relative to its solver-in-the-loop teacher on
 the same surfaces it retains 77\% of the teacher's aggregate profit on standard
 2024 and 70\% on dispatch-matched, and \emph{exceeds} it on expanded broad-2024
-(132\%) and 2025 out-of-distribution (276\%) --- where the teacher's
-seasonal-forecast planning generalizes less well --- all while removing the
+(132\%) and 2025 out-of-distribution (276\%), where the teacher's
+seasonal-forecast planning generalises less well, all while removing the
 solver from the control loop. All
 results are simulator-based and driven by historical NEM data; sim-to-real
 transfer is the main open question. Code, trajectory corpora, and model weights
@@ -145,27 +129,27 @@ are released with this paper.
   \caption{The behaviour-cloning ceiling and how it is broken. Within the
   cloning paradigm (grey) profit improves then plateaus; solver-in-the-loop
   planners (orange) exceed it but are not deployable; the distilled standalone
-  student (teal) keeps the ceiling broken with no solver at inference. Values are
-  per-stage evaluation surfaces (report \S8.2.7).}
+  student (teal) keeps the ceiling broken with no solver in the control loop.
+  Values are per-stage evaluation surfaces.}
   \label{fig:ceiling}
 \end{figure}
 
 % =============================================================================
 \section{Related Work}
 
-Sequence modeling reframes control as autoregressive prediction over
+Sequence modelling reframes control as autoregressive prediction over
 (return, state, action) tokens. The Decision Transformer conditions on a target
 return-to-go and predicts actions, matching or exceeding online RL on several
 offline benchmarks \citep{chen2021decision}; related work applies the recipe
 online \citep{zheng2022online}, to value-based relabeling \citep{li2023qdt}, and
-to whole-trajectory modeling \citep{janner2021offline}. We adopt the Decision
+to whole-trajectory modelling \citep{janner2021offline}. We adopt the Decision
 Transformer and, unlike prior work, derive its RTG prompt from a planner's
 cost-to-go and gate it by market power.
 
 Offline value-based RL instead constrains or re-weights the value function to
 avoid over-estimating unseen actions, as in conservative Q-learning
 \citep{kumar2020cql} and implicit Q-learning \citep{kostrikov2022iql}. These are
-the natural alternatives to sequence modeling; we chose the Decision Transformer
+the natural alternatives to sequence modelling; we chose the Decision Transformer
 for its inference-time RTG conditioning, and leave a direct IQL/CQL comparison to
 future work.
 
@@ -173,17 +157,17 @@ Distilling a planner into a reactive policy is classical in imitation learning,
 where DAgger aggregates expert corrections under the student's own state
 distribution \citep{ross2011reduction}. Our teacher is an honest, non-clairvoyant
 stochastic-dynamic-programming planner over a seasonal price forecast
-\citep{abdulla2016optimal}. Because it never sees realized future prices, the
+\citep{abdulla2016optimal}. Because it never sees realised future prices, the
 distilled policy is more robust out-of-distribution than one trained on a
 perfect-foresight planner.
 
 Battery scheduling is a mature application area: dynamic-programming and
-model-predictive approaches optimize operation against forecasts and
+model-predictive approaches optimise operation against forecasts and
 degradation \citep{abdulla2016optimal}, and detailed aging models quantify the
 wear those schedules induce \citep{muenzel2015multifactor,kampker2025modelling};
 reinforcement learning has been applied to storage in a range of settings
 \citep{subramanya2022review}. Our setting differs in scope: a nine-dimensional
-co-optimization over energy and eight FCAS services, evaluated across multiple
+co-optimisation over energy and eight FCAS services, evaluated across multiple
 held-out surfaces with an explicit market-impact gate.
 
 % =============================================================================
@@ -193,7 +177,7 @@ held-out surfaces with an explicit market-impact gate.
 \subsection{Market environment}
 
 We model a grid-scale battery participating in Australia's National Electricity
-Market (NEM), using the repository's \texttt{AEMOBatteryTradingEnv}. The
+Market (NEM), using the \texttt{AEMOBatteryTradingEnv} environment. The
 environment advances in five-minute intervals and exposes an 18-dimensional
 observation: calendar features (hour-of-day and day-of-year sine/cosine
 encodings and a peak-period indicator), the regional reference price (RRP),
@@ -225,10 +209,10 @@ environment reward and reported as a cost per unit of throughput.
 By default the battery is a price taker: it trades at the observed historical
 RRP and FCAS prices, which its own dispatch does not move. For impact-aware
 evaluation we use a piecewise-merit-order model in which the battery's dispatch
-changes the realised prices --- charging adds demand and raises the energy price,
-discharging adds supply and lowers it --- and each FCAS price is reduced in
+changes the realised prices (charging adds demand and raises the energy price,
+discharging adds supply and lowers it), and each FCAS price is reduced in
 proportion to the battery's share of an estimated service depth. This is a
-per-interval approximation of an endogenous market rather than a full market
+per-interval approximation of an endogenous market, not a full market
 re-clear. We call evaluations without this model \emph{identity} surfaces and
 those with it \emph{impact} surfaces; Section~\ref{sec:impact} reports the impact
 gate.
@@ -241,7 +225,7 @@ type. Training trajectories and the seasonal price profile are drawn from
 pre-2024 windows; evaluation uses 2024 (identity surfaces) and 2025
 (out-of-distribution) windows that are held out by date. Because the exported
 trajectory corpus does not store timestamps, the training/evaluation separation
-was verified against the source data windows rather than by auditing per-row
+was verified against the source data windows, not from per-row
 timestamps.
 
 % =============================================================================
@@ -264,7 +248,7 @@ timestamps.
 
 Dynamic programming solves a finite-horizon control problem by working
 backward from a terminal cost. At each time and state, it selects a feasible
-action that minimizes the immediate cost plus the cost-to-go of the resulting
+action that minimises the immediate cost plus the cost-to-go of the resulting
 state. In battery dispatch, the state includes the battery's state of charge
 (SOC), and the actions control charging or discharging. The general
 battery-planning formulation is related to prior work on SDP-based storage
@@ -275,10 +259,10 @@ For energy dispatch, the teacher constructs a regional reference price (RRP)
 forecast by averaging historical RRP within month-of-year and hour-of-day
 bins. The profile is estimated from pre-2024 processed data and indexed by
 the settlement times in each episode. The energy planner therefore uses
-seasonal mean prices, not the episode's realized future RRP. FCAS is handled
+seasonal mean prices, not the episode's realised future RRP. FCAS is handled
 separately: the bidding rule uses prices available at the current step and
 does not forecast future FCAS prices. We use ``non-clairvoyant'' to describe
-this restricted information set, in contrast to a planner given realized
+this restricted information set, in contrast to a planner given realised
 future prices. For example, the NSW1 October seasonal profile gives mean RRP
 values of about A\$77/MWh at 07:00 and A\$184/MWh at 18:00. The teacher
 therefore expects lower-priced morning energy and higher-priced evening energy,
@@ -289,10 +273,10 @@ The teacher is a three-stage pipeline (Figure~\ref{fig:pipeline}):
 \begin{enumerate}
   \item \textbf{SOC waypoints.} A learned model proposes a sequence of
   intermediate SOC targets. It supplies targets to the planner but does not
-  optimize the dispatch actions.
+  optimise the dispatch actions.
   \item \textbf{Energy dispatch.} For each interval between waypoints, a
-  discretized dynamic program performs backward induction over SOC states
-  and candidate charge/discharge actions. It minimizes forecast energy cost
+  discretised dynamic program performs backward induction over SOC states
+  and candidate charge/discharge actions. It minimises forecast energy cost
   plus estimated degradation cost, with a soft terminal penalty that
   encourages the final SOC to approach the interval's target. The wear
   estimate combines the planner's degradation estimator with a linear
@@ -304,10 +288,10 @@ The teacher is a three-stage pipeline (Figure~\ref{fig:pipeline}):
 \end{enumerate}
 Thus, the teacher combines learned waypoint selection, dynamic-programming
 energy planning, and rule-based FCAS bidding. It is not a pure SDP solver
-or a joint optimizer of energy and FCAS.
+or a joint optimiser of energy and FCAS.
 
 We also compute a free-terminal cost-to-go table $J_t(s)$ over time $t$ and
-discretized SOC $s$:
+discretised SOC $s$:
 \begin{equation}
   J_t(s) \;=\; \min_{a \in \mathcal{A}(s)}
   \left[ c_t(s,a) + J_{t+1}(s') \right],
@@ -318,10 +302,10 @@ the resulting next SOC, and $c_t$ includes forecast energy cost and the
 degradation surrogate. Unlike the waypoint-constrained dispatch plan, this
 table has no terminal SOC target. At inference, the table is queried at the
 current time and SOC, and the Decision Transformer receives $-J_t(s)$ as its
-return-to-go prompt. The table provides a value-conditioning signal rather than
-the SDP policy: the student selects actions in a single forward pass, with no
-solver in the action-selection loop. The table itself is built by the same
-seasonal dynamic program; because it uses no realized prices, it can be
+return-to-go prompt. The table provides a value-conditioning signal, not the
+SDP policy: the student selects actions in a single forward pass, with no
+solver in the control loop. The table itself is built by the same
+seasonal dynamic program; because it uses no realised prices, it can be
 precomputed and cached per region, season, and battery.
 
 \begin{figure}[htbp]
@@ -333,8 +317,6 @@ precomputed and cached per region, season, and battery.
   state-dependent RTG prompt.}
   \label{fig:jtsoc}
 \end{figure}
-%  4.2 Trajectory generation — teacher rollouts -> (obs, action, reward) triples;
-%      the J_t(soc) cost-to-go column.
 \subsection{Trajectory corpus}
 
 We generated the student-training corpus by sampling random, fixed-length
@@ -349,7 +331,7 @@ bidder in the environment, so its observations, teacher actions, and rewards
 come from the same rollout rather than being assembled from separate sources
 \cite{generate_sdp_dt_trajectories}.
 
-Each row stores the normalized 18-dimensional observation, the 9-dimensional
+Each row stores the normalised 18-dimensional observation, the 9-dimensional
 action (one energy-dispatch component and eight FCAS bids), and the resulting
 per-step reward, together with episode and step identifiers and metadata.
 For the shipped corpus, a per-step \texttt{rtg\_value} is also provided:
@@ -358,20 +340,17 @@ a logged discounted sum of future rewards. The exported rows do not retain
 timestamps. Accordingly, temporal non-overlap between training and evaluation
 was checked against the source data windows, rather than by auditing
 timestamps stored in each corpus row.
-%  4.3 Student DT — architecture, loss:
-%        L = w_a * MSE_action + w_s * MSE_state + w_r * MSE_return
-%      with w_a=0.999, w_s=0.002, w_r=0.0001 [FACT, shipped v2cal].
 \subsection{Student Decision Transformer}
 
 The student is a causal Decision Transformer trained on the teacher-generated
-sequences described above. At each step, it embeds the return-to-go, normalized
+sequences described above. At each step, it embeds the return-to-go, normalised
 observation, and action as an ordered sequence and uses the preceding context
 to predict actions. The shipped model has 8 Transformer blocks with hidden
 dimension 768, grouped-query attention with 12 query heads and 6 key--value
 heads, QK-Norm, rotary positional embeddings, and SwiGLU feed-forward layers.
 Its context covers 210 time steps. A mixed action head applies a hyperbolic
 tangent to the energy-dispatch output, which lies in $[-1,1]$, and a sigmoid to
-the eight FCAS-bid outputs, which lie in $[0,1]$. Training minimizes a
+the eight FCAS-bid outputs, which lie in $[0,1]$. Training minimises a
 weighted combination of action, state, and return prediction losses:
 \begin{equation}
   \mathcal{L}
@@ -386,26 +365,17 @@ prediction provide lower-weight auxiliary objectives. To keep the RTG inputs
 numerically scaled for training, we use an automatically calibrated
 \texttt{return\_scale}; for the shipped checkpoint it is 23{,}284.83, which maps
 return-to-go values to order-10 magnitudes for the network.
-% NOTE(author): the shipped return_scale (23,284.83) does NOT exactly equal
-% p90(|J_t|)/10 of the released corpus. Recomputing from
-% dt_trajectories_jtsoc_v2cal_conservative.parquet (seed-42 episode split) gives
-% p90(train)=210,670 -> 21,067, i.e. ratio ~9.1, not 10. Confirmed 2026-10-14.
-% Revisit wording once the provenance of 23,284.83 is confirmed.
-%  4.4 Return-to-go prompting — RTG = -J_t(soc); return_scale calibration;
-%      \texttt{auto} mode = j_t_soc on price-taking surfaces, constant under
-%      market impact (robustness, not collapse-avoidance).
-%  Figure placeholder: pipeline schematic.
 \subsection{Return-to-go prompting and \texttt{auto} mode}
 
 At inference time, the Decision Transformer is conditioned on a return-to-go
 (RTG) prompt derived from the teacher's free-terminal value table. Specifically,
-we set $\mathrm{RTG} = -J_t(s)$, normalized by the checkpoint's
+we set $\mathrm{RTG} = -J_t(s)$, normalised by the checkpoint's
 \texttt{return\_scale}, so that higher remaining value corresponds to a larger
 prompt token. This turns the SDP cost-to-go into a value-conditioning signal
-while keeping the action-selection loop solver-free: the student selects actions
+while keeping the control loop solver-free: the student selects actions
 with a single forward pass. The value table is produced by a single
 backward-induction pass per episode, not per decision, and because it is a
-function only of the seasonal forecast and the SOC grid (no realized prices), it
+function only of the seasonal forecast and the SOC grid (no realised prices), it
 can be precomputed offline and cached per region, season, and battery, leaving
 only a constant-time lookup at each step. Figure~\ref{fig:jtsoc} shows the table
 for a representative window.
@@ -416,8 +386,8 @@ $J_t(s)$ for the current time and SOC and feeds its negative, scaled by
 \texttt{return\_scale}, to the transformer as RTG. Under a market-impact model
 (Section~\ref{sec:impact}), where the battery's own dispatch moves prices,
 \texttt{auto} instead falls back to a constant \texttt{rtg0.0} prompt. This is a
-robustness choice rather than a failure mode: on large batteries, a value prompt
-that is too optimistic can over-trade energy and self-suppress realized prices,
+robustness choice, not a failure mode: on large batteries, a value prompt
+that is too optimistic can over-trade energy and self-suppress realised prices,
 so the conservative constant prompt is used once the battery is no longer a
 negligible price taker. Using the state-dependent prompt directly in this regime,
 rather than falling back to a constant, remains an open item.
@@ -455,7 +425,7 @@ rollouts can vary slightly run-to-run (see Table~\ref{tab:headline}).
 
 \subsection{Headline Results}
 
-Table~\ref{tab:headline} summarizes the extended identity-surface results.
+Table~\ref{tab:headline} summarises the extended identity-surface results.
 Figure~\ref{fig:main} shows the per-surface comparison and the paired
 differences, and Figure~\ref{fig:revenue} decomposes profit by revenue source.
 The student has higher mean profit than PPO on all four surfaces, and each
@@ -463,7 +433,7 @@ paired-difference 95\% confidence interval excludes zero. Relative to its
 solver-in-the-loop teacher on the same surfaces, the student retains 77\% of the
 teacher's aggregate profit on standard 2024 and 70\% on dispatch-matched, and
 exceeds it on expanded broad-2024 (132\%) and 2025 out-of-distribution (276\%),
-where the teacher's seasonal-forecast planning generalizes less well; the
+where the teacher's seasonal-forecast planning generalises less well; the
 per-cell ratios are noisier than these aggregates. The extended surfaces also
 evaluate more windows than the earlier small-sample runs, while retaining a
 small sample on the 2025 OOD surface.
@@ -532,7 +502,7 @@ These results support a mode-selection rule, not a claim that one prompt is
 best in every regime: use the state-dependent value prompt when the battery
 is approximately price-taking, and the conservative constant prompt when
 its dispatch can materially affect prices. In this sense, market power is
-a gate on value-based prompting. Figure~\ref{fig:impact} summarizes the gate.
+a gate on value-based prompting. Figure~\ref{fig:impact} summarises the gate.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.8\linewidth]{figures/fig4_impact_resilience.pdf}
@@ -546,8 +516,8 @@ a gate on value-based prompting. Figure~\ref{fig:impact} summarizes the gate.
 \section{Limitations}
 \label{sec:limitations}
 
-\textbf{Simulator-based.} All results come from the in-repository simulator
-driven by historical NEM data; sim-to-real transfer is the main open item. The
+\textbf{Simulator-based.} All results come from our simulator, driven by
+historical NEM data; sim-to-real transfer is the main open item. The
 market-impact model is a per-interval merit-order approximation, not a full
 market re-clear.
 
@@ -576,7 +546,7 @@ relied upon here.
 retains 70--77\% of its solver-in-the-loop teacher's aggregate profit on the
 in-distribution surfaces (standard, dispatch-matched) and \emph{exceeds} it on
 the broad and out-of-distribution surfaces, where the teacher's seasonal-forecast
-planning generalizes less well. Any single retention figure is therefore
+planning generalises less well. Any single retention figure is therefore
 surface-dependent, and the per-cell ratios are noisier than the aggregates. The
 approach also does not transfer automatically to the residential scale, where the
 same recipe over-cycles on long horizons.
@@ -593,7 +563,7 @@ discrepancy is documented in the released audit notes.
 We asked whether behaviour cloning is a fundamental limit for multi-market
 battery dispatch, and found that it is not. A systematic search within the
 cloning paradigm never exceeded the FCAS-bidding behaviour present in the logged
-data (C1), so the ceiling is a property of the data rather than of the model. We
+data (C1), so the ceiling is a property of the data, not of the model. We
 broke it by distilling an honest, non-clairvoyant SDP planning teacher into a
 standalone Decision Transformer prompted with a state-dependent cost-to-go
 $J_t(\mathrm{soc})$ (C2), so the student roughly matches the teacher's aggregate
@@ -602,7 +572,7 @@ no solver in the control loop. We then showed that value-based prompting must be
 gated by market power: the shipped surface-aware policy passes a piecewise
 merit-order impact gate on all nine grid-scale cells (C3).
 
-Taken together, the results argue that offline sequence modeling is a credible
+Overall, the results argue that offline sequence modelling is a credible
 control prior for utility-scale battery trading when the data source is chosen
 well --- most of the planner, none of the solver in the control loop. The main
 open question is sim-to-real transfer, which we leave to a shadow-mode
