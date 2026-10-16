@@ -13,9 +13,6 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{hyperref}
-\usepackage{url}
-\usepackage{xurl}   % let \url/\path break anywhere (avoids overfull file paths)
 \usepackage{booktabs}   % \toprule \midrule \bottomrule
 \usepackage{amsfonts}
 \usepackage{amsmath}
@@ -23,7 +20,14 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{float}   % [H] = pin floats exactly where written
+\usepackage{array}   % >{\raggedright\arraybackslash}p{...} column specs
 \usepackage{xcolor}
+% hyperref must be loaded AFTER the packages it patches (float, graphicx, ...);
+% loading it early gives captions duplicate PDF anchors ("destination ... already
+% used, duplicate ignored"). url then hyperref then xurl is the safe order.
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{xurl}   % after hyperref: let \url/\path break anywhere (avoids overfull paths)
 
 \title{Planner-Distilled Decision Transformers Break the\\ Behaviour-Cloning Ceiling in Multi-Market BESS Dispatch}
 
@@ -622,7 +626,7 @@ the broad (expanded-2024) surface unless noted.
   FCAS-bidding gap to PPO; the ceiling is a property of the logged data.}
   \label{tab:cloning}
   \small
-  \begin{tabular}{p{0.36\linewidth}p{0.58\linewidth}}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.36\linewidth}>{\raggedright\arraybackslash}p{0.58\linewidth}}
     \toprule
     Lever & Outcome \\
     \midrule
@@ -666,7 +670,7 @@ non-clairvoyant planner of Section~\ref{sec:method}.
   \caption{Datasets and routes explored, and how each was resolved.}
   \label{tab:routes}
   \small
-  \begin{tabular}{p{0.32\linewidth}p{0.28\linewidth}p{0.30\linewidth}}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.32\linewidth}>{\raggedright\arraybackslash}p{0.28\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}}
     \toprule
     Route & Purpose & Outcome / disposition \\
     \midrule
