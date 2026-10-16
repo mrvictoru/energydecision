@@ -95,7 +95,9 @@ re-weighting; mixed action heads; architectural changes; and online
 fine-tuning), the DT never exceeds the FCAS-bidding behaviour present in its
 logged data, and stays well below a tuned proximal-policy-optimisation (PPO)
 baseline on broad and out-of-distribution surfaces. The ceiling is a property of
-the data, not of the model.
+the data, not of the model. Our search ranged wider than the routes reported in
+full here; Appendix~\ref{app:routes} lists the datasets and planner variants we
+explored and set aside, with the reason in each case.
 
 Our contributions are threefold:
 
@@ -641,6 +643,49 @@ These results show the ceiling to be a property of the logged data: the
 FCAS-bidding behaviour the student must learn is absent from it, and no amount
 of prompting, re-weighting, or fine-tuning creates it. Section~\ref{sec:method}
 breaks it by changing the data source.
+
+\section{Datasets and Routes Explored}
+\label{app:routes}
+
+The shipped recipe is the survivor of a wider search over data sources and
+planner variants. Table~\ref{tab:routes} records what we tried, why, and how
+each route was resolved. Two patterns stand out. First, every behaviour-cloning
+route --- the FCAS-rich, PPO-only, and FCAS-heavy corpora --- stalled at the
+same ceiling, which is why we treat the ceiling as a property of the data rather
+than of any one corpus. Second, the first teacher we built was not deployable
+(it was given realised future prices), which motivated the honest,
+non-clairvoyant planner of Section~\ref{sec:method}.
+
+\begin{table}[H]
+  \centering
+  \caption{Datasets and routes explored, and how each was resolved.}
+  \label{tab:routes}
+  \small
+  \begin{tabular}{p{0.32\linewidth}p{0.28\linewidth}p{0.30\linewidth}}
+    \toprule
+    Route & Purpose & Outcome / disposition \\
+    \midrule
+    Residential benchmark (\texttt{SolarBatteryEnv}, Ausgrid) & Legacy household
+    benchmark & kWh-scale, single-tariff market; out of scope here \\
+    Original grid-scale corpus (162 eps, 5 regions) & First AEMO corpus &
+    Superseded by the richer corpora below \\
+    FCAS-rich corpus (2{,}425 eps: PPO, TD3, A2C, DDPG, SAC, rule-based) &
+    Behaviour cloning & Stalls at the ceiling (Appendix~\ref{app:ceiling}) \\
+    PPO-only corpus (900 eps) & Does data composition explain the ceiling? &
+    Energy-heavy, no FCAS edge; negative \\
+    FCAS-heavy subset (1{,}200 eps: A2C/TD3/SAC/DDPG) & Does more FCAS data
+    help? & FCAS capture $+23\%$, still $1.7\times$ below PPO; negative \\
+    TTM forecast tokens & Do explicit forecasts help? & $8.5\%$ below the
+    modern-v2 baseline; negative \\
+    Oracle-LP teacher (SOC waypoints) & First teacher attempt & Given realised
+    future prices; not deployable \\
+    Real AEMO dispatch replay (Dalrymple North) & Realistic baseline & Kept as
+    the dispatch-matched baseline \\
+    SDP-teacher corpora (v1 full-corpus; v2cal conservative) & Honest
+    distillation & \textbf{Shipped policy} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \section{Provenance and Reproducibility}
 
