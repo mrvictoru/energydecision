@@ -2,15 +2,15 @@
   "standard 2024": {
     "student": 16501.13635350861,
     "teacher": 21454.08123255359,
-    "ppo": 4302.6788635102985,
+    "ppo": 4302.678863510298,
     "retention": 0.7691374044240321,
-    "teacher_vs_ppo": 4.986214847335943,
+    "teacher_vs_ppo": 4.986214847335944,
     "teacher_ckpt": "soc_waypoint_dt_best.pt",
     "deg_calibration": 0.12
   },
   "dispatch-matched": {
-    "student": 33790.62157487596,
-    "teacher": 48331.607238972996,
+    "student": 33790.621574875964,
+    "teacher": 48331.607238973,
     "ppo": 18817.57642451047,
     "retention": 0.699141276386694,
     "teacher_vs_ppo": 2.56842890649933,
@@ -18,20 +18,20 @@
     "deg_calibration": 0.12
   },
   "expanded broad-2024": {
-    "student": 29124.32743300364,
-    "teacher": 22097.81605296391,
-    "ppo": 4457.965329072621,
-    "retention": 1.3179731138678425,
-    "teacher_vs_ppo": 4.956928648334926,
+    "student": 29124.327433003637,
+    "teacher": 22097.816052963914,
+    "ppo": 4349.789525512903,
+    "retention": 1.317973113867842,
+    "teacher_vs_ppo": 5.080203518665253,
     "teacher_ckpt": "soc_waypoint_dt_best.pt",
     "deg_calibration": 0.12
   },
   "2025 OOD": {
     "student": 30791.3102794281,
-    "teacher": 11149.359599204547,
-    "ppo": 4793.333572093943,
-    "retention": 2.7617111104412593,
-    "teacher_vs_ppo": 2.3260137087296444,
+    "teacher": 11149.359599204548,
+    "ppo": 4817.017667317296,
+    "retention": 2.761711110441259,
+    "teacher_vs_ppo": 2.3145772694277604,
     "teacher_ckpt": "soc_waypoint_dt_best.pt",
     "deg_calibration": 0.12
   }

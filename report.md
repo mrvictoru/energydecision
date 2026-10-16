@@ -834,7 +834,7 @@ lower FCAS.
 
 | Experiment | Result |
 |---|---|
-| RTG sweep (0–50) | Flat — not a prompting artifact |
+| RTG sweep (0–100) | Flat — not a prompting artifact |
 | PPO-only training data (legacy 8×384 and modern 8×768) | Energy-heavy ($17.6–17.8k profit, ~$2.1k FCAS) — architecture does not matter, data is the determinant |
 | FCAS-weighted action loss (`--action-dim-weights`) | No effect — data contains no higher-FCAS behaviour to amplify |
 | Online fine-tuning (GRPO; plus a new full-PPO value-critic variant) | Flat-to-negative on the fine-tune surface and on 2025 (full-PPO DT −$0.7k) |

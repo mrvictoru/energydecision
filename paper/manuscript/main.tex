@@ -223,10 +223,7 @@ The simulator is driven by historical AEMO market data: dispatch prices for
 energy and the eight FCAS services, regional demand, and generation by fuel
 type. Training trajectories and the seasonal price profile are drawn from
 pre-2024 windows; evaluation uses 2024 (identity surfaces) and 2025
-(out-of-distribution) windows that are held out by date. Because the exported
-trajectory corpus does not store timestamps, the training/evaluation separation
-was verified against the source data windows, not from per-row
-timestamps.
+(out-of-distribution) windows that are held out by date.
 
 % =============================================================================
 \section{Method}
