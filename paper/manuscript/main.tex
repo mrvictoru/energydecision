@@ -586,7 +586,11 @@ control prior for utility-scale battery trading when the data source is chosen
 well --- most of the planner, none of the solver in the control loop. The main
 open question is sim-to-real transfer, which we leave to a shadow-mode
 deployment and to extending the market-impact model beyond its per-interval
-approximation.
+approximation. A further open direction is corpus composition: we tested
+re-weighting and re-composition \emph{within} the behaviour-cloning corpora
+(Appendix~\ref{app:ceiling}), but not a mixture of teacher-generated and
+policy-generated trajectories, which could combine the teacher's FCAS bidding
+with the policies' energy behaviour.
 
 % =============================================================================
 \begin{ack}

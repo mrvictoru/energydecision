@@ -112,6 +112,7 @@ comparative claims, but are not a safety prerequisite.
 | 2.3 | **Spike-risk conditioning (Exp 6 revisit)** — add distributional spike-risk token (volatility + time-of-day + headroom) to modern v2; test on expanded 2024 & 2025 OOD | Exp 6 deferred in plan; TTM point forecasts failed because FCAS spikes are unpredictable — risk scalar may work | Low effort if generator from Phase 6 usable |
 | 2.4 | **Reward-weighted regression** — upsample high-FCAS-revenue trajectories in loss (PPO best rollouts, FCAS-heavy policies) | Data-side lever; "better offline data" without new generation | Low effort; `transformer_training.py` supports sample weighting |
 | 2.5 | **FCAS-spike period dataset** — curate episodes from high-FCAS months (Nov 2024, May 2024, Sep 2024) for targeted retrain | Targeted data quality > brute-force volume | PPO FCAS $35.5k in Nov vs DT $3.5k — that's the gap |
+| 2.6 | **Mixed-corpus distillation** — train the student on a mixture of SDP-teacher trajectories and RL-policy trajectories (PPO/SB3), to test whether the teacher's FCAS bidding and the policies' energy behaviour are complementary | Best-of-both corpus; compare against the pure-teacher shipped model on the 4 identity surfaces + impact gate | Never tried; D4 ruled out *within-cloning* re-composition only, not teacher+policy mixing. Named in the preprint conclusion as future work |
 
 ---
 
