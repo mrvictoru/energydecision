@@ -1786,9 +1786,9 @@ This report documents the system and experimental protocol; results can be itera
 
 [10] G. Zheng, A. Calandra, F. Wan, S. Levine, and K. Pertsch, "Online Decision Transformer," *International Conference on Machine Learning (ICML)*, 2022, arXiv:2202.05607.
 
-[11] W. Li, X. Chen, W. Chen, and L. Wang, "Q-learning Decision Transformer: Learning to Seek Improvements Instead of Rewards," 2023, arXiv:2306.03966.
+[11] T. Yamagata, A. Khalil, and R. Santos-Rodriguez, "Q-Learning Decision Transformer: Leveraging Dynamic Programming for Conditional Sequence Modelling in Offline RL," *International Conference on Machine Learning (ICML)*, 2023, arXiv:2209.03993.
 
-[12] M. Janner, Q. Li, and S. Levine, "Sequence Modeling is a Scalable Framework for Reinforcement Learning," *International Conference on Machine Learning (ICML)*, 2021, arXiv:2109.10120.
+[12] M. Janner, Q. Li, and S. Levine, "Offline Reinforcement Learning as One Big Sequence Modeling Problem," *Advances in Neural Information Processing Systems (NeurIPS)*, 2021, arXiv:2106.02039.
 
 ---
 
