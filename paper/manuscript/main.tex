@@ -217,8 +217,10 @@ temperature-driven solid-electrolyte-interphase growth (Arrhenius temperature
 dependence), and cycle aging that grows as a power law in depth of discharge and
 increases with the C-rate (charge/discharge rate). We use the
 lithium-iron-phosphate (LFP) preset; the combined calendar-plus-cycle
-formulation follows \citet{kampker2025modelling}, and the multi-factor
-cycle-life component follows \citet{muenzel2015multifactor}. Wear is charged to the policy as part of the
+formulation follows \citet{kampker2025modelling}, and cycles are identified by
+rainflow counting. The earlier multi-factor cycle-life model of
+\citet{muenzel2015multifactor} is also implemented in the released code but is
+not used for the results reported here. Wear is charged to the policy as part of the
 environment reward and reported as a cost per unit of throughput.
 
 \subsection{Market-impact model}
