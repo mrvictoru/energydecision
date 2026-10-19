@@ -153,16 +153,19 @@ are released with this paper.
 
 Sequence modelling reframes control as autoregressive prediction over
 (return, state, action) tokens. The Decision Transformer conditions on a target
-return-to-go and predicts actions, matching or exceeding online RL on several
-offline benchmarks \citep{chen2021decision}; related work applies the recipe
+return-to-go and predicts actions, matching or exceeding state-of-the-art
+offline RL baselines on several offline benchmarks \citep{chen2021decision};
+related work applies the recipe
 online \citep{zheng2022online}, to value-based relabeling \citep{yamagata2023qdt}, and
 to whole-trajectory modelling \citep{janner2021offline}. We adopt the Decision
 Transformer and, unlike prior work, derive its RTG prompt from a planner's
 cost-to-go and gate it by market power.
 
-Offline value-based RL instead constrains or re-weights the value function to
-avoid over-estimating unseen actions, as in conservative Q-learning
-\citep{kumar2020cql} and implicit Q-learning \citep{kostrikov2022iql}. These are
+Offline value-based RL instead guards against over-estimating unseen actions:
+conservative Q-learning penalises their values, so the learned Q-function
+lower-bounds the true value \citep{kumar2020cql}, while implicit Q-learning
+avoids querying unseen actions at all, fitting an upper expectile instead
+\citep{kostrikov2022iql}. These are
 the natural alternatives to sequence modelling; we chose the Decision Transformer
 for its inference-time RTG conditioning, and leave a direct IQL/CQL comparison to
 future work.
