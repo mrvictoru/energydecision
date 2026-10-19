@@ -80,8 +80,13 @@ The practical obstacle is that online reinforcement learning learns by
 exploration. In a live market, exploration is expensive, risky, and slow to
 converge, and the value is concentrated in rare events (energy price spikes
 and FCAS scarcity prices) that a learner must experience to price. Learning
-from logged data avoids exploration entirely. The Decision Transformer (DT) is
-the leading offline sequence-modelling approach: it is trained on fixed
+from logged data avoids exploration entirely. The Transformer established attention-based sequence modelling as a practical
+architecture, and autoregressive Transformer language models later showed broad
+few-shot performance across language tasks
+\citep{vaswani2017attention,brown2020fewshot}. This versatility motivates
+exploring sequence models for control, although success in language does not
+establish success in a battery market. The Decision Transformer (DT)
+adapts this sequence-modelling approach to offline RL: it is trained on fixed
 trajectories with no environment interaction, and it conditions its actions on a
 return-to-go (RTG) prompt describing how much value should remain
 \citep{chen2021decision}. Offline learning, however, inherits the behaviour of
@@ -604,7 +609,10 @@ approximation. A further open direction is corpus composition: we tested
 re-weighting and re-composition \emph{within} the behaviour-cloning corpora
 (Appendix~\ref{app:ceiling}), but not a mixture of teacher-generated and
 policy-generated trajectories, which could combine the teacher's FCAS bidding
-with the policies' energy behaviour.
+with the policies' energy behaviour. We also plan controlled comparisons of
+selected newer sequence-model architectures against the shipped 8-block,
+768-dimensional backbone, holding the data and evaluation protocol fixed. This
+paper does not establish that the current backbone is architecture-optimal.
 
 % =============================================================================
 \begin{ack}
