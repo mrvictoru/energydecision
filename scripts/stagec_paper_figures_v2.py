@@ -74,19 +74,22 @@ def fig1_main_results(out_dir: Path) -> None:
 
     dt = np.array([r["dt_mean"] for r in rows]) / 1e3
     pp = np.array([r["ppo_mean"] for r in rows]) / 1e3
-    dt_e = np.array([_halfwidth(r["dt_ci"]) for r in rows]) / 1e3
-    pp_e = np.array([_halfwidth(r["ppo_ci"]) for r in rows]) / 1e3
-    ax1.bar(x - w / 2, dt, w, yerr=dt_e, capsize=3, color=C_DT, label="Decision Transformer")
-    ax1.bar(x + w / 2, pp, w, yerr=pp_e, capsize=3, color=C_PPO, label="PPO (online RL)")
+    dt_lo = np.array([r["dt_mean"] - r["dt_ci"][0] for r in rows]) / 1e3
+    dt_hi = np.array([r["dt_ci"][1] - r["dt_mean"] for r in rows]) / 1e3
+    pp_lo = np.array([r["ppo_mean"] - r["ppo_ci"][0] for r in rows]) / 1e3
+    pp_hi = np.array([r["ppo_ci"][1] - r["ppo_mean"] for r in rows]) / 1e3
+    ax1.bar(x - w / 2, dt, w, yerr=[dt_lo, dt_hi], capsize=3, color=C_DT, label="Decision Transformer")
+    ax1.bar(x + w / 2, pp, w, yerr=[pp_lo, pp_hi], capsize=3, color=C_PPO, label="PPO (online RL)")
     for i, r in enumerate(rows):
         ann = "{:.2f}x\nn={}".format(r["dt_mean"] / r["ppo_mean"], r["n"])
-        ax1.text(i, max(dt[i], pp[i]) * 1.03, ann, ha="center", va="bottom", fontsize=8)
+        top = max(dt[i] + dt_hi[i], pp[i] + pp_hi[i])
+        ax1.text(i, top + 1.5, ann, ha="center", va="bottom", fontsize=8)
     ax1.set_xticks(x)
     ax1.set_xticklabels([SURFACE_LABEL[s] for s in SURFACE_ORDER])
     ax1.set_ylabel("profit per episode (k$)")
     ax1.set_title("Identity surfaces: DT vs PPO (95% CI)")
-    ax1.legend(frameon=False, fontsize=8)
-    ax1.set_ylim(0, max(dt) * 1.35)
+    ax1.legend(frameon=False, fontsize=8, loc="upper left")
+    ax1.set_ylim(0, 70)
 
     diff = np.array([r["diff_mean"] for r in rows]) / 1e3
     dlo = np.array([r["diff_mean"] - r["diff_ci"][0] for r in rows]) / 1e3
@@ -169,7 +172,8 @@ def fig5_revenue_decomposition(out_dir: Path) -> None:
     ax.set_xticklabels([SURFACE_LABEL[s] for s in SURFACE_ORDER])
     ax.set_ylabel("per episode (k$)")
     ax.set_title("Revenue decomposition: energy, FCAS, degradation (DT vs PPO)")
-    ax.legend(frameon=False, fontsize=7, ncol=2)
+    ax.set_ylim(-5, 47)
+    ax.legend(frameon=False, fontsize=7, ncol=3, loc="upper center")
     _save(fig, out_dir, "fig5_revenue_decomposition")
 
 
@@ -206,7 +210,7 @@ def fig3_jtsoc_heatmap(out_dir: Path) -> None:
     im = ax.imshow(rtg.T, aspect="auto", origin="lower",
                    extent=[hours[0], hours[-1], soc[0], soc[-1]], cmap="viridis")
     ax.set_xlabel("time within episode (hours)")
-    ax.set_ylabel("state of charge (kWh)")
+    ax.set_ylabel("state of charge (MWh)")
     ax.set_title("J_t(soc) return-to-go prompt (NSW1, Oct 2024, seasonal forecast)")
     cb = fig.colorbar(im, ax=ax)
     cb.set_label("return-to-go (A$)")
@@ -232,6 +236,8 @@ def fig6_ceiling_break(out_dir: Path) -> None:
     ax.axhline(0, color="k", lw=0.8)
     ax.set_yscale("symlog", linthresh=1000)
     ax.set_ylim(-3e4, 8e5)
+    ax.set_yticks([-1e4, -1e3, 0, 1e3, 1e4, 1e5])
+    ax.yaxis.set_minor_locator(matplotlib.ticker.NullLocator())
     ax.set_xticks(x)
     ax.set_xticklabels(stages, fontsize=7)
     ax.set_ylabel("profit/ep, dispatch-matched (A$, symlog)")
