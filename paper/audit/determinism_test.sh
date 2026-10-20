@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /home/victoru/rescued/energydecision
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONUNBUFFERED=1 AEMO_CACHE_ONLY=1
 for tag in a b; do
   python3 scripts/autoresearch_evaluator.py \

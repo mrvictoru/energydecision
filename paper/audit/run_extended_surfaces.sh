@@ -3,7 +3,7 @@
 # v2cal checkpoint. Sequential (single GPU). Canonical configs/artifacts are
 # untouched; these write to new *_v2cal dirs and use fresh reference caches.
 set -euo pipefail
-cd /home/victoru/rescued/energydecision
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONUNBUFFERED=1
 export AEMO_CACHE_ONLY=1
 

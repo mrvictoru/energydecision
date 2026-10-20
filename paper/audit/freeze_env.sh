@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-cd /home/victoru/rescued/energydecision
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 echo "## Runtime (distrobox energydecision-gpu)"
 python3 -V
 python3 - <<'PY'

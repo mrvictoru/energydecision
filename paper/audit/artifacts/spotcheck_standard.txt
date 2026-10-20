@@ -1,34 +1,40 @@
-Phase 1 reproducibility spot-check — standard identity surface
-==============================================================
+Reproducibility spot-check — standard identity surface (re-run 2026-10-20)
+=========================================================================
 
-Date:     2026-09-22
-Frozen:   commit c815c51 (tag preprint-v1)
+Frozen:   tag preprint-v1 (source frozen 2026-09-22)
 Command:  paper/audit/spotcheck_standard.sh
+          (note: the script's hard-coded /home/victoru/... path was replaced by a
+          repo-root-relative cd on 2026-10-20 so it runs from any checkout)
           python3 scripts/autoresearch_evaluator.py \
             --surface-manifest-path models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal_loss_surface_manifest.json \
             --evaluation-config configs/aemo_autoresearch_evaluator.sdp_teacher_standard.json \
             --output-dir eval_output/physics_v2/standard_v2cal_spotcheck
 Env:      AEMO_CACHE_ONLY=1, distrobox energydecision-gpu
+Wall:     ~3 min 48 s
 
-Result:   heldout_metrics_by_scenario.csv is IDENTICAL (byte-for-byte, cmp -s)
-          to the stored eval_output/physics_v2/standard_v2cal artifact.
-
-          policy          stored mean      spot-check mean
-          candidate_dt    16208.586198     16208.586198
-          ppo_reference    2352.701767      2352.701767
-          fcas_rule      -56095.360774    -56095.360774
+Result (mean avg_profit_per_episode over the 5 standard scenarios)
+-----------------------------------------------------------------
+  policy          stored (2026-09-14)   spot-check (2026-10-20)   delta
+  candidate_dt          16208.586198          16208.586198       0.000000
+  ppo_reference          2352.701767           2354.816929      +2.115162  (+0.09%)
+  fcas_rule            -56095.360774         -48423.452136     +7671.908638
 
 Interpretation
 --------------
-The evaluator is deterministic (fixed scenarios, PPO deterministic=True and
-served from reference_cache, DT action selection is a deterministic forward
-pass, global stats fitted from the same data). Combined with the finding that
-no AEMO eval-path source file changed after the v2cal artifacts were produced
-(2026-09-14/15), this establishes that the stored identity-surface numbers are
-reproducible from the frozen release.
+- The **Decision Transformer is bit-identical** across the two runs: the evaluator
+  is deterministic for the student (fixed scenarios, deterministic forward pass,
+  global stats fitted from the same data). This is the reproducibility claim that
+  matters for the paper's headline numbers.
+- **PPO** differs by +0.09%, inside the ~1% run-to-run variation disclosed in the
+  paper (§7, Table 1 caption).
+- **fcas_rule** differs by ~14%. The stored value predates the fresh-cache /
+  physics-v2 re-baseline described in
+  `paper/audit/artifacts/cache_data_staleness_finding.md`. The rule baseline is
+  not bit-reproducible across cache generations, and it is **not** used in the
+  paper's headline table (which compares DT vs PPO only).
 
-Decision: the full four-surface re-run is therefore SKIPPED as redundant. The
-dispatch, expanded, and 2025 surfaces use the same evaluator code path, the same
-checkpoint, and the same cached reference policy; the standard surface is a
-representative bit-identical reproduction. This is documented rather than
-silently omitted.
+Decision: the DT reproduction is confirmed. A full four-surface re-run is still
+unnecessary for the headline claims (same evaluator path, checkpoint, and
+cached references); the standard surface is a representative deterministic
+check. This record supersedes the 2026-09-22 note that claimed a byte-identical
+CSV for all three policies — that held only for the then-current cache state.

@@ -4,7 +4,7 @@
 # cover the v1 fullcorpus checkpoint (stagec_h3h1_auto / stagec_fix_20260913),
 # so this closes the missing v2cal impact evidence for report.md §8.2.0.
 set -euo pipefail
-cd /home/victoru/rescued/energydecision
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONUNBUFFERED=1
 
 python3 scripts/phase3_impact_eval.py \

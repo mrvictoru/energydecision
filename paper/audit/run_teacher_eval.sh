@@ -2,7 +2,7 @@
 # Stage-A teacher (waypoint DT + honest SDP executor, deg calibration 0.12) on
 # the four extended surfaces, for the retention computation.
 set -euo pipefail
-cd /mnt/rescue-hdd/energydecision
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONUNBUFFERED=1
 export AEMO_CACHE_ONLY=1
 

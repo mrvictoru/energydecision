@@ -5,7 +5,7 @@
 # bit-identical standard surface demonstrates determinism without the ~40 min
 # full re-run.
 set -euo pipefail
-cd /home/victoru/rescued/energydecision
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONUNBUFFERED=1
 export AEMO_CACHE_ONLY=1
 
