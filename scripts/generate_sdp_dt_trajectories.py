@@ -42,7 +42,7 @@ BATTERY_SPECS = {
     "large_07c": {"capacity": 50.0, "max_flow": 35.0},
     "small_05c": {"capacity": 2.0, "max_flow": 1.0},
 }
-# 5-min steps per episode by horizon (short=14d, medium=8wk)
+# 5-min steps per episode by horizon (short=12d, medium=8wk)
 HORIZON_STEPS = {"short": 3456, "medium": 16128, "long": 74880}
 
 # Region -> longest pre-2024 processed parquet

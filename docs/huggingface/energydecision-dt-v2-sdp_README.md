@@ -39,7 +39,7 @@ pipeline_tag: reinforcement-learning
 | Dispatch-matched (SA1 full-year) | **$33,791/ep** | $18,818 | 1.80× | 12 |
 | Expanded broad-2024 | **$29,124/ep** | $4,350 | 6.70× | 30 |
 | 2025 OOD | **$30,791/ep** | $4,817 | 6.39× | 6 |
-| Market impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.71× / torrens 4.67× | — | passes | 9 |
+| Market impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.70× / torrens 4.67× | — | passes | 9 |
 
 All four identity surfaces beat PPO with paired-difference 95% CIs excluding zero. Methodology, the physics fixes, and the full experiment ladder: [report.md §8.2.10/§8.2.11](https://github.com/mrvictoru/energydecision/blob/main/report.md) and [docs/known_issues.md](https://github.com/mrvictoru/energydecision/blob/main/docs/known_issues.md).
 
@@ -66,6 +66,8 @@ The model card's numbers above are from the corrected pipeline. Prior household 
 | State / action dim | 18 / 9 (`full_fcas`) |
 | Action head | Mixed (Tanh energy, Sigmoid FCAS) |
 | `return_scale` | **23,284.83** — auto-calibrated at training time (the `p90(\|J_t\|)/10` heuristic), **checkpoint-specific**; must be applied at inference |
+
+> **Note on `return_scale`:** 23,284.83 is the correct value to use at inference, but it does not reproduce exactly as `p90(|J_t|)/10` of the released corpus (recomputed ≈21,067). The checkpoint sidecar is authoritative; the discrepancy is documented in the paper's provenance appendix.
 
 Action space: dim 0 energy dispatch in [-1, 1]; dims 1–8 FCAS bids in [0, 1] (RAISEREG, LOWERREG, RAISE6SEC, LOWER6SEC, RAISE60SEC, LOWER60SEC, RAISE5MIN, LOWER5MIN). State space: 18-dim normalized market observations (time features, RRP, demand, 8 FCAS prices, generation mix, SOC).
 

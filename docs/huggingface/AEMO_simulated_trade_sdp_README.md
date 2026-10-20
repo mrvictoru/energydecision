@@ -58,7 +58,7 @@ The shipped model trained on this corpus is [`energydecision-dt-v2-sdp`](https:/
 ## Dataset composition
 
 - Shipped physics-v2 corpus: 320 episodes / 3.13M rows
-- 5 regions × 2 horizons (short ≈ 14-day, medium ≈ 8-week) × 4 battery sizes × 8 episodes each — balanced
+- 5 regions × 2 horizons (short = 12-day, medium ≈ 8-week) × 4 battery sizes × 8 episodes each — balanced
 - Time range: 2021–2023 (training-era, pre-eval)
 
 ## How it was generated
