@@ -28,6 +28,10 @@
 \usepackage{url}
 \usepackage{hyperref}
 \usepackage{xurl}   % after hyperref: let \url/\path break anywhere (avoids overfull paths)
+% Ragged bottom: with [H] figures, some pages are sparse; \flushbottom then
+% stretches the glue around section headings into large white bands
+% (the Underfull \vbox warnings). Ragged bottom keeps the text tight.
+\raggedbottom
 
 \title{Planner-Distilled Decision Transformers Break the\\ Behaviour-Cloning Ceiling in Multi-Market BESS Dispatch}
 
@@ -519,7 +523,7 @@ the nine paired differences, its mean advantage is \$167{,}099 per episode
 (95\% bootstrap confidence interval [\$101{,}213, \$227{,}362]). At $n=9$ the
 two-sided Wilcoxon minimum is $0.0039$, which the paired test attains; the
 bootstrap interval is the primary evidence. The ratio of mean profits is
-4.36$\times$ for the small battery, 4.71$\times$ for Hornsdale, and
+4.36$\times$ for the small battery, 4.70$\times$ for Hornsdale, and
 4.67$\times$ for Torrens Island. For the price-taking counterpart, see the
 identity-surface comparisons in Section~\ref{sec:experiments}.
 
