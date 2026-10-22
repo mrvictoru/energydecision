@@ -10,14 +10,23 @@ uploads = [
      "mrvictoru/energydecision-dt-v2-sdp", "model"),
     ("docs/huggingface/energydecision-waypoint-dt_README.md",
      "mrvictoru/energydecision-waypoint-dt", "model"),
+    ("docs/huggingface/AEMO_simulated_trade_sdp_README.md",
+     "mrvictoru/AEMO_simulated_trade_sdp", "dataset"),
 ]
 for src, repo, kind in uploads:
     api.upload_file(path_or_fileobj=src, path_in_repo="README.md", repo_id=repo, repo_type=kind)
     print("uploaded README ->", repo, flush=True)
 
 # verify the control-loop wording is live
-for repo in ["mrvictoru/energydecision-dt-v2-sdp", "mrvictoru/energydecision-waypoint-dt"]:
-    p = hf_hub_download(repo, "README.md", repo_type="model", force_download=True)
+checks = [
+    ("mrvictoru/energydecision-dt-v2-sdp", "model", "4.70"),
+    ("mrvictoru/energydecision-waypoint-dt", "model", None),
+    ("mrvictoru/AEMO_simulated_trade_sdp", "dataset", "12-day"),
+]
+for repo, kind, needle in checks:
+    p = hf_hub_download(repo, "README.md", repo_type=kind, force_download=True)
     t = open(p).read()
-    print(repo, "| 'control loop':", "control loop" in t, "| 'solver at inference':", "solver at inference" in t)
+    ok = "control loop" in t
+    extra = "" if needle is None else f" | '{needle}': {needle in t}"
+    print(repo, "| 'control loop':", ok, extra)
 print("CARDS_UPLOADED")
