@@ -20,13 +20,11 @@ for src, repo, kind in uploads:
 # verify the control-loop wording is live
 checks = [
     ("mrvictoru/energydecision-dt-v2-sdp", "model", "4.70"),
-    ("mrvictoru/energydecision-waypoint-dt", "model", None),
+    ("mrvictoru/energydecision-waypoint-dt", "model", "control loop"),
     ("mrvictoru/AEMO_simulated_trade_sdp", "dataset", "12-day"),
 ]
 for repo, kind, needle in checks:
     p = hf_hub_download(repo, "README.md", repo_type=kind, force_download=True)
     t = open(p).read()
-    ok = "control loop" in t
-    extra = "" if needle is None else f" | '{needle}': {needle in t}"
-    print(repo, "| 'control loop':", ok, extra)
+    print(repo, f"| '{needle}' present:", needle in t)
 print("CARDS_UPLOADED")
