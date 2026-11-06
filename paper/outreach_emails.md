@@ -45,9 +45,9 @@ would fit your group.
 **The work.** I study whether an offline sequence model — a Decision Transformer
 — can act as a single controller for multi-market battery dispatch: energy
 arbitrage plus eight FCAS markets, with battery wear in the reward. Training on
-trajectories from online RL policies stalls at a behaviour-cloning ceiling: the
-logged policies bid little into FCAS, and no amount of data scaling, prompting,
-loss re-weighting, or fine-tuning closes the gap. I break the ceiling by
+trajectories from online RL policies stalls at a behaviour-cloning ceiling on the tested data sources and levers: the
+logged policies bid little into FCAS, and tested changes to data scale, prompting,
+loss re-weighting, or fine-tuning did not close the gap. I break the ceiling by
 distilling an honest, non-clairvoyant SDP planning teacher into a standalone
 Decision Transformer, conditioned on a state-dependent return-to-go prompt
 derived from the planner's cost-to-go. The teacher follows the SDP-with-forecasts

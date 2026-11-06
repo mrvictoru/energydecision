@@ -52,7 +52,7 @@ the pipeline from this section alone.
   mixed action head (tanh energy, sigmoid FCAS).
 - Loss equation (display it):
   `L = w_a·MSE_a + w_s·MSE_s + w_r·MSE_r`, with `w_a=0.999, w_s=0.002, w_r=0.0001`.
-- `return_scale` auto-calibrated so p90(|J_t|)/scale ≈ 10; shipped 23,284.83.
+- Shipped checkpoint-sidecar `return_scale=23,284.83`; the released corpus recomputes to p90(|J_t|)/10 ≈ 21,067, so do not claim the heuristic reproduces the shipped value.
 - **Pitfall:** quote the SHIPPED weights (0.999/0.002/0.0001), not the function defaults.
 
 ### 4.4 Return-to-go prompting and \texttt{auto} (1 paragraph)
@@ -87,7 +87,7 @@ the pipeline from this section alone.
 - Describe the piecewise merit-order impact model and the 9 grid-scale cells
   (3 batteries × 3 scenarios), identity vs endogenous.
 - Result: fixed `rtg0.0` fallback beats PPO on **9/9** cells; per-battery ratios
-  small 4.36× / hornsdale 4.71× / torrens 4.67×; paired Δ +167,099, 95% CI
+  small 4.36× / hornsdale 4.70× / torrens 4.67×; paired Δ +167,099, 95% CI
   [101,213, 227,362], p=0.0039 (cite `stagec_v2cal_impact_analysis.json`).
 - Takeaway sentence: value-based prompts must be gated by market power → `auto`.
 

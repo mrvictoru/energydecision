@@ -50,6 +50,7 @@ This is the main human documentation entrypoint for the repository.
 
 These files are useful, but they are not the best place to start if you are new to the repo.
 
+- [agent_artifact_index.md](agent_artifact_index.md): agent-facing prompts, workflow records, and documented AI-assisted edits
 - [known_issues.md](known_issues.md): tracked code-level inconsistencies and modelling caveats
 - [research/README.md](research/README.md)
 - [grpo_experiments.md](grpo_experiments.md)

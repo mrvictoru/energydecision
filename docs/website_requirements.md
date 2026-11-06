@@ -4,7 +4,8 @@
 > the website. Everything needed to build it is in this file — you do **not**
 > need access to the repository's code or results to complete the task.
 >
-> **Status of this document:** requirements for the built page. The site exists at
+> **Status of this document:** requirements for the built page, reconciled to the
+> shipped extended v2cal surfaces on 2026-10-24. The site exists at
 > repo-root `index.html` (AEMO track shipped 2026-08; household track tab added
 > 2026-09 — see §3.14; AEMO behaviour charts clarified 2026-09 — see §3.15;
 > household behaviour zoom/picker 2026-09 — see §3.16).
@@ -53,9 +54,9 @@ degrades gracefully without network.
 
 ## 3. Content Specification
 
-All numbers below are **verified results from the project's technical report**
-(`report.md`, §8.2.10, verified 2026-08-23). Embed them as JS objects; do not
-fetch them at runtime.
+All numbers below are **verified results from the project's technical report
+and audit artifacts** (`report.md` §8.2.11 and `paper/audit/artifacts/`,
+reconciled 2026-10-24). Embed them as JS objects; do not fetch them at runtime.
 
 ### 3.1 Hero section
 
@@ -73,8 +74,8 @@ fetch them at runtime.
 Explain in ~150 words, for a technically literate but non-specialist reader:
 - Grid-scale batteries in Australia's NEM earn money two ways: energy arbitrage (buy low / sell high on 5-minute spot prices) and FCAS ancillary services (8 markets).
 - The control problem: decide dispatch + FCAS bids every 5 minutes, net of battery degradation.
-- Prior belief: online RL (PPO) was needed to capture FCAS spikes; offline behaviour cloning couldn't exceed its training data.
-- This project's result: distilling an honest stochastic-dynamic-programming (SDP) planning teacher into a standalone Decision Transformer breaks that ceiling — no clairvoyance, no solver in the control loop, better than PPO everywhere tested.
+- Prior belief: online RL (PPO) was needed to capture FCAS spikes; the tested offline behaviour-cloning setup did not exceed its logged-policy data ceiling on the tested surfaces.
+- This project's result: distilling an honest stochastic-dynamic-programming (SDP) planning teacher into a standalone Decision Transformer breaks that tested ceiling — no clairvoyance, no solver in the control loop, better than PPO on the four extended identity surfaces tested.
 
 ### 3.3 Environment explainer (interactive diagram)
 
@@ -92,7 +93,7 @@ shows a tooltip with detail. Keep it dependency-free.
 
 ### 3.4 Headline results — THE centerpiece (interactive)
 
-Four identity surfaces, profit per episode (USD, net of degradation),
+Four extended identity surfaces, profit per episode (USD, net of degradation),
 5-min protocol. Data:
 
 ```js
@@ -115,29 +116,33 @@ Required interactivity:
 1. **Grouped bar chart** (DT vs PPO per surface) with hover tooltips showing exact values and ratio.
 2. **Surface tabs or toggle** letting users switch between "Profit" view and "DT/PPO ratio" view.
 3. A toggle: **"Show confidence intervals"** — overlay error bars using these bootstrap CIs (DT − PPO difference):
-   - Standard Oct: +$9,220 [+$7,073, +$11,624]
-   - Dispatch-matched: +$12,791 [+$7,008, +$18,277]
-   - Expanded broad-2024: +$15,257 [+$4,108, +$33,350]
-   - 2025 OOD: +$19,364 [+$7,138, +$39,670]
-   - Impact gate: +$63,064 [+$33,356, +$100,973]
-4. A footnote explaining: *all Wilcoxon p-values marked \* are at the bounded minimum attainable for n<10 (every paired difference had the same sign); all six CIs exclude zero.*
+   - Standard 2024: +$12,198 [+$9,181, +$14,738]
+   - Dispatch-matched: +$14,973 [+$4,794, +$22,663]
+   - Expanded broad-2024: +$24,775 [+$13,509, +$41,434]
+   - 2025 OOD: +$25,974 [+$12,708, +$49,850]
+   - Impact gate: +$167,099 [+$101,213, +$227,362]
+4. A footnote explaining: all four extended identity-surface paired-difference CIs exclude zero; the impact gate is a separate 9-cell comparison whose paired-difference CI also excludes zero. For n<10, disclose the bounded minimum attainable by the paired Wilcoxon test where relevant.
 
-### 3.5 Revenue decomposition chart
+### 3.5 Revenue decomposition
 
-The DT's edge is FCAS, not energy. Stacked/grouped bar per surface:
+Do not assert a current FCAS or energy decomposition without component-level
+v2cal artifacts matched to the extended surfaces. The often-quoted $14.8k vs
+$17.4k expanded-surface energy comparison is from the superseded v1 Stage C
+analysis. Use qualitative context unless matched values can be traced:
 
 ```js
 const DECOMP = {
   // stage-C DT under j_t_soc inference (identity surfaces)
-  dt:    { expandedEnergy: 14800 },           // narrowed gap vs PPO's $17.4k energy
-  note:  "FCAS capture is 3–6.8× PPO everywhere; energy arbitrage gap narrowed to $14.8k vs $17.4k",
+  // Do not use the superseded v1 Stage C $14.8k vs $17.4k energy comparison as a shipped v2cal result.
+  // Add current component-level figures only when they are traced to a v2cal artifact.
+  note:  "The shipped policy's total-profit results are the headline; any component-level comparison must be protocol-matched and artifact-traced.",
 };
 ```
 
-If precise per-surface decomposition values are unavailable, present the
-qualitative finding with the one hard number above plus: distilled-model
-degradation $88–176/MWh vs PPO ~$211–310/MWh. Do NOT invent numbers — mark any
-illustrative value explicitly as illustrative.
+If precise per-surface decomposition values are unavailable, present only
+qualitative context. Do not carry forward historical degradation-cost ranges
+as shipped v2cal results without a matching artifact. Do NOT invent numbers —
+mark any illustrative value explicitly as illustrative.
 
 ### 3.6 Model improvement timeline ("How we got here")
 
@@ -153,7 +158,7 @@ const TIMELINE = [
   { stage: 5, name: "Modern v2 pretrained",     arch: "8×768 GQA",              data: "2,401 eps (realistic bats)",  dmProfit: 10138,  fcas: 10068,  deg: 187,   change: "Architecture improvement" },
   { stage: 6, name: "Hierarchical DT+LP",       arch: "waypoint-DT + Oracle-LP",data: "Oracle SOC paths (1,200 eps)",dmProfit: 291841, note: "*perfect foresight — not deployable*", change: "Decomposition: DT plans SOC, LP executes" },
   { stage: 7, name: "Honest SDP executor",      arch: "waypoint-DT + SDP",      data: "seasonal forecast only",      dmProfit: 59091,  note: "*solver at inference*", change: "Foresight caveat lifted" },
-  { stage: 8, name: "Standalone J_t(soc) DT",   arch: "8×768 mixed-head",       data: "SDP teacher trajs (640 eps, wear-calibrated)", dmProfit: 40039,  fcas: 105000, deg: 145,   change: "Planner distillation + state-dependent prompts — SHIPPED (physics-v2 v2cal)" },
+  { stage: 8, name: "Standalone J_t(soc) DT",   arch: "8×768 mixed-head",       data: "SDP teacher trajs (320 eps, wear-calibrated)", dmProfit: 33791, change: "Planner distillation + state-dependent prompts — SHIPPED (physics-v2 v2cal)" },
 ];
 ```
 
@@ -191,11 +196,11 @@ Visual flow (SVG or styled divs with arrows):
 ```
 Seasonal price forecast (pre-2024 only, no future info)
         ↓
-Honest SDP teacher ── degradation-aware ($50/$20 per MWh) ── plans energy/SOC
+Honest SDP teacher ── wear-calibrated conservative ($50/MWh; calibration 0.12) ── plans energy/SOC
         ↓                                    ↓
 greedy FCAS bids from residual headroom   J_t(soc) cost-to-go table
         ↓                                    ↓
-Teacher trajectories (640 eps, 6.2M rows) ──→ Standalone DT (8×768 GQA)
+Teacher trajectories (320 eps, 3.13M rows; shipped v2cal corpus) ──→ Standalone DT (8×768 GQA)
                                                      ↓
                               Inference: rtg_mode="auto"
                               ├─ identity surfaces → j_t_soc state-dependent prompt
@@ -203,7 +208,7 @@ Teacher trajectories (640 eps, 6.2M rows) ──→ Standalone DT (8×768 GQA)
 ```
 
 Include the three corpora table (§5.4 of report): conservative 320 eps /
-aggressive 320 eps / combined 640 eps with J_t(soc) RTG column.
+v2cal conservative 320 eps / historical v1 combined 640 eps with J_t(soc) RTG column.
 
 ### 3.9 Why `rtg_mode="auto"` (mode-selection explainer)
 
@@ -225,9 +230,12 @@ publishing.
 
 ### 3.10 Statistical rigor section
 
-Table of the six comparisons (already given in §3.4 data) rendered cleanly,
-plus notes: bootstrap 10,000 resamples, paired Wilcoxon, per-cell P(DT>PPO)
-≥ 0.9998 on every identity surface.
+Table of the four extended identity comparisons from
+`paper/audit/artifacts/stagec_v2cal_extended_significance.json`, plus the
+separate impact-gate comparison from
+`paper/audit/artifacts/stagec_v2cal_impact_analysis.json`: bootstrap 10,000
+resamples and paired Wilcoxon. Report the paired-difference CIs as the primary
+evidence; do not imply all surfaces have per-cell P(DT>PPO) ≥ 0.9998.
 
 ### 3.11 Artifacts & reproducibility
 
@@ -252,15 +260,15 @@ python -m pytest tests/ -v
 
 Must be present, not buried:
 - All results are simulator-based (historical AEMO prices, modeled FCAS co-optimization and degradation); sim-to-real transfer is open.
-- Explicit j_t_soc is identity-only; shipped default is `auto`.
-- Expanded-surface energy-arbitrage gap vs PPO is narrowed ($14.8k vs $17.4k), not eliminated.
-- Some headline surfaces have few scenarios (n=5–6); point estimates should be read alongside their intervals.
+- Shipped `auto` mode resolves to `j_t_soc` on identity surfaces and a constant RTG under market impact; explicit `j_t_soc` is viable under impact after applying the checkpoint `return_scale`.
+- The $14.8k vs $17.4k expanded-surface energy comparison is from the superseded v1 Stage C analysis, not the shipped v2cal checkpoint; do not present it as a current decomposition.
+- The smallest extended headline surface has n=6; point estimates should be read alongside their intervals.
 - Broad-surface comparisons were run with a handicapped 3-dim-effective action space (protocol asymmetry disclosed in report §6).
 
 ### 3.13 Footer
 
 License note (match repo license), "Built with vanilla JS + Chart.js",
-last-updated date (2026-08), links back to repo.
+last-updated date (2026-10-24), links back to repo.
 
 ### 3.14 Track tabs — AEMO ↔ Household (added 2026-09)
 

@@ -32,7 +32,7 @@ research maturity instead of a black box.
 **Runtime for every command below:** from the repo root inside the GPU box:
 
 ```bash
-distrobox enter energydecision-gpu -- bash -lc 'cd /home/victoru/rescued/energydecision && <command>'
+distrobox enter energydecision-gpu -- bash -lc 'cd <repo-root> && <command>'
 ```
 
 **Suggested budget:** ~6–8 focused hours, split into the six modules below, then

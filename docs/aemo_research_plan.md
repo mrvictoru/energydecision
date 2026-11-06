@@ -191,7 +191,7 @@ Key results (see `docs/grpo_experiments.md` for the full log):
 
 ## Motivation
 
-The SDP paper (Abdulla et al. 2016) achieves optimal battery control via
+The SDP paper (Abdulla et al. 2018) achieves optimal battery control via
 explicit forecasts, backward induction, and Monte Carlo scenarios. The modern
 v2 DT conditions only on a 210-step history window and has **no explicit
 forward-looking signal** (report.md §8.2.8). The plan was to inject

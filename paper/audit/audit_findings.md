@@ -27,7 +27,7 @@ path + mtime + sha256 rather than git SHA.
    (2026-09-13T21:53) predates v2cal training (checkpoint 2026-09-14T21:45). This audit
    ran the canonical v2cal gate on 2026-09-21 (`paper/audit/run_v2cal_impact.sh`) and the
    shipped policy **passes decisively**: 9/9 piecewise cells beat PPO, fixed-`rtg0.0`
-   per-battery ratios **small 4.36× / hornsdale 4.71× / torrens 4.67×**, paired difference
+   per-battery ratios **small 4.36× / hornsdale 4.70× / torrens 4.67×**, paired difference
    **+$167,099, 95% CI [$101k, $227k], p=0.0039**. Best-RTG-per-cell is within 1% of the
    fixed policy, so no cherry-picking is needed. **The report's 3.2/2.6/2.0× are stale v1
    numbers and should be replaced.**
@@ -159,7 +159,7 @@ For reference, the same analysis on the v1 labels reproduces the old claim exact
 (`stagec_fix_20260913` best-RTG: 3.210 / 2.594 / 2.024), confirming the misattribution.
 
 **Action:** replace the 3.2/2.6/2.0× row in report.md, README, AGENTS.md, index.html with
-the v2cal fixed-policy numbers (4.36/4.71/4.67×, 9/9 wins, CI), and state that the impact
+the v2cal fixed-policy numbers (4.36/4.70/4.67×, 9/9 wins, CI), and state that the impact
 fallback is a fixed constant RTG.
 
 ## 4. Document-integrity findings
@@ -256,9 +256,9 @@ Configs: `configs/aemo_autoresearch_evaluator.sdp_teacher_{standard_year,
 dispatch_year,expanded_full}.json`. Artifacts:
 `eval_output/physics_v2/{standard_year,dispatch_year,expanded_full,2025_v2cal_fresh}_v2cal*`.
 
-**Open decision for the user:** whether to make the extended (fresh) surfaces the
-preprint headline and demote the canonical single-month / n=27 surfaces to named
-sub-surfaces. The doc tables still show the canonical numbers pending that call.
+**Decision (2026-09-22):** the extended fresh surfaces are the preprint headline;
+the canonical single-month / n=27 surfaces are retained only as named
+sub-surfaces. The current headline tables and provenance record reflect this.
 
 ## 8. `return_scale` provenance — shipped value does not reproduce
 

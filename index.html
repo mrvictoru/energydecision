@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>energydecision — Offline Decision Transformers for Battery Control: AEMO/NEM Grid-Scale &amp; Household Tracks</title>
-<meta name="description" content="A degradation-aware benchmark showing planner-distilled Decision Transformers beating online RL (PPO) and real-world dispatch on the utility-scale AEMO/NEM market (4/4 surfaces + impact gate), plus a household solar-battery track where the DT is net-positive only on a short real-OOD horizon and over-cycles on long horizons.">
+<meta name="description" content="A degradation-aware benchmark where a planner-distilled Decision Transformer beats PPO on four extended AEMO/NEM identity surfaces (n=30/12/30/6) and passes a separate market-impact gate. The household solar-battery DT is net-positive only on the unconstrained 7-day real-OOD horizon and over-cycles on longer horizons.">
 <meta property="og:title" content="energydecision — Offline DT Outperforms Online RL for Battery Dispatch">
-<meta property="og:description" content="Two tracks: the AEMO DT beats PPO on 4/4 identity surfaces + impact gate; the household DT is net-positive only on a short real-OOD horizon and over-cycles on long horizons. Interactive results dashboard.">
+<meta property="og:description" content="Two tracks: the AEMO DT beats PPO on four extended identity surfaces (n=30/12/30/6) and passes a separate market-impact gate; the household DT is net-positive only on the unconstrained 7-day real-OOD horizon and over-cycles on longer horizons.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://mrvictoru.github.io/energydecision/">
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="10" y="3" width="12" height="5" rx="1" fill="none" stroke="%23383838" stroke-width="2"/><rect x="5" y="8" width="22" height="20" rx="2" fill="%23ffde00" stroke="%23383838" stroke-width="2"/><path d="M16 13 L11 20 H15 L14 25 L20 17 H16 Z" fill="%23383838"/></svg>'>
@@ -521,8 +521,8 @@ footer strong { color: var(--ink); }
     <span class="section-kicker">AEMO / NEM · Decision Transformer Benchmark</span>
     <h1>Offline decision transformers outperform online RL for utility-scale battery dispatch</h1>
     <p class="tagline">A degradation-aware benchmark for battery trading in Australia's National Electricity Market:
-      a planner-distilled Decision Transformer beats online RL (PPO) and real-world dispatch replay on
-      every evaluation surface tested — with no solver in the control loop.</p>
+      a planner-distilled Decision Transformer beats online reinforcement learning (proximal policy optimisation, PPO) on four extended identity surfaces, passes
+      a separate market-impact gate, and includes held-out comparisons with real-world dispatch replay — with no solver in the control loop.</p>
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-num"><span data-countup data-end="3.8" data-decimals="1" data-suffix="×">0</span></div>
@@ -530,7 +530,7 @@ footer strong { color: var(--ink); }
       </div>
       <div class="stat-card">
         <div class="stat-num">4/4 + GATE</div>
-        <div class="stat-label">Identity surfaces won, plus the market-impact gate passed on all grid-scale batteries</div>
+        <div class="stat-label">Four extended identity surfaces won, plus the separate market-impact gate passed on all grid-scale batteries</div>
       </div>
       <div class="stat-card">
         <div class="stat-num">0 SOLVERS</div>
@@ -538,7 +538,7 @@ footer strong { color: var(--ink); }
       </div>
       <div class="stat-card">
         <div class="stat-num">4/4 CIs</div>
-        <div class="stat-label">Identity-surface DT-vs-PPO paired 95% bootstrap intervals excluding zero</div>
+        <div class="stat-label">Extended identity-surface DT-vs-PPO paired 95% bootstrap intervals excluding zero</div>
       </div>
     </div>
     <div class="cta-row">
@@ -552,8 +552,8 @@ footer strong { color: var(--ink); }
 <!-- ==================== MARQUEE ==================== -->
 <div class="marquee" aria-hidden="true">
   <div class="marquee-track">
-    <span>Offline DT &gt; online RL</span><span>★</span><span>Beats real-world dispatch replay</span><span>★</span><span>4/4 identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver in the control loop</span><span>★</span>
-    <span>Offline DT &gt; online RL</span><span>★</span><span>Beats real-world dispatch replay</span><span>★</span><span>4/4 identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver in the control loop</span><span>★</span>
+    <span>Offline DT &gt; online RL</span><span>★</span><span>Includes dispatch-replay comparisons</span><span>★</span><span>4/4 extended identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver in the control loop</span><span>★</span>
+    <span>Offline DT &gt; online RL</span><span>★</span><span>Includes dispatch-replay comparisons</span><span>★</span><span>4/4 extended identity surfaces</span><span>★</span><span>Impact gate passed</span><span>★</span><span>No solver in the control loop</span><span>★</span>
   </div>
 </div>
 
@@ -565,15 +565,15 @@ footer strong { color: var(--ink); }
     <div class="prose">
       <p>Grid-scale batteries in Australia's National Electricity Market (NEM) earn money two ways:
         <strong>energy arbitrage</strong> — buying low and selling high on 5-minute spot prices — and
-        <strong>FCAS ancillary services</strong>, eight co-optimized frequency-control markets.
+        <strong>frequency control ancillary services (FCAS)</strong>, across eight co-optimized markets.
         The controller must decide dispatch plus all eight FCAS bids every 5 minutes,
         while paying for every cycle of battery wear.</p>
       <p>The prior belief: only online reinforcement learning (PPO) could capture rare FCAS price spikes,
         because offline behaviour cloning cannot output skills that are absent from its logged data.
-        This project shows that belief was an artifact of the <em>teacher</em>, not the student:
-        by distilling an honest stochastic-dynamic-programming (SDP) planning agent into a standalone
-        Decision Transformer, the offline-data ceiling breaks entirely — no clairvoyance,
-        no solver in the control loop, and better than PPO everywhere it was tested.</p>
+        In the tested data sources and levers, the observed ceiling was a property of the <em>teacher</em>,
+        not the student: distilling an honest stochastic-dynamic-programming (SDP) planning agent into a
+        standalone Decision Transformer broke that tested ceiling — no clairvoyance, no solver in the
+        control loop, and better than PPO on the four extended identity surfaces.</p>
     </div>
   </div>
 </section>
@@ -603,7 +603,7 @@ footer strong { color: var(--ink); }
         <ul><li>solar %</li><li>wind %</li></ul>
       </div>
       <div class="env-card" tabindex="0" title="Normalized state of charge — the physical memory of the system.">
-        <h3>🔋 Battery SOC <span class="dim-badge">1-D</span></h3>
+        <h3>🔋 Battery state of charge (SOC) <span class="dim-badge">1-D</span></h3>
         <ul><li>SOC ∈ [0, 1]</li><li>capacity-limited</li></ul>
       </div>
       <div class="env-card" tabindex="0" title="Energy dispatch in [-1,1] plus one bid fraction in [0,1] per FCAS service. Raise-direction bids + discharge are proportionally scaled to fit SOC headroom — the coupling that makes joint bidding hard.">
@@ -688,7 +688,7 @@ footer strong { color: var(--ink); }
 <section id="results">
   <div class="container reveal">
     <span class="section-kicker">Headline result</span>
-    <h2>Beats PPO on every surface — including out-of-distribution 2025</h2>
+    <h2>Beats PPO across four extended identity surfaces — including out-of-distribution 2025</h2>
     <p class="section-sub">Total profit per episode (USD, net of degradation). Identity (price-taking) surfaces plus the
       mandatory market-impact validation gate. Stage C standalone Decision Transformer under the shipped
       rtg_mode="auto".</p>
@@ -851,19 +851,18 @@ footer strong { color: var(--ink); }
     <div class="card-grid">
       <div class="env-card">
         <h3>📶 FCAS revenue</h3>
-        <p style="color:var(--graphite);font-size:13px">The distilled DT earns <strong>3–6.8× PPO's FCAS</strong>
-          on every surface tested. The skill comes from the teacher's co-optimization — not from cloning behaviour mass.</p>
+        <p style="color:var(--graphite);font-size:13px">The teacher co-optimizes FCAS bids with energy dispatch, and that behaviour is distilled into the student.
+          The extended headline results report total profit; component-level FCAS ratios require matched v2cal artifacts.</p>
       </div>
       <div class="env-card">
         <h3>⚡ Energy arbitrage</h3>
-        <p style="color:var(--graphite);font-size:13px">On expanded broad-2024 the DT's energy edge reached
-          <strong>$14.8k/ep</strong> vs PPO's <strong>$17.4k</strong> — narrowed but not eliminated (see limitations).</p>
+        <p style="color:var(--graphite);font-size:13px">The expanded broad-2024 total-profit result is reported on the extended v2cal surface.
+          The often-quoted $14.8k vs $17.4k energy comparison is from the superseded v1 analysis, not a current decomposition.</p>
       </div>
       <div class="env-card">
         <h3>🔋 Degradation cost</h3>
-        <p style="color:var(--graphite);font-size:13px">Distilled models run <strong>$88–176/MWh</strong>
-          throughput cost vs PPO's ~$211–310/MWh. The SDP teacher plans against an explicit degradation penalty,
-          closing the long-standing "PPO owns efficiency" caveat.</p>
+        <p style="color:var(--graphite);font-size:13px">The SDP teacher plans against an explicit degradation penalty.
+          Compare throughput wear costs only on matched v2cal scenarios; older component-level estimates are not the shipped headline result.</p>
       </div>
     </div>
     <p class="footnote">Per-surface dollar decompositions across the narrow/broad surface families are not directly comparable due to a disclosed
@@ -936,7 +935,7 @@ footer strong { color: var(--ink); }
       <div class="pipe-node"><b>Honest SDP teacher</b> <span class="sub">degradation-aware backward induction · never sees realized future prices</span></div>
       <div class="pipe-arrow">↓</div>
       <div class="pipe-split">
-        <div class="pipe-node"><b>Teacher trajectories</b><br><span class="sub">640 episodes · 6.2M rows<br>(conservative λ=$50 + aggressive λ=$20)</span></div>
+        <div class="pipe-node"><b>Teacher trajectories</b><br><span class="sub">320 episodes · 3.13M rows<br>(shipped v2cal conservative corpus)</span></div>
         <div class="pipe-node"><b>J_t(soc) cost-to-go table</b><br><span class="sub">remaining value per (timestep, SOC)<br>under the seasonal forecast</span></div>
       </div>
       <div class="pipe-arrow">↓&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓</div>
@@ -953,14 +952,13 @@ footer strong { color: var(--ink); }
           <th scope="col" class="num">Size</th><th scope="col">Teacher</th><th scope="col">RTG column</th>
         </tr></thead>
         <tbody>
-          <tr><td>dt_trajectories_full.parquet</td><td class="num">320</td><td class="num">3.13M</td><td class="num">368 MB</td><td>Conservative (λ_deg = $50/MWh)</td><td>discounted return</td></tr>
-          <tr><td>dt_trajectories_aggressive.parquet</td><td class="num">320</td><td class="num">3.13M</td><td class="num">373 MB</td><td>Aggressive (λ_deg = $20/MWh, +57% throughput)</td><td>discounted return</td></tr>
-          <tr><td><strong>dt_trajectories_jtsoc_combined.parquet</strong></td><td class="num"><strong>640</strong></td><td class="num"><strong>6.2M</strong></td><td class="num"><strong>762 MB</strong></td><td>both, concatenated</td><td><strong>J_t(soc) cost-to-go</strong></td></tr>
+          <tr><td><strong>dt_trajectories_jtsoc_v2cal_conservative.parquet</strong></td><td class="num"><strong>320</strong></td><td class="num"><strong>3.13M</strong></td><td class="num"><strong>401.8 MB</strong></td><td>Shipped v2cal conservative teacher (wear-calibrated)</td><td><strong>J_t(soc) cost-to-go</strong></td></tr>
+          <tr><td>dt_trajectories_jtsoc_combined.parquet</td><td class="num">640</td><td class="num">6.2M</td><td class="num">762 MB</td><td>Historical v1 conservative + aggressive corpora</td><td>J_t(soc) cost-to-go</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="footnote">All corpora cover 5 regions × short+medium horizons × 4 realistic battery configurations
-      (medium_1c, large_07c, small_05c, fast_375c). The combined corpus trains the shipped checkpoint.</p>
+    <p class="footnote">The shipped v2cal corpus covers 5 regions × short+medium horizons × 4 realistic battery configurations
+      (medium_1c, large_07c, small_05c, fast_375c). The 640-episode combined corpus is historical v1 data, not the shipped checkpoint's training corpus.</p>
   </div>
 </section>
 
@@ -1065,9 +1063,8 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
       <li><strong>The shipped default is the surface-aware auto mode.</strong> Explicit j_t_soc is viable under market impact
         once the checkpoint <code>return_scale</code> is applied (B8 fix), but the conservative constant fallback avoids residual
         energy over-trading on large batteries and is the robust choice.</li>
-      <li><strong>Expanded broad-2024 is the marginal surface.</strong> Its paired-difference CI spans zero even though the
-        shipped DT's energy revenue ($21.6k/ep) now exceeds PPO's ($17.4k/ep); the remaining spread is in FCAS and risk.</li>
-      <li><strong>Small samples on some surfaces.</strong> Headline surfaces have as few as n=5–6 scenarios; read point estimates alongside their intervals.</li>
+      <li><strong>Energy/FCAS decomposition is protocol-specific.</strong> The $14.8k vs $17.4k energy comparison belongs to the superseded v1 analysis (report §8.2.10), not the shipped v2cal headline; current component-level values should not be inferred from it.</li>
+      <li><strong>Small samples on some surfaces.</strong> The smallest headline surface has n=6 scenarios; read point estimates alongside their intervals.</li>
       <li><strong>Disclosed protocol asymmetry.</strong> Broad-surface comparisons ran with a handicapped 3-dim-effective action space
         (multi_market scoring dims 0–2 only) — which strengthens rather than weakens the claim, but limits cross-family decomposition comparability.</li>
     </ul>
@@ -1413,7 +1410,7 @@ python -m pytest tests/ -v</code><button class="copy-btn" id="copyBtn" type="but
   <div class="container">
     <div>
       <strong>energydecision</strong> — offline sequence modeling for battery control: utility-scale AEMO/NEM trading and household solar + battery dispatch.<br>
-      AEMO results verified 2026-08 · Household forecast results verified 2026-09 · Built with vanilla JS + Chart.js · No trackers.
+      AEMO extended v2cal results verified 2026-09 · Household re-baseline verified 2026-09 · Page updated 2026-10-24 · Built with vanilla JS + Chart.js · No trackers.
     </div>
     <div>
       <a href="https://github.com/mrvictoru/energydecision" target="_blank" rel="noopener">GitHub</a> &nbsp;·&nbsp;

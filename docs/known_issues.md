@@ -40,7 +40,8 @@ documentation-only correction.
   fractional loss (LFP, 25 °C, 50% SOC). Tests:
   `tests/test_environment_calendar.py`. Note: cycle aging remains Muenzel, so
   `full` is a calendar(RealWorld)+cycle(Muenzel) composite — deliberate.
-  Status: `RESOLVED` (re-baseline pending).
+  Status: `RESOLVED`; household buckets A+B were re-baselined by 2026-09-20,
+  with bucket C still open.
 
 ### A2. No round-trip efficiency in the env, but the SDP teacher assumes `sqrt(0.80)`
 
@@ -57,8 +58,8 @@ documentation-only correction.
   efficiency-aware, and the teacher generator passes its `roundtrip_eff` to the
   env too. Tests: `tests/test_environment_efficiency.py` (SOC-limit/projector
   tests set `roundtrip_eff=1.0` to stay focused). This changes household
-  dynamics, so all household results shift. Status: `RESOLVED` (re-baseline
-  pending).
+  dynamics, so all household results shift. Status: `RESOLVED`; household
+  buckets A+B were re-baselined by 2026-09-20, with bucket C still open.
 
 ### A3. Rainflow inferred C-rate is ~100× too large and saturates the clamp
 
@@ -75,7 +76,8 @@ documentation-only correction.
   profile: household 7-day cycle-only cumulative degradation 0.02058 → 0.01487
   (**−27.7%**); AEMO SA1 Oct 8 MWh/30 MW `real_world` LFP 288-step degradation
   cost $4,456.77 → $2,739.34 (**−38.5%**). Because this is shared code, both
-  tracks shift; see §D.0. Status: `RESOLVED` (re-baseline pending).
+  tracks shift; see §D.0. Status: `RESOLVED`; household buckets A+B were
+  re-baselined by 2026-09-20, with bucket C still open.
 
 ### A4. `EnergySimEnv.reset()` drops the rainflow C-rate cap
 
@@ -106,8 +108,7 @@ documentation-only correction.
   `compute_step_degradation` (a per-step half-cycle estimate at the true SoC
   and C-rate) and `SDPSolver._deg_cost_grid` now prices wear state-dependently,
   precomputed once per solver. Tests: `tests/test_physics_v2_planner.py`. Status:
-  `RESOLVED` (planner policies are no longer degradation-blind; re-baseline
-  pending).
+  `RESOLVED`; household buckets A+B and AEMO v2cal were re-baselined.
 
 ### A6. Household SDP teacher is degradation-blind; `J_t(soc)` excludes wear
 
@@ -125,8 +126,8 @@ documentation-only correction.
   `--deg-cost-per-mwh` (default **50.0**) so teacher labels are wear-aware.
   Delta on a representative synth day: throughput 24.7 kWh (λ=0) → 15.1 (λ=20)
   → 14.8 (λ=50), with a ~$0.024/day bill increase. Tests:
-  `tests/test_physics_v2_planner.py`. Status: `RESOLVED` (teacher λ calibration
-  still open; re-baseline pending).
+  `tests/test_physics_v2_planner.py`. Status: `RESOLVED`; teacher wear was
+  calibrated to 0.29 and household buckets A+B were re-baselined by 2026-09-20.
 - **Measured regression (2026-09-14): the λ is uncalibrated.** With `λ_deg=50`
   the regenerated household teacher still **under-prices** wear relative to the
   corrected environment (calendar + corrected cycle aging + RTE losses). The
@@ -137,7 +138,7 @@ documentation-only correction.
   Back-of-envelope: the environment's effective wear is ≈$190–370/MWh versus the
   teacher's $50/MWh. This is the household counterpart of B4 with the opposite
   sign (AEMO's planner *over*-priced; the household planner *under*-prices).
-  **Required:** calibrate household `λ_deg` to the env's realized wear (or have
+  **At that point, required:** calibrate household `λ_deg` to the env's realized wear (or have
   `optimize_dispatch` use the env's degradation model), regenerate the corpora,
   retrain, and re-run H4.x.
 - **Resolved (2026-09-15, option 2 — state-dependent calibrated wear).**
@@ -160,8 +161,8 @@ documentation-only correction.
   −$238/yr; clips 25→48/day). The evaluator also gained
   `--reference-cache-dir` (cached rule/oracle/SB3 rollouts), and `--batch-eval`
   is confirmed numerically equivalent to per-window stepping ($2/yr, <0.1%
-  clips at 90 d). Status: `RESOLVED` (remaining household H4.x re-runs tracked
-  in FUTURE_PLAN).
+  clips at 90 d). Status: `RESOLVED`; household buckets A+B were re-baselined
+  by 2026-09-20, while bucket C remains open in `FUTURE_PLAN`.
 
 ### A7. Household observation degradation-cost normalization is tied to `battery_life_cost`
 
@@ -398,17 +399,17 @@ retraining, and re-running evaluation. Do them as one coherent
 ### D.0 Scope decision (required before any code change)
 
 > **Status (2026-09-13):** the chosen scope was **global fix + re-baseline**.
-> A1–A8 are now implemented with unit tests and the full suite passes (381).
-> **Re-baseline status (2026-09-20):** AEMO done 2026-09-14; household buckets
-> A (eval-only) and B (retrained forecast arms + SB3) done 2026-09-18/20. All
-> prior household and AEMO numerical results predate at least one of these
-> physics/planner fixes and are historical only. Required order:
+> A1–A8 are implemented with unit tests and the full suite passed at the time.
+> **Re-baseline completed (2026-09-20):** AEMO v2cal and household buckets A
+> (eval-only) and B (retrained forecast arms + SB3) are complete. All numerical
+> results from before the physics/planner fixes are historical only. The
+> sequence below records the completed order:
 >
-> 1. Regenerate the H4.1 household corpus and retrain household policies.
-> 2. Re-run household H4.2-H4.5, H4.7, H4.9-H4.12 evaluations and paired
->    statistics, including the interrupted `h4_13_real_90d` run.
-> 3. Regenerate SDP-teacher corpora with `--deg-calibration 0.12`, retrain
->    AEMO Stage C, then rerun AEMO identity surfaces and the impact gate.
+> 1. Regenerated the H4.1 household corpus and retrained household policies.
+> 2. Re-ran household H4.2-H4.5, H4.7, H4.9-H4.12 evaluations and paired
+>    statistics.
+> 3. Regenerated SDP-teacher corpora with `--deg-calibration 0.12`, retrained
+>    AEMO Stage C, then reran AEMO identity surfaces and the impact gate.
 >
 > This includes old SB3/DT checkpoints: evaluating them under the corrected
 > environment is useful as a fixed-policy delta diagnostic, but it is not a
@@ -492,17 +493,19 @@ limitations instead.
 - **B8** (`phase3_impact_eval.py` ignored checkpoint `return_scale`) — fixed and
   verified 2026-09-13; this reverses the reported j_t_soc impact collapse.
 - **A3** (rainflow C-rate units) — fixed 2026-09-13 globally; household/AEMO
-  degradation drops ~28%/~38% on controlled cycles. Re-baseline pending.
+  degradation drops ~28%/~38% on controlled cycles. Re-baselined for the
+  current household buckets A+B and AEMO v2cal results.
 - **A4** (`EnergySimEnv.reset` dropped `max_c_rate`) — fixed 2026-09-13.
 - **A5** (planner degradation was state-independent and always zero) — fixed
-  2026-09-13; state-dependent step estimator + precomputed grid. Re-baseline
-  pending.
+  2026-09-13; state-dependent step estimator + precomputed grid. Re-baselined
+  for current household buckets A+B and AEMO v2cal results.
 - **A6** (household teacher degradation-blind) — fixed 2026-09-13; `λ_deg`
-  parameter, generator default 50 $/MWh. Re-baseline pending.
+  parameter, generator default 50 $/MWh, calibrated to 0.29 for the household
+  teacher; buckets A+B re-baselined.
 - **A1** (household `full` had no calendar aging) — fixed 2026-09-13; calendar
-  term added in `full` mode. Re-baseline pending.
+  term added in `full` mode. Buckets A+B re-baselined.
 - **A2** (env had no round-trip efficiency) — fixed 2026-09-13; `roundtrip_eff`
-  default 0.80 + efficiency-aware projector. Re-baseline pending.
+  default 0.80 + efficiency-aware projector. Buckets A+B re-baselined.
 - **A7** (deg-cost obs normalizer tied to life cost) — fixed 2026-09-13.
 - **A8** (SOC obs anchored to initial capacity) — fixed 2026-09-13.
 

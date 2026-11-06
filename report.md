@@ -159,7 +159,7 @@ but the decisive gains come from the following):
 - **Weight tying:** the input embedding and output prediction layers for state/action/return share weights (`pred_act`, `pred_state`, `pred_return` are linear projections of the tied embeddings).
 - **Learned timestep embedding** in the historical modern v2 checkpoint (RoPE disabled; `rope_enabled=false`), context length 210. The **shipped Stage C** checkpoint (§8.2.10) reuses the same 8×768 backbone but with **RoPE enabled** (`rope_max_position=630`, `max_timestep=2016`) and a **mixed action head**; the two checkpoints do not share a config.
 - Trained with `discount=0.95`, `return_scale=1.0` (modern v2, as recorded in the checkpoint `.meta.json`), and near-action-only loss weights
-  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly. Stage C instead uses an auto-calibrated `return_scale=25988.190625` for its J_t(soc) targets.
+  (`action=0.999`, `state=0.002`, `return=0.0001`) — i.e. the model is trained almost entirely to predict the next action correctly. Shipped Stage C inference uses the checkpoint-sidecar `return_scale=23,284.83`; this does not reproduce exactly as `p90(|J_t|)/10` from the released corpus (recomputed ≈21,067; see `paper/audit/audit_findings.md`).
 
 Canonical modern-v2 hyperparameters are shipped at
 `configs/aemo_decision_transformer_model_kwargs_modern_v2_full_fcas.json`, but the
@@ -1567,10 +1567,10 @@ PDF, 200 dpi) under `eval_output/paper_figures/`.
   the conservative `auto` fallback.
 - The expanded-broad-2024 energy-arbitrage gap is narrowed ($14.8k vs $17.4k),
   not eliminated; further gains likely need richer teacher diversity.
-- Bootstrap/Wilcoxon coverage for the headline comparisons is complete
-  (see "Statistical significance" above); per-cell CIs are wide on surfaces with
-  few scenarios (n=5–6), so point estimates should still be read alongside their
-  intervals.
+- Bootstrap/Wilcoxon coverage for these v1 headline comparisons is complete
+  (see "Statistical significance" above); some v1 surfaces had n=5–6. The
+  extended v2cal results in §8.2.11 use n=30/12/30/6; the smallest current
+  surface remains n=6, so read point estimates alongside their intervals.
 
 #### 8.2.11 Physics-v2 Re-baseline (2026-09) — corrected degradation, calibrated teacher
 
@@ -1755,8 +1755,8 @@ This repository introduces a unified framework for learning and planning in batt
 **Key empirical findings:**
 
 - **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: the forecast arms are re-baselined under corrected physics (the pre-fix TTM > persistence advantage does not survive — the three arms are statistically indistinguishable at the shared prompt), only the unconstrained 7 d real-OOD DT is net-positive, and the DT trails an RTE-matched perfect-foresight oracle (+$293 vs +$690/yr gross) while over-cycling on long horizons; throughput budgeting and price gating do not make the long-horizon surfaces net-positive (§8.1.1, §8.1.2).
-- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is the standalone physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`) with **surface-aware `rtg_mode="auto"`**. On the extended identity surfaces — standard-2024 **$16,501/ep** (n=30), dispatch-matched **$33,791/ep** (n=12), expanded broad-2024 **$29,124/ep** (n=30), and **2025 OOD $30,791/ep** (n=6) — all ahead of PPO with **all four paired 95% CIs excluding zero**. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on **9/9** canonical grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.70×, torrens 4.67×; paired Δ +$167,099, 95% CI [$101k, $227k]), avoiding the hornsdale/torrens collapse seen with explicit `j_t_soc`.
-- **AEMO utility-scale (the ceiling was real, then broken):** A systematic attempt to close the DT-vs-PPO gap *within* behaviour cloning — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, architecture changes — all failed to exceed the offline data's FCAS bidding. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver in the control loop; the J_t(soc) prompt is precomputable), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
+- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is the standalone physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`) with **surface-aware `rtg_mode="auto"`**. On the extended identity surfaces — standard-2024 **$16,501/ep** (n=30), dispatch-matched **$33,791/ep** (n=12), expanded broad-2024 **$29,124/ep** (n=30), and **2025 OOD $30,791/ep** (n=6) — all ahead of PPO with **all four paired 95% CIs excluding zero**. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on **9/9** canonical grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.70×, torrens 4.67×; paired Δ +$167,099, 95% CI [$101k, $227k]). The earlier apparent `j_t_soc` collapse was an evaluation artifact; explicit `j_t_soc` is viable after applying the checkpoint `return_scale` (B8), while `auto` remains the robust default.
+- **AEMO utility-scale (the tested cloning ceiling, then broken):** On the tested logged-policy data sources and behaviour-cloning levers — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, and architecture changes — the FCAS gap was not eliminated. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver in the control loop; the J_t(soc) prompt is precomputable), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. It has evolved from a hand-tuned scalar (architecture-dependent: modern peaks at 0.0, legacy at 0.5) to a state-dependent J_t(soc) cost-to-go table — with automatic fallback to constant RTG under market impact, since optimistic prompts self-suppress at grid scale (§8.2.10).
 - **AEMO utility-scale (FCAS-rich offline DT):** Before GRPO fine-tuning, the offline DT retrained on a 2,425-episode FCAS-rich dataset achieved +$1,522/ep on the example evaluator (beating PPO's +$1,444/ep). FCAS revenue rose 18× (from $77/ep to $1,383/ep), closing most of the prior gap to PPO's $1,616/ep FCAS revenue (the DT reached ~86% of PPO's FCAS revenue, versus ~5% before), while degradation fell 2.9× vs PPO ($212/ep vs $609/ep). This establishes that **offline RL on well-curated data can match online RL**.
@@ -1766,7 +1766,7 @@ This report documents the system and experimental protocol; results can be itera
 
 ## References
 
-[1] K. Abdulla, J. De Hoog, et al., "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation," *IEEE Transactions on Smart Grid*, 2016.
+[1] K. Abdulla, J. De Hoog, et al., "Optimal Operation of Energy Storage Systems Considering Forecasts and Battery Degradation," *IEEE Transactions on Smart Grid*, 2018.
 
 [2] V. Muenzel, J. De Hoog, et al., "A Multi-Factor Battery Cycle Life Prediction Methodology for Optimal Battery Management," *Proceedings of the 2015 ACM Sixth International Conference on Future Energy Systems (e-Energy '15)*, 2015.
 

@@ -9,6 +9,8 @@
 > the final session was 2026-08-23; **all numbers in the diary below are historical
 > and must not be cited** (the shipped numbers are in `report.md §8.2.11`). The
 > forward plan is now in **`docs/FUTURE_PLAN.md`**.
+> DAgger references in the historical diary are proposed follow-up experiments,
+> not implemented methods; the manuscript mentions DAgger only as related work.
 >
 > **PRECISION NOTE (2026-10-15):** where the diary below says "no solver at inference",
 > read *no solver in the control loop*. The `J_t(soc)` RTG prompt is produced by one
@@ -29,7 +31,7 @@
 > canonical impact gate was re-run with the fix and still **passes** (v1 checkpoint beats
 > PPO on all 9 cells, best-RTG-per-cell: small 3.21×, hornsdale 2.59×, torrens 2.02×). The
 > shipped physics-v2 v2cal gate at the fixed `rtg0.0` fallback is likewise 9/9 cells
-> (small 4.36×, hornsdale 4.71×, torrens 4.67×; `report.md §8.2.11`). `rtg_mode="auto"` remains
+> (small 4.36×, hornsdale 4.70×, torrens 4.67×; `report.md §8.2.11`). `rtg_mode="auto"` remains
 > the shipped choice, but as a robustness trade-off rather than collapse-avoidance.
 
 ## 1. Goal
@@ -38,7 +40,7 @@ Make the **Decision Transformer the preferred control algorithm** for a battery
 unit trading energy + all 8 FCAS services in AEMO, on the **actual objective:
 total profit per episode, net of degradation**.
 
-The repo currently ships "Option C" (PR #35): *PPO is the broad-year /
+At the time this archived plan was drafted, the repo shipped "Option C" (PR #35): *PPO is the broad-year /
 out-of-distribution leader; the DT is scoped to its winning surfaces
 (impact, dispatch-matched, mild markets).* This workstream challenges that
 scoping by exploiting a finding the repo already documented but never acted on:

@@ -1,7 +1,10 @@
-# Small-n assessment — how far each identity surface can be expanded
+# Small-n assessment — historical plan for expanding identity surfaces
 
 **Date:** 2026-09-22 · **Frozen release:** `preprint-v1`
-**Question:** the headline identity surfaces have n=5 / 6 / 27 / 6 scenario cells.
+**Status (2026-09-22):** superseded. The recommended extended surfaces were run;
+current headline sample sizes are n=30 / 12 / 30 / 6 (see provenance E3 and
+`report.md` §8.2.11). The options below are retained as a planning record.
+**Question at the time:** the headline identity surfaces had n=5 / 6 / 27 / 6 scenario cells.
 How many more can each support from cached data, and at what cost?
 
 ## Cost model (measured)
@@ -31,7 +34,7 @@ The 2024 AEMO data is already preprocessed into long-span parquets
 
 ## Expansion options
 
-### standard — current n=5 (Oct 2024 × 5 regions, `medium_1c`)
+### standard — planning-baseline n=5 (Oct 2024 × 5 regions, `medium_1c`)
 
 | Option | n | Method | Added runtime |
 |---|---:|---|---:|
@@ -39,20 +42,20 @@ The 2024 AEMO data is already preprocessed into long-span parquets
 | B. Multi-asset | 20 | {medium_1c, fast_375c, large_07c, small_05c} × 5 regions (Oct) | ~8 min |
 | C. Both | 120 | 4 assets × 5 regions × 6 periods | ~50 min |
 
-### dispatch — current n=6 (SA1 Jul–Dec 2024, `dispatch_asset_template`)
+### dispatch — planning-baseline n=6 (SA1 Jul–Dec 2024, `dispatch_asset_template`)
 
 | Option | n | Method | Added runtime |
 |---|---:|---|---:|
 | D. Full year | 12 | SA1 Jan–Dec 2024 | ~5 min |
 
-### expanded — current n=27 (5 regions × 6 periods, `medium`)
+### expanded — planning-baseline n=27 (5 regions × 6 periods, `medium`)
 
 | Option | n | Method | Added runtime |
 |---|---:|---|---:|
 | E. Complete TAS1 | 30 | add TAS1 Jul/Sep/Nov (data exists; config currently omits) | ~3 min |
 | F. Monthly | 60 | 5 regions × 12 months 2024 | ~55 min |
 
-### 2025 OOD — current n=6 (NSW1/SA1/QLD1 × Jan/Feb, `medium`)
+### 2025 OOD — planning-baseline n=6 (NSW1/SA1/QLD1 × Jan/Feb, `medium`)
 
 | Option | n | Method | Added runtime |
 |---|---:|---|---:|

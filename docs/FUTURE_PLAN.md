@@ -1,4 +1,4 @@
-# FUTURE_PLAN.md — AEMO Track Forward Plan (2026-08-25+)
+# FUTURE_PLAN.md — AEMO Track Forward Plan (started 2026-08-25; reviewed 2026-10-24)
 
 > This is the **living forward plan** for the AEMO/NEM track.
 > It supersedes and consolidates the open items from:
@@ -8,15 +8,11 @@
 >
 > Status key: ⬜ = open, 🟡 = in progress / partially measured, ✅ = done, 🔴 = on hold, 📝 = writing / meta.
 
-> **Physics rebaseline notice (2026-09-14):** Household results and status
-> claims recorded before the A1-A4 fixes are historical and require reruns.
-> The fixes changed round-trip efficiency, calendar aging, rainflow C-rate
-> units, and the reset C-rate cap. Marked household items H4.1-H4.5, H4.7,
-> and H4.9-H4.12 as pending rebaseline; their existing artifacts and headline
-> numbers must not be used as current evidence until regenerated. The shared
-> `batterydeg` changes also invalidate prior AEMO simulator evaluations; the
-> A5/B4 planner calibration requires regenerated SDP-teacher corpora,
-> Stage C retraining, and rerun identity/impact-gate evaluations.
+> **Physics rebaseline status (reviewed 2026-10-24):** The corrected physics
+> rebaseline is complete for household buckets A+B and the shipped AEMO v2cal
+> results. Pre-fix results remain historical; the current household caveat is
+> bucket C (live shadow, spot pass-through, broader telemetry). See
+> `docs/household/workflow.md` §H4.9 and `report.md` §8.2.11.
 
 ### Rebaseline status
 
@@ -28,7 +24,7 @@
 | H4.7/H4.9/H4.11 deployment + long-horizon eval | ✅ DONE (eval-only, 2026-09-18) | RTE-matched oracle + calibrated `h4_v2c` DT on real 7/30/90/14 d + 1 y/180 d synth; see `workflow.md` §H4.9 bucket-A table. |
 | H4.10/H4.12 fair DT-vs-RL + paired statistics | ✅ DONE (bucket B, 2026-09-20) | PPO/SAC/TD3 retrained on corrected env; no policy robustly net-positive under the wrapper; stats in `eval_output/household/h4_12_bucket_b/statistics.json`. |
 | AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
-| AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on 4/4 identity surfaces + impact. HF upload pending. |
+| AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on the four extended identity surfaces and passes the impact gate. Model and corpus are hosted on Hugging Face. |
 | Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$93/yr vs rule −$60 (RTE-matched oracle +$690/yr). |
 | Household H4.x re-runs + RTE-matched oracle | ✅ DONE (2026-09-20) | Bucket A (eval-only, RTE-matched oracle) + bucket B (retrained forecast arms and SB3) complete. Remaining household gaps: live shadow, spot pass-through, broader telemetry (bucket C). |
 
