@@ -94,8 +94,10 @@ adapts this sequence-modelling approach to offline RL: it is trained on fixed
 trajectories with no environment interaction, and it conditions its actions on a
 return-to-go (RTG) prompt describing how much value should remain
 \citep{chen2021decision}. Offline learning, however, inherits the behaviour of
-its data: a model trained by behaviour cloning cannot reliably produce actions
-it has never seen.
+its data: return conditioning can push the policy above the returns in its
+logs --- the original work reports both gains and regressions when the target
+is set beyond the data --- but the behaviour it can express is still assembled
+from what those trajectories contain.
 
 We set out to test whether an offline sequence model can serve as a single,
 generalising controller for this problem --- one that learns from logged data,
