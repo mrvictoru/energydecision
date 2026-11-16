@@ -75,7 +75,7 @@ Explain in ~150 words, for a technically literate but non-specialist reader:
 - Grid-scale batteries in Australia's NEM earn money two ways: energy arbitrage (buy low / sell high on 5-minute spot prices) and FCAS ancillary services (8 markets).
 - The control problem: decide dispatch + FCAS bids every 5 minutes, net of battery degradation.
 - Prior belief: online RL (PPO) was needed to capture FCAS spikes; the tested offline behaviour-cloning setup did not exceed its logged-policy data ceiling on the tested surfaces.
-- This project's result: distilling an honest stochastic-dynamic-programming (SDP) planning teacher into a standalone Decision Transformer breaks that tested ceiling — no clairvoyance, no solver in the control loop, better than PPO on the four extended identity surfaces tested.
+- This project's result: distilling an honest dynamic-programming-based planning teacher into a standalone Decision Transformer breaks that tested ceiling — no clairvoyance, no solver in the control loop, better than PPO on the four extended identity surfaces tested.
 
 ### 3.3 Environment explainer (interactive diagram)
 
@@ -170,8 +170,9 @@ Requirements:
 
 ### 3.7 The ceiling story (why this was hard) — narrative + failed-attempts table
 
-Short narrative (~200 words): behaviour cloning cannot output skills absent from
-the data; FCAS spike bidding survived every within-paradigm fix. Then an
+Short narrative (~200 words): on the tested corpora, behaviour cloning did not
+produce skills absent from the data; the FCAS-bidding gap to PPO survived every
+within-paradigm fix. Then an
 interactive table of failed attempts:
 
 ```js

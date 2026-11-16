@@ -569,9 +569,9 @@ footer strong { color: var(--ink); }
         The controller must decide dispatch plus all eight FCAS bids every 5 minutes,
         while paying for every cycle of battery wear.</p>
       <p>The prior belief: only online reinforcement learning (PPO) could capture rare FCAS price spikes,
-        because offline behaviour cloning cannot output skills that are absent from its logged data.
+        because offline behaviour cloning did not produce skills absent from its logged data on the tested corpora.
         In the tested data sources and levers, the observed ceiling was a property of the <em>teacher</em>,
-        not the student: distilling an honest stochastic-dynamic-programming (SDP) planning agent into a
+        not the student: distilling an honest dynamic-programming-based planning teacher into a
         standalone Decision Transformer broke that tested ceiling — no clairvoyance, no solver in the
         control loop, and better than PPO on the four extended identity surfaces.</p>
     </div>
@@ -674,7 +674,7 @@ footer strong { color: var(--ink); }
       <div class="env-card" tabindex="0" title="Dynamic-programming planners: the honest teacher behind the shipped DT, plus the clairvoyant ceiling.">
         <h3>🧮 Planners <span class="dim-badge">TEACHER / CEILING</span></h3>
         <ul>
-          <li>SDP/MRDP: stochastic DP against seasonal forecasts — the honest teacher distilled into the shipped DT</li>
+          <li>SDP/MRDP: dynamic programming against seasonal forecasts — the honest teacher distilled into the shipped DT</li>
           <li>Oracle LP: perfect-foresight energy+FCAS co-optimizer; revenue ceiling, degradation-blind, not deployable</li>
         </ul>
       </div>
@@ -847,11 +847,11 @@ footer strong { color: var(--ink); }
     <span class="section-kicker">Where the money comes from</span>
     <h2>The edge is FCAS capture — and degradation parity</h2>
     <p class="section-sub">Revenue decomposition matters more than any single number. The distilled DT's dominance comes from
-      co-optimized FCAS bidding inherited from the planning teacher, while its energy arbitrage narrowed the residual gap.</p>
+      FCAS bidding inherited from the planning teacher, while its energy arbitrage narrowed the residual gap.</p>
     <div class="card-grid">
       <div class="env-card">
         <h3>📶 FCAS revenue</h3>
-        <p style="color:var(--graphite);font-size:13px">The teacher co-optimizes FCAS bids with energy dispatch, and that behaviour is distilled into the student.
+        <p style="color:var(--graphite);font-size:13px">The teacher pairs a dynamic-programming energy plan with a greedy FCAS-bidding rule, and that behaviour is distilled into the student.
           The extended headline results report total profit; component-level FCAS ratios require matched v2cal artifacts.</p>
       </div>
       <div class="env-card">
@@ -901,7 +901,7 @@ footer strong { color: var(--ink); }
     <span class="section-kicker">Why this was hard</span>
     <h2>Every fix inside behaviour cloning failed first</h2>
     <div class="prose" style="margin-bottom:26px">
-      <p>Behaviour cloning cannot output skills absent from its data. Rare, aggressive FCAS spike bidding sits far outside
+      <p>In the tested corpora, behaviour cloning did not produce skills absent from its data. Rare, aggressive FCAS spike bidding sits far outside
         the offline behaviour mass, so it survived every attempt to prompt, re-weight, re-compose, or fine-tune it away.
         The project documented these failures systematically — they are the evidence that the ceiling was real:</p>
     </div>
@@ -914,9 +914,9 @@ footer strong { color: var(--ink); }
     <div class="timeline-detail" style="margin-top:24px">
       <h3>The resolution: change the teacher, not the student</h3>
       <p style="font-size:14px">Instead of cloning market history, the team distilled an <strong>honest planner</strong>: a
-        stochastic-dynamic-programming agent that plans against a seasonal forecast only (never realized future prices),
-        is degradation-aware, and co-optimizes FCAS by construction. A standalone transformer trained on those trajectories
-        inherits the planning skill — breaking the FCAS-cloning ceiling <em>by construction</em>. State-dependent
+        dynamic-programming-based planner that plans against a seasonal forecast only (never realized future prices),
+        is degradation-aware, and allocates FCAS headroom with a greedy rule. A standalone transformer trained on those trajectories
+        inherits the planning skill — breaking the FCAS-cloning ceiling on the tested surfaces. State-dependent
         J_t(soc) prompting then recovered the remaining energy-arbitrage gap. See <a href="#method">the method</a>.</p>
     </div>
   </div>
