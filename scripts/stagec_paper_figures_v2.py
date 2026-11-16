@@ -256,14 +256,7 @@ def fig6_ceiling_break(out_dir: Path) -> None:
         Patch(color="#e08a3c", label="solver in the loop"),
         Patch(color="#2a9d8f", label="distilled, standalone (shipped)"),
     ], frameon=False, fontsize=7, loc="upper left")
-    fig.text(
-        0.012, 0.012,
-        "\u2020 Legacy GRPO checkpoint: a narrow overfit (\\$8,242 dispatch-matched "
-        "collapses to \\$1,533 on the standard surface).\n"
-        "Values are per-stage evaluation surfaces from different eras and physics "
-        "versions and are not directly comparable.",
-        fontsize=5.8, color="#444444", ha="left", va="bottom")
-    fig.subplots_adjust(bottom=0.17)
+
     _save(fig, out_dir, "fig6_ceiling_break")
 
 

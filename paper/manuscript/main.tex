@@ -155,11 +155,14 @@ Appendix~\ref{app:ceiling}.
   \includegraphics[width=0.9\linewidth]{figures/fig6_ceiling_break.pdf}
   \caption{Historical trajectory of model variants leading to the shipped policy.
   Grey: behaviour-cloning checkpoints; orange: solver-in-the-loop planners, not
-  deployable standalone; teal: the shipped standalone distilled student. Values
-  are per-stage evaluation surfaces from different eras and physics versions and
-  are not directly comparable; stage 6 uses perfect foresight and stage 7 a
-  solver in the loop. The behaviour-cloning ceiling itself is documented by the
-  within-cloning levers in Appendix~\ref{app:ceiling}, not by this trajectory.}
+  deployable standalone; teal: the shipped standalone distilled student.
+  $\dagger$ Stage 4 is the legacy GRPO checkpoint, a narrow overfit: its
+  \$8{,}242 dispatch-matched profit falls to \$1{,}533 on the standard surface.
+  Values are per-stage evaluation surfaces from different eras and physics
+  versions and are not directly comparable; stage 6 uses perfect foresight and
+  stage 7 a solver in the loop. The behaviour-cloning ceiling itself is
+  documented by the within-cloning levers in Appendix~\ref{app:ceiling}, not by
+  this trajectory.}
   \label{fig:ceiling}
 \end{figure}
 
