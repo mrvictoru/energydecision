@@ -17,6 +17,20 @@ for pat in '*.aux' '*.log' '*.out' '*.synctex.gz' '*.bbl.bak'; do
   found=$(find "$DIR" -maxdepth 2 -name "$pat" -print -quit 2>/dev/null || true)
   [[ -n "$found" ]] && { echo "WARN remove $found"; }
 done
+# arXiv rejects PostScript Type 3 fonts, which matplotlib emits by default and
+# which arrive inside included figure PDFs (invisible to the LaTeX log).
+if command -v pdffonts >/dev/null 2>&1; then
+  for f in "$DIR"/figures/*.pdf; do
+    [[ -e "$f" ]] || continue
+    if pdffonts "$f" 2>/dev/null | grep -qi 'type 3'; then
+      echo "FAIL Type 3 font in ${f#"$DIR"/} (regenerate with pdf.fonttype=42)"; fail=1
+    else
+      echo "OK   ${f#"$DIR"/} fonts (no Type 3)"
+    fi
+  done
+else
+  echo "SKIP font check (pdffonts not installed)"
+fi
 if [[ $fail -eq 0 ]]; then
   echo "PACKAGE OK — zip with: (cd \"$DIR\" && zip -r ../arxiv_source.zip . -x '*.aux' '*.log' '*.out' '*.synctex.gz')"
 else

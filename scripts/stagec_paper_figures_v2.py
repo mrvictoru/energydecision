@@ -22,6 +22,10 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+# arXiv (and most publishers) reject PostScript Type 3 fonts; matplotlib's
+# default PDF backend emits them. Type 42 == embedded TrueType.
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["ps.fonttype"] = 42
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
