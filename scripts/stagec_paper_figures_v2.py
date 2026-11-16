@@ -220,14 +220,20 @@ def fig3_jtsoc_heatmap(out_dir: Path) -> None:
 def fig6_ceiling_break(out_dir: Path) -> None:
     from matplotlib.patches import Patch
 
-    # Values: report.md §8.2.7 improvement-trajectory table (profit/ep, dispatch-matched);
-    # stage 8 = shipped SA1 full-year. Solver stages marked.
-    stages = ["1 Pilot", "2 Autoresearch", "3 FCAS-rich", "4 GRPO*", "5 Modern v2",
-              "6 Hier DT+LP", "7 SDP exec", "8 Distilled\n(shipped)"]
+    # Route history, not ceiling evidence. Values are report.md §8.2.7
+    # improvement-trajectory numbers, each from a different evaluation surface,
+    # era, and physics version: stages 1-5 predate the physics-v2 re-baseline,
+    # stage 6 is the perfect-foresight LP, stage 7 is solver-in-the-loop, and
+    # stage 8 is the extended dispatch-matched surface. The bars are therefore
+    # not directly comparable; the behaviour-cloning ceiling itself is
+    # documented by the within-cloning levers in Appendix A.
+    stages = ["1 Pilot", "2 Autoresearch", "3 FCAS-rich", "4 GRPO\u2020",
+              "5 Modern v2", "6 Hier DT+LP", "7 SDP exec",
+              "8 Distilled\n(shipped)"]
     vals = [-10620, -1396, 1522, 8242, 10138, 291841, 59091, 33791]
     colors = ["#9aa5b1"] * 5 + ["#e08a3c"] * 2 + ["#2a9d8f"]
 
-    fig, ax = plt.subplots(figsize=(9.5, 4.0))
+    fig, ax = plt.subplots(figsize=(9.5, 4.1))
     x = np.arange(len(vals))
     ax.bar(x, vals, color=colors)
     for i, v in enumerate(vals):
@@ -240,13 +246,20 @@ def fig6_ceiling_break(out_dir: Path) -> None:
     ax.yaxis.set_minor_locator(matplotlib.ticker.NullLocator())
     ax.set_xticks(x)
     ax.set_xticklabels(stages, fontsize=7)
-    ax.set_ylabel("profit/ep, dispatch-matched (A$, symlog)")
-    ax.set_title("Within-cloning ceiling vs planner distillation")
+    ax.set_ylabel("profit/ep (A$, symlog; per-stage surfaces)")
     ax.legend(handles=[
         Patch(color="#9aa5b1", label="behaviour cloning"),
         Patch(color="#e08a3c", label="solver in the loop"),
         Patch(color="#2a9d8f", label="distilled, standalone (shipped)"),
     ], frameon=False, fontsize=7, loc="upper left")
+    fig.text(
+        0.012, 0.012,
+        "\u2020 Legacy GRPO checkpoint: a narrow overfit (\\$8,242 dispatch-matched "
+        "collapses to \\$1,533 on the standard surface).\n"
+        "Values are per-stage evaluation surfaces from different eras and physics "
+        "versions and are not directly comparable.",
+        fontsize=5.8, color="#444444", ha="left", va="bottom")
+    fig.subplots_adjust(bottom=0.17)
     _save(fig, out_dir, "fig6_ceiling_break")
 
 
