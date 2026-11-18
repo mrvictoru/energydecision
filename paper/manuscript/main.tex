@@ -263,22 +263,82 @@ environment reward and reported as a cost per unit of throughput.
 
 By default the battery is a price taker: it trades at the observed historical
 RRP and FCAS prices, which its own dispatch does not move. For impact-aware
-evaluation we use a piecewise-merit-order model in which the battery's dispatch
-changes the realised prices (charging adds demand and raises the energy price,
-discharging adds supply and lowers it), and each FCAS price is reduced in
-proportion to the battery's share of an estimated service depth. This is a
-per-interval approximation of an endogenous market, not a full market
-re-clear. We call evaluations without this model \emph{identity} surfaces and
-those with it \emph{impact} surfaces; Section~\ref{sec:impact} reports the impact
-gate.
+evaluation we relax that assumption because a sufficiently large battery can
+change the price it receives for its own dispatch. Using five-minute NEM data
+from 2024--2025, Davi-Arderius et al.~\citep{daviarderius2026merchant}
+estimate that battery
+charging raises spot prices while discharging lowers them, compressing the
+arbitrage spread. A separate recent NEM preprint reports evidence that batteries
+using a common autobidding provider sometimes forgo profitable dispatch when it
+would reduce profits for other batteries using that provider, particularly when
+the provider has a substantial share of near-margin capacity
+\citep{eschenbaum2026sharedbidding}. These are related but distinct effects:
+our impact model approximates only the effect of this battery's own energy
+dispatch and FCAS enablement on its settlement prices; it does not model
+competitors' bids or shared-provider strategic behaviour.
+
+For this first-order price effect we use a piecewise-merit-order model. For
+energy, a supply stack is
+constructed for each interval from historical generator availability, ordered
+by marginal-cost estimates inferred from fuel type and accumulated as available
+MW. If $D_t$ is regional demand and $b_t$ is the battery's dispatch in MW
+(positive when charging, negative when discharging), the model evaluates the
+stack at effective demand $D_t+b_t$ and linearly interpolates between its price
+tiers (clipping at the stack endpoints). Let $p_t^{\mathrm{curve}}$ denote that
+price and $p_t^{\mathrm{RRP}}$ the historical regional reference price. The
+energy price charged to the battery is
+\[
+  p_t^{\mathrm{energy}}
+  = p_t^{\mathrm{RRP}}
+    + \alpha\bigl(p_t^{\mathrm{curve}}-p_t^{\mathrm{RRP}}\bigr),
+\]
+where $\alpha$ is the impact intensity: zero recovers price-taking evaluation,
+and one applies the full curve estimate. The reported impact evaluations use
+$\alpha=1$. If a curve is unavailable for an
+interval, the historical RRP is retained. Thus, charging can move the battery up
+the supply stack and raise the price it pays; discharging can move it down the
+stack and lower the price it receives.
+
+For FCAS service $k$, the market depth $\widehat D_{t,k}$ is estimated from
+regional demand $D_t$ using a service-specific minimum $D_k^{\min}$ and ratio
+$\rho_k$:
+\[
+  \widehat D_{t,k}=\max(D_k^{\min},\rho_k D_t).
+\]
+For a positive historical FCAS price and a positive battery enablement
+$b_{t,k}$ MW, the model attenuates that price according to the battery's share
+of estimated depth:
+\[
+  p_{t,k}^{\mathrm{FCAS,impact}}
+  = \max\!\left(0,\ p_{t,k}^{\mathrm{FCAS}}
+    \left[1-\alpha\frac{b_{t,k}}{\widehat D_{t,k}+b_{t,k}}\right]\right).
+\]
+For example, 40 MW of enablement against 100 MW of estimated depth gives a
+share of $40/(100+40)\approx 0.29$, reducing the price by about 29\% at full
+intensity.
+If the historical price or enablement is non-positive, or depth is unavailable,
+the model retains the historical price. This captures the idea that adding
+reserve supply can dilute the price earned by that same supply. The calculation
+changes the battery's settlement prices only; it does not redispatch other
+generators or model network constraints, unit
+commitment, or a full market re-clear. Each interval is approximated separately.
+We call evaluations without this model \emph{identity} surfaces and those with
+it \emph{impact} surfaces; Section~\ref{sec:impact} reports the impact gate.
 
 \subsection{Data}
 
 The simulator is driven by historical AEMO market data: dispatch prices for
 energy and the eight FCAS services, regional demand, and generation by fuel
-type. Training trajectories and the seasonal price profile are drawn from
-pre-2024 windows; evaluation uses 2024 (identity surfaces) and 2025
-(out-of-distribution) windows that are held out by date.
+type. Training trajectories and the seasonal price profile use pre-2024 data
+from all five NEM regions: NSW1 (New South Wales), QLD1 (Queensland), SA1
+(South Australia), TAS1 (Tasmania), and VIC1 (Victoria). The split is by date,
+not by region: the standard and expanded 2024 identity surfaces cover all five
+regions, the dispatch-matched surface uses SA1 across all twelve months, and
+the 2025 out-of-distribution (OOD) surface uses NSW1, QLD1, and SA1 in January
+and February. The latest training source ends on 1 December 2023; the earliest
+evaluation window starts on 1 January 2024, leaving a 31-day gap. Thus, these
+results test temporal generalisation across years in regions seen during
+training, not transfer to unseen regions.
 
 % =============================================================================
 \section{Method}
