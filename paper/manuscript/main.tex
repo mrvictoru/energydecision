@@ -371,9 +371,20 @@ historical means.
 
 The teacher is a three-stage pipeline (Figure~\ref{fig:pipeline}):
 \begin{enumerate}
-  \item \textbf{SOC waypoints.} A learned model proposes a sequence of
-  intermediate SOC targets. It supplies targets to the planner but does not
-  optimise the dispatch actions.
+  \item \textbf{SOC waypoints.} A separate Decision Transformer (8 blocks,
+  768 hidden units, context 210) outputs $K{=}8$ normalised target-SOC
+  waypoints at evenly spaced checkpoints across the episode. It is evaluated
+  once on the observation history available at the first step, and the
+  resulting schedule is held fixed for the episode. The first waypoint is
+  pinned to the initial SOC and the last supplies the terminal target. This
+  model sets the coarse shape of the SOC trajectory but does not choose
+  dispatch actions. It is trained by supervised regression on 1{,}200 episodes
+  from pre-2024 rollout logs covering five regions, four battery sizes, and
+  three horizons (12 days, 8 weeks, and 26 weeks). For each episode we solve a
+  perfect-foresight linear program over that episode's realised prices, sample
+  the optimal SOC path at eight evenly spaced checkpoints, and normalise by
+  capacity to form the target vector. Training minimises a masked
+  mean-squared error on the eight outputs.
   \item \textbf{Energy dispatch.} For each interval between waypoints, a
   discretised dynamic program performs backward induction over SOC states
   and candidate charge/discharge actions. It minimises forecast energy cost
@@ -388,7 +399,12 @@ The teacher is a three-stage pipeline (Figure~\ref{fig:pipeline}):
 \end{enumerate}
 Thus, the teacher combines learned waypoint selection, dynamic-programming
 energy planning, and rule-based FCAS bidding. It is not a pure SDP solver
-or a joint optimiser of energy and FCAS.
+or a joint optimiser of energy and FCAS. The waypoint model is needed only to
+generate the training corpus; the shipped policy does not use it at inference.
+Because those targets are generated with perfect foresight over each episode's
+realised prices, our use of ``non-clairvoyant'' refers to the information
+available to the teacher at rollout, not to the absence of oracle supervision
+when the waypoint labels were produced.
 
 \begin{figure}[H]
   \centering
