@@ -55,6 +55,16 @@ The shipped model trained on this corpus is [`energydecision-dt-v2-sdp`](https:/
 | `battery` | str | `medium_1c` (10 MWh), `fast_375c` (8 MWh), `large_07c` (50 MWh), or `small_05c` (2 MWh) |
 | `rtg_value` | float | `jtsoc_*` files only — J_t(soc) cost-to-go at this step (state-dependent remaining value under the seasonal forecast) |
 
+### Which column is the return signal?
+
+The Decision Transformer's return embedding receives **`rtg_value`**, not
+`reward`. When a corpus has that column, `src/transformer_training.py` uses it
+as the return-to-go and does not derive returns from `reward`; the per-step
+`reward` is retained for provenance and for training runs on corpora that lack
+the column. This makes the shipped model *value-conditioned* rather than
+*return-conditioned* in the sense of Chen et al. (2021); the model card explains
+the consequences and the open ablation.
+
 ## Dataset composition
 
 - Shipped physics-v2 corpus: 320 episodes / 3.13M rows

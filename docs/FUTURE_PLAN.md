@@ -121,6 +121,7 @@ comparative claims, but are not a safety prerequisite.
 | 3.2 | **Surface-aware mode gating (H3)** — `rtg_mode="auto"` already ships; validate fallback RTG=0.0 is conservative enough; sweep fallback RTG on impact surface | Already shipped; just needs validation sweep | 🟡 Partial (shipped, needs validation) |
 | 3.3 | **Oracle_MI numerical fix** — the fixed-point solve exceeds 100% PT at 150 MW+ (unreliable ceiling). Diagnose: supply-curve step granularity? convergence tolerance? | Reliable impact-aware ceiling for eval | Open |
 | 3.4 | **Dynamic RTG prompting** — match training-time decaying RTG at inference (start at target, discount per step). Test fixed vs decaying RTG on expanded 5-min surface. | RTG-distribution finding in research plan §RTG-distribution | Open |
+| 3.5 | **Realised-return RTG ablation (value- vs return-conditioned DT)** — retrain the same 8×768 model on the same SDP corpus with returns-to-go computed from the logged `reward` column (Chen et al. recipe) rather than the planner's `rtg_value` (−J_t(soc)); compare on the four identity surfaces + impact gate. Separates planner imitation from the value-prompt contribution and pre-empts the reviewer question about departing from standard return conditioning. Note: `--rtg-source constant` only warns for corpora that already contain `rtg_value` (datasets are built before the flag resolves), so a faithful run needs a corpus without that column or a load-time drop. | Quantify how much of the gain is the prompt vs the teacher | Open |
 
 ---
 

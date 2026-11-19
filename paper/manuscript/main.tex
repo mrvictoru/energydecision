@@ -187,7 +187,8 @@ Sequence modelling reframes control as autoregressive prediction over
 return-to-go and predicts actions, matching or exceeding state-of-the-art
 offline RL baselines on several offline benchmarks \citep{chen2021decision};
 related work applies the recipe
-online \citep{zheng2022online}, to value-based relabeling \citep{yamagata2023qdt}, and
+online \citep{zheng2022online}, to value-conditioned objectives
+\citep{yamagata2023qdt}, and
 to whole-trajectory modelling \citep{janner2021offline}. We adopt the Decision
 Transformer, derive its RTG prompt from a planner's cost-to-go, and evaluate a
 surface-aware prompt fallback under market impact.
@@ -418,8 +419,10 @@ when the waypoint labels were produced.
   \label{fig:pipeline}
 \end{figure}
 
-We also compute a free-terminal cost-to-go table $J_t(s)$ over time $t$ and
-discretised SOC $s$:
+To turn this into a prompt, we also compute a free-terminal cost-to-go table
+$J_t(s)$ over time $t$ and discretised SOC $s$. It records the least cost of
+serving the remainder of the episode from each state, under the same seasonal
+forecast, with no terminal SOC requirement:
 \begin{equation}
   J_t(s) \;=\; \min_{a \in \mathcal{A}(s)}
   \left[ c_t(s,a) + J_{t+1}(s') \right],
@@ -428,7 +431,15 @@ discretised SOC $s$:
 where $\mathcal{A}(s)$ is the set of feasible actions at SOC $s$, $s'$ is
 the resulting next SOC, and $c_t$ includes forecast energy cost and the
 degradation surrogate. Unlike the waypoint-constrained dispatch plan, this
-table has no terminal SOC target. At inference, the table is queried at the
+table has no terminal SOC target.
+
+The recursion is what makes the table usable as a prompt. Because $J_t(s)$ is
+the smallest remaining cost from state $s$ at time $t$, its negation is the
+largest remaining profit attainable from that state, so $-J_t(s)$ answers the
+question a return-to-go token is supposed to encode: how much value is still on
+the table. Feeding it to the student therefore replaces a hand-set scalar with
+a state-dependent estimate that already accounts for the SOC and the time left
+in the episode. At inference, the table is queried at the
 current time and SOC, and the Decision Transformer receives $-J_t(s)$ as its
 return-to-go prompt. The table provides a value-conditioning signal, not the
 SDP policy: the student selects actions in a single forward pass, with no
@@ -442,7 +453,12 @@ precomputed and cached per region, season, and battery.
   \caption{The $J_t(\mathrm{soc})$ return-to-go prompt for a representative window
   (NSW1, October 2024, seasonal forecast). Value rises with stored energy and
   decays as the remaining episode shortens; this table supplies the DT's
-  state-dependent RTG prompt.}
+  state-dependent RTG prompt. The banding reflects the daily periodicity of the
+  seasonal profile: the table is computed on a profile that repeats every 24 h,
+  so its value falls by roughly one cycle's net profit each time an evening
+  peak (at high SOC) or a midday trough (at low SOC) passes. The near-linear
+  rise with SOC is the marginal value of stored energy, about A\$109/MWh, which
+  is the forecast spread net of the degradation surrogate.}
   \label{fig:jtsoc}
 \end{figure}
 \subsection{Trajectory corpus}
@@ -464,7 +480,10 @@ action (one energy-dispatch component and eight FCAS bids), and the resulting
 per-step reward, together with episode and step identifiers and metadata.
 For the shipped corpus, a per-step \texttt{rtg\_value} is also provided:
 it is computed as $-J_t(s)$ from the free-terminal cost-to-go table, not as
-a logged discounted sum of future rewards. The exported rows do not retain
+a logged discounted sum of future rewards. The Decision Transformer's return
+embedding receives this value; the per-step \texttt{reward} column records the
+profit the teacher realised at each step, and is used instead of
+\texttt{rtg\_value} only for corpora that lack that column. The exported rows do not retain
 timestamps. Accordingly, temporal non-overlap between training and evaluation
 was checked against the source data windows, rather than by auditing
 timestamps stored in each corpus row.
@@ -489,7 +508,22 @@ weighted combination of action, state, and return prediction losses:
   (w_a,w_s,w_r)=(0.999,\,0.002,\,0.0001).
 \end{equation}
 The loss is therefore dominated by action prediction, while state and return
-prediction provide lower-weight auxiliary objectives. To keep the RTG inputs
+prediction provide lower-weight auxiliary objectives. Here ``return
+prediction'' refers to the RTG prompt, not to realised reward: the target for
+$\mathrm{MSE}_r$ is the planner's $-J_t(s)$. This is a deliberate departure
+from the original Decision Transformer, which defines RTG as the cumulative
+realised reward from the current step to the end of the logged episode
+\citep{chen2021decision}. At inference, the user sets an initial target and
+subtracts each observed reward as the episode proceeds. This gives an
+inference-time steering mechanism: a higher target can steer the model towards
+higher-return behaviour, although it does not guarantee that the target will be
+reached. Here improvement comes from the
+teacher, and the prompt is used differently: as a state-dependent value signal
+rather than a target the user raises. This is closer to value-aware sequence
+modelling, such as QDT and Trajectory Transformer
+\citep{yamagata2023qdt,janner2021offline}, though their mechanisms differ; we
+return to the consequences in Section~\ref{sec:limitations}.
+To keep the RTG inputs
 numerically scaled for training, we use an automatically calibrated
 \texttt{return\_scale}; for the shipped checkpoint it is 23{,}284.83, which maps
 return-to-go values to order-10 magnitudes for the network.
@@ -649,6 +683,15 @@ historical NEM data; sim-to-real transfer is the main open item. The
 market-impact model is a per-interval merit-order approximation, not a full
 market re-clear.
 
+\textbf{Conditioning signal.} The student is conditioned on the planner's value
+rather than on realised returns-to-go, so it never learns from the rewards its
+own actions produce. This suits distillation, since the teacher supplies the
+actions and the prompt only needs to encode how much value a state still holds,
+but it means the model is not return-conditioned in the sense of
+\citet{chen2021decision}. Isolating the effect of this choice requires an
+ablation with returns-to-go computed from logged rewards, which we leave to
+future work (Section~\ref{sec:conclusion}).
+
 \textbf{Same-simulator teacher and evaluation.} The teacher and the evaluation
 share the simulator, so the student may inherit environment-specific behaviour.
 Held-out 2025 data and the endogenous-price impact gate mitigate this, but the
@@ -687,6 +730,7 @@ discrepancy is documented in the released audit notes.
 
 % =============================================================================
 \section{Conclusion}
+\label{sec:conclusion}
 
 We set out to test whether an offline sequence model could serve as a single,
 generalising controller for multi-market battery dispatch, learning from a fixed
@@ -714,7 +758,11 @@ approximation. A further open direction is corpus composition: we tested
 re-weighting and re-composition \emph{within} the behaviour-cloning corpora
 (Appendix~\ref{app:ceiling}), but not a mixture of teacher-generated and
 policy-generated trajectories, which could combine the teacher's FCAS bidding
-with the policies' energy behaviour. We also plan controlled comparisons of
+with the policies' energy behaviour. A third is the conditioning signal itself:
+training the same architecture on the same corpus with returns-to-go computed
+from logged rewards, instead of the planner's value table, would separate the
+contribution of planner imitation from that of the value prompt. We leave that
+ablation to future work. We also plan controlled comparisons of
 selected newer sequence-model architectures against the shipped 8-block,
 768-dimensional backbone, holding the data and evaluation protocol fixed. This
 paper does not establish that the current backbone is architecture-optimal.
