@@ -547,12 +547,23 @@ resolves to the state-dependent \texttt{j\_t\_soc} prompt: the agent looks up
 $J_t(s)$ for the current time and SOC and feeds its negative, scaled by
 \texttt{return\_scale}, to the transformer as RTG. Under a market-impact model
 (Section~\ref{sec:impact}), where the battery's own dispatch moves prices,
-\texttt{auto} instead falls back to a constant \texttt{rtg0.0} prompt. This is a
-robustness choice, not a failure mode: on large batteries, a value prompt
-that is too optimistic can over-trade energy and self-suppress realised prices,
-so the conservative constant prompt is used once the battery is no longer a
-negligible price taker. Using the state-dependent prompt directly in this regime,
-rather than falling back to a constant, remains an open item.
+\texttt{auto} instead falls back to a constant \texttt{rtg0.0} prompt.
+
+This fallback is not a rescue from an evaluation artifact or a claim that
+\texttt{j\_t\_soc} always fails under impact. In the nine-cell v2cal sign check,
+the state-dependent prompt wins 2 of 9 cells and the constant prompt wins 7,
+with constant ahead by 15.2\% in aggregate profit ($1.915M versus $1.624M).
+The difference is largest in the South Australia November large-battery cases,
+where the value prompt over-trades energy: it is the prompt that asks for the
+most remaining value, not merely the prompt that maximises the observable
+identity-surface reward. Under the impact model, that optimistic prompt can
+lead the battery to charge and discharge enough to alter the prices against
+itself; the zero prompt is conservative and keeps the policy closer to the
+teacher's less aggressive, FCAS-heavy behaviour. It is therefore a robustness
+rule, not a failure mode: use state-dependent $-J_t(s)$ where the battery is
+approximately a price taker, and use a constant RTG under visible market
+power. Using the state-dependent prompt directly under impact remains an open
+item.
 
 % =============================================================================
 \section{Experiments}
@@ -575,13 +586,30 @@ scenario--battery cell. PPO and rule-policy reference rollouts are run
 against the same evaluation scenarios as the student, with fresh reference
 caches to keep the comparisons consistent.
 
-We report mean episode profit and paired differences between the student
-and PPO. Uncertainty in the paired differences is estimated by bootstrap
-resampling the matched scenario cells with 10{,}000 replicates; paired
-Wilcoxon tests are reported as a complementary analysis. We treat the
-paired-difference confidence interval as the primary inferential result.
-Scenario cells from the same region may be correlated, so the cell count
-should not be interpreted as an equal number of independent regions.
+We compare the policies on matched cells: every scenario and battery
+configuration on which the student is evaluated is also evaluated by each
+baseline on identical market data. We therefore report the per-cell difference
+$d_i = y_i^{\mathrm{DT}} - y_i^{\mathrm{PPO}}$, where $y_i$ is episode profit,
+and the mean of those differences, rather than comparing two independent means.
+Pairing removes the effect of scenario difficulty (a volatile month, a quiet
+one), which enters both policies equally, and the differences are typically much
+less variable than the profits themselves, so the comparison is more sensitive
+to a genuine policy difference.
+
+We attach a 95\% interval to the mean difference by bootstrap: resample the $n$
+cell differences with replacement 10{,}000 times, recompute the mean each time,
+and take the 2.5th and 97.5th percentiles. This assumes that the cells are
+exchangeable, not that profits are normally distributed. An interval that
+excludes zero means the sign of the average advantage is stable under
+resampling. As a distribution-free check on the same differences we report a
+paired Wilcoxon signed-rank test, which ranks $|d_i|$ and asks whether the
+positive and negative differences are balanced; ranking makes it insensitive to
+a single unusually large cell. Both procedures are limited by the number of
+cells: at $n=6$ the smallest attainable two-sided Wilcoxon $p$ is $0.031$, and at
+$n=9$ it is $0.0039$. We therefore treat the bootstrap interval as primary and
+the rank test as corroboration. Because cells within a region are correlated,
+the bootstrap also overstates precision somewhat, so we report cell counts
+rather than claiming that many independent regions.
 The student is deterministic at evaluation time; baseline reference
 rollouts can vary slightly run-to-run (see Table~\ref{tab:headline}).
 
