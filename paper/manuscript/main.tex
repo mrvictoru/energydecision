@@ -577,6 +577,17 @@ evaluates six NSW1, QLD1, and SA1 scenario cells from January and February
 ($n=6$). Training data and the seasonal price profile use pre-2024 source
 windows; the evaluation windows are held out by date.
 
+The surfaces are not identical protocols. Standard and dispatch-matched use
+144 h (six-day) episodes with a 10 MWh battery and one rollout per cell; the
+standard surface uses 10 MW (1C) and the dispatch-matched asset 5 MW (0.5C).
+Expanded and 2025 OOD use 288 h (twelve-day) episodes with a 10 MWh/5 MW
+battery and five randomly started rollouts per cell, averaged within each cell.
+The expanded surface reuses the standard surface's months and is broader in
+episode length, rollout count, and battery power rather than in calendar
+coverage. Dollar-per-episode values are therefore comparable between the two
+policies within a row, but not across rows; the ratio and paired difference are
+the cross-surface statistics.
+
 We compare the Decision Transformer with a tuned PPO policy, an
 \texttt{fcas\_rule} policy, and dispatch replay (the latter only on the
 dispatch-matched surface). PPO is tuned using an
@@ -619,7 +630,10 @@ Table~\ref{tab:headline} summarises the extended identity-surface results.
 Figure~\ref{fig:main} shows the per-surface comparison and the paired
 differences, and Figure~\ref{fig:revenue} decomposes profit by revenue source.
 The student has higher mean profit than PPO on all four surfaces, and each
-paired-difference 95\% confidence interval excludes zero. Relative to its
+paired-difference 95\% confidence interval excludes zero, although it does not
+win every individual cell (29/30 on standard, 10/12 on dispatch-matched, 29/30
+on expanded, and 6/6 on 2025 OOD); the claim is about the paired mean, not
+per-cell dominance. Relative to its
 solver-in-the-loop teacher on the same surfaces, the student retains 77\% of the
 teacher's aggregate profit on standard 2024 and 70\% on dispatch-matched, and
 exceeds it on expanded broad-2024 (132\%) and 2025 out-of-distribution (276\%);
@@ -631,7 +645,11 @@ small sample on the 2025 OOD surface.
   \centering
   \caption{Extended identity surfaces (shipped physics-v2 checkpoint,
   \texttt{rtg\_mode="auto"}). \textbf{All four paired-difference 95\% CIs exclude
-  zero.} Baselines may show $\sim$1\% run-to-run variation.}
+  zero.} Episode length and battery power differ by surface (144 h on a 10 MWh
+  battery --- 10 MW for standard, 5 MW for dispatch-matched --- and 288 h on a
+  10 MWh/5 MW battery for expanded and 2025 OOD), so \$/ep is comparable within
+  a row but not across rows. PPO reference rollouts vary by about 1\%
+  run-to-run; the student is deterministic.}
   \label{tab:headline}
   \small
   \begin{tabular}{lrrrrr}
