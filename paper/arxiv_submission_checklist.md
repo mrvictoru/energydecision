@@ -58,7 +58,7 @@ Required files:
 - [ ] **Abstract:** paste the plain-text version from
       `paper/arxiv_abstract_plaintext.txt` (1592 characters, under arXiv's
       ~1920-character limit). Do **not** paste LaTeX (`$...$`, `\emph{}`).
-- [ ] **Comments field:** e.g. "13 pages, 6 figures, 3 tables. Preprint."
+- [ ] **Comments field:** e.g. "15 pages, 6 figures, 3 tables. Preprint."
 - [ ] **Authors:** Hou Nam U (decide whether to include the "(Victor)" nickname).
 - [ ] **Affiliation:** GitHub URL is currently in the author block; arXiv allows
       an affiliation field — decide what to put there.
@@ -75,6 +75,7 @@ Required files:
 ## F. After announcement
 
 - [ ] Add the arXiv ID to the GitHub README and the Hugging Face model card.
-- [ ] Tag the repo (`preprint-v1`) and archive the exact source used.
+- [ ] Archive the exact source used: the `preprint-v1` tag plus the
+      2026-09-22 extended-surface and cache-key commits through `ea558bf`.
 - [ ] Replace the preprint with the camera-ready if a venue accepts it (keep the
       arXiv v1 for priority).

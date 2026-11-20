@@ -88,5 +88,5 @@ whole `figures/` folder to Overleaf**, or compilation will fail with "file not f
 
 ## 5. When the draft is ready
 
-Run the Phase 6 checklist (in `paper/phase2_mastery_guide.md` → "When you're done"):
+Run the pre-submission checks in `paper/arxiv_submission_checklist.md`:
 repro one-command eval on a fresh clone, arXiv endorsement check, tag the release.

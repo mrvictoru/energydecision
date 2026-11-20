@@ -17,7 +17,6 @@ an audience label, not an authorship claim.
 | `.opencode/command/ponytail-*.md` | Six OpenCode command prompts; local-only |
 | `program.md` | Instructions for the autonomous autoresearch harness; local-only |
 | `docs/website_requirements.md` | Website requirements written for an AI agent or developer; local-only |
-| `paper/agent_audit_prompt.md` | Prompt for the documentation and website audit; local-only |
 
 ## Agent-workflow, experiment, and status records
 
@@ -39,8 +38,6 @@ established by the document itself.
 | [`../paper/audit/audit_findings.md`](../paper/audit/audit_findings.md) | Dated provenance-audit record |
 | [`../paper/audit/small_n_assessment.md`](../paper/audit/small_n_assessment.md) | Historical assessment, superseded by later results |
 | [`../paper/audit/artifacts/cache_data_staleness_finding.md`](../paper/audit/artifacts/cache_data_staleness_finding.md) | Dated audit finding |
-| [`../paper/manuscript/WRITING_PLAN.md`](../paper/manuscript/WRITING_PLAN.md) | Manuscript writing plan |
-| [`../paper/phase2_mastery_guide.md`](../paper/phase2_mastery_guide.md) | Project handoff / work guide |
 
 ## Documented AI-assisted audit work
 
@@ -52,8 +49,7 @@ claim that the full documents were AI-authored.
 - [`FUTURE_PLAN.md`](FUTURE_PLAN.md), [`aemo_dt_preferred_policy_plan.md`](aemo_dt_preferred_policy_plan.md), [`aemo_research_plan.md`](aemo_research_plan.md), [`known_issues.md`](known_issues.md), and `docs/website_requirements.md` (local-only)
 - [`../index.html`](../index.html)
 - [`../paper/audit/audit_findings.md`](../paper/audit/audit_findings.md) and [`../paper/audit/small_n_assessment.md`](../paper/audit/small_n_assessment.md)
-- [`../paper/manuscript/WRITING_PLAN.md`](../paper/manuscript/WRITING_PLAN.md), [`../paper/outreach_emails.md`](../paper/outreach_emails.md), and [`../paper/phase2_mastery_guide.md`](../paper/phase2_mastery_guide.md)
-- [`../paper/audit/doc_audit_2026-10-24.md`](../paper/audit/doc_audit_2026-10-24.md), the audit report created during that work
+- [`../paper/outreach_emails.md`](../paper/outreach_emails.md)
 
 This index was also drafted with AI assistance; no claim is made about the
 authorship of the other indexed documents unless stated above.

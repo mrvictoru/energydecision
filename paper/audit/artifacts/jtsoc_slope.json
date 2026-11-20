@@ -1,0 +1,15 @@
+{
+  "source": "data/aemo/processed_NSW1_2024-10-01_2024-10-14_0.0833h.parquet",
+  "region": "NSW1",
+  "horizon_steps": 1728,
+  "step_hours": 0.08333333333333333,
+  "deg_cost_per_mwh": 50.0,
+  "deg_calibration": 0.12,
+  "slope_units": "A$/MWh",
+  "slope_median": 107.30544994123622,
+  "slope_mean": 111.34919550715745,
+  "slope_p10": 107.30544994123618,
+  "slope_p90": 132.5673270306648,
+  "n_timesteps": 1729,
+  "method": "linear fit of -J_t(soc) against SOC at each timestep; median across timesteps"
+}

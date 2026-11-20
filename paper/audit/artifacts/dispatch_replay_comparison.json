@@ -1,0 +1,25 @@
+{
+  "source": "eval_output/physics_v2/dispatch_year_v2cal/heldout_metrics_by_scenario.csv",
+  "policies": {
+    "dt": "candidate_dt",
+    "replay": "dispatch_dalrymple_north"
+  },
+  "n": 12,
+  "dt_mean": 33790.621574875964,
+  "replay_mean": 19326.265522726088,
+  "diff_mean": 14464.356052149868,
+  "diff_ci": [
+    -12160.98087390666,
+    29674.724624440372
+  ],
+  "ci_excludes_zero": false,
+  "win_count": 11,
+  "win_rate": 0.9166666666666666,
+  "wilcoxon_p": 0.0341796875,
+  "method": {
+    "bootstrap": "percentile over matched cells",
+    "n_boot": 10000,
+    "seed": 42,
+    "confidence": 0.95
+  }
+}

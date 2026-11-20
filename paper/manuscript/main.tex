@@ -457,8 +457,9 @@ precomputed and cached per region, season, and battery.
   seasonal profile: the table is computed on a profile that repeats every 24 h,
   so its value falls by roughly one cycle's net profit each time an evening
   peak (at high SOC) or a midday trough (at low SOC) passes. The near-linear
-  rise with SOC is the marginal value of stored energy, about A\$109/MWh, which
-  is the forecast spread net of the degradation surrogate.}
+  rise with SOC is the marginal value of stored energy, about A\$107/MWh (median
+  over timesteps), which is the forecast spread net of the degradation
+  surrogate.}
   \label{fig:jtsoc}
 \end{figure}
 \subsection{Trajectory corpus}
@@ -553,7 +554,8 @@ $J_t(s)$ for the current time and SOC and feeds its negative, scaled by
 This fallback is not a rescue from an evaluation artifact or a claim that
 \texttt{j\_t\_soc} always fails under impact. In the nine-cell v2cal sign check,
 the state-dependent prompt wins 2 of 9 cells and the constant prompt wins 7,
-with constant ahead by 15.2\% in aggregate profit ($1.915M versus $1.624M).
+with the state-dependent prompt 15.2\% lower in aggregate profit (\$1.624M
+versus \$1.915M).
 The difference is largest in the South Australia November large-battery cases,
 where the value prompt over-trades energy: it is the prompt that asks for the
 most remaining value, not merely the prompt that maximises the observable
@@ -710,7 +712,8 @@ regimes are evaluated with the settings that the shipped mode selects.
 
 Section~\ref{sec:prompting} reports the direct prompt comparison on these nine
 cells: under impact the state-dependent prompt wins 2 of 9 and the constant
-prompt wins 7, with the constant ahead by 15.2\% in aggregate profit. The gate
+prompt wins 7, with the state-dependent prompt 15.2\% lower in aggregate
+profit. The gate
 therefore evaluates the fallback that ships, and the comparison is between that
 fallback and PPO rather than between the two prompts.
 
@@ -872,6 +875,9 @@ table below.
     Lever & Outcome \\
     \midrule
     RTG prompt sweep (0--100) & Flat --- not a prompting artifact \\
+    Corpus scale and coverage (24 $\to$ 2{,}425 episodes) & FCAS revenue \$77 $\to$
+    \$1{,}383/ep (18$\times$), about 86\% of PPO's FCAS revenue; profit gap
+    remains \\
     PPO-only training data (legacy and modern architectures) & Energy-heavy
     ($\sim$\$17.6--17.8k profit, $\sim$\$2.1k FCAS); architecture is not the
     determinant \\
@@ -891,9 +897,9 @@ table below.
 
 These results suggest that, in the tested settings, the ceiling is driven chiefly
 by the logged data: the FCAS-bidding behaviour the student must learn is poorly
-represented, and none of the tested prompting, re-weighting, or fine-tuning
-changes supplied it. Section~\ref{sec:method} addresses this limitation by
-changing the data source.
+represented, and none of the tested changes to data scale or composition,
+prompting, loss weighting, fine-tuning, or architecture supplied it.
+Section~\ref{sec:method} addresses this limitation by changing the data source.
 
 \section{Datasets and Routes Explored}
 \label{app:routes}
@@ -941,16 +947,18 @@ non-clairvoyant planner of Section~\ref{sec:method}.
 
 \section{Provenance and Reproducibility}
 
-We release the code, the training corpora, and the model weights, together with a
-provenance record that maps every headline number in this paper to the artifact
-and command that produced it.
+We release the code, the shipped training corpus, and the model weights,
+together with a provenance record that maps every headline number in this paper
+to the artifact (and, where available, the command) that produced it.
 
 \begin{itemize}
   \item \textbf{Code and environment.} Source code:
   \url{https://github.com/mrvictoru/energydecision}. The evaluation environment is
   pinned in \path{paper/environment.txt} (Python 3.10.12, PyTorch 2.9.0+cu130,
-  CUDA 13.0), and all reported results correspond to the \texttt{preprint-v1}
-  release tag, at which the test suite (387 tests) passes.
+  CUDA 13.0). The evaluation results were produced from the \texttt{preprint-v1}
+  release state (2026-09-22) together with the same-day extended-surface and
+  cache-key commits on \texttt{main} (through \texttt{ea558bf}); the test suite
+  (387 tests) passes on that state.
   \item \textbf{Models and data.} The shipped checkpoint
   (\path{aemo_dt_sdp_jtsoc_v2cal.pt}) and its training corpus
   (\path{dt_trajectories_jtsoc_v2cal_conservative.parquet}) are hosted at
@@ -958,11 +966,18 @@ and command that produced it.
   \url{https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp}.
   Reproducing the corpus additionally requires the SOC-waypoint teacher helper
   \url{https://huggingface.co/mrvictoru/energydecision-waypoint-dt}.
-  \item \textbf{Headline numbers.} Every reported value is traced in
-  \path{paper/audit/provenance.tsv}; the identity-surface statistics are in
-  \path{paper/audit/artifacts/stagec_v2cal_extended_significance.json}, and
-  the impact-gate analysis in
-  \path{paper/audit/artifacts/stagec_v2cal_impact_analysis.json}.
+  \item \textbf{Headline numbers.} Every headline number and every derived
+  comparison quoted in the text is mapped in
+  \path{paper/audit/provenance.tsv} to the artifact, and where available the
+  command, that produced it. The identity-surface statistics are in
+  \path{paper/audit/artifacts/stagec_v2cal_extended_significance.json}, the
+  impact-gate analysis in
+  \path{paper/audit/artifacts/stagec_v2cal_impact_analysis.json}, and the
+  dispatch-replay comparison in
+  \path{paper/audit/artifacts/dispatch_replay_comparison.json}. The prompt
+  slope quoted in Figure~\ref{fig:jtsoc} is recomputed by
+  \path{paper/audit/jtsoc_slope_check.py} and recorded in
+  \path{paper/audit/artifacts/jtsoc_slope.json}.
   \item \textbf{Validation.} Train/evaluation temporal separation was checked
   against the source data windows
   (\path{paper/audit/artifacts/leakage_check.txt}); the student's determinism
@@ -971,9 +986,10 @@ and command that produced it.
   hashes after a stale-cache issue was identified
   (\path{paper/audit/artifacts/cache_data_staleness_finding.md}).
   \item \textbf{Provenance caveat.} The shipped \texttt{return\_scale}
-  (23{,}284.83) is the correct value for inference but does not reproduce exactly
-  as $\mathrm{p90}(|J_t|)/10$ of the released corpus; the discrepancy is
-  documented in the audit notes above.
+  (23{,}284.83) is frozen in the checkpoint sidecar and is the value used at
+  inference, but it does not reproduce exactly as $\mathrm{p90}(|J_t|)/10$ of
+  the released corpus. Section~\ref{sec:limitations} explains the discrepancy
+  and \path{paper/audit/audit_findings.md} records the reproduction attempt.
 \end{itemize}
 
 \end{document}
