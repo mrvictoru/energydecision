@@ -56,7 +56,7 @@ Required files:
 - [ ] **Title:** "Planner-Distilled Decision Transformers Break the Behaviour-Cloning
       Ceiling in Multi-Market BESS Dispatch"
 - [ ] **Abstract:** paste the plain-text version from
-      `paper/arxiv_abstract_plaintext.txt` (1592 characters, under arXiv's
+      `paper/arxiv_abstract_plaintext.txt` (1,653 characters, under arXiv's
       ~1920-character limit). Do **not** paste LaTeX (`$...$`, `\emph{}`).
 - [ ] **Comments field:** e.g. "15 pages, 6 figures, 3 tables. Preprint."
 - [ ] **Authors:** Hou Nam U (decide whether to include the "(Victor)" nickname).
