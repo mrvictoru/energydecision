@@ -766,10 +766,13 @@ from the same region are correlated, so the cell count overstates the number of
 independent regions. The paired-difference bootstrap is the primary inferential
 tool; the Wilcoxon test is indicative at these sizes.
 
-\textbf{Sensitivity to physics.} Correcting the shared degradation and
-efficiency models moved the headline numbers substantially. The shipped results
-use the corrected physics; several earlier numbers are superseded and are not
-relied upon here.
+\textbf{Sensitivity to physics.} The battery reward changes with degradation
+and efficiency assumptions, so the headline results are conditional on the
+shipped simulator dynamics. The shared fixes to the degradation model and
+round-trip efficiency moved the reported numbers substantially. The shipped
+results use the corrected physics and the corresponding retrained or re-evaluated
+checkpoints; earlier values remain historical and are not compared directly
+with the shipped table.
 
 \textbf{Retention and scope.} Distillation is not uniformly lossy. The student
 retains 70--77\% of its solver-in-the-loop teacher's aggregate profit on the
@@ -780,11 +783,15 @@ surface-dependent, and the per-cell ratios are noisier than the aggregates. The
 approach also does not transfer automatically to the residential scale, where the
 same recipe over-cycles on long horizons.
 
-\textbf{Provenance.} The shipped checkpoint's \texttt{return\_scale}
-(23{,}284.83) is the correct value for inference, but it does not reproduce
-exactly as $\mathrm{p90}(|J_t|)/10$ of the released corpus, suggesting the
-released corpus may differ slightly from the file used at training; the
-discrepancy is documented in the released audit notes.
+\textbf{Provenance.} The shipped checkpoint scales its planner-derived RTG with
+\texttt{return\_scale} $23{,}284.83$, a value frozen in the checkpoint sidecar and
+therefore authoritative for inference. Recalculating the same auto-scale from
+the released corpus gives approximately $21{,}067$--$21{,}193$ rather than
+$23{,}284.83$, suggesting that the checkpoint was calibrated on a corpus
+variant that is not present exactly in the repository. This prevents exact
+corpus-level reproduction of that scale, but it does not alter the checkpoint's
+inference configuration or the traced headline artifacts; the discrepancy is
+documented in the released audit notes.
 
 % =============================================================================
 \section{Conclusion}
