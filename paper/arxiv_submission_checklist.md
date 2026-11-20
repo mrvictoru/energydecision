@@ -1,4 +1,4 @@
-# arXiv submission checklist — Planner-Distilled Decision Transformers
+# arXiv submission checklist — Distilling a Planner into a Decision Transformer
 
 Status: prepared 2026-10-20. Source of truth: `paper/manuscript/main.tex`,
 `paper/manuscript/references.bib`, `paper/manuscript/figures/`.
@@ -53,8 +53,8 @@ Required files:
 
 ## D. Metadata
 
-- [ ] **Title:** "Planner-Distilled Decision Transformers Break the Behaviour-Cloning
-      Ceiling in Multi-Market BESS Dispatch"
+- [ ] **Title:** "Distilling a Planner into a Decision Transformer for
+      Multi-Market Battery Dispatch"
 - [ ] **Abstract:** paste the plain-text version from
       `paper/arxiv_abstract_plaintext.txt` (1,653 characters, under arXiv's
       ~1920-character limit). Do **not** paste LaTeX (`$...$`, `\emph{}`).

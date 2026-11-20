@@ -130,7 +130,7 @@ comparative claims, but are not a safety prerequisite.
 | ID | Target | Venue | Status |
 |---|---|---|---|
 | 4.1 | **Benchmark paper**: "A Degradation-Aware Benchmark for Multi-Market BESS Dispatch in AEMO/NEM" — Stage C result + evaluation protocol + statistical rigor | NeurIPS Datasets & Benchmarks / ACM e-Energy / IEEE Trans Smart Grid | 📝 Writing |
-| 4.2 | **Method paper**: "Planner-Distilled Decision Transformers Break the Behaviour-Cloning Ceiling in Multi-Market BESS Dispatch" — SDP distillation + J_t(soc) + impact gate | ICML / NeurIPS / ICLR | 📝 Writing |
+| 4.2 | **Method paper**: "Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch" — SDP distillation + J_t(soc) + impact gate | ICML / NeurIPS / ICLR | 📝 Writing |
 | 4.3 | **Multi-agent NEM paper** — "Learned Market Power: Multi-BESS Coordination under Merit-Order Impact" — MARL with your impact model | ICML / NeurIPS / AAMAS | ⬜ Proposed PhD direction |
 | 4.4 | **Offline-Q vs Planner-Distillation** — IQL/CQL vs SDP-distillation on same FCAS-rich data + impact surface | ICML / NeurIPS | ⬜ Proposed |
 | 4.5 | **Website as academic project page** — add BibTeX, citation block, "applying for PhD at X" framing | Project page | 📝 Writing |
