@@ -597,25 +597,27 @@ same scenarios as the student, with fresh reference caches so that no stale
 result enters a comparison, and the number of rollouts per cell follows the
 protocol above.
 
-Because every baseline sees the same cells, we report the paired difference
-$d_i = y_i^{\mathrm{DT}} - y_i^{\mathrm{PPO}}$, where $y_i$ is episode profit,
-and the mean of those differences, rather than comparing two independent means.
-Pairing removes scenario difficulty, which affects both policies equally, and
-the differences are less variable than the profits themselves, so the comparison
-is more sensitive to a genuine policy difference. We attach a 95\% interval by
-bootstrapping the $n$ differences with 10{,}000 resamples and taking the 2.5th
-and 97.5th percentiles; this assumes exchangeable cells, not normally
-distributed profits, and an interval that excludes zero means the sign of the
-average advantage is stable under resampling. As a distribution-free check we
-also report a paired Wilcoxon signed-rank test, which ranks $|d_i|$ and asks
-whether positive and negative differences are balanced, making it insensitive to
-a single unusually large cell. Both procedures are bounded by the cell count: at
-$n=6$ the smallest attainable two-sided Wilcoxon $p$ is $0.031$, and at $n=9$ it
-is $0.0039$, so we treat the bootstrap interval as primary and the rank test as
-corroboration. Cells within a region are correlated, so both procedures
-overstate precision somewhat, and we report cell counts rather than claiming
-that many independent regions. The student is deterministic at evaluation time;
-baseline reference rollouts vary slightly run-to-run.
+For each scenario--battery cell, we evaluate DT and PPO on the same market data
+and subtract PPO profit from DT profit. We average these paired differences
+rather than comparing two separate averages. This controls for whether a cell
+is an easy or difficult market condition, making the comparison less noisy.
+
+To show uncertainty, we resample the $n$ paired differences with replacement
+10{,}000 times, calculate the mean each time, and take the middle 95\% of those
+means (the 2.5th and 97.5th percentiles). If this interval excludes zero, the
+average advantage is stable across the resamples. Unlike a normal-theory
+interval, this does not assume the profit differences follow a bell-shaped
+distribution. We also report the paired Wilcoxon signed-rank test: it checks
+whether the paired differences tend to favour one policy, using ranks so that
+one unusually large episode has less influence. With so few cells, the test can
+only return a limited set of $p$-values; its smallest two-sided value is $0.031$
+at $n=6$ and $0.0039$ at $n=9$. We treat the bootstrap interval as the main
+evidence and the Wilcoxon test as a check.
+
+These methods treat cells as the resampling units, but cells within a region
+may be related, so the uncertainty estimates may overstate precision. We
+therefore report cell counts, not counts of independent regions. The DT is
+deterministic at evaluation; PPO reference rollouts vary slightly between runs.
 
 \subsection{Headline Results}
 
