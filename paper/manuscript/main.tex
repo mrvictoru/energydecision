@@ -591,66 +591,52 @@ the cross-surface statistics.
 
 We compare the Decision Transformer with a tuned PPO policy, an
 \texttt{fcas\_rule} policy, and dispatch replay (the latter only on the
-dispatch-matched surface). PPO is tuned using an
-Optuna search over ten trials and trained for up to four million
-environment steps. Evaluation uses five-minute steps and one rollout per
-scenario--battery cell. PPO and rule-policy reference rollouts are run
-against the same evaluation scenarios as the student, with fresh reference
-caches to keep the comparisons consistent.
+dispatch-matched surface). PPO is tuned with an Optuna search over ten trials
+and up to four million environment steps. All baselines are rolled out on the
+same scenarios as the student, with fresh reference caches so that no stale
+result enters a comparison, and the number of rollouts per cell follows the
+protocol above.
 
-We compare the policies on matched cells: every scenario and battery
-configuration on which the student is evaluated is also evaluated by each
-baseline on identical market data. We therefore report the per-cell difference
+Because every baseline sees the same cells, we report the paired difference
 $d_i = y_i^{\mathrm{DT}} - y_i^{\mathrm{PPO}}$, where $y_i$ is episode profit,
 and the mean of those differences, rather than comparing two independent means.
-Pairing removes the effect of scenario difficulty (a volatile month, a quiet
-one), which enters both policies equally, and the differences are typically much
-less variable than the profits themselves, so the comparison is more sensitive
-to a genuine policy difference.
-
-We attach a 95\% interval to the mean difference by bootstrap: resample the $n$
-cell differences with replacement 10{,}000 times, recompute the mean each time,
-and take the 2.5th and 97.5th percentiles. This assumes that the cells are
-exchangeable, not that profits are normally distributed. An interval that
-excludes zero means the sign of the average advantage is stable under
-resampling. As a distribution-free check on the same differences we report a
-paired Wilcoxon signed-rank test, which ranks $|d_i|$ and asks whether the
-positive and negative differences are balanced; ranking makes it insensitive to
-a single unusually large cell. Both procedures are limited by the number of
-cells: at $n=6$ the smallest attainable two-sided Wilcoxon $p$ is $0.031$, and at
-$n=9$ it is $0.0039$. We therefore treat the bootstrap interval as primary and
-the rank test as corroboration. Because cells within a region are correlated,
-the bootstrap also overstates precision somewhat, so we report cell counts
-rather than claiming that many independent regions.
-The student is deterministic at evaluation time; baseline reference
-rollouts can vary slightly run-to-run (see Table~\ref{tab:headline}).
+Pairing removes scenario difficulty, which affects both policies equally, and
+the differences are less variable than the profits themselves, so the comparison
+is more sensitive to a genuine policy difference. We attach a 95\% interval by
+bootstrapping the $n$ differences with 10{,}000 resamples and taking the 2.5th
+and 97.5th percentiles; this assumes exchangeable cells, not normally
+distributed profits, and an interval that excludes zero means the sign of the
+average advantage is stable under resampling. As a distribution-free check we
+also report a paired Wilcoxon signed-rank test, which ranks $|d_i|$ and asks
+whether positive and negative differences are balanced, making it insensitive to
+a single unusually large cell. Both procedures are bounded by the cell count: at
+$n=6$ the smallest attainable two-sided Wilcoxon $p$ is $0.031$, and at $n=9$ it
+is $0.0039$, so we treat the bootstrap interval as primary and the rank test as
+corroboration. Cells within a region are correlated, so both procedures
+overstate precision somewhat, and we report cell counts rather than claiming
+that many independent regions. The student is deterministic at evaluation time;
+baseline reference rollouts vary slightly run-to-run.
 
 \subsection{Headline Results}
 
-Table~\ref{tab:headline} summarises the extended identity-surface results.
-Figure~\ref{fig:main} shows the per-surface comparison and the paired
-differences, and Figure~\ref{fig:revenue} decomposes profit by revenue source.
-The student has higher mean profit than PPO on all four surfaces, and each
-paired-difference 95\% confidence interval excludes zero, although it does not
-win every individual cell (29/30 on standard, 10/12 on dispatch-matched, 29/30
-on expanded, and 6/6 on 2025 OOD); the claim is about the paired mean, not
-per-cell dominance. Relative to its
-solver-in-the-loop teacher on the same surfaces, the student retains 77\% of the
-teacher's aggregate profit on standard 2024 and 70\% on dispatch-matched, and
-exceeds it on expanded broad-2024 (132\%) and 2025 out-of-distribution (276\%);
-the cause of this surface dependence is not isolated here, and the per-cell
-ratios are noisier than these aggregates. The extended surfaces also
-evaluate more windows than the earlier small-sample runs, while retaining a
-small sample on the 2025 OOD surface.
+Table~\ref{tab:headline} summarises the four identity surfaces. The student
+has higher mean profit than PPO on all four, and every paired-difference 95\%
+interval excludes zero. It wins 29/30 cells on standard, 10/12 on dispatch-matched,
+29/30 on expanded, and 6/6 on 2025 OOD; the headline is therefore a paired mean,
+not per-cell dominance. Relative to the same-surface solver-in-the-loop teacher,
+it retains 77\% of aggregate profit on standard and 70\% on dispatch-matched, but
+exceeds it on expanded (132\%) and 2025 OOD (276\%). This surface dependence is
+not isolated here, and the per-cell ratios are noisier than the aggregates.
+Figure~\ref{fig:main} shows the per-surface comparison and paired differences;
+Figure~\ref{fig:revenue} decomposes profit into energy, FCAS, and degradation.
 \begin{table}[H]
   \centering
-  \caption{Extended identity surfaces (shipped physics-v2 checkpoint,
-  \texttt{rtg\_mode="auto"}). \textbf{All four paired-difference 95\% CIs exclude
-  zero.} Episode length and battery power differ by surface (144 h on a 10 MWh
-  battery --- 10 MW for standard, 5 MW for dispatch-matched --- and 288 h on a
-  10 MWh/5 MW battery for expanded and 2025 OOD), so \$/ep is comparable within
-  a row but not across rows. PPO reference rollouts vary by about 1\%
-  run-to-run; the student is deterministic.}
+  \caption{Identity-surface results (shipped physics-v2 checkpoint,
+  \texttt{rtg\_mode="auto"}). All four paired-difference 95\% CIs exclude zero.
+  Protocol: 144 h episodes on a 10 MWh battery (10 MW standard; 5 MW dispatch),
+  versus 288 h episodes on 10 MWh/5 MW for expanded and 2025 OOD. \$/ep is thus
+  comparable within a row, not across rows. Expanded and OOD average five random
+  starts per scenario; the other surfaces use one fixed start.}
   \label{tab:headline}
   \small
   \begin{tabular}{lrrrrr}
@@ -668,19 +654,18 @@ small sample on the 2025 OOD surface.
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{figures/fig1_main_results.pdf}
-  \caption{Decision Transformer vs PPO across the four extended identity
-  surfaces. Left: per-episode profit with 95\% bootstrap CIs (episode length
-  and battery power differ by surface; see Table~\ref{tab:headline}). Right: the
-  paired difference (DT $-$ PPO) with its 95\% CI; all four exclude zero.}
+  \caption{Decision Transformer vs PPO across the four identity surfaces.
+  Left: per-episode profit and 95\% bootstrap CIs (protocol differences are
+  listed in Table~\ref{tab:headline}). Right: the paired DT$-$PPO difference
+  and 95\% CI; all four CIs exclude zero.}}
   \label{fig:main}
 \end{figure}
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\linewidth]{figures/fig5_revenue_decomposition.pdf}
-  \caption{Revenue decomposition (energy, FCAS, degradation) per surface for the
-  DT (solid) and PPO (hatched); the annotated number is net profit per episode.
-  The DT's advantage is dominated by FCAS capture.}
+  \caption{Revenue decomposition (energy, FCAS, degradation) per episode for
+  DT (solid) and PPO (hatched). Annotated values are net profit.}
   \label{fig:revenue}
 \end{figure}
 
