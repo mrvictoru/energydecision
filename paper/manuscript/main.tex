@@ -631,6 +631,15 @@ exceeds it on expanded (132\%) and 2025 OOD (276\%). This surface dependence is
 not isolated here, and the per-cell ratios are noisier than the aggregates.
 Figure~\ref{fig:main} shows the per-surface comparison and paired differences;
 Figure~\ref{fig:revenue} decomposes profit into energy, FCAS, and degradation.
+
+The dispatch-matched surface also includes a fair replay of Dalrymple North
+dispatch on the same 8 MWh asset as the DT and PPO baselines. Historical replay
+averages \$19{,}326/episode, versus \$33{,}791 for the DT; the DT wins 11 of 12
+months and has a mean advantage of \$14{,}464/episode. The paired bootstrap
+interval is wide and includes zero ([\$-12{,}161, \$29{,}675]), while the paired
+Wilcoxon test gives $p=0.034$. This comparison is supporting, not decisive:
+the mean and win count favour the DT, but the 12-month sample is too small for
+a strongly positive confidence statement.
 \begin{table}[H]
   \centering
   \caption{Identity-surface results (shipped physics-v2 checkpoint,
