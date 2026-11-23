@@ -4,7 +4,8 @@ This is the main human documentation entrypoint for the repository.
 
 ## Start Here
 
-- [../README.md](../README.md): project overview and quick navigation
+- [Project overview](../README.md): current preprint and separate household benchmark
+- [Reproduce the AEMO preprint](reproduction.md): CPU-only audit check and prerequisites for simulator reruns
 - [architecture.md](architecture.md): how the repository is organized
 - [development.md](development.md): setup, runtime modes, tests, and contributor workflow
 
@@ -50,12 +51,9 @@ This is the main human documentation entrypoint for the repository.
 
 These files are useful, but they are not the best place to start if you are new to the repo.
 
-- [agent_artifact_index.md](agent_artifact_index.md): agent-facing prompts, workflow records, and documented AI-assisted edits
 - [known_issues.md](known_issues.md): tracked code-level inconsistencies and modelling caveats
-- [research/README.md](research/README.md)
-- [grpo_experiments.md](grpo_experiments.md)
-- [aemo_research_plan.md](aemo_research_plan.md)
-- [modern_transformer_improvements.md](modern_transformer_improvements.md)
+- [Research notes and experiment history](research/README.md): historical results, superseded plans and optional workflows
+- [Forward roadmap](FUTURE_PLAN.md): proposed work, not validated results
 
 ## Legacy Deep References
 

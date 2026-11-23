@@ -386,7 +386,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Print evaluation command for next step
     print(f"\nTo evaluate with the dispatch_matched config:\n")
-    print(f"  python3 src/autoresearch_evaluator.py \\")
+    print(f"  python3 scripts/autoresearch_evaluator.py \\")
     print(f"    --surface-manifest-path {surface_manifest_path} \\")
     print(f"    --evaluation-config configs/aemo_autoresearch_evaluator.q4_dispatch_matched.json \\")
     print(f"    --output-dir eval_output/autoresearch/grpo_{run_tag} \\")

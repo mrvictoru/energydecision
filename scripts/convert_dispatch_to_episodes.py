@@ -12,14 +12,14 @@ full_fcas) and ``reward``.
 
 Usage::
 
-    python3 src/convert_dispatch_to_episodes.py \
+    python3 scripts/convert_dispatch_to_episodes.py \
         --station dalrymple_north \
         --start-date 2024-01-01 \
         --end-date 2024-07-01 \
         --output data/aemo_dispatch_episodes/dalrymple_north_2024h1.parquet
 
     # Multiple stations
-    python3 src/convert_dispatch_to_episodes.py \
+    python3 scripts/convert_dispatch_to_episodes.py \
         --station dalrymple_north --station hornsdale \
         --start-date 2024-01-01 --end-date 2024-07-01 \
         --output-dir data/aemo_dispatch_episodes

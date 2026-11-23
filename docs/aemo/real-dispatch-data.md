@@ -1,5 +1,8 @@
 # Real Dispatch Data: Generation Plan (2023–2025)
 
+> Historical collection plan, not evidence of sim-to-real transfer. For the
+> matched replay in the preprint, see the [reproduction guide](../reproduction.md).
+
 ## Background
 
 The FCAS dataset (2,425 episodes, 78.4M rows) is **99.5% synthetic**. Real AEMO
@@ -16,8 +19,8 @@ set for the DT, measuring the sim-to-real gap.
 Run from repo root (inside distrobox) using the replacement `convert_dispatch_to_episodes.py`:
 
 ```bash
-# Single station, all of 2024
-python3 src/convert_dispatch_to_episodes.py \
+# Single station, first half of 2024
+python3 scripts/convert_dispatch_to_episodes.py \
     --station dalrymple_north \
     --start-date 2024-01-01 \
     --end-date 2024-07-01 \

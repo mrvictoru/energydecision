@@ -1,8 +1,6 @@
-# energydecision autoresearch program
+# Constrained Decision Transformer experiment protocol
 
-This document tells an autonomous agent harness how to run constrained autoresearch on this repository.
-
-The goal is **not** to freely mutate the whole project. The goal is to run repeatable Decision Transformer training experiments while keeping the environment, dataset schema, notebook workflow, and adapter layers stable.
+This protocol applies to explicitly requested autoresearch runs, not general maintenance or paper reproduction. It keeps the environment, dataset schema, notebook workflow and adapters fixed during Decision Transformer training experiments. For the shipped preprint, see the [reproduction guide](docs/reproduction.md).
 
 ## Setup
 
@@ -28,13 +26,13 @@ Before starting an autoresearch run, work with the human to:
 
 4. **Verify data and paths exist**
    - Household track requires parquet logs under `data/household/logs/`.
-    - AEMO track requires SDP-teacher trajectories (`data/aemo_dt_sdp/dt_trajectories_jtsoc_combined.parquet`, 640 eps — the shipped Stage C DT training data) or the historical FCAS corpus (`data/aemo_dt_fcas/aemo_fcas_dataset.parquet`) and `configs/aemo_decision_transformer_model_kwargs.json`.
+    - For AEMO, select a corpus and matching model config before running. The pilot launcher uses behaviour-policy experiment data, not the paper's `dt_trajectories_jtsoc_v2cal_conservative.parquet`. The combined SDP corpus and FCAS-rich dataset are historical experiment inputs.
    - Model outputs must stay under the repository root, typically under `models/household/dt/` or `models/aemo/dt/`.
    - Before running experiments, define which episodes/date ranges/regions are training data, which are validation-only, and which are held out for simulator evaluation.
 
-5. **Create an untracked results file**
-   - Create `results.tsv` in the repo root if it does not exist.
-   - Keep it **untracked** by git.
+5. **Create a run ledger**
+   - Write a new ledger under the ignored `results/` directory, for example `results/<tag>.tsv`.
+   - Do not overwrite the tracked historical `results.tsv`.
    - Header:
 
 ```tsv
@@ -138,7 +136,7 @@ python3 scripts/pretrain_decision_transformer.py \
   --loss-csv-path models/household/dt/dt_model_loss_history.csv
 ```
 
-### Recommended baseline command: AEMO track
+### AEMO baseline example (historical FCAS-rich corpus)
 
 Run from the repository root:
 
@@ -157,7 +155,7 @@ python3 scripts/pretrain_aemo_decision_transformer.py \
 
 ### Distrobox note
 
-Run the autoresearch agent inside the `energydecision` Distrobox container rather than the Docker Compose shell. From the repo root, the agent should keep using `src/...` script paths and normal `data/...` and `models/...` paths.
+Run from the repository root in the `energydecision` Distrobox container, using `scripts/...` entry points and repo-relative `data/...` and `models/...` paths. See the [development guide](docs/development.md) for runtime conventions.
 
 The DT trainer includes a live terminal monitor for epoch/batch progress plus CPU, RAM, GPU, and VRAM stats. It works from the repo root and from interactive Distrobox shells opened with `distrobox enter energydecision`.
 
@@ -344,7 +342,7 @@ More simulated episodes usually help when they increase coverage of the target d
 
 ## Logging results
 
-Append one line per experiment to `results.tsv`:
+Append one line per experiment to the run ledger under `results/`:
 
 ```tsv
 commit	track	metric	status	description
@@ -361,21 +359,21 @@ Status must be one of:
 
 ## Experiment loop
 
-Once setup is complete, loop autonomously:
+After the run has been authorised and the setup is complete:
 
 1. Check git state and confirm you are on the intended autoresearch branch.
 2. Re-establish whether the current branch point is a **proxy loop** checkpoint or the **learning baseline** checkpoint.
 3. Make one focused change in `scripts/pretrain_decision_transformer.py`.
-4. Commit the change.
+4. Record the change or commit it if explicitly authorised for the run.
 5. Run the fixed training command directly in the terminal so the live DT monitor stays visible. If you also need a log file, mirror the output with `tee` instead of fully redirecting stdout/stderr away from the terminal.
 6. Read the proxy ranking metric from the loss CSV / surface manifest summary.
-7. Record the result in `results.tsv`.
+7. Record the result in the run ledger.
 8. For AEMO proxy loops, prefer `configs/aemo_autoresearch_evaluator.mini.json` as the first simulator screen.
 9. Run `scripts/autoresearch_evaluator.py` on the baseline checkpoint before interpreting later experiments.
 10. Periodically rerun the evaluator on the strongest checkpoints rather than waiting until the very end.
 11. If the proxy metric improved, but the evaluator shows worse held-out simulator objective, safety metrics, or stability metrics, do not automatically keep the change.
 12. If both the proxy metric and the evaluator evidence improved, keep the commit and continue from there.
-13. If the metric was worse, or the idea added complexity without clear evaluator benefit, revert to the previous kept commit.
+13. If the metric was worse, or the idea added complexity without clear evaluator benefit, discard the experiment's own changes. Preserve unrelated work.
 
 For AEMO learning-baseline refreshes, prefer this low-hanging-fruit order:
 
@@ -400,7 +398,7 @@ If a run crashes:
 
 1. Inspect the log.
 2. If the problem is a trivial bug in the current experiment, fix it and rerun once.
-3. If the idea is fundamentally bad or unstable, log `crash`, revert, and move on.
+3. If the experiment is unstable, log `crash` and set that experiment aside.
 
 Do not repeatedly dig deeper into broken ideas when the failure mode is obvious.
 
@@ -435,5 +433,3 @@ Stop when:
 - the environment cannot run the chosen training command
 - repeated experiments stop producing useful ideas
 - a human-defined experiment budget or time budget is reached
-
-The harness should be persistent, but not reckless: stay within the constrained DT training surface and keep experiments reproducible.

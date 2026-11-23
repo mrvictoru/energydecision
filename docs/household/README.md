@@ -1,6 +1,6 @@
 # Household Documentation Guide
 
-This is the entrypoint for the household solar-battery track.
+This guide covers the separate household solar-battery benchmark, not the AEMO preprint. The [modern telemetry re-baseline](workflow.md#h49-long-horizon-pilot) supersedes pre-fix results for modern tariff and telemetry tests; the legacy Ausgrid results remain historical.
 
 If you are new to the repository, read [../README.md](../README.md), [../architecture.md](../architecture.md), and [../development.md](../development.md) first.
 

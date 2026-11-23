@@ -33,10 +33,20 @@ docker exec -it test_energy_container /bin/bash
 
 ### Local Python install
 
+Run from the repository root. For CPU-only development, install the CPU PyTorch
+wheel first, then the project dependencies in a virtual environment:
+
 ```bash
-pip install -r requirements.txt
-pip install -r torch_req.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install 'torch==2.9.0' --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements.txt
+python -m pytest tests/test_market_impact.py -q
 ```
+
+`torch_req.txt` pins the CUDA wheels for the historical paper environment; it
+is not required for the CPU smoke test. See the [reproduction guide](reproduction.md)
+for the exact recorded environment and an audit check without PyTorch.
 
 ## Path Conventions
 
@@ -46,6 +56,8 @@ The repo uses different path conventions depending on where commands are run.
 
 - Run `python scripts/...` or `python src/...` depending on the entrypoint.
 - Use `data/...`, `models/...`, and `eval_output/...` paths.
+- The repository is a flat Python codebase, not an installed package. The test
+  setup adds `src/` to the import path; no manual `PYTHONPATH` is needed for pytest.
 
 ### Docker Compose shell
 
@@ -94,7 +106,7 @@ python scripts/autoresearch_evaluator.py \
   --output-dir eval_output/autoresearch/<run-tag>
 ```
 
-## Test Suite Coverage (367 tests as of 2026-09-13)
+## Selected Test Coverage
 
 | File | Area | Key Coverage |
 |------|------|--------------|
@@ -146,6 +158,21 @@ python scripts/autoresearch_evaluator.py \
 - Keep household and AEMO results separate.
 - Prefer explicit config files and saved manifests for reproducibility.
 - Avoid changing dataset schema casually; many workflows assume the existing parquet shape.
+- For an AEMO model, match the action dimension to its evaluation mode: `simple`
+  has one output, `multi_market` has three, and `full_fcas` has nine. The hidden
+  dimension must be divisible by the number of attention heads.
+- Keep the [experiment protocol](../program.md) for constrained training runs,
+  separate from normal maintenance. The tracked [`results.tsv`](../results.tsv)
+  is historical; write new scratch logs under ignored `results/`.
+
+### Optional training operations
+
+- Monitor an active run with `python3 scripts/dt_progress_runner.py --attach
+  --progress-snapshot-path <path>` using the trainer's snapshot path.
+- For supported long GPU runs, `bash scripts/run_full_learning_baseline.sh <tag>`
+  captures host telemetry under `system_logs/<tag>/`. Wait for
+  `SAFE_TO_SHUTDOWN.txt` before shutting down; `CRASH_DETECTED.txt` flags a GPU
+  crash. These operations are not needed to verify the paper's saved results.
 
 ## Where To Learn More
 

@@ -2,16 +2,16 @@
 
 This is the entrypoint for the grid-scale AEMO/NEM track.
 
-If you are new to the repository, read [../README.md](../README.md), [../architecture.md](../architecture.md), and [../development.md](../development.md) first.
+Start with the [preprint and released artifacts](../../README.md#the-preprint) or the [AEMO preprint reproduction guide](../reproduction.md). For new experiments and implementation details, use the references below.
 
 ## Start Here
 
 | If you want to... | Read this | What it covers |
 | --- | --- | --- |
 | Understand the AEMO track at a high level | [../architecture.md](../architecture.md) | Where AEMO modules, scripts, and artifacts live |
-| Run the main workflow | [workflow.md](workflow.md) | Dataset creation, notebook flow, CLI entrypoints, and training artifacts |
-| Understand the environment | [environment.md](environment.md) | Observation space, action space, reward, market data, and simulator behavior |
-| Run held-out evaluation | [../evaluation_guide.md](../evaluation_guide.md) | Evaluator configs, metrics, and result interpretation |
+| Run a new experiment | [workflow.md](workflow.md) | Dataset creation, notebook flow, CLI entry points and training artifacts |
+| Understand the environment | [environment.md](environment.md) | Observation space, action space, reward, market data and simulator behaviour |
+| Understand evaluator mechanics | [evaluation guide](../evaluation_guide.md) | Evaluator configs, metrics and historical evaluation tiers |
 | Work with dispatch replay | [dispatch-replay.md](dispatch-replay.md) | DUID discovery, sizing resolution, and replay helpers |
 | Understand degradation modeling | [degradation.md](degradation.md) | Design rationale and implementation summary |
 
@@ -19,8 +19,8 @@ If you are new to the repository, read [../README.md](../README.md), [../archite
 
 Use these when you need time-specific experiment context rather than stable operating guidance.
 
-- [../grpo_experiments.md](../grpo_experiments.md)
-- [../aemo_research_plan.md](../aemo_research_plan.md)
+- [GRPO experiments](../grpo_experiments.md) (historical)
+- [AEMO research plan](../aemo_research_plan.md) (superseded)
 - [recommended_data_generation.md](recommended_data_generation.md)
 
 ## Recommended Reading Order

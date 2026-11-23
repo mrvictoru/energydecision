@@ -1,5 +1,9 @@
 # Evaluation Guide — Standardised Evaluation for AEMO Models
 
+> **Historical protocol:** the three tiers and checkpoint examples below
+> document the behaviour-cloning and fine-tuning experiments. For the shipped
+> v2cal model, use the extended configs in the [preprint reproduction guide](reproduction.md).
+
 This document defines a **standardised 3-tier evaluation system** so results are
 comparable apple-to-apple across any Decision Transformer model (legacy,
 modern, GRPO-tuned).

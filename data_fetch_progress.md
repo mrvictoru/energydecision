@@ -1,5 +1,8 @@
 # Data Generation Progress
 
+> Historical record from the behaviour-policy dataset work, not the preprint
+> corpus or a report on current cache coverage.
+
 ## AEMO Data Fetch — ✅ All 5 regions complete
 
 | Region | Date Range | Rows |
@@ -29,7 +32,7 @@
 
 ```bash
 distrobox enter energydecision
-python3 src/fetch_aemo_region.py --region NSW1 --start 2021-01-01 --end 2023-04-01 --cache-dir data/aemo
+python3 scripts/fetch_aemo_region.py --region NSW1 --start 2021-01-01 --end 2023-04-01 --cache-dir data/aemo
 ```
 
 Fetch logs: `data/aemo/fetch_logs/`

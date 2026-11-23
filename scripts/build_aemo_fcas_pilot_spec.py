@@ -8,13 +8,13 @@ This script:
 
 Usage:
     # Generate spec only
-    python3 src/build_aemo_fcas_pilot_spec.py
+    python3 scripts/build_aemo_fcas_pilot_spec.py
 
     # Generate spec and build pilot parquet files
-    python3 src/build_aemo_fcas_pilot_spec.py --build-pilot
+    python3 scripts/build_aemo_fcas_pilot_spec.py --build-pilot
 
     # Custom paths
-    python3 src/build_aemo_fcas_pilot_spec.py \
+    python3 scripts/build_aemo_fcas_pilot_spec.py \
         --dataset-path data/aemo_dt_fcas/aemo_fcas_dataset.parquet \
         --output-path data/aemo_dt_fcas/autoresearch_pilot_spec.json \
         --pilot-output-dir data/aemo_dt_fcas/autoresearch_pilot \

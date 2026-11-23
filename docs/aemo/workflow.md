@@ -1,5 +1,9 @@
 # AEMO Workflow Guide
 
+For the shipped preprint evaluations, start with the [reproduction guide](../reproduction.md).
+The launcher and behaviour-policy data examples below are for experiments,
+not a recipe for recreating the shipped planner-distilled checkpoint.
+
 This is the main workflow guide for AEMO data generation, experiments, Decision Transformer training, and held-out evaluation.
 
 Use this document when you need:

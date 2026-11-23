@@ -2,16 +2,16 @@
 
 Usage:
   # Test run: one region, one policy, one battery, short horizon
-  python3 src/generate_fcas_dataset.py --mode test
+  python3 scripts/generate_fcas_dataset.py --mode test
 
   # Full PPO generation (all regions, 3 horizons, all batteries)
-  python3 src/generate_fcas_dataset.py --policies ppo
+  python3 scripts/generate_fcas_dataset.py --policies ppo
 
-  # Full generation (all SB3 models)
-  python3 src/generate_fcas_dataset.py --policies ppo,td3
+  # Full generation for the selected policies
+  python3 scripts/generate_fcas_dataset.py --policies ppo,td3
 
   # Build final dataset (after all episodes are generated)
-  python3 src/generate_fcas_dataset.py --mode assemble
+  python3 scripts/generate_fcas_dataset.py --mode assemble
 """
 from __future__ import annotations
 

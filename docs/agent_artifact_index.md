@@ -1,5 +1,9 @@
 # Agent-Facing and Workflow Artifacts
 
+> Historical record from the 2026-10-24 documentation audit. The file-status
+> labels below are not a current tracking or publication inventory. For current
+> contributor guidance, see the [development guide](development.md).
+
 This index identifies tracked documentation that is written for AI agents, is
 part of an agent workflow, or has documented AI-assisted edits. It separates
 intended audience from authorship: an agent-facing prompt is not evidence that

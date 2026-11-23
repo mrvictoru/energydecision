@@ -1,14 +1,16 @@
-# Offline Decision Transformers Outperform Online RL for Utility-Scale Battery Dispatch: A Degradation-Aware AEMO/NEM Benchmark
+# energydecision companion technical report
+
+This report records experiments at different stages of the AEMO and household benchmarks. It is not the preprint; historical results use different checkpoints, protocols and simulator physics. For the current AEMO paper, read [Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch](paper/manuscript/draft_paper_NeurIPS_2026.pdf), the [manuscript](paper/manuscript/main.tex) and the [provenance table](paper/audit/provenance.tsv). For the separate household benchmark, start with the [household guide](docs/household/README.md).
 
 ## Abstract
 
 Optimal operation of grid-scale battery energy storage (BESS) in wholesale electricity markets requires simultaneous energy arbitrage and co-optimized bidding across multiple ancillary-service markets, under non-linear degradation and strict physical constraints. This report asks whether a **decision transformer (DT)** trained purely offline from logged trajectories can match or exceed online reinforcement learning (RL) and real-world dispatch for this problem. We answer this on a unified, degradation-aware benchmark built around Australia's NEM market (AEMO), supporting both a household solar–battery environment and a utility-scale BESS trading environment with full 9-dimensional FCAS bidding.
 
-Our central result is that the **standalone AEMO Decision Transformer is the preferred control policy**, shipped with **surface-aware `rtg_mode="auto"`**: on the 4 canonical identity surfaces it beats PPO everywhere — **$16,501/ep on standard 2024** (PPO $4,303, 3.84×, n=30), **$33,791/ep on dispatch-matched** (PPO $18,818, 1.80×, n=12), **$29,124/ep on expanded broad-2024** (PPO $4,350, 6.70×, n=30), and **$30,791/ep on 2025 OOD** (PPO $4,817, 6.39×, n=6); all four paired-difference 95% CIs exclude zero — while under market impact it falls back to constant RTG and passes the impact-gate on 9/9 grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.70×, torrens 4.67×; §8.2.11).
+The **standalone AEMO Decision Transformer**, shipped with **surface-aware `rtg_mode="auto"`**, earns higher mean profit than tuned PPO on all four extended price-taking surfaces (§8.2.11). All four paired-difference 95% confidence intervals exclude zero. The same checkpoint passes the separate simulated market-impact gate with the fixed `rtg0.0` fallback.
 
-Reaching this result required breaking a ceiling that had capped every prior DT variant (§8.2.1a): in the tested corpora, behaviour cloning did not produce skills absent from its logged data, so the FCAS-bidding gap to PPO survived every tested attempt to prompt, re-weight, re-compose, or fine-tune it away. The fix was two-fold. First, we stopped cloning market history and instead **distilled an honest planner**: a dynamic-programming-based planning teacher (seasonal-forecast DP, degradation-aware, non-clairvoyant) generates near-optimal energy+FCAS trajectories across the corpus, and a standalone transformer trained on those trajectories inherits the planning skill with **no solver in the control loop** (the action is a single forward pass; the `J_t(soc)` prompt comes from a precomputable cost-to-go table) — the FCAS-cloning ceiling is broken by construction. Second, we replaced the hand-tuned scalar return-to-go prompt with a **state-dependent cost-to-go J_t(soc)** ("how much value remains from this battery level?"), which fixed the distilled model's residual energy-arbitrage under-trading. The one failure mode found — the price-taking J_t(soc) table over-prompts arbitrage at grid scale under merit-order impact, collapsing hornsdale/torrens — is resolved by impact-aware table pricing plus automatic fallback to constant RTG when the environment carries an impact model; this surface-aware selection *is* the shipped `auto` mode.
+Earlier runs trained on logs from reinforcement-learning policies; the tested variants did not close the FCAS-bidding gap to PPO (§8.2.1a and §8.2.10). The shipped policy distils a non-clairvoyant planning teacher and is conditioned on a state-dependent value derived from its precomputed cost-to-go, not on realised returns. The planner is not called in the online action loop. The fallback is a robustness choice, not a result about all market regimes or evidence of live-market readiness.
 
-Two further findings stand out. First, **GRPO online fine-tuning does not improve the modern model** — the architecture already internalizes what RL once added, and the legacy GRPO champion is shown to be a narrow overfit ($8,242 dispatch-matched collapses to $1,533 on the standard surface). Second, the DT's return-to-go prompt yields **zero-shot, inference-time control** of the profit/degradation trade-off, but the robust shipped setting is now **surface-aware mode selection** rather than a single scalar RTG or a universal `j_t_soc` policy. These results position offline sequence modeling — with strong architecture, curated data, and planner distillation — as a credible, deployable control prior for utility-scale battery trading across both identity and impact-aware benchmarks.
+Section 8.1 separately records the household experiments. Sections 8.2.4–8.2.10 document earlier AEMO model and prompt experiments, including the negative fine-tuning results.
 
 ## 1. Introduction
 
@@ -1520,42 +1522,33 @@ collapses" claim was another artifact of the `return_scale` bug.
 
 ##### Figures
 
-All plots are generated by `scripts/stagec_paper_figures.py` and saved (PNG +
-PDF, 200 dpi) under `eval_output/paper_figures/`.
+These are historical v1 plots. The [v1 figure script](scripts/stagec_paper_figures.py)
+generates them from local inputs under `eval_output/`; its outputs are not
+tracked. The [checked-in manuscript figures](paper/manuscript/figures/) are the
+figures for the current preprint and should be used when citing it.
 
-- **Figure 1 (main results):** Stage C DT vs PPO profit on the four identity
-  surfaces with bootstrap 95% CI error bars — the paper's headline chart.
+- **Figure 1 (main results):** Stage C DT vs PPO profit on the earlier identity
+  surfaces with bootstrap 95% CI error bars (`fig1_main_results.png`).
 
-  ![Figure 1: Stage C DT vs PPO on four identity surfaces](eval_output/paper_figures/fig1_main_results.png)
-
-- **Figure 2 (behavior):** SOC trajectory and energy dispatch over one held-out
+- **Figure 2 (behaviour):** SOC trajectory and energy dispatch over one held-out
   episode (NSW1 Oct 2024). The DT actively arbitrages; PPO collapses to empty
-  SOC with flat −1.0 dispatch.
-
-  ![Figure 2: learned dispatch behavior](eval_output/paper_figures/fig2_behavior.png)
+  SOC with flat −1.0 dispatch (`fig2_behavior.png`).
 
 - **Figure 3 (state-dependent prompt):** the J_t(soc) cost-to-go table used as
   the RTG token — remaining value rises with SOC and decays to zero at horizon
-  end.
+  end (`fig3_jtsoc_heatmap.png`).
 
-  ![Figure 3: J_t(soc) cost-to-go table](eval_output/paper_figures/fig3_jtsoc_heatmap.png)
-
-- **Figure 4 (impact gate):** mean profit for the shipped auto-DT vs PPO under
+- **Figure 4 (impact gate):** mean profit for the earlier auto-DT vs PPO under
   identity and piecewise merit-order impact across the three grid-scale
-  batteries.
-
-  ![Figure 4: impact gate resilience](eval_output/paper_figures/fig4_impact_resilience.png)
+  batteries (`fig4_impact_resilience.png`).
 
 - **Figure 5 (decomposition):** energy / FCAS / degradation net of cost, per
-  surface, DT vs PPO. The DT's edge is FCAS (blue), not energy.
-
-  ![Figure 5: revenue decomposition](eval_output/paper_figures/fig5_revenue_decomposition.png)
+  surface, DT vs PPO. In these runs the DT's edge is FCAS (blue), not energy
+  (`fig5_revenue_decomposition.png`).
 
 - **Figure 6 (ceiling break):** expanded broad-2024 profit across model
   generations, showing the behaviour-cloning ceiling (grey, below the PPO
-  dashed line) broken by Stage C (blue).
-
-  ![Figure 6: breaking the behaviour-cloning ceiling](eval_output/paper_figures/fig6_ceiling_break.png)
+  dashed line) broken by Stage C (blue) (`fig6_ceiling_break.png`).
 
 ##### Limitations
 
@@ -1742,6 +1735,8 @@ is now positioned from a position of measured strength rather than scoped retrea
 > **NOTE (literature alignment):** The review explicitly calls out the need to compare simulated/model-based performance to real battery deployments [6].
 
 ## 10. Reproducibility and Artifacts
+
+For the AEMO preprint, start with the [reproduction guide](docs/reproduction.md) and [released audit evidence](paper/audit/artifacts/). The paths in this report also describe local experiment outputs that are not included in a fresh checkout.
 
 - Code pointers: environment (`src/EnergySimEnv.py`), agents (`src/decision.py`), SB3 training (`src/sb3train.py`), DT (`src/decision_transformer.py`, `src/transformer_training.py`), preprocessing and evaluation (`src/helper.py`).
 - Determinism: use fixed seeds, log configs, and prefer containers for repeatability (recommended practice).

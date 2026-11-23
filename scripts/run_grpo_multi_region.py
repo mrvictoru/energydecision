@@ -323,7 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"  Improvement: {imp:+.2f}")
     print(f"  Model:       {save_path}")
     print(f"  Manifest:    {manifest_path}")
-    print(f"  Eval next: python3 src/autoresearch_evaluator.py \\")
+    print(f"  Eval next: python3 scripts/autoresearch_evaluator.py \\")
     print(f"    --surface-manifest-path {manifest_path} \\")
     print(f"    --evaluation-config <config> \\")
     print(f"    --output-dir eval_output/autoresearch/grpo_multi")

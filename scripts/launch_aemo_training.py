@@ -184,7 +184,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--tracker-ui",
         choices=["auto", "plain", "rich"],
         default="auto",
-        help="UI mode forwarded to src/dt_progress_runner.py.",
+        help="UI mode forwarded to scripts/dt_progress_runner.py.",
     )
     parser.add_argument(
         "--model-variant",

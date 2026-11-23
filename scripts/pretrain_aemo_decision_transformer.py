@@ -61,14 +61,14 @@ def parse_args() -> argparse.Namespace:
         "--val-dataset-path",
         type=Path,
         default=None,
-        help="Optional explicit validation parquet path to forward to src/pretrain_decision_transformer.py.",
+        help="Optional explicit validation parquet path to forward to scripts/pretrain_decision_transformer.py.",
     )
     parser.add_argument(
         "--surface-preset",
         type=str,
         default="aemo_learning_baseline",
         help=(
-            "DT training surface preset forwarded to src/pretrain_decision_transformer.py. "
+            "DT training surface preset forwarded to scripts/pretrain_decision_transformer.py. "
             "Use aemo_learning_baseline for broader baseline training or aemo_proxy for cheap triage."
         ),
     )
@@ -76,19 +76,19 @@ def parse_args() -> argparse.Namespace:
         "--model-variant",
         type=str,
         default=None,
-        help="Optional DT model variant forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT model variant forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--optimizer",
         type=str,
         default=None,
-        help="Optional optimizer name forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional optimiser name forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--scheduler",
         type=str,
         default=None,
-        help="Optional scheduler name forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional scheduler name forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--optimizer-kwargs-json",
@@ -106,49 +106,49 @@ def parse_args() -> argparse.Namespace:
         "--context-length",
         type=int,
         default=None,
-        help="Optional DT context length forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT context length forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--state-dim",
         type=int,
         default=None,
-        help="Optional DT state dimension forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT state dimension forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--act-dim",
         type=int,
         default=None,
-        help="Optional DT action dimension forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT action dimension forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--n-block",
         type=int,
         default=None,
-        help="Optional DT block count forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT block count forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--h-dim",
         type=int,
         default=None,
-        help="Optional DT hidden size forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT hidden size forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--n-heads",
         type=int,
         default=None,
-        help="Optional DT attention head count forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT attention head count forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--drop-p",
         type=float,
         default=None,
-        help="Optional DT dropout forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT dropout forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--max-timestep",
         type=int,
         default=None,
-        help="Optional DT max timestep forwarded to src/pretrain_decision_transformer.py.",
+        help="Optional DT max timestep forwarded to the shared trainer.",
     )
     parser.add_argument(
         "--save-path",
