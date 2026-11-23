@@ -18,12 +18,14 @@
   --cream: #f4efea; --paper: #fff; --chalk: #f8f8f7; --ice: #ebf9ff;
   --ink: #383838; --muted: #55514d; --line: #c4bcb5; --shadow: #383838;
   --sky: #6fc2ff; --yellow: #ffde00; --accent-ink: #17303f;
+  --plot-dt: #175f93; --plot-ppo: #a74626; --plot-replay: #156e55;
   --font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --cream: #211f1c; --paper: #2a2824; --chalk: #1a1815; --ice: #24333e;
     --ink: #f0ebe4; --muted: #c0b7ad; --line: #635b52; --shadow: #0d0c0a;
+    --plot-dt: #88ccff; --plot-ppo: #ffa685; --plot-replay: #95debb;
   }
 }
 * { box-sizing: border-box; }
@@ -64,8 +66,21 @@ section:nth-of-type(even) { background: var(--chalk); }
 .card p:last-child { margin-bottom: 0; }
 a.card { display: block; overflow-wrap: anywhere; text-decoration: none; }
 a.card h3 { text-decoration: underline; text-decoration-color: var(--sky); text-underline-offset: .2em; }
-.flow { list-style: none; padding: 0; margin: 1.5rem 0; }
-.flow .card { border-top: 4px solid var(--sky); }
+.diagram { background: var(--paper); }
+.step-chain { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; }
+.step-chain li { position: relative; padding: .8rem; border: 1px solid var(--line); background: var(--chalk); }
+.step-chain li strong, .step-chain li small { display: block; }
+.step-chain li small { color: var(--muted); line-height: 1.45; margin-top: .25rem; }
+.step-chain li:not(:last-child)::after { content: ""; position: absolute; width: .5rem; height: .5rem; border: solid var(--ink); border-width: 2px 2px 0 0; transform: rotate(45deg); right: -1rem; top: calc(50% - .25rem); }
+.step-chain .accent-step { border-top: 4px solid var(--sky); }
+.cache-bridge { margin: 1rem 0; padding: .7rem .8rem; border: 1px dashed var(--muted); background: var(--ice); font-size: .875rem; }
+.token-row { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
+.token-row span { padding: .15rem .35rem; border: 1px solid var(--line); background: var(--ice); font-size: .75rem; }
+.architecture-note { margin: .9rem 0 0; }
+@media (max-width: 45rem) {
+  .step-chain { grid-template-columns: 1fr; }
+  .step-chain li:not(:last-child)::after { right: calc(50% - .25rem); top: auto; bottom: -1rem; transform: rotate(135deg); }
+}
 .callout { padding: 1.1rem 1.25rem; margin-top: 1.5rem; background: var(--ice); border-left: 4px solid var(--sky); }
 .callout p:last-child { margin-bottom: 0; }
 figure { margin: 1.5rem 0; }
@@ -85,6 +100,30 @@ meter::-webkit-meter-optimum-value { background: var(--sky); }
 meter::-moz-meter-bar { background: var(--sky); }
 figcaption { margin-top: 1rem; }
 .impact { max-width: 38rem; }
+.paper-plot img { display: block; width: 100%; height: auto; }
+.paper-plot img, .trace-panel { border: 1px solid var(--line); }
+.trace-panel { background: var(--paper); padding: clamp(.65rem, 3vw, 1.4rem); }
+.trace-controls { display: flex; flex-wrap: wrap; gap: .75rem; }
+.trace-controls label { display: grid; gap: .15rem; min-width: 0; }
+.trace-controls select { max-width: 100%; padding: .45rem; color: var(--ink); background: var(--chalk); border: 1px solid var(--muted); font: inherit; font-size: .875rem; }
+.trace-policies { margin: 1rem 0 0; padding: .35rem .65rem .5rem; border: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: .45rem .8rem; font-size: .875rem; }
+.trace-dt { --trace: var(--plot-dt); }
+.trace-ppo { --trace: var(--plot-ppo); --dash: 6 3; }
+.trace-replay { --trace: var(--plot-replay); --dash: 2 3; }
+.trace-swatch { display: inline-block; width: .95em; border-top: 2px solid var(--trace); vertical-align: middle; }
+.trace-ppo .trace-swatch { border-top-style: dashed; }
+.trace-replay .trace-swatch { border-top-style: dotted; }
+.trace-chart { width: 100%; height: 17.5rem; cursor: crosshair; display: block; overflow: hidden; }
+.trace-chart text { font-size: 11px; fill: var(--muted); }
+.trace-chart .gridline { stroke: var(--line); }
+.trace-chart .axis { stroke: var(--muted); }
+.trace-chart .path { fill: none; stroke: var(--trace, var(--ink)); stroke-width: 2; stroke-dasharray: var(--dash, none); }
+.trace-chart .point { fill: var(--trace, var(--ink)); stroke: var(--paper); }
+.trace-chart .cursor { stroke: var(--muted); stroke-dasharray: 4 3; }
+.trace-scrub { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; font-size: .875rem; }
+.trace-scrub input { flex: 1 1 8rem; min-width: 5rem; }
+.trace-reading { display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .875rem; margin: .5rem 0 0; }
+.trace-reading span { font-variant-numeric: tabular-nums; }
 .scroll-hint { display: none; }
 @media (max-width: 55rem) {
   .scroll-hint { display: block; }
@@ -111,6 +150,7 @@ code { font: inherit; overflow-wrap: anywhere; }
     <div class="nav-links">
       <a href="#method">Method</a>
       <a href="#results">Results</a>
+      <a href="#behavior">Policy traces</a>
       <a href="#limitations">Scope</a>
       <a href="#artifacts">Paper and code</a>
       <a href="#track-household">Household benchmark</a>
@@ -129,6 +169,7 @@ code { font: inherit; overflow-wrap: anywhere; }
       <div class="cta">
         <a class="button primary" href="paper/manuscript/draft_paper_NeurIPS_2026.pdf">Read the preprint (PDF)</a>
         <a class="button" href="#results">See the evaluated results</a>
+        <a class="button" href="#behavior">Explore the policy traces</a>
       </div>
     </div>
   </header>
@@ -139,24 +180,36 @@ code { font: inherit; overflow-wrap: anywhere; }
       <h2 id="method-title">Change where the training decisions come from</h2>
       <p>At each five-minute step, the simulator asks the battery to choose how much energy to buy or sell and how much capacity to offer across all eight frequency control ancillary service (FCAS) markets. The objective deducts battery wear from energy and FCAS earnings.</p>
       <p>The initial Decision Transformers learned from trajectories logged by reinforcement-learning policies. None of the tested changes within that approach closed the FCAS-bidding gap to PPO. The paper switches the data source to a planning teacher. The earlier experiments suggest a data bottleneck, but do not isolate it as the sole cause.</p>
-      <ol class="grid flow">
-        <li class="card">
-          <h3>Planning teacher</h3>
-          <p>For offline data generation, a waypoint model sets state-of-charge targets, a wear-aware dynamic programme plans energy dispatch from seasonal price averages, and a greedy rule bids into FCAS using current prices. The energy planner is related to stochastic dynamic programming for storage scheduling (Abdulla et al.); it is not their implementation. Rollouts do not see realised future prices, although historical waypoint training labels use perfect foresight.</p>
-        </li>
-        <li class="card">
-          <h3>Precomputed value table</h3>
-          <p>A separate dynamic programme computes <code>J<sub>t</sub>(SOC)</code>, the remaining forecast energy cost including a wear surrogate, without a terminal charge target. The negative cost-to-go gives a state-dependent value at the current time and state of charge. The table can be built in advance and cached.</p>
-        </li>
-        <li class="card">
-          <h3>Standalone Decision Transformer</h3>
-          <p>The student learns to predict the teacher’s actions from its trajectories. The prompt occupies the original return-to-go input, but it is a scaled planner value, not a sum of realised rewards or a target decremented by observed rewards. The student is <strong>value-conditioned</strong>, not return-conditioned in the original Decision Transformer sense.</p>
-        </li>
-        <li class="card">
-          <h3>Online action selection</h3>
-          <p>At each step the controller combines recent observations and actions with the selected prompt, then predicts energy dispatch and FCAS bids in one forward pass. No planning solver or waypoint model runs in this action loop. The price-taking prompt only requires a lookup in the precomputed table.</p>
-        </li>
-      </ol>
+      <figure class="card diagram" aria-labelledby="pipeline-title">
+        <h3 id="pipeline-title">From historical prices to a battery decision</h3>
+        <div class="diagram-stage">
+          <strong>Offline · generate examples and train</strong>
+          <ol class="step-chain" role="list">
+            <li><strong>Historical data</strong><small>Seasonal energy-price profile; current market observations during teacher rollouts.</small></li>
+            <li><strong>Planning teacher</strong><small>Charge waypoints → wear-aware energy planning → greedy FCAS bids.</small></li>
+            <li class="accent-step"><strong>Train the student</strong><small>Learn from the teacher’s actions and the planner-value prompt.</small></li>
+          </ol>
+        </div>
+        <p class="cache-bridge"><strong>Prepared separately:</strong> A backward pass with no terminal charge target builds the <code>J<sub>t</sub>(SOC)</code> table. Its negative is the value signal for training and price-taking inference.</p>
+        <div class="diagram-stage">
+          <strong>Online · select one action per market interval</strong>
+          <ol class="step-chain" role="list">
+            <li><strong>Recent observations and actions</strong><small>Request a value lookup from the cached table or use the fixed fallback.</small></li>
+            <li class="accent-step"><strong>Trained Decision Transformer</strong><small>One forward pass. No waypoint model or planning solver is called.</small></li>
+            <li><strong>Energy and FCAS commands</strong><small>Apply the next action in the simulator, then repeat with the updated observation.</small></li>
+          </ol>
+        </div>
+        <figcaption class="note">The energy planner is related to Abdulla et al.’s storage-scheduling formulation, not their implementation. Teacher rollouts do not use realised future prices, although historical waypoint labels were computed with perfect foresight.</figcaption>
+      </figure>
+      <figure class="card diagram" aria-labelledby="architecture-title">
+        <h3 id="architecture-title">Inside the Decision Transformer</h3>
+        <ol class="step-chain" role="list">
+          <li><strong>Tokens at each timestep</strong><div class="token-row"><span>Planner value</span><span>Observation</span><span>Action</span></div><small>Embeddings are interleaved in this order over up to 210 timesteps.</small></li>
+          <li class="accent-step"><strong>Causal Transformer</strong><small>8 blocks · width 768 · 12 query and 6 key/value heads · rotary positions. The observation token predicts the current action without seeing it.</small></li>
+          <li><strong>Mixed action head</strong><div class="token-row"><span>1 energy command</span><span>8 FCAS bids</span></div><small>Tanh produces signed dispatch; sigmoid gives a bid fraction for each service.</small></li>
+        </ol>
+        <figcaption class="note">The model is <strong>value-conditioned</strong>: its prompt is a scaled planner value, not a sum of realised rewards or a return target updated after every action.</figcaption>
+      </figure>
       <div class="callout" id="automode">
         <h3>How the shipped prompt is selected</h3>
         <p><code>rtg_mode="auto"</code> uses the state-dependent prompt on the tested price-taking surfaces. Under the tested market-impact model it instead supplies a fixed zero prompt (<code>rtg0.0</code>). This is a robustness choice, not a universal optimum: the state-dependent prompt can still work under impact, and the converse test of the constant prompt on the headline price-taking surfaces was not run for this checkpoint.</p>
@@ -170,6 +223,10 @@ code { font: inherit; overflow-wrap: anywhere; }
       <h2 id="results-title">Higher mean simulated profit than PPO on all four surfaces</h2>
       <p>In these “identity” tests, the battery does not change the prices it receives. We compare the Decision Transformer (DT) with tuned proximal policy optimisation (PPO). The evaluated configuration uses the state-dependent prompt, the branch selected by <code>auto</code> on these surfaces. Profit is in Australian dollars (A$) per episode, net of modelled degradation.</p>
       <p><strong>Compare A$/episode within each row, not across rows:</strong> episode durations and battery specifications differ. <em>n</em> counts matched scenario cells, not independent regions; on the expanded and out-of-distribution (OOD) surfaces, multiple starts are averaged within each cell.</p>
+      <figure class="paper-plot">
+        <a href="paper/manuscript/figures/fig1_main_results.pdf" aria-label="Open the full-size results figure (PDF)"><img src="paper/manuscript/figures/fig1_main_results.png" width="1916" height="785" loading="lazy" alt="Grouped bars compare DT and PPO within each surface. The paired difference and its confidence interval lie to the right of zero on all four surfaces. Exact values are in the table below."></a>
+        <figcaption class="note">Left: mean profit by policy with 95% bootstrap intervals on each mean. Right: confidence intervals on the paired differences, which are the primary statistical evidence. <a href="paper/manuscript/figures/fig1_main_results.pdf">Open the full-size figure (PDF)</a>.</figcaption>
+      </figure>
       <figure class="identity">
         <p class="note scroll-hint">Scroll the table sideways to see every column.</p>
         <div class="table-wrap" role="region" aria-label="Scrollable price-taking results" tabindex="0">
@@ -190,7 +247,50 @@ code { font: inherit; overflow-wrap: anywhere; }
         </div>
         <figcaption class="note">All four paired-difference 95% bootstrap confidence intervals exclude zero. Bars show the ratio of unrounded mean profits, not the share of cells won. The teacher column compares aggregate student and planner profit on the same surface; the study does not isolate why this retention varies by surface.</figcaption>
       </figure>
-      <p>Dispatch-matched also includes a replay of recorded Dalrymple North dispatch in the simulator. The mean profit favours the DT, but the paired bootstrap interval includes zero. This is supporting evidence, not a settlement backtest.</p>
+      <p>Dispatch-matched also includes a replay of recorded Dalrymple North dispatch in the simulator. The mean profit favours the DT, but the paired bootstrap interval includes zero. This is supporting evidence, not a settlement backtest. <a href="#behavior">Explore the matched rollouts</a>.</p>
+    </div>
+  </section>
+
+  <section id="behavior" aria-labelledby="behavior-title">
+    <div class="wrap">
+      <span class="kicker">Interactive policy traces</span>
+      <h2 id="behavior-title">How the policies operate the same battery</h2>
+      <p>Choose a month to inspect the saved six-day South Australian dispatch-matched rollouts. DT, PPO and recorded-dispatch replay use the same price path and the same 8 MWh / 30 MW Dalrymple North battery. Each trace is one episode, not an average or a realised settlement outcome.</p>
+      <p id="trace-status" class="note" role="status">The interactive charts need JavaScript and the site’s saved trace data. You can also <a href="paper/manuscript/figures/fig5_revenue_decomposition.pdf">view the paper’s revenue breakdown (PDF)</a>.</p>
+      <div class="trace-panel" id="trace-viewer" hidden>
+        <div class="trace-controls">
+          <label for="trace-month">Scenario month<select id="trace-month"></select></label>
+          <label for="trace-metric">What to plot
+            <select id="trace-metric">
+              <optgroup label="Battery and market">
+                <option value="dispatch">Energy dispatch (MW)</option>
+                <option value="soc">Stored energy (MWh)</option>
+                <option value="price">Spot price (A$/MWh)</option>
+                <option value="raiseBid">Raise regulation FCAS bid (%)</option>
+                <option value="lowerBid">Lower regulation FCAS bid (%)</option>
+              </optgroup>
+              <optgroup label="Cumulative financial results">
+                <option value="profit">Net profit (A$)</option>
+                <option value="energy">Energy revenue (A$)</option>
+                <option value="fcas">FCAS revenue, all services (A$)</option>
+                <option value="wear">Degradation cost (A$)</option>
+              </optgroup>
+            </select>
+          </label>
+          <label for="trace-window">Time window<select id="trace-window"><option value="all">Full episode</option></select></label>
+        </div>
+        <fieldset class="trace-policies" id="trace-policies">
+          <legend>Show policies</legend>
+          <label class="trace-dt"><input type="checkbox" value="dt" checked><span class="trace-swatch" aria-hidden="true"></span> DT</label>
+          <label class="trace-ppo"><input type="checkbox" value="ppo" checked><span class="trace-swatch" aria-hidden="true"></span> PPO</label>
+          <label class="trace-replay"><input type="checkbox" value="replay" checked><span class="trace-swatch" aria-hidden="true"></span> Dispatch replay</label>
+        </fieldset>
+        <div id="trace-frame"><svg id="trace-chart" class="trace-chart" role="img" aria-labelledby="trace-chart-title"></svg></div>
+        <div class="trace-scrub"><label for="trace-time">Inspect half-hour bin</label><input id="trace-time" type="range" min="0" max="287" value="0" aria-describedby="trace-reading"></div>
+        <p id="trace-reading" class="trace-reading"></p>
+        <p id="trace-note" class="note architecture-note"></p>
+      </div>
+      <p class="note architecture-note">Source: the shipped v2cal dispatch-matched runs cited in provenance E3 and D2. <a id="trace-data" href="website-assets/dispatch-v2cal.json">Download the plotted series (JSON)</a>.</p>
     </div>
   </section>
 
@@ -250,7 +350,7 @@ code { font: inherit; overflow-wrap: anywhere; }
           <h3>Shipped model on Hugging Face</h3><p class="note"><code>aemo_dt_sdp_jtsoc_v2cal.pt</code>, inference sidecar and seasonal price profiles.</p>
         </a>
         <a class="card" href="https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp">
-          <h3>Hugging Face dataset repository</h3><p class="note">Earlier planner corpora are listed here. The exact v2cal conservative parquet named in the paper is not currently listed.</p>
+          <h3>Hugging Face dataset repository</h3><p class="note">Use <code>dt_trajectories_jtsoc_v2cal_conservative.parquet</code> for the shipped corpus. The public <code>dt_trajectories_jtsoc_v2_conservative.parquet</code> is distinct and earlier.</p>
         </a>
         <a class="card" href="https://github.com/mrvictoru/energydecision/blob/main/paper/audit/provenance.tsv">
           <h3>Provenance table</h3><p class="note">Claim-by-claim links to the numerical evidence.</p>
@@ -274,5 +374,6 @@ code { font: inherit; overflow-wrap: anywhere; }
 </main>
 
 <footer><div class="wrap"><p class="note"><strong>energydecision</strong> · Research code and simulator evidence · <a href="#top">Back to top</a></p></div></footer>
+<script src="website-assets/rollout-viewer.js" defer></script>
 </body>
 </html>

@@ -581,11 +581,12 @@ evaluates six NSW1, QLD1, and SA1 scenario cells from January and February
 ($n=6$). Training data and the seasonal price profile use pre-2024 source
 windows; the evaluation windows are held out by date.
 
-The surfaces are not identical protocols. Standard and dispatch-matched use
-144 h (six-day) episodes with a 10 MWh battery and one rollout per cell; the
-standard surface uses 10 MW (1C) and the dispatch-matched asset 5 MW (0.5C).
-Expanded and 2025 OOD use 288 h (twelve-day) episodes with a 10 MWh/5 MW
-battery and five randomly started rollouts per cell, averaged within each cell.
+The surfaces are not identical protocols. Standard uses 144 h (six-day)
+episodes with a 10 MWh/10 MW battery and one rollout per cell. Dispatch-matched
+also uses 144 h episodes and one rollout per cell, but its effective asset is
+Dalrymple North at 8 MWh/30 MW (3.75C). Expanded and 2025 OOD use 288 h
+(twelve-day) episodes with a 10 MWh/5 MW battery and five randomly started
+rollouts per cell, averaged within each cell.
 The expanded surface reuses the standard surface's months and is broader in
 episode length, rollout count, and battery power rather than in calendar
 coverage. Dollar-per-episode values are therefore comparable between the two
@@ -647,8 +648,9 @@ a strongly positive confidence statement.
   \centering
   \caption{Identity-surface results (shipped physics-v2 checkpoint,
   \texttt{rtg\_mode="auto"}). All four paired-difference 95\% CIs exclude zero.
-  Protocol: 144 h episodes on a 10 MWh battery (10 MW standard; 5 MW dispatch),
-  versus 288 h episodes on 10 MWh/5 MW for expanded and 2025 OOD. \$/ep is thus
+  Protocol: 144 h episodes on a 10 MWh/10 MW battery for standard and an
+  8 MWh/30 MW Dalrymple North asset for dispatch-matched, versus 288 h episodes
+  on 10 MWh/5 MW for expanded and 2025 OOD. \$/ep is thus
   comparable within a row, not across rows. Expanded and OOD average five random
   starts per scenario; the other surfaces use one fixed start.}
   \label{tab:headline}
@@ -966,7 +968,9 @@ together with a provenance record mapping every headline number to the artifact
   (\path{dt_trajectories_jtsoc_v2cal_conservative.parquet}) are hosted at
   \url{https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp} and
   \url{https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp}.
-  Reproducing the corpus additionally requires the SOC-waypoint teacher helper
+  The earlier \path{dt_trajectories_jtsoc_v2_conservative.parquet} is not a
+  substitute for the v2cal corpus. Reproducing the corpus additionally requires
+  the SOC-waypoint teacher helper
   \url{https://huggingface.co/mrvictoru/energydecision-waypoint-dt}.
   \item \textbf{Headline numbers.} All headline numbers and derived comparisons
   are mapped in \path{paper/audit/provenance.tsv} to the artifact (and, where

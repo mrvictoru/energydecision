@@ -9,9 +9,9 @@ energydecision is a research codebase for battery control using historical Austr
 
 **Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch** is a simulator-based preprint, not a peer-reviewed publication or evidence of live-market readiness.
 
-- [Latest PDF](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages URL](https://mrvictoru.github.io/energydecision/) (currently unavailable)
+- [Latest checked-in PDF](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages](https://mrvictoru.github.io/energydecision/)
 - [Shipped model on Hugging Face](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp): `aemo_dt_sdp_jtsoc_v2cal.pt` and its `.pt.meta.json` sidecar. Use the sidecar's scaling and the shipped `rtg_mode="auto"`.
-- [Hugging Face dataset repository](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp): the paper names `dt_trajectories_jtsoc_v2cal_conservative.parquet` (local path `data/aemo_dt_sdp/`). The public listing currently contains earlier corpora, not that exact file.
+- [Hugging Face dataset repository](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp): `dt_trajectories_jtsoc_v2cal_conservative.parquet` is the shipped v2cal training corpus. `dt_trajectories_jtsoc_v2_conservative.parquet` is a distinct earlier public corpus.
 - [Provenance table](paper/audit/provenance.tsv) · [Audit artifacts](paper/audit/artifacts/) · [Dated audit findings](paper/audit/audit_findings.md) · [Frozen environment](paper/environment.txt)
 
 ## Reproduce the paper
