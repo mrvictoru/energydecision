@@ -40,7 +40,7 @@ jobs:
         run: |
           mkdir -p _site/website-assets _site/paper/manuscript/figures
           cp index.html _site/
-          cp website-assets/rollout-viewer.js website-assets/dispatch-v2cal.json _site/website-assets/
+          cp website-assets/{attention-explorer.js,rollout-viewer.js,dispatch-v2cal.json} _site/website-assets/
           cp paper/manuscript/draft_paper_NeurIPS_2026.pdf _site/paper/manuscript/
           cp paper/manuscript/figures/fig1_main_results.{pdf,png} \
              paper/manuscript/figures/fig5_revenue_decomposition.pdf _site/paper/manuscript/figures/

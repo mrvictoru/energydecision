@@ -74,9 +74,60 @@ a.card h3 { text-decoration: underline; text-decoration-color: var(--sky); text-
 .step-chain li:not(:last-child)::after { content: ""; position: absolute; width: .5rem; height: .5rem; border: solid var(--ink); border-width: 2px 2px 0 0; transform: rotate(45deg); right: -1rem; top: calc(50% - .25rem); }
 .step-chain .accent-step { border-top: 4px solid var(--sky); }
 .cache-bridge { margin: 1rem 0; padding: .7rem .8rem; border: 1px dashed var(--muted); background: var(--ice); font-size: .875rem; }
-.token-row { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
-.token-row span { padding: .15rem .35rem; border: 1px solid var(--line); background: var(--ice); font-size: .75rem; }
 .architecture-note { margin: .9rem 0 0; }
+.model-card {
+  --model-bg: #111929; --model-text: #f5f8ff; --model-muted: #b9cae5;
+  --model-line: #39506e; --query: #9cddff; --key: #e0bcff; --value: #a4efd0;
+  background: var(--model-bg); color: var(--model-text); border-color: var(--model-line);
+  background-image: radial-gradient(ellipse at 5% 0%, #23476b, transparent 50%);
+}
+.model-card .note { color: var(--model-muted); }
+.model-card :focus-visible { outline-color: var(--query); }
+.model-grid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 5fr); gap: 1rem; align-items: start; margin-top: 1rem; }
+.model-stage, .attention-lab { min-width: 0; border: 1px solid var(--model-line); border-radius: 12px; background: #101a2b; }
+.model-stage { padding: .35rem; }
+.model-diagram { display: block; width: 100%; max-width: 30rem; height: auto; margin-inline: auto; font-family: var(--font); }
+.model-diagram .block-label { font-weight: 600; font-size: 15px; fill: var(--model-text); }
+.model-diagram .small-label { font-size: 12px; fill: var(--model-muted); }
+.model-diagram .flow-arrow { fill: none; stroke: #afc6e8; stroke-width: 1.5; marker-end: url(#model-arrow); }
+.model-diagram .skip-path { fill: none; stroke: #e0bcff; stroke-width: 1.4; stroke-dasharray: 4 3; marker-end: url(#model-skip-arrow); }
+.attention-lab { padding: clamp(.7rem, 2vw, 1.2rem); }
+.attention-lab h4 { margin: .6rem 0 .4rem; font-size: 1.1rem; }
+.attention-lab p, .attention-lab dl { font-size: .85rem; }
+.attention-tag { display: inline-block; padding: .16rem .5rem; border-radius: 1rem; background: var(--query); color: #102039; font-size: .72rem; font-weight: 600; }
+.qkv-roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin: .85rem 0; }
+.qkv-roles div { padding: .45rem; border: 1px solid var(--model-line); border-radius: 6px; }
+.qkv-roles dt { font-weight: 600; }
+.qkv-roles dd { margin: .2rem 0 0; color: var(--model-muted); line-height: 1.4; }
+.q-label { color: var(--query); }
+.k-label { color: var(--key); }
+.v-label { color: var(--value); }
+.attention-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; margin: .55rem 0; }
+.attention-groups label { position: relative; min-width: 0; }
+.attention-groups input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.attention-groups span { display: block; padding: .4rem .25rem; border: 1px solid var(--model-line); border-radius: 7px; text-align: center; font-size: .76rem; }
+.attention-groups :checked + span { border-color: var(--query); background: #243d58; box-shadow: inset 0 -2px var(--query); }
+.attention-groups :focus-visible + span { outline: 2px solid var(--query); outline-offset: 2px; }
+.head-wiring { display: grid; grid-template-columns: minmax(0, 1fr) 2.3rem minmax(0, 1.2fr); align-items: center; margin: .8rem 0; }
+.head-fork { display: block; width: 100%; height: 3rem; color: var(--key); }
+.head-pair { display: grid; gap: .25rem; }
+.head-pill { border-radius: 5px; padding: .24rem .35rem; text-align: center; font-size: .78rem; font-weight: 600; background: var(--query); color: #13213a; }
+.head-shared { border: 1px dashed var(--key); border-radius: 7px; padding: .3rem; text-align: center; font-size: .73rem; }
+.head-example { font-size: .8rem; }
+.head-example summary { color: var(--query); cursor: pointer; padding-block: .25rem; }
+.head-example p { margin: .4rem 0; }
+.head-example ul { padding-left: 1.25rem; margin: .4rem 0; }
+.attention-lab hr { border: 0; border-top: 1px solid var(--model-line); margin: 1rem 0; }
+.attention-query { width: 100%; margin: .4rem 0 .55rem; padding: .4rem; border: 1px solid var(--model-line); border-radius: 6px; background: #1e3049; color: var(--model-text); font: inherit; font-size: .82rem; }
+.attention-tokens { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; list-style: none; padding: 0; margin: .55rem 0; }
+.attention-tokens li { min-width: 0; border: 1px solid #537394; border-radius: 6px; background: #1e3049; padding: .3rem .22rem; font-size: .75rem; text-align: center; }
+.attention-tokens small { display: block; font-size: .71rem; color: var(--model-muted); }
+.attention-tokens .is-query { border-color: var(--query); box-shadow: inset 0 -2px var(--query); }
+.attention-tokens .is-masked { border: 1px dashed #7486a2; background: transparent; }
+.attention-math { margin: .5rem 0; padding: .45rem; background: #1e3049; border-left: 3px solid var(--key); font-size: .78rem; }
+.attention-math code { display: block; margin-top: .3rem; color: var(--query); }
+@media (max-width: 54rem) { .model-grid { grid-template-columns: 1fr; } }
+@media (max-width: 25rem) { .qkv-roles { grid-template-columns: 1fr; } }
 @media (max-width: 45rem) {
   .step-chain { grid-template-columns: 1fr; }
   .step-chain li:not(:last-child)::after { right: calc(50% - .25rem); top: auto; bottom: -1rem; transform: rotate(135deg); }
@@ -104,8 +155,8 @@ figcaption { margin-top: 1rem; }
 .paper-plot img, .trace-panel { border: 1px solid var(--line); }
 .trace-panel { background: var(--paper); padding: clamp(.65rem, 3vw, 1.4rem); }
 .trace-controls { display: flex; flex-wrap: wrap; gap: .75rem; }
-.trace-controls label { display: grid; gap: .15rem; min-width: 0; }
-.trace-controls select { max-width: 100%; padding: .45rem; color: var(--ink); background: var(--chalk); border: 1px solid var(--muted); font: inherit; font-size: .875rem; }
+.trace-controls label { display: grid; gap: .15rem; min-width: 0; flex: 1 1 13rem; }
+.trace-controls select { width: 100%; min-width: 0; max-width: 100%; padding: .45rem; color: var(--ink); background: var(--chalk); border: 1px solid var(--muted); font: inherit; font-size: .875rem; }
 .trace-policies { margin: 1rem 0 0; padding: .35rem .65rem .5rem; border: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: .45rem .8rem; font-size: .875rem; }
 .trace-dt { --trace: var(--plot-dt); }
 .trace-ppo { --trace: var(--plot-ppo); --dash: 6 3; }
@@ -113,17 +164,25 @@ figcaption { margin-top: 1rem; }
 .trace-swatch { display: inline-block; width: .95em; border-top: 2px solid var(--trace); vertical-align: middle; }
 .trace-ppo .trace-swatch { border-top-style: dashed; }
 .trace-replay .trace-swatch { border-top-style: dotted; }
-.trace-chart { width: 100%; height: 17.5rem; cursor: crosshair; display: block; overflow: hidden; }
-.trace-chart text { font-size: 11px; fill: var(--muted); }
-.trace-chart .gridline { stroke: var(--line); }
-.trace-chart .axis { stroke: var(--muted); }
-.trace-chart .path { fill: none; stroke: var(--trace, var(--ink)); stroke-width: 2; stroke-dasharray: var(--dash, none); }
-.trace-chart .point { fill: var(--trace, var(--ink)); stroke: var(--paper); }
-.trace-chart .cursor { stroke: var(--muted); stroke-dasharray: 4 3; }
-.trace-scrub { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; font-size: .875rem; }
+#trace-frame { position: relative; margin-top: .35rem; }
+.trace-chart { width: 100%; height: 22rem; cursor: crosshair; display: block; overflow: hidden; touch-action: pan-y; }
+.trace-chart text { font-size: 12px; fill: var(--muted); }
+.trace-chart .gridline { stroke: var(--line); stroke-width: 1; opacity: .8; }
+.trace-chart .axis { stroke: var(--muted); stroke-width: 1.25; }
+.trace-chart .path { fill: none; stroke: var(--trace, var(--ink)); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: var(--dash, none); }
+.trace-chart .point { fill: var(--trace, var(--ink)); stroke: var(--paper); stroke-width: 2; }
+.trace-chart .cursor { stroke: var(--muted); stroke-width: 1.25; stroke-dasharray: 4 3; }
+.trace-chart .clipped { fill: var(--paper); stroke: var(--plot-ppo); stroke-width: 1.5; }
+.trace-tooltip { position: absolute; z-index: 5; min-width: 11rem; max-width: min(22rem, calc(100% - 1rem)); padding: .6rem .7rem; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); box-shadow: -4px 4px 0 var(--shadow); pointer-events: none; font-size: .78rem; line-height: 1.4; }
+.trace-tooltip strong { display: block; margin-bottom: .35rem; font-size: .82rem; }
+.trace-tooltip-row { display: grid; grid-template-columns: auto 1fr; gap: .3rem .65rem; align-items: baseline; }
+.trace-tooltip-row .tooltip-name { white-space: nowrap; }
+.trace-tooltip-row .tooltip-value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.trace-tooltip-row dt, .trace-tooltip-row dd { margin: 0; }
+.trace-scrub { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; font-size: .875rem; margin-top: .6rem; }
 .trace-scrub input { flex: 1 1 8rem; min-width: 5rem; }
-.trace-reading { display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .875rem; margin: .5rem 0 0; }
-.trace-reading span { font-variant-numeric: tabular-nums; }
+.trace-reading { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.trace-scale-note { font-size: .78rem; margin-left: auto; align-self: end; color: var(--muted); }
 .scroll-hint { display: none; }
 @media (max-width: 55rem) {
   .scroll-hint { display: block; }
@@ -201,14 +260,115 @@ code { font: inherit; overflow-wrap: anywhere; }
         </div>
         <figcaption class="note">The energy planner is related to Abdulla et al.’s storage-scheduling formulation, not their implementation. Teacher rollouts do not use realised future prices, although historical waypoint labels were computed with perfect foresight.</figcaption>
       </figure>
-      <figure class="card diagram" aria-labelledby="architecture-title">
+      <figure class="card model-card" aria-labelledby="architecture-title">
         <h3 id="architecture-title">Inside the Decision Transformer</h3>
-        <ol class="step-chain" role="list">
-          <li><strong>Tokens at each timestep</strong><div class="token-row"><span>Planner value</span><span>Observation</span><span>Action</span></div><small>Embeddings are interleaved in this order over up to 210 timesteps.</small></li>
-          <li class="accent-step"><strong>Causal Transformer</strong><small>8 blocks · width 768 · 12 query and 6 key/value heads · rotary positions. The observation token predicts the current action without seeing it.</small></li>
-          <li><strong>Mixed action head</strong><div class="token-row"><span>1 energy command</span><span>8 FCAS bids</span></div><small>Tanh produces signed dispatch; sigmoid gives a bid fraction for each service.</small></li>
-        </ol>
-        <figcaption class="note">The model is <strong>value-conditioned</strong>: its prompt is a scaled planner value, not a sum of realised rewards or a return target updated after every action.</figcaption>
+        <p class="note">Read the stack from the bottom up, then look inside its attention layer. There is no separate encoder or cross-attention.</p>
+        <div class="model-grid">
+          <div class="model-stage">
+            <svg class="model-diagram" viewBox="0 0 320 560" role="img" aria-labelledby="architecture-svg-title architecture-svg-desc">
+              <title id="architecture-svg-title">The shipped causal Decision Transformer, read bottom to top</title>
+              <desc id="architecture-svg-desc">Interleaved planner value, state and action tokens are linearly embedded, then fed through eight pre-normalised residual blocks. Each block applies causal grouped-query attention and then a SwiGLU feed-forward layer, each with a residual connection. After final RMSNorm, the state token predicts the energy command and eight FCAS bids.</desc>
+              <defs>
+                <marker id="model-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 7 3.5 0 7Z" fill="#afc6e8"/></marker>
+                <marker id="model-skip-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 6 3 0 6Z" fill="#e0bcff"/></marker>
+                <linearGradient id="attention-fill"><stop stop-color="#133e56"/><stop offset="1" stop-color="#2b305f"/></linearGradient>
+              </defs>
+              <rect x="15" y="149" width="294" height="291" rx="17" fill="none" stroke="#2d4260"/>
+              <rect x="10" y="155" width="294" height="291" rx="17" fill="#141e31" stroke="#547398"/>
+              <text x="28" y="174" class="small-label">RESIDUAL BLOCK ×8</text>
+              <g text-anchor="middle">
+                <rect x="20" y="12" width="280" height="54" rx="9" fill="#17403e" stroke="#a4efd0"/>
+                <text x="160" y="34" class="block-label">Mixed action head</text>
+                <text x="160" y="53" class="small-label">tanh: energy · sigmoid: 8 FCAS bids</text>
+                <rect x="46" y="87" width="228" height="40" rx="8" fill="#20334f" stroke="#547398"/>
+                <text x="160" y="103" class="block-label">Final RMSNorm</text>
+                <text x="160" y="119" class="small-label">from the state token</text>
+
+                <circle cx="160" cy="191" r="10" fill="#1c2c46" stroke="#e0bcff"/>
+                <text x="160" y="196" class="block-label">+</text>
+                <rect x="67" y="218" width="186" height="36" rx="7" fill="#4a3542" stroke="#f2b7a1"/>
+                <text x="160" y="241" class="block-label">SwiGLU feed-forward</text>
+                <rect x="94" y="270" width="132" height="27" rx="6" fill="#20334f"/>
+                <text x="160" y="288" class="small-label">RMSNorm</text>
+                <circle cx="160" cy="321" r="10" fill="#1c2c46" stroke="#e0bcff"/>
+                <text x="160" y="326" class="block-label">+</text>
+                <rect x="54" y="347" width="212" height="48" rx="8" fill="url(#attention-fill)" stroke="#9cddff"/>
+                <text x="160" y="367" class="block-label">Causal self-attention</text>
+                <text x="160" y="385" class="small-label">12 Q heads · 6 K/V pairs</text>
+                <rect x="94" y="410" width="132" height="26" rx="6" fill="#20334f"/>
+                <text x="160" y="427" class="small-label">RMSNorm</text>
+
+                <rect x="33" y="467" width="254" height="37" rx="7" fill="#20334f" stroke="#547398"/>
+                <text x="160" y="484" class="block-label">Linear embeddings</text>
+                <text x="160" y="498" class="small-label">width 768 · up to 210 timesteps</text>
+                <rect x="13" y="526" width="95" height="26" rx="5" fill="#40335e" stroke="#e0bcff"/>
+                <rect x="116" y="526" width="88" height="26" rx="5" fill="#1d4761" stroke="#9cddff"/>
+                <rect x="212" y="526" width="95" height="26" rx="5" fill="#17403e" stroke="#a4efd0"/>
+                <text x="60" y="544" class="small-label">Planner value</text>
+                <text x="160" y="544" class="small-label">State</text>
+                <text x="260" y="544" class="small-label">Action</text>
+              </g>
+              <path class="flow-arrow" d="M60 526V505"/><path class="flow-arrow" d="M160 526V505"/><path class="flow-arrow" d="M260 526V505"/>
+              <path class="flow-arrow" d="M160 467V437"/><path class="flow-arrow" d="M160 410V396"/><path class="flow-arrow" d="M160 347V332"/><path class="flow-arrow" d="M160 311V298"/>
+              <path class="flow-arrow" d="M160 270V255"/><path class="flow-arrow" d="M160 218V202"/><path class="flow-arrow" d="M160 181V128"/><path class="flow-arrow" d="M160 87V67"/>
+              <path class="skip-path" d="M160 451H280Q290 451 290 441V331Q290 321 280 321H171"/>
+              <path class="skip-path" d="M160 305H41Q31 305 31 295V201Q31 191 41 191H149"/>
+            </svg>
+          </div>
+          <div class="attention-lab" id="attention-lab" aria-labelledby="attention-title">
+            <span class="attention-tag">ZOOM IN · GROUPED-QUERY ATTENTION</span>
+            <h4 id="attention-title">Two questions, one shared source</h4>
+            <p>Every token is projected into queries, keys and values. A head learns what to look for, matches its query to visible keys, then blends the corresponding values.</p>
+            <dl class="qkv-roles">
+              <div><dt class="q-label">Q · Query</dt><dd>What am I looking for?</dd></div>
+              <div><dt class="k-label">K · Key</dt><dd>What can this token match?</dd></div>
+              <div><dt class="v-label">V · Value</dt><dd>What information can it pass on?</dd></div>
+            </dl>
+            <div id="attention-groups" hidden>
+              <p id="attention-groups-label" class="note">Select one of the six head groups:</p>
+              <div class="attention-groups" role="radiogroup" aria-labelledby="attention-groups-label">
+                <label><input type="radio" name="head-group" value="1" checked><span>Group 1</span></label>
+                <label><input type="radio" name="head-group" value="2"><span>Group 2</span></label>
+                <label><input type="radio" name="head-group" value="3"><span>Group 3</span></label>
+                <label><input type="radio" name="head-group" value="4"><span>Group 4</span></label>
+                <label><input type="radio" name="head-group" value="5"><span>Group 5</span></label>
+                <label><input type="radio" name="head-group" value="6"><span>Group 6</span></label>
+              </div>
+            </div>
+            <div class="head-wiring" aria-live="polite">
+              <div class="head-pair"><span class="head-pill" id="head-first">Query 1</span><span class="head-pill" id="head-second">Query 2</span></div>
+              <svg class="head-fork" viewBox="0 0 36 48" preserveAspectRatio="none" aria-hidden="true"><path d="M0 11 H10 Q16 11 16 17 V24 M0 37 H10 Q16 37 16 31 V24 H36" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+              <div class="head-shared">shared <strong class="k-label" id="head-key">K1</strong> / <strong class="v-label" id="head-value">V1</strong></div>
+            </div>
+            <p class="note">Sharing K/V does not make the two heads identical: each query computes its own weights. There are 12 query heads and six shared K/V pairs, with 64 features per head.</p>
+            <details class="head-example">
+              <summary>See a worked example of two heads</summary>
+              <p>Suppose two visible state tokens carry values 2 and 10 on one feature. Both heads read those same values, but their queries score the keys differently:</p>
+              <ul>
+                <li>Head A puts 75% on the earlier state: 0.75 × 2 + 0.25 × 10 = <strong>4</strong>.</li>
+                <li>Head B puts 75% on the current state: 0.25 × 2 + 0.75 × 10 = <strong>8</strong>.</li>
+              </ul>
+              <p class="note">Illustrative numbers only. Real heads mix vectors across the allowed tokens.</p>
+            </details>
+            <hr>
+            <h4>What can a query see?</h4>
+            <div id="attention-query-control" hidden>
+              <label class="note" for="attention-query">Choose a query token</label>
+              <select class="attention-query" id="attention-query">
+                <option value="0">Earlier planner value</option><option value="1">Earlier state</option><option value="2">Earlier action</option>
+                <option value="3">Current planner value</option><option value="4" selected>Current state</option><option value="5">Current action</option>
+              </select>
+            </div>
+            <ol class="attention-tokens" id="attention-tokens" aria-label="Illustrated token order">
+              <li>Earlier value<small>Visible</small></li><li>Earlier state<small>Visible</small></li><li>Earlier action<small>Visible</small></li>
+              <li>Current value<small>Visible</small></li><li class="is-query">Current state<small>Query</small></li><li class="is-masked">Current action<small>Masked</small></li>
+            </ol>
+            <p class="note" id="attention-mask-note" aria-live="polite">The state token can use earlier actions and the current planner value, but not the action it is about to predict.</p>
+            <div class="attention-math">Normalise Q and K, then apply RoPE. Score the allowed keys, normalise with softmax, and use those weights to mix V. Finally, join the heads and project back to width 768.<code>head(Q, K, V) = softmax(QKᵀ / √64 + mask) V</code></div>
+            <p class="note">RoPE adds position information to Q and K. The coloured tokens show mask rules, not measured attention weights or fixed roles for any trained head.</p>
+          </div>
+        </div>
+        <figcaption class="note">The layout follows the bottom-up residual stacks of <em>Attention Is All You Need</em>, adapted to this decoder-only, value-conditioned policy. The planner token carries scaled cost-to-go (or the fixed fallback), not realised returns.</figcaption>
       </figure>
       <div class="callout" id="automode">
         <h3>How the shipped prompt is selected</h3>
@@ -278,6 +438,14 @@ code { font: inherit; overflow-wrap: anywhere; }
             </select>
           </label>
           <label for="trace-window">Time window<select id="trace-window"><option value="all">Full episode</option></select></label>
+          <label for="trace-scale">Vertical scale
+            <select id="trace-scale">
+              <option value="robust">Focus on typical data</option>
+              <option value="exact">Fit every visible point</option>
+              <option value="physical">Physical limits</option>
+            </select>
+          </label>
+          <span class="trace-scale-note" id="trace-scale-note"></span>
         </div>
         <fieldset class="trace-policies" id="trace-policies">
           <legend>Show policies</legend>
@@ -285,7 +453,10 @@ code { font: inherit; overflow-wrap: anywhere; }
           <label class="trace-ppo"><input type="checkbox" value="ppo" checked><span class="trace-swatch" aria-hidden="true"></span> PPO</label>
           <label class="trace-replay"><input type="checkbox" value="replay" checked><span class="trace-swatch" aria-hidden="true"></span> Dispatch replay</label>
         </fieldset>
-        <div id="trace-frame"><svg id="trace-chart" class="trace-chart" role="img" aria-labelledby="trace-chart-title"></svg></div>
+        <div id="trace-frame">
+          <svg id="trace-chart" class="trace-chart" role="img" aria-labelledby="trace-chart-title"><title id="trace-chart-title">Policy rollout chart</title></svg>
+          <div class="trace-tooltip" id="trace-tooltip" role="tooltip" hidden></div>
+        </div>
         <div class="trace-scrub"><label for="trace-time">Inspect half-hour bin</label><input id="trace-time" type="range" min="0" max="287" value="0" aria-describedby="trace-reading"></div>
         <p id="trace-reading" class="trace-reading"></p>
         <p id="trace-note" class="note architecture-note"></p>
@@ -375,5 +546,6 @@ code { font: inherit; overflow-wrap: anywhere; }
 
 <footer><div class="wrap"><p class="note"><strong>energydecision</strong> · Research code and simulator evidence · <a href="#top">Back to top</a></p></div></footer>
 <script src="website-assets/rollout-viewer.js" defer></script>
+<script src="website-assets/attention-explorer.js" defer></script>
 </body>
 </html>
