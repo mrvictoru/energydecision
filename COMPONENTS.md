@@ -45,9 +45,9 @@ It is not the primary onboarding document. Start with [README.md](README.md), [d
 - Household: [docs/household/environment.md](docs/household/environment.md)
 - AEMO: [docs/aemo/environment.md](docs/aemo/environment.md)
 
-### Understand agent behavior
+### Understand control policies
 
-- [docs/AGENT_README.md](docs/AGENT_README.md)
+- [docs/control_policies.md](docs/control_policies.md)
 
 ### Understand helper and evaluation behavior
 

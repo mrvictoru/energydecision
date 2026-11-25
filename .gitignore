@@ -199,7 +199,7 @@ system_logs/
 /results/
 **/results/
 
-# experiment-tracking log (un-tracked; see AGENTS.md)
+# experiment-tracking log (untracked; see REPOSITORY_GUIDE.md)
 /results.tsv
 
 # whitelist only eval_output/final/ for curated report artifacts

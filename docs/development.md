@@ -161,7 +161,7 @@ python scripts/autoresearch_evaluator.py \
 - For an AEMO model, match the action dimension to its evaluation mode: `simple`
   has one output, `multi_market` has three, and `full_fcas` has nine. The hidden
   dimension must be divisible by the number of attention heads.
-- Keep the [experiment protocol](../program.md) for constrained training runs,
+- Keep the [experiment protocol](experiment_protocol.md) for constrained training runs,
   separate from normal maintenance. The tracked [`results.tsv`](../results.tsv)
   is historical; write new scratch logs under ignored `results/`.
 

@@ -1,21 +1,21 @@
-# Agent Reference
+# Control policies reference
 
-This document is the focused reference for agent logic in `src/decision.py`.
+This document describes the software control-policy wrappers in `src/decision.py`: `Agent` and `AEMOAgent`. It is not a guide to AI coding assistants.
 
-Use it when you need:
+Use this document when you need:
 
 - the role of `Agent` and `AEMOAgent`
 - the supported algorithm modes
-- the logging behavior of episode execution
-- dispatch replay and DT inference entrypoints
+- the logging behaviour of episode execution
+- dispatch replay and Decision Transformer inference entrypoints
 
-For the repo-wide system view, use [architecture.md](architecture.md). For workflow entrypoints, use [development.md](development.md) and [aemo/workflow.md](aemo/workflow.md).
+For the repository-wide system view, see [architecture.md](architecture.md). For workflow entrypoints, see [development.md](development.md) and [aemo/workflow.md](aemo/workflow.md).
 
-## Main Agent Classes
+## Main control-policy wrappers
 
 ### `Agent`
 
-`Agent` is the general control wrapper for the household track and some shared logic.
+`Agent` is the general control wrapper for the household track and shared logic.
 
 Supported modes include:
 
@@ -52,18 +52,16 @@ Main responsibilities:
 - replay historical dispatch trajectories
 - support Decision Transformer inference on AEMO state/action shapes
 
-## Common Execution Pattern
+## Common execution pattern
 
-Both agent classes expose `run_episode(...)` as the main data-collection surface.
-
-The typical outcome is:
+Both wrappers expose `run_episode(...)` as the main data-collection surface. The typical outcome is:
 
 - an episode log DataFrame
 - an incident or auxiliary DataFrame depending on the environment
 
 Those logs are later consumed by helper functions in [HELPER_README.md](HELPER_README.md), saved to parquet, or converted into DT datasets.
 
-## Decision Transformer Inference
+## Decision Transformer inference
 
 DT-backed modes maintain rolling buffers of:
 
@@ -76,13 +74,13 @@ These are padded and forwarded to `DecisionTransformer.get_action(...)` during r
 
 Important operational details:
 
-- the DT dimensions must match the environment observation and action spaces
+- DT dimensions must match the environment observation and action spaces
 - AEMO runs must keep `act_dim` aligned with the configured `action_mode`
-- RTG prompting behavior depends on `rtg_value` and `dt_gamma`
+- RTG prompting behaviour depends on `rtg_value` and `dt_gamma`
 
-## Dispatch Replay
+## Dispatch replay
 
-`AEMOAgent` owns the agent-side portion of dispatch replay.
+`AEMOAgent` owns the wrapper-side portion of dispatch replay.
 
 Key supporting surfaces:
 
@@ -96,9 +94,9 @@ The usual workflow is:
 2. build a replay action trace aligned to the environment timestep
 3. run the episode through `AEMOAgent(algorithm='dispatch', ...)`
 
-For the broader replay workflow, use [aemo/dispatch-replay.md](aemo/dispatch-replay.md).
+For the broader replay workflow, see [aemo/dispatch-replay.md](aemo/dispatch-replay.md).
 
-## Algorithm Notes
+## Algorithm notes
 
 ### Rule-based modes
 
@@ -113,10 +111,10 @@ For the broader replay workflow, use [aemo/dispatch-replay.md](aemo/dispatch-rep
 
 ### RL modes
 
-- `rl` forwards normalized observations to a provided SB3 policy.
-- The agent wrapper handles rollout and logging, not training.
+- `rl` forwards normalised observations to a provided SB3 policy.
+- The control-policy wrapper handles rollout and logging, not training.
 
-## Logging Shape
+## Logging shape
 
 Typical episode logs include fields such as:
 
@@ -129,7 +127,7 @@ Typical episode logs include fields such as:
 
 This logging contract is important because downstream evaluation and DT dataset tooling assume it.
 
-## Related Docs
+## Related docs
 
 - [HELPER_README.md](HELPER_README.md)
 - [DP_ALGORITHM_README.md](DP_ALGORITHM_README.md)

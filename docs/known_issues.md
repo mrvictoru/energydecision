@@ -378,7 +378,7 @@ documentation-only correction.
   recoverable from an "embedded config".
 - `report.md` referenced `src/pretrain_decision_transformer.py`; the entrypoint is
   `scripts/pretrain_decision_transformer.py`.
-- `AGENTS.md` stated the household DT "beats Oracle" without scoping it to the
+- `REPOSITORY_GUIDE.md` (formerly `AGENTS.md`) stated the household DT "beats Oracle" without scoping it to the
   legacy benchmark.
 - `report.md` §8.1.1/§8.1.2 and `workflow.md` §H4.4 claimed TTM forecasts added
   **+$47.94/yr** over persistence. After regenerating the calibrated forecast

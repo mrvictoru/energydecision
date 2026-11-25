@@ -536,6 +536,12 @@ Model hashes are listed in §5 and in `ppo_retrain_20261125.json`; data hashes i
 
 ## 13. Conclusion
 
+> **Paper-facing aggregate:** the corrected manuscript uses the within-cell mean across all three
+> tuned PPO seeds, not the pre-specified primary checkpoint alone. See the Bottom line table and
+> `paper/audit/artifacts/ppo_retrain_seed_aggregate_20261125.json` (provenance P4/P5) for
+> 1.70× / 1.20× / 1.69× / 1.60×, dispatch CI including zero, impact seed-mean 1.60× with 8/9
+> wins, and seed-specific impact ratios 0.91×–2.96×.
+
 * **Supported:** with a properly trained, seeded, validation-selected PPO, the shipped DT still
   has the higher mean profit on all four identity surfaces for the pre-specified primary
   checkpoint (1.20–2.12×), and still wins 9/9 impact-gate cells (2.26× ratio of means).

@@ -2,9 +2,11 @@
 
 **Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch** is a simulator-based preprint.
 
+Current release tag: `preprint-v2-baseline-corrected`. For current claims and the corrected PPO baseline, see the [reproduction guide](../../docs/reproduction.md) and [audit evidence index](../audit/README.md).
+
 - [Latest checked-in PDF](draft_paper_NeurIPS_2026.pdf)
 - [LaTeX manuscript](main.tex), [bibliography](references.bib) and [figures](figures/)
-- [Provenance table](../audit/provenance.tsv), [audit artifacts](../audit/artifacts/) and [evaluation reproduction guide](../../docs/reproduction.md)
+- [Provenance table](../audit/provenance.tsv), [audit evidence index](../audit/README.md), [audit artifacts](../audit/artifacts/) and [evaluation reproduction guide](../../docs/reproduction.md)
 
 ## Build the PDF
 

@@ -64,5 +64,5 @@ Required files:
 ## F. After announcement
 
 - [ ] Add the arXiv ID to the GitHub README and the Hugging Face model card.
-- [x] Archive the exact source used: the `preprint-v2-baseline-corrected` tag, which includes the refreshed PDF and release-hygiene changes.
+- [x] Archive the exact paper state under the `preprint-v2-baseline-corrected` tag. It includes the refreshed PDF and release-hygiene changes; later documentation cleanup does not change numerical claims.
 - [ ] Replace the preprint with the camera-ready if a venue accepts it (keep the arXiv v1 for priority).

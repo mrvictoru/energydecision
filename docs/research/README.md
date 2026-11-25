@@ -4,6 +4,10 @@ This section groups documents that are useful for ongoing research context, expe
 
 These are not the best starting point for onboarding. Use [../README.md](../README.md), [../architecture.md](../architecture.md), and [../development.md](../development.md) first.
 
+> **Note on layout:** `docs/research/` is a virtual grouping only. The notes
+> indexed below actually live in the parent `docs/` directory (hence the
+> `../` links); there is no separate `docs/research/` document tree to browse.
+
 ## Research context and experiment history
 
 - [Companion technical report](../../report.md): context and experiment record; use the [preprint](../../README.md#the-preprint) for current claims.

@@ -982,10 +982,13 @@ together with a provenance record mapping every headline number to the artifact
   \item \textbf{Code and environment.} Source code:
   \url{https://github.com/mrvictoru/energydecision}. The environment is pinned
   in \path{paper/environment.txt} (Python 3.10.12, PyTorch 2.9.0+cu130, CUDA
-  13.0). Evaluation results derive from the \texttt{preprint-v1} release state
-  (2026-09-22) plus the same-day extended-surface and cache-key commits on
-  \texttt{main} (through \texttt{ea558bf}), at which the test suite (387 tests)
-  passes.
+  13.0). The corrected publication is released under
+  \texttt{preprint-v2-baseline-corrected}; the earlier \texttt{preprint-v1}
+  state (2026-09-22) plus same-day commits through \texttt{ea558bf} describes the
+  original simulator-evaluation code used for the reused rollouts. The test suite
+  (387 tests) passes at that original release state, and current corrected claims
+  additionally depend on the 2026-11-25 PPO retraining artifacts described in
+  \path{docs/reproduction.md}.
   \item \textbf{Models and data.} The shipped checkpoint
   (\path{aemo_dt_sdp_jtsoc_v2cal.pt}) and its training corpus
   (\path{dt_trajectories_jtsoc_v2cal_conservative.parquet}) are hosted at

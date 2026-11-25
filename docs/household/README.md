@@ -13,6 +13,8 @@ If you are new to the repository, read [../README.md](../README.md), [../archite
 | Understand the household environment | [environment.md](environment.md) | PV + load dynamics, action space, reward, and the household control loop |
 | Understand battery degradation modeling | [degradation.md](degradation.md) | Muenzel-style degradation, rainflow counting, and implementation details |
 | Understand the wider repo structure | [../architecture.md](../architecture.md) | How the household track fits into the full codebase |
+| Work with real (2019+) household telemetry | [real_data_protocol.md](real_data_protocol.md) | Privacy, consent and ingestion protocol for real portal CSV exports |
+| Interpret the battery-size replay result | [replay_battery_size_analysis.md](replay_battery_size_analysis.md) | Why a bigger battery does not save more under the recorded tariff |
 
 ## Recommended Reading Order
 

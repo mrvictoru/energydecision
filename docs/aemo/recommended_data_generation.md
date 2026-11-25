@@ -1,10 +1,27 @@
 # AEMO Data Generation Status
 
+> **⚠️ ARCHIVED / HISTORICAL.** This is a historical research-status note, not
+> current operating guidance. The "recommended FCAS-rich dataset recipe" below
+> describes the 2021–2023 behaviour-cloning corpus that is now superseded: the
+> shipped physics-v2 `v2cal` policy is **not** trained on this FCAS-rich corpus
+> but on SDP-teacher trajectories under `data/aemo_dt_sdp/`. For current claims
+> and released artifacts see [`../reproduction.md`](../reproduction.md) and
+> [`../huggingface/energydecision-dt-v2-sdp_README.md`](../huggingface/energydecision-dt-v2-sdp_README.md).
+>
+> **Corrected publication state** (release tag
+> `preprint-v2-baseline-corrected`): current DT-vs-PPO claims use three tuned
+> 4M-step PPO seeds, with within-cell DT/PPO seed-mean ratios
+> **1.70× / 1.20× / 1.69× / 1.60×** (dispatch's paired CI includes zero; one
+> PPO seed reverses three surface means); under market impact the seed-mean
+> ratio is **1.60× with 8/9 wins**, but seed-specific ratios span
+> **0.91×–2.96×**. The older 200k / 204,800-step default-PPO ratios are
+> historical.
+
 This document is a status-heavy companion to [workflow.md](workflow.md).
 
 Use it when you need:
 
-- the current recommended FCAS-rich dataset recipe
+- the historical (superseded) FCAS-rich dataset recipe
 - a summary of which generation steps produced the main corpus
 - historical context on supplementary dispatch-replay data
 
@@ -65,4 +82,4 @@ This means the file should be treated as a research-status note, not as the prim
 - FCAS bidding: bids 1.0 on RAISEREG/LOWERREG when price exceeds p80 threshold
 - $2,941 FCAS rev / ep vs $0 for old rule
 
-See `src/decision.py`, [../AGENT_README.md](../AGENT_README.md), and [../research/README.md](../research/README.md) for related context.
+See `src/decision.py`, [../control_policies.md](../control_policies.md), and [../research/README.md](../research/README.md) for related context.

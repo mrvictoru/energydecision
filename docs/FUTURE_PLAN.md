@@ -358,7 +358,7 @@ Gate failures loop back to resampling/injection parameters, never hand-fixed.
 | `docs/aemo_dt_preferred_policy_plan.md` | **ARCHIVED** (completed — Stage C shipped) | Marked archived; final session 2026-08-23 |
 | [Project README](../README.md) | **CURRENT** | Entry point to the paper and both tracks |
 | [Manuscript](../paper/manuscript/main.tex) and [provenance](../paper/audit/provenance.tsv) | **CURRENT** | Narrative and numerical sources for the preprint |
-| [Website maintenance](website_requirements.md) | **REFERENCE** | Evidence and publishing checks for `index.html` |
+| [Website maintenance](website_maintenance.md) | **REFERENCE** | Evidence and publishing checks for `index.html` |
 | `docs/FUTURE_PLAN.md` | **THIS FILE** | Living forward plan |
 
 ---

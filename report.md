@@ -1507,6 +1507,19 @@ Wilcoxon signed-rank tests, computed by
 `scripts/stagec_statistical_significance.py`
 (`eval_output/stagec_statistical_significance.json`):
 
+> **Historical v1 evidence.** The "9/9" impact-gate win rate and the
+> "all four CIs exclude zero" wording in this subsection are **v1 Stage C
+> results against the old unseeded 204,800-step default PPO comparator**,
+> retained for provenance only. They are **not** the corrected 2026-11-25
+> conclusion. The corrected state (release tag
+> `preprint-v2-baseline-corrected`, §8.2.11 and
+> `paper/audit/ppo_retrain_20261125.md`) uses three tuned 4M-step PPO seeds:
+> within-cell DT/PPO seed-mean ratios **1.70× / 1.20× / 1.69× / 1.60×**
+> (dispatch's paired CI includes zero; one PPO seed reverses three surface
+> means); under impact a **1.60×** seed-mean ratio with **8/9 wins** but
+> seed-specific ratios spanning **0.91×–2.96×**. The older 200k /
+> 204,800-step default-PPO ratios are historical.
+
 | Comparison | n | Diff (DT−PPO) | 95% CI | Win rate | Wilcoxon p |
 |---|---:|---:|---|---:|---:|
 | Standard Oct | 5 | +$9,220 | [+$7,073, +$11,624] | 5/5 | 0.0625* |

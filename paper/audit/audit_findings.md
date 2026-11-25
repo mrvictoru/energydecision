@@ -105,7 +105,7 @@ the primary evidence. dispatch-matched has one loss cell (win 5/6) on v2cal, vs 
 
 ### 3.1 What the report claims vs what exists
 
-- **Claim** (report.md §8.2.0 line 733, §8.2.10 line 1451, AGENTS.md header, README):
+- **Claim** (report.md §8.2.0 line 733, §8.2.10 line 1451, REPOSITORY_GUIDE.md header, README):
   the v2cal DT "passes the market-impact gate", per-battery small 3.21×, hornsdale 2.59×,
   torrens 2.02×.
 - **Reality:** `eval_output/phase3_impact/results.json` was last written 2026-09-13T21:53,
@@ -163,7 +163,7 @@ report**.
 For reference, the same analysis on the v1 labels reproduces the old claim exactly
 (`stagec_fix_20260913` best-RTG: 3.210 / 2.594 / 2.024), confirming the misattribution.
 
-**Action:** replace the 3.2/2.6/2.0× row in report.md, README, AGENTS.md, index.html with
+**Action:** replace the 3.2/2.6/2.0× row in report.md, README, REPOSITORY_GUIDE.md, index.html with
 the v2cal fixed-policy numbers (4.36/4.70/4.67×, 9/9 wins, CI), and state that the impact
 fallback is a fixed constant RTG.
 

@@ -1,5 +1,23 @@
 # GRPO Fine-Tuning Guide
 
+> **⚠️ ARCHIVED / HISTORICAL.** This guide documents a historical GRPO
+> post-training workflow. The tested GRPO variants did **not** improve the
+> modern v2 pretrained Decision Transformer and are superseded by the shipped
+> physics-v2 `v2cal` planner-distilled policy. For current claims and released
+> artifacts see [`reproduction.md`](reproduction.md) and
+> [`huggingface/energydecision-dt-v2-sdp_README.md`](huggingface/energydecision-dt-v2-sdp_README.md).
+> Treat the commands and figures below as experiment context, not current
+> guidance.
+>
+> **Corrected publication state** (release tag
+> `preprint-v2-baseline-corrected`): current DT-vs-PPO claims use three tuned
+> 4M-step PPO seeds, with within-cell DT/PPO seed-mean ratios
+> **1.70× / 1.20× / 1.69× / 1.60×** (dispatch's paired CI includes zero; one
+> PPO seed reverses three surface means); under market impact the seed-mean
+> ratio is **1.60× with 8/9 wins**, but seed-specific ratios span
+> **0.91×–2.96×**. The older 200k / 204,800-step default-PPO ratios are
+> historical.
+
 This guide documents the GRPO post-training workflow for advanced AEMO experiments.
 
 Use it when you need:
@@ -11,10 +29,15 @@ Use it when you need:
 
 If you are new to the repo, start with [README.md](README.md), [architecture.md](architecture.md), [development.md](development.md), and [aemo/README.md](aemo/README.md) first.
 
-Group Relative Policy Optimization (GRPO) improves a pretrained Decision
-Transformer through online interaction with the simulation environment.
-No dataset regeneration or SB3 retraining is needed — the model learns by
-trying actions and observing rewards.
+Group Relative Policy Optimization (GRPO) fine-tunes a pretrained Decision
+Transformer through online interaction with the simulation environment —
+no dataset regeneration or SB3 retraining is needed; the model learns by
+trying actions and observing rewards. **However, the tested GRPO variants did
+not improve the modern v2 model**: the modern v2 pretrained DT was already
+the strongest tested checkpoint, and GRPO at best came within 5–11% of it and
+at worst regressed. These GRPO experiments are historical and are superseded
+by the shipped physics-v2 `v2cal` planner-distilled policy (see the archived
+banner above and [`reproduction.md`](reproduction.md)).
 
 ## Quick Start: Single-Region
 

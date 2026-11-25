@@ -10,13 +10,29 @@ energydecision is a research codebase for battery control using historical Austr
 **Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch** is a simulator-based preprint, not a peer-reviewed publication or evidence of live-market readiness.
 
 - [Latest checked-in PDF](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [Current LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages](https://mrvictoru.github.io/energydecision/)
+- [Paper directory index](paper/README.md) · [Preprint source notes](paper/manuscript/README.md)
 - [Shipped model on Hugging Face](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp): `aemo_dt_sdp_jtsoc_v2cal.pt` and its `.pt.meta.json` sidecar. Use the sidecar's scaling and the shipped `rtg_mode="auto"`.
 - [Hugging Face dataset repository](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp): `dt_trajectories_jtsoc_v2cal_conservative.parquet` is the shipped v2cal training corpus. `dt_trajectories_jtsoc_combined.parquet` remains the historical v1 corpus.
-- [Provenance table](paper/audit/provenance.tsv) · [Audit artifacts](paper/audit/artifacts/) · [Dated audit findings](paper/audit/audit_findings.md) · [Frozen environment](paper/environment.txt)
+- [HF card sources](docs/huggingface/README.md) · [Provenance table](paper/audit/provenance.tsv) · [Audit evidence index](paper/audit/README.md) · [Dated audit findings](paper/audit/audit_findings.md) · [Frozen environment](paper/environment.txt)
 
 ## Reproduce the paper
 
 Start with the [CPU-only aggregate audit](docs/reproduction.md#verify-the-corrected-three-seed-headline), which verifies the corrected three-seed PPO aggregate from the released audit artifact without training, credentials or market data. The [full evaluation notes](docs/reproduction.md#rerun-the-simulator-evaluations) point to the paper configs and list the extra inputs needed to rerun simulator rollouts. See the manuscript's limitations and [known issues](docs/known_issues.md) before interpreting the results.
+
+## Documentation map
+
+- [Repository guide](REPOSITORY_GUIDE.md): conventions, runtime paths, GPU telemetry, data/caching and historical engineering context
+- [Documentation hub](docs/README.md): all guides and reference docs by goal
+- [Preprint reproduction guide](docs/reproduction.md): current claims, audit artifacts and simulator prerequisites
+- [Development guide](docs/development.md): environment setup, runtime modes, tests and contributor workflow
+- [Architecture](docs/architecture.md): repository structure
+- [Known issues](docs/known_issues.md): modelling caveats and stale-command history
+- [Experiment protocol](docs/experiment_protocol.md): constrained Decision Transformer training runs
+- [Website maintenance](docs/website_maintenance.md): evidence and publishing checks for `index.html`
+- [Documentation audit](docs/documentation_audit.md): historical workflow/instruction inventory
+- [Paper directory](paper/README.md), [audit evidence](paper/audit/README.md) and [artifact index](paper/audit/artifacts/README.md)
+- [Companion report](report.md): historical experiment ladder and engineering notes
+- [Components](COMPONENTS.md): code-level map
 
 ## Developer quick start
 
