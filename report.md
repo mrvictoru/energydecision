@@ -1,6 +1,6 @@
 # energydecision companion technical report
 
-This report records experiments at different stages of the AEMO and household benchmarks. It is not the preprint; historical results use different checkpoints, protocols and simulator physics. The checked-in PDF predates the 2026-11-25 baseline correction and awaits a fresh Overleaf render; the current claims are in [the manuscript source](paper/manuscript/main.tex) and [provenance table](paper/audit/provenance.tsv). For the separate household benchmark, start with the [household guide](docs/household/README.md).
+This report records experiments at different stages of the AEMO and household benchmarks. It is not the preprint; historical results use different checkpoints, protocols and simulator physics. The checked-in PDF includes the 2026-11-25 baseline correction and matches the current manuscript source. For the current AEMO paper, read [the preprint PDF](paper/manuscript/draft_paper_NeurIPS_2026.pdf), [the manuscript source](paper/manuscript/main.tex) and [the provenance table](paper/audit/provenance.tsv). For the separate household benchmark, start with the [household guide](docs/household/README.md).
 
 > **2026-11-25 baseline correction.** The original PPO comparator was a 204,800-step,
 > unseeded default checkpoint, not the tuned 4M baseline described in older sections.

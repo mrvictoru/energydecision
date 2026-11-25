@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use this software or reproduce the preprint, please cite the manuscript."
+title: "energydecision"
+type: software
+authors:
+  - family-names: "U"
+    given-names: "Hou Nam"
+repository-code: "https://github.com/mrvictoru/energydecision"
+url: "https://github.com/mrvictoru/energydecision"
+abstract: >-
+  Research codebase for degradation-aware battery dispatch, offline Decision
+  Transformers, planning teachers and reinforcement-learning baselines using
+  Australian household and NEM market data.
+keywords:
+  - decision-transformer
+  - offline-rl
+  - battery-dispatch
+  - aemo
+  - nem
+  - fcas
+  - planner-distillation
+license: MIT
+version: "2026-11-25"
+date-released: 2026-11-25
+preferred-citation:
+  type: article
+  title: "Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch"
+  authors:
+    - family-names: "U"
+      given-names: "Hou Nam"
+  year: 2026
+  journal: "arXiv preprint"
+  url: "https://github.com/mrvictoru/energydecision/blob/main/paper/manuscript/draft_paper_NeurIPS_2026.pdf"
+  note: "Preprint; arXiv ID pending."

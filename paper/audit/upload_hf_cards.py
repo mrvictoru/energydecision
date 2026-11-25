@@ -21,7 +21,7 @@ for src, repo, kind in uploads:
 # Verify the shipped wording is live, including the conditioning-signal section.
 checks = [
     ("mrvictoru/energydecision-dt-v2-sdp", "model",
-     ["4.70", "value-conditioned", "Open ablation"]),
+     ["1.70×", "0.91×", "2.96×", "value-conditioned", "Open ablation"]),
     ("mrvictoru/energydecision-waypoint-dt", "model",
      ["control loop"]),
     ("mrvictoru/AEMO_simulated_trade_sdp", "dataset",

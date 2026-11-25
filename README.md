@@ -9,14 +9,14 @@ energydecision is a research codebase for battery control using historical Austr
 
 **Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch** is a simulator-based preprint, not a peer-reviewed publication or evidence of live-market readiness.
 
-- [Prior checked-in PDF — render refresh pending](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [Current LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages](https://mrvictoru.github.io/energydecision/)
+- [Latest checked-in PDF](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [Current LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages](https://mrvictoru.github.io/energydecision/)
 - [Shipped model on Hugging Face](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp): `aemo_dt_sdp_jtsoc_v2cal.pt` and its `.pt.meta.json` sidecar. Use the sidecar's scaling and the shipped `rtg_mode="auto"`.
 - [Hugging Face dataset repository](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp): `dt_trajectories_jtsoc_v2cal_conservative.parquet` is the shipped v2cal training corpus. `dt_trajectories_jtsoc_combined.parquet` remains the historical v1 corpus.
 - [Provenance table](paper/audit/provenance.tsv) · [Audit artifacts](paper/audit/artifacts/) · [Dated audit findings](paper/audit/audit_findings.md) · [Frozen environment](paper/environment.txt)
 
 ## Reproduce the paper
 
-Start with the [CPU-only audit walkthrough](docs/reproduction.md#verify-the-market-impact-headline), which recomputes the impact result from the released matched-cell values without training, credentials or market data. The [full evaluation notes](docs/reproduction.md#rerun-the-simulator-evaluations) point to the paper configs and list the extra inputs needed to rerun simulator rollouts. See the manuscript's limitations and [known issues](docs/known_issues.md) before interpreting the results.
+Start with the [CPU-only aggregate audit](docs/reproduction.md#verify-the-corrected-three-seed-headline), which verifies the corrected three-seed PPO aggregate from the released audit artifact without training, credentials or market data. The [full evaluation notes](docs/reproduction.md#rerun-the-simulator-evaluations) point to the paper configs and list the extra inputs needed to rerun simulator rollouts. See the manuscript's limitations and [known issues](docs/known_issues.md) before interpreting the results.
 
 ## Developer quick start
 
