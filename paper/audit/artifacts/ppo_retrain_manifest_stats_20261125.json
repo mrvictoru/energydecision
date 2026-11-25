@@ -1,0 +1,44 @@
+{
+  "surfaces": {
+    "standard_year_2024": {
+      "dt_dir": "eval_output/ppo_retrain_20261125/standard_year/tuned_seed0",
+      "dt_cells_source": "recomputed (identical to eval_output/physics_v2/standard_year_v2cal)",
+      "ppo_seed_dirs": {
+        "tuned_seed0": "eval_output/ppo_retrain_20261125/standard_year/tuned_seed0",
+        "tuned_seed1": "eval_output/ppo_retrain_20261125/standard_year/tuned_seed1",
+        "tuned_seed2": "eval_output/ppo_retrain_20261125/standard_year/tuned_seed2"
+      },
+      "primary_seed_tag": "tuned_seed0"
+    },
+    "dispatch_year_2024": {
+      "dt_dir": "eval_output/ppo_retrain_20261125/dispatch_year/tuned_seed0",
+      "dt_cells_source": "recomputed with fit_global_stats=true (identical to eval_output/physics_v2/dispatch_year_v2cal)",
+      "ppo_seed_dirs": {
+        "tuned_seed0": "eval_output/ppo_retrain_20261125/dispatch_year/tuned_seed0",
+        "tuned_seed1": "eval_output/ppo_retrain_20261125/dispatch_year/tuned_seed1",
+        "tuned_seed2": "eval_output/ppo_retrain_20261125/dispatch_year/tuned_seed2"
+      },
+      "primary_seed_tag": "tuned_seed0"
+    },
+    "expanded_broad_2024": {
+      "dt_dir": "eval_output/physics_v2/expanded_full_v2cal",
+      "dt_cells_source": "shipped surface; 2-scenario spot check reproduced exactly",
+      "ppo_seed_dirs": {
+        "tuned_seed0": "eval_output/ppo_retrain_20261125/expanded_full/tuned_seed0",
+        "tuned_seed1": "eval_output/ppo_retrain_20261125/expanded_full/tuned_seed1",
+        "tuned_seed2": "eval_output/ppo_retrain_20261125/expanded_full/tuned_seed2"
+      },
+      "primary_seed_tag": "tuned_seed0"
+    },
+    "2025_ood": {
+      "dt_dir": "eval_output/ppo_retrain_20261125/fresh_2025/tuned_seed0",
+      "dt_cells_source": "recomputed (identical to eval_output/physics_v2/2025_v2cal_fresh)",
+      "ppo_seed_dirs": {
+        "tuned_seed0": "eval_output/ppo_retrain_20261125/fresh_2025/tuned_seed0",
+        "tuned_seed1": "eval_output/ppo_retrain_20261125/fresh_2025/tuned_seed1",
+        "tuned_seed2": "eval_output/ppo_retrain_20261125/fresh_2025/tuned_seed2"
+      },
+      "primary_seed_tag": "tuned_seed0"
+    }
+  }
+}

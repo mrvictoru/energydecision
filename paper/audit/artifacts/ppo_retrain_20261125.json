@@ -1,0 +1,2330 @@
+{
+  "schema": "energydecision.ppo_retrain.v1",
+  "generated_at": "2026-11-25T14:30:55",
+  "git_sha": "81a929afa24666d8056c8afb3815e4c9822f51bf",
+  "git_status_short": "?? configs/aemo_autoresearch_evaluator.ppo_retrain_dispatch_year__oldcheck.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_dtcheck_dispatch_year.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_dtcheck_expanded_full.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_dtcheck_fresh_2025.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_dtcheck_standard_year.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_expanded_full__oldcheck.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_fresh_2025__oldcheck.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_standard_year__fitfalse_test.json\n?? configs/aemo_autoresearch_evaluator.ppo_retrain_standard_year__oldcheck.json\n?? scripts/ppo_retrain_aemo.py\n?? scripts/ppo_retrain_dt_validation.py\n?? scripts/ppo_retrain_impact_eval.py\n?? scripts/ppo_retrain_learning_curves.py\n?? scripts/ppo_retrain_make_eval_configs.py\n?? scripts/ppo_retrain_statistics.py",
+  "purpose": "Retrain and evaluate a defensible PPO baseline for the AEMO Decision Transformer paper. The shipped PPO reference is a 204,800-step unseeded default-configuration checkpoint; the manuscript describes a tuned 4M-step Optuna search.",
+  "protocol": {
+    "regions": [
+      "NSW1",
+      "QLD1",
+      "TAS1",
+      "SA1",
+      "VIC1"
+    ],
+    "battery_variants": [
+      {
+        "name": "medium_1c",
+        "capacity_mwh": 10.0,
+        "max_power_mw": 10.0,
+        "init_soc_ratio": 0.5
+      },
+      {
+        "name": "large_07c",
+        "capacity_mwh": 50.0,
+        "max_power_mw": 35.0,
+        "init_soc_ratio": 0.5
+      },
+      {
+        "name": "small_05c",
+        "capacity_mwh": 2.0,
+        "max_power_mw": 1.0,
+        "init_soc_ratio": 0.5
+      },
+      {
+        "name": "fast_375c",
+        "capacity_mwh": 8.0,
+        "max_power_mw": 30.0,
+        "init_soc_ratio": 0.5
+      }
+    ],
+    "step_duration_hours": 0.08333333333333333,
+    "train_episode_hours": 168,
+    "train_max_step": 2016,
+    "validation_episode_hours": 144.0,
+    "validation_max_step": 1728,
+    "train_fraction": 0.8,
+    "validation_window_fractions": [
+      0.1,
+      0.55
+    ],
+    "n_envs": 20,
+    "action_mode": "full_fcas",
+    "degradation_mode": "real_world",
+    "degradation_chemistry": "LFP",
+    "degradation_temperature": 30.0,
+    "market_impact": "identity",
+    "random_episode_start": true,
+    "train_data_era": "pre-2024 (2021-01-01 .. 2023-12-01)",
+    "test_era_seen_in_training": false,
+    "env_construction": "one env per (region x battery variant); regions are NOT concatenated, unlike retrain_sb3_full_fcas.py which interleaves all 5 regions row-by-row after sorting by SETTLEMENTDATE."
+  },
+  "data_files": {
+    "NSW1": {
+      "path": "data/aemo/processed_NSW1_2021-01-01_2023-04-01_0.0833h.parquet",
+      "sha256": "0fbabbbd7361373a066672c6e0f5b7e4fa09b030fe4c5cf35b9d8840bab9ba2f",
+      "rows": 236160,
+      "columns": [
+        "SETTLEMENTDATE",
+        "RRP",
+        "TOTALDEMAND",
+        "REGIONID",
+        "FCAS_LOWERREG",
+        "FCAS_RAISEREG",
+        "FCAS_LOWER5MIN",
+        "FCAS_LOWER6SEC",
+        "FCAS_RAISE5MIN",
+        "FCAS_RAISE6SEC",
+        "FCAS_LOWER60SEC",
+        "FCAS_RAISE60SEC",
+        "GEN_wind",
+        "GEN_solar",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "is_peak",
+        "RRP_normalized",
+        "DEMAND_normalized",
+        "FCAS_LOWERREG_normalized",
+        "FCAS_RAISEREG_normalized",
+        "FCAS_LOWER5MIN_normalized",
+        "FCAS_LOWER6SEC_normalized",
+        "FCAS_RAISE5MIN_normalized",
+        "FCAS_RAISE6SEC_normalized",
+        "FCAS_LOWER60SEC_normalized",
+        "FCAS_RAISE60SEC_normalized",
+        "GEN_wind_pct",
+        "GEN_solar_pct"
+      ],
+      "min_settlementdate": "2021-01-01 00:05:00",
+      "max_settlementdate": "2023-04-01 00:00:00",
+      "expected_start": "2021-01-01",
+      "expected_end": "2023-04-01"
+    },
+    "QLD1": {
+      "path": "data/aemo/processed_QLD1_2021-01-01_2023-04-01_0.0833h.parquet",
+      "sha256": "a995f37ba3d2e9545f8206c54dfd8e87d6016a588524a3cc77204b5d6aa2afb3",
+      "rows": 236160,
+      "columns": [
+        "SETTLEMENTDATE",
+        "RRP",
+        "TOTALDEMAND",
+        "REGIONID",
+        "FCAS_LOWERREG",
+        "FCAS_RAISEREG",
+        "FCAS_LOWER5MIN",
+        "FCAS_LOWER6SEC",
+        "FCAS_RAISE5MIN",
+        "FCAS_RAISE6SEC",
+        "FCAS_LOWER60SEC",
+        "FCAS_RAISE60SEC",
+        "GEN_wind",
+        "GEN_solar",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "is_peak",
+        "RRP_normalized",
+        "DEMAND_normalized",
+        "FCAS_LOWERREG_normalized",
+        "FCAS_RAISEREG_normalized",
+        "FCAS_LOWER5MIN_normalized",
+        "FCAS_LOWER6SEC_normalized",
+        "FCAS_RAISE5MIN_normalized",
+        "FCAS_RAISE6SEC_normalized",
+        "FCAS_LOWER60SEC_normalized",
+        "FCAS_RAISE60SEC_normalized",
+        "GEN_wind_pct",
+        "GEN_solar_pct"
+      ],
+      "min_settlementdate": "2021-01-01 00:05:00",
+      "max_settlementdate": "2023-04-01 00:00:00",
+      "expected_start": "2021-01-01",
+      "expected_end": "2023-04-01"
+    },
+    "TAS1": {
+      "path": "data/aemo/processed_TAS1_2021-01-01_2023-04-01_0.0833h.parquet",
+      "sha256": "f28a4d14a582b9d7647e6255bc4392bdd34b30325eb403de40a3422ba526ca5f",
+      "rows": 236160,
+      "columns": [
+        "SETTLEMENTDATE",
+        "RRP",
+        "TOTALDEMAND",
+        "REGIONID",
+        "FCAS_LOWERREG",
+        "FCAS_RAISEREG",
+        "FCAS_LOWER5MIN",
+        "FCAS_LOWER6SEC",
+        "FCAS_RAISE5MIN",
+        "FCAS_RAISE6SEC",
+        "FCAS_LOWER60SEC",
+        "FCAS_RAISE60SEC",
+        "GEN_wind",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "is_peak",
+        "RRP_normalized",
+        "DEMAND_normalized",
+        "FCAS_LOWERREG_normalized",
+        "FCAS_RAISEREG_normalized",
+        "FCAS_LOWER5MIN_normalized",
+        "FCAS_LOWER6SEC_normalized",
+        "FCAS_RAISE5MIN_normalized",
+        "FCAS_RAISE6SEC_normalized",
+        "FCAS_LOWER60SEC_normalized",
+        "FCAS_RAISE60SEC_normalized",
+        "GEN_wind_pct"
+      ],
+      "min_settlementdate": "2021-01-01 00:05:00",
+      "max_settlementdate": "2023-04-01 00:00:00",
+      "expected_start": "2021-01-01",
+      "expected_end": "2023-04-01"
+    },
+    "SA1": {
+      "path": "data/aemo/processed_SA1_2022-04-01_2023-12-01_0.0833h.parquet",
+      "sha256": "cb0750e6af1ebe5879accddcfe51bc0ffc8db65919b2003026be9ec7489854f3",
+      "rows": 171984,
+      "columns": [
+        "SETTLEMENTDATE",
+        "RRP",
+        "TOTALDEMAND",
+        "REGIONID",
+        "FCAS_LOWERREG",
+        "FCAS_RAISEREG",
+        "FCAS_LOWER5MIN",
+        "FCAS_LOWER6SEC",
+        "FCAS_RAISE5MIN",
+        "FCAS_RAISE6SEC",
+        "FCAS_LOWER60SEC",
+        "FCAS_RAISE60SEC",
+        "GEN_wind",
+        "GEN_solar",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "is_peak",
+        "RRP_normalized",
+        "DEMAND_normalized",
+        "FCAS_LOWERREG_normalized",
+        "FCAS_RAISEREG_normalized",
+        "FCAS_LOWER5MIN_normalized",
+        "FCAS_LOWER6SEC_normalized",
+        "FCAS_RAISE5MIN_normalized",
+        "FCAS_RAISE6SEC_normalized",
+        "FCAS_LOWER60SEC_normalized",
+        "FCAS_RAISE60SEC_normalized",
+        "GEN_wind_pct",
+        "GEN_solar_pct"
+      ],
+      "min_settlementdate": "2022-04-01 00:05:00",
+      "max_settlementdate": "2023-12-01 00:00:00",
+      "expected_start": "2022-04-01",
+      "expected_end": "2023-12-01"
+    },
+    "VIC1": {
+      "path": "data/aemo/processed_VIC1_2021-04-01_2023-12-01_0.0833h.parquet",
+      "sha256": "4b4f2ef1ce87bbf89501b816a14e11adde02595553059bcf371e5b03482a7292",
+      "rows": 277103,
+      "columns": [
+        "SETTLEMENTDATE",
+        "RRP",
+        "TOTALDEMAND",
+        "REGIONID",
+        "FCAS_LOWERREG",
+        "FCAS_RAISEREG",
+        "FCAS_LOWER5MIN",
+        "FCAS_LOWER6SEC",
+        "FCAS_RAISE5MIN",
+        "FCAS_RAISE6SEC",
+        "FCAS_LOWER60SEC",
+        "FCAS_RAISE60SEC",
+        "GEN_wind",
+        "GEN_solar",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos",
+        "is_peak",
+        "RRP_normalized",
+        "DEMAND_normalized",
+        "FCAS_LOWERREG_normalized",
+        "FCAS_RAISEREG_normalized",
+        "FCAS_LOWER5MIN_normalized",
+        "FCAS_LOWER6SEC_normalized",
+        "FCAS_RAISE5MIN_normalized",
+        "FCAS_RAISE6SEC_normalized",
+        "FCAS_LOWER60SEC_normalized",
+        "FCAS_RAISE60SEC_normalized",
+        "GEN_wind_pct",
+        "GEN_solar_pct"
+      ],
+      "min_settlementdate": "2021-04-01 00:05:00",
+      "max_settlementdate": "2023-12-01 00:00:00",
+      "expected_start": "2021-04-01",
+      "expected_end": "2023-12-01"
+    }
+  },
+  "split": {
+    "NSW1": {
+      "rows_total": 236160,
+      "train_rows": 188928,
+      "valid_rows": 47232,
+      "train_start": "2021-01-01 00:05:00",
+      "train_end": "2022-10-19 00:00:00",
+      "valid_start": "2022-10-19 00:05:00",
+      "valid_end": "2023-04-01 00:00:00"
+    },
+    "QLD1": {
+      "rows_total": 236160,
+      "train_rows": 188928,
+      "valid_rows": 47232,
+      "train_start": "2021-01-01 00:05:00",
+      "train_end": "2022-10-19 00:00:00",
+      "valid_start": "2022-10-19 00:05:00",
+      "valid_end": "2023-04-01 00:00:00"
+    },
+    "TAS1": {
+      "rows_total": 236160,
+      "train_rows": 188928,
+      "valid_rows": 47232,
+      "train_start": "2021-01-01 00:05:00",
+      "train_end": "2022-10-19 00:00:00",
+      "valid_start": "2022-10-19 00:05:00",
+      "valid_end": "2023-04-01 00:00:00"
+    },
+    "SA1": {
+      "rows_total": 171984,
+      "train_rows": 137587,
+      "valid_rows": 34397,
+      "train_start": "2022-04-01 00:05:00",
+      "train_end": "2023-08-03 13:35:00",
+      "valid_start": "2023-08-03 13:40:00",
+      "valid_end": "2023-12-01 00:00:00"
+    },
+    "VIC1": {
+      "rows_total": 277103,
+      "train_rows": 221682,
+      "valid_rows": 55421,
+      "train_start": "2021-04-01 00:05:00",
+      "train_end": "2023-05-10 17:30:00",
+      "valid_start": "2023-05-10 17:35:00",
+      "valid_end": "2023-12-01 00:00:00"
+    }
+  },
+  "validation_windows": [
+    {
+      "region": "NSW1",
+      "window_index": 0,
+      "offset": 4723,
+      "fraction": 0.1,
+      "start": "2022-11-04 09:40:00",
+      "end": "2022-11-10 09:35:00"
+    },
+    {
+      "region": "NSW1",
+      "window_index": 1,
+      "offset": 25978,
+      "fraction": 0.55,
+      "start": "2023-01-17 04:55:00",
+      "end": "2023-01-23 04:50:00"
+    },
+    {
+      "region": "QLD1",
+      "window_index": 0,
+      "offset": 4723,
+      "fraction": 0.1,
+      "start": "2022-11-04 09:40:00",
+      "end": "2022-11-10 09:35:00"
+    },
+    {
+      "region": "QLD1",
+      "window_index": 1,
+      "offset": 25978,
+      "fraction": 0.55,
+      "start": "2023-01-17 04:55:00",
+      "end": "2023-01-23 04:50:00"
+    },
+    {
+      "region": "TAS1",
+      "window_index": 0,
+      "offset": 4723,
+      "fraction": 0.1,
+      "start": "2022-11-04 09:40:00",
+      "end": "2022-11-10 09:35:00"
+    },
+    {
+      "region": "TAS1",
+      "window_index": 1,
+      "offset": 25978,
+      "fraction": 0.55,
+      "start": "2023-01-17 04:55:00",
+      "end": "2023-01-23 04:50:00"
+    },
+    {
+      "region": "SA1",
+      "window_index": 0,
+      "offset": 3440,
+      "fraction": 0.1,
+      "start": "2023-08-15 12:20:00",
+      "end": "2023-08-21 12:15:00"
+    },
+    {
+      "region": "SA1",
+      "window_index": 1,
+      "offset": 18918,
+      "fraction": 0.55,
+      "start": "2023-10-08 06:10:00",
+      "end": "2023-10-14 06:05:00"
+    },
+    {
+      "region": "VIC1",
+      "window_index": 0,
+      "offset": 5542,
+      "fraction": 0.1,
+      "start": "2023-05-29 23:25:00",
+      "end": "2023-06-04 23:20:00"
+    },
+    {
+      "region": "VIC1",
+      "window_index": 1,
+      "offset": 30482,
+      "fraction": 0.55,
+      "start": "2023-09-05 09:50:00",
+      "end": "2023-09-11 09:45:00"
+    }
+  ],
+  "old_ppo_checkpoint": {
+    "path": "models/aemo_sb3/ppo_aemo_fcas_model.zip",
+    "sha256": "4281f8fbdeb13b9e28be48d7f02d850a9e979f5f01657830bf43e8fb622fb825",
+    "metadata": {
+      "num_timesteps": 204800,
+      "_total_timesteps": 200000,
+      "n_envs": 4,
+      "n_steps": 2048,
+      "batch_size": 64,
+      "n_epochs": 10,
+      "gamma": 0.99,
+      "learning_rate": 0.0003,
+      "policy_kwargs": {},
+      "seed": null,
+      "_n_updates": 250,
+      "clip_range": "ConstantSchedule(val=0.2)",
+      "ent_coef": 0.0,
+      "vf_coef": 0.5,
+      "max_grad_norm": 0.5,
+      "gae_lambda": 0.95,
+      "target_kl": null
+    },
+    "validation": {
+      "mean_profit": 17891.587982573074,
+      "median_profit": 15574.847525331006,
+      "mean_profit_by_battery": {
+        "medium_1c": 9401.645375669588,
+        "large_07c": 33325.86728130616,
+        "small_05c": 954.3994003025666,
+        "fast_375c": 27884.439873013984
+      },
+      "n_episodes": 40,
+      "source_file": "models/aemo_sb3/ppo_retrain_20261125/validate_old_ppo.json"
+    }
+  },
+  "dt_validation_reference": {
+    "mean_profit": 37981.22625038815,
+    "median_profit": 37645.68541265189,
+    "mean_profit_by_battery": {
+      "medium_1c": 37981.22625038815
+    },
+    "n_episodes": 10,
+    "source_file": "models/aemo_sb3/ppo_retrain_20261125/validate_dt.json"
+  },
+  "optuna": {
+    "seed": 0,
+    "timesteps": 400000,
+    "trials": [
+      {
+        "number": 0,
+        "state": "TrialState.COMPLETE",
+        "value": 16971.586747399873,
+        "params": {
+          "net_arch": "256x256",
+          "learning_rate": 0.00039687933304443713,
+          "gamma": 0.9577229227019006,
+          "clip_range": 0.13119890406724052,
+          "ent_coef": 2.2310108018679158e-08,
+          "vf_coef": 0.8795585311974417,
+          "n_steps": 1024
+        },
+        "wall_seconds": 517.0391614437103,
+        "mean_profit_by_battery": {
+          "medium_1c": 9924.065547522125,
+          "large_07c": 35664.694099893924,
+          "small_05c": 1027.3277389575521,
+          "fast_375c": 21270.259603225895
+        },
+        "mean_profit_by_region": {
+          "NSW1": 14680.280153913767,
+          "QLD1": 15235.916454402599,
+          "TAS1": 9920.940922761656,
+          "SA1": 35018.23371775914,
+          "VIC1": 10002.562488162206
+        }
+      },
+      {
+        "number": 1,
+        "state": "TrialState.COMPLETE",
+        "value": 19434.551591458287,
+        "params": {
+          "net_arch": "64x64",
+          "learning_rate": 0.0001519934830130982,
+          "gamma": 0.9590785232377449,
+          "clip_range": 0.16084844859190756,
+          "ent_coef": 1.4077923139972383e-05,
+          "vf_coef": 0.48875051677790415,
+          "n_steps": 1024
+        },
+        "wall_seconds": 312.39226937294006,
+        "mean_profit_by_battery": {
+          "medium_1c": 11604.583612273185,
+          "large_07c": 42372.62681102251,
+          "small_05c": 1253.5008367616504,
+          "fast_375c": 22507.495105775823
+        },
+        "mean_profit_by_region": {
+          "NSW1": 20623.75356231069,
+          "QLD1": 22127.542556609038,
+          "TAS1": 12742.240387369306,
+          "SA1": 30210.053818678065,
+          "VIC1": 11469.167632324356
+        }
+      },
+      {
+        "number": 2,
+        "state": "TrialState.COMPLETE",
+        "value": 25919.569882395368,
+        "params": {
+          "net_arch": "400x300",
+          "learning_rate": 0.0006097839109531517,
+          "gamma": 0.9598838522168388,
+          "clip_range": 0.2028468876827223,
+          "ent_coef": 3.5849855803404713e-05,
+          "vf_coef": 0.14180537144799796,
+          "n_steps": 512
+        },
+        "wall_seconds": 528.990195274353,
+        "mean_profit_by_battery": {
+          "medium_1c": 13945.615107538619,
+          "large_07c": 50000.32683485056,
+          "small_05c": 1587.03995344017,
+          "fast_375c": 38145.297633752125
+        },
+        "mean_profit_by_region": {
+          "NSW1": 35421.91371234773,
+          "QLD1": 36153.78121602815,
+          "TAS1": 20591.234588055824,
+          "SA1": 18700.136672292694,
+          "VIC1": 18730.783223252445
+        }
+      },
+      {
+        "number": 3,
+        "state": "TrialState.COMPLETE",
+        "value": 15350.63146070475,
+        "params": {
+          "net_arch": "256x256",
+          "learning_rate": 0.00020165721691808595,
+          "gamma": 0.9548347696433159,
+          "clip_range": 0.23684660530243137,
+          "ent_coef": 4.374364439939069e-06,
+          "vf_coef": 0.20983441136030095,
+          "n_steps": 2048
+        },
+        "wall_seconds": 428.4938154220581,
+        "mean_profit_by_battery": {
+          "medium_1c": 8496.82609294746,
+          "large_07c": 30690.886088783667,
+          "small_05c": 894.2137816199438,
+          "fast_375c": 21320.599879467925
+        },
+        "mean_profit_by_region": {
+          "NSW1": 12501.851815523765,
+          "QLD1": 13583.01963064147,
+          "TAS1": 10499.513424710094,
+          "SA1": 31288.264935786126,
+          "VIC1": 8880.507496862294
+        }
+      },
+      {
+        "number": 4,
+        "state": "TrialState.COMPLETE",
+        "value": 16577.797107854847,
+        "params": {
+          "net_arch": "256x256",
+          "learning_rate": 0.000331182988807238,
+          "gamma": 0.9770621588274924,
+          "clip_range": 0.1369708911051054,
+          "ent_coef": 0.006569128640939186,
+          "vf_coef": 0.7976195410250031,
+          "n_steps": 512
+        },
+        "wall_seconds": 447.5960557460785,
+        "mean_profit_by_battery": {
+          "medium_1c": 9751.613273173067,
+          "large_07c": 41801.970144173494,
+          "small_05c": 1232.3937639437731,
+          "fast_375c": 13525.21125012905
+        },
+        "mean_profit_by_region": {
+          "NSW1": 16695.368827418137,
+          "QLD1": 17298.290895529797,
+          "TAS1": 9511.904262341403,
+          "SA1": 30782.96140095722,
+          "VIC1": 8600.460153027674
+        }
+      },
+      {
+        "number": 5,
+        "state": "TrialState.COMPLETE",
+        "value": 17534.792872624457,
+        "params": {
+          "net_arch": "400x300",
+          "learning_rate": 0.0008332200226393874,
+          "gamma": 0.9979920869839994,
+          "clip_range": 0.28645806838235743,
+          "ent_coef": 0.00010337819824472162,
+          "vf_coef": 0.13485267996506467,
+          "n_steps": 512
+        },
+        "wall_seconds": 541.8141000270844,
+        "mean_profit_by_battery": {
+          "medium_1c": 10205.544808700584,
+          "large_07c": 38718.313306336626,
+          "small_05c": 1082.8362630477382,
+          "fast_375c": 20132.477112412882
+        },
+        "mean_profit_by_region": {
+          "NSW1": 11772.078084424904,
+          "QLD1": 14275.623973172998,
+          "TAS1": 15342.33217040984,
+          "SA1": 28220.93587855566,
+          "VIC1": 18062.99425655888
+        }
+      },
+      {
+        "number": 6,
+        "state": "TrialState.COMPLETE",
+        "value": 29125.7515988718,
+        "params": {
+          "net_arch": "400x300",
+          "learning_rate": 0.0009197770682218488,
+          "gamma": 0.9760663067420267,
+          "clip_range": 0.21809493791874596,
+          "ent_coef": 3.271042702312801e-07,
+          "vf_coef": 0.46762666136247577,
+          "n_steps": 512
+        },
+        "wall_seconds": 516.041647195816,
+        "mean_profit_by_battery": {
+          "medium_1c": 16245.615443706105,
+          "large_07c": 59391.2821231938,
+          "small_05c": 1700.0540023038823,
+          "fast_375c": 39166.05482628344
+        },
+        "mean_profit_by_region": {
+          "NSW1": 28058.730791986636,
+          "QLD1": 31233.241418457645,
+          "TAS1": 21100.407658727556,
+          "SA1": 46082.94464343077,
+          "VIC1": 19153.4334817564
+        }
+      },
+      {
+        "number": 7,
+        "state": "TrialState.COMPLETE",
+        "value": 10895.503263363902,
+        "params": {
+          "net_arch": "400x300",
+          "learning_rate": 0.0008712587071192368,
+          "gamma": 0.9798292079489371,
+          "clip_range": 0.24877537640703354,
+          "ent_coef": 2.935315836616761e-08,
+          "vf_coef": 0.5446325257423194,
+          "n_steps": 2048
+        },
+        "wall_seconds": 508.3456726074219,
+        "mean_profit_by_battery": {
+          "medium_1c": 6491.23174406089,
+          "large_07c": 22690.038284941165,
+          "small_05c": 701.2361260179008,
+          "fast_375c": 13699.506898435659
+        },
+        "mean_profit_by_region": {
+          "NSW1": 5127.513817098407,
+          "QLD1": 6182.651657542564,
+          "TAS1": 6040.772525994678,
+          "SA1": 30243.1311550128,
+          "VIC1": 6883.44716117107
+        }
+      },
+      {
+        "number": 8,
+        "state": "TrialState.COMPLETE",
+        "value": 22833.7292237444,
+        "params": {
+          "net_arch": "64x64",
+          "learning_rate": 0.0004960573224620038,
+          "gamma": 0.9895736566499854,
+          "clip_range": 0.18931603423603338,
+          "ent_coef": 4.511670190214303e-07,
+          "vf_coef": 0.38249343341879305,
+          "n_steps": 512
+        },
+        "wall_seconds": 303.8680965900421,
+        "mean_profit_by_battery": {
+          "medium_1c": 13222.929807582123,
+          "large_07c": 52671.192709866446,
+          "small_05c": 1553.2671867062643,
+          "fast_375c": 23887.527190822795
+        },
+        "mean_profit_by_region": {
+          "NSW1": 24193.530366061503,
+          "QLD1": 26269.00462169985,
+          "TAS1": 12284.637365595772,
+          "SA1": 37476.99156293861,
+          "VIC1": 13944.482202426301
+        }
+      },
+      {
+        "number": 9,
+        "state": "TrialState.COMPLETE",
+        "value": 14339.948333879172,
+        "params": {
+          "net_arch": "400x300",
+          "learning_rate": 0.00010572010247617831,
+          "gamma": 0.9691657333398498,
+          "clip_range": 0.10484959181504355,
+          "ent_coef": 4.929663008889477e-07,
+          "vf_coef": 0.6970657857507843,
+          "n_steps": 512
+        },
+        "wall_seconds": 509.4735977649689,
+        "mean_profit_by_battery": {
+          "medium_1c": 9274.255337382712,
+          "large_07c": 36966.753670822654,
+          "small_05c": 1136.9739174041933,
+          "fast_375c": 9981.810409907132
+        },
+        "mean_profit_by_region": {
+          "NSW1": 12308.809507010392,
+          "QLD1": 13474.848664796245,
+          "TAS1": 7772.4269069916145,
+          "SA1": 29664.197462958342,
+          "VIC1": 8479.459127639271
+        }
+      }
+    ],
+    "best": {
+      "overrides": {
+        "learning_rate": 0.0009197770682218488,
+        "gamma": 0.9760663067420267,
+        "clip_range": 0.21809493791874596,
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "n_steps": 512,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        },
+        "net_arch_label": "400x300"
+      },
+      "score": 29125.7515988718,
+      "name": "optuna_trial_6",
+      "validation": "fixed 40-episode pre-2024 validation set (see data_split_manifest.json)",
+      "trial": 6
+    }
+  },
+  "runs": {
+    "default_seed0": {
+      "seed": 0,
+      "config": "default",
+      "config_json": null,
+      "overrides": {},
+      "requested_timesteps": 4000000,
+      "actual_num_timesteps": 4014080,
+      "n_envs": 20,
+      "device": "cpu",
+      "total_wall_seconds": 3061.689973592758,
+      "final_checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed0_4014k.zip",
+      "final_checkpoint_sha256": "88ee5f12e3844f5eb868b97f1636f1105c68653c38d525f35afe22399bee79ae",
+      "ppo_checkpoint_metadata": {
+        "num_timesteps": 4014080,
+        "_total_timesteps": 4000000,
+        "n_envs": 20,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "policy_kwargs": {},
+        "seed": 0,
+        "_n_updates": 980,
+        "clip_range": "ConstantSchedule(val=0.2)",
+        "ent_coef": 0.0,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "gae_lambda": 0.95,
+        "target_kl": null
+      },
+      "history": [
+        {
+          "requested_milestone": 250000,
+          "model_num_timesteps": 286720,
+          "val_mean_profit": 7886.604244400543,
+          "val_median_profit": 4116.065895592057,
+          "val_std_profit": 16472.851039971123,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 5275.808321247971,
+            "large_07c": 19978.672334410523,
+            "small_05c": 564.2719061114192,
+            "fast_375c": 5727.664415832258
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 3047.3904238434056,
+            "QLD1": 3745.5295944640684,
+            "TAS1": 5202.568082129653,
+            "SA1": 22166.97611864442,
+            "VIC1": 5270.557002921164
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed0_0286k.zip",
+          "checkpoint_sha256": "207120138bbdfdbfecd26c94bbd35e1373597c23f7c0ea9186426b990360aac1"
+        },
+        {
+          "requested_milestone": 500000,
+          "model_num_timesteps": 532480,
+          "val_mean_profit": 14377.179183743754,
+          "val_median_profit": 6711.215277672549,
+          "val_std_profit": 24824.059239310707,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 8416.816763743444,
+            "large_07c": 34563.2091035602,
+            "small_05c": 1038.821589454385,
+            "fast_375c": 13489.869278216993
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 7226.559069388669,
+            "QLD1": 11103.99455005452,
+            "TAS1": 6778.584040290693,
+            "SA1": 35129.657012668686,
+            "VIC1": 11647.101246316211
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed0_0532k.zip",
+          "checkpoint_sha256": "aa7f1632a1d5578c3690e314264065d47b7034f5511b0589536f9197f7bdacc0"
+        },
+        {
+          "requested_milestone": 1000000,
+          "model_num_timesteps": 1024000,
+          "val_mean_profit": 17365.233808304125,
+          "val_median_profit": 10425.537509778922,
+          "val_std_profit": 27072.078288452933,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 9849.388092366225,
+            "large_07c": 40249.9224737432,
+            "small_05c": 1216.322552153038,
+            "fast_375c": 18145.30211495404
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 9836.56480823435,
+            "QLD1": 12855.218589687433,
+            "TAS1": 8938.190700740273,
+            "SA1": 38202.29147809849,
+            "VIC1": 16993.903464760093
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed0_1024k.zip",
+          "checkpoint_sha256": "0f93ae840a4dd6c3dfa0c3a0623f349bb1df9cd7e5c2532fcc66fbde73a88b1c"
+        },
+        {
+          "requested_milestone": 2000000,
+          "model_num_timesteps": 2007040,
+          "val_mean_profit": 24211.25941001418,
+          "val_median_profit": 15399.628387267298,
+          "val_std_profit": 29065.088308467355,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 13374.536316700023,
+            "large_07c": 54322.79164036493,
+            "small_05c": 1660.719465824023,
+            "fast_375c": 27486.99021716775
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 20220.95553971419,
+            "QLD1": 22457.87036563422,
+            "TAS1": 15440.047585361048,
+            "SA1": 42097.26915995999,
+            "VIC1": 20840.154399401443
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed0_2007k.zip",
+          "checkpoint_sha256": "757968a2af74505ab2f081128017861670e65612d11c81a89ad213dcb987b621"
+        },
+        {
+          "requested_milestone": 4000000,
+          "model_num_timesteps": 4014080,
+          "val_mean_profit": 40270.9130019862,
+          "val_median_profit": 34462.57853357104,
+          "val_std_profit": 38248.95250775082,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 22146.137585932018,
+            "large_07c": 84749.01031810648,
+            "small_05c": 2513.0549189447365,
+            "fast_375c": 51675.44918496155
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 36212.7989949246,
+            "QLD1": 38239.674758749825,
+            "TAS1": 31791.277564310087,
+            "SA1": 56246.737398446276,
+            "VIC1": 38864.07629350021
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed0_4014k.zip",
+          "checkpoint_sha256": "88ee5f12e3844f5eb868b97f1636f1105c68653c38d525f35afe22399bee79ae"
+        }
+      ]
+    },
+    "default_seed1": {
+      "seed": 1,
+      "config": "default",
+      "config_json": null,
+      "overrides": {},
+      "requested_timesteps": 4000000,
+      "actual_num_timesteps": 4014080,
+      "n_envs": 20,
+      "device": "cpu",
+      "total_wall_seconds": 2936.661257982254,
+      "final_checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed1_4014k.zip",
+      "final_checkpoint_sha256": "0213e9a9c8cd539b81a533527db6039b830fb10227db5acd281ad2c2cc1566a8",
+      "ppo_checkpoint_metadata": {
+        "num_timesteps": 4014080,
+        "_total_timesteps": 4000000,
+        "n_envs": 20,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "policy_kwargs": {},
+        "seed": 1,
+        "_n_updates": 980,
+        "clip_range": "ConstantSchedule(val=0.2)",
+        "ent_coef": 0.0,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "gae_lambda": 0.95,
+        "target_kl": null
+      },
+      "history": [
+        {
+          "requested_milestone": 250000,
+          "model_num_timesteps": 286720,
+          "val_mean_profit": 14497.050872773567,
+          "val_median_profit": 7782.445510039739,
+          "val_std_profit": 20158.6121006685,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 8636.164659766586,
+            "large_07c": 36273.64340180303,
+            "small_05c": 1112.532220620396,
+            "fast_375c": 11965.863208904266
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 9667.248009697749,
+            "QLD1": 12844.972441136215,
+            "TAS1": 7921.223185900847,
+            "SA1": 28935.71367537902,
+            "VIC1": 13116.097051754004
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed1_0286k.zip",
+          "checkpoint_sha256": "961b6311065e8dee533ea7658d73ebd39a40e4567d449e68bb212e4c901b48ba"
+        },
+        {
+          "requested_milestone": 500000,
+          "model_num_timesteps": 532480,
+          "val_mean_profit": 16249.797431561474,
+          "val_median_profit": 8068.069673385593,
+          "val_std_profit": 24836.18127375451,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 9491.409884499764,
+            "large_07c": 39664.98571270369,
+            "small_05c": 1232.4798734913625,
+            "fast_375c": 14610.314255551075
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 11135.573804468262,
+            "QLD1": 14037.065455523712,
+            "TAS1": 7537.221949214216,
+            "SA1": 35511.02324426076,
+            "VIC1": 13028.10270434041
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed1_0532k.zip",
+          "checkpoint_sha256": "cf9f098f2facdf449dffb7a82364753b405034d165b2a7cd6e4af19e7eec51dc"
+        },
+        {
+          "requested_milestone": 1000000,
+          "model_num_timesteps": 1024000,
+          "val_mean_profit": 21056.224821327567,
+          "val_median_profit": 14239.864053194702,
+          "val_std_profit": 26370.44918632512,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 11805.802044847145,
+            "large_07c": 48820.85905921196,
+            "small_05c": 1560.318832884469,
+            "fast_375c": 22037.91934836671
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 15685.646123492419,
+            "QLD1": 18857.439621942336,
+            "TAS1": 12459.035231839407,
+            "SA1": 38519.04227393552,
+            "VIC1": 19759.960855428173
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed1_1024k.zip",
+          "checkpoint_sha256": "9803c9af914a5ace219be5e70e0090aff2b3a52688cbad8a6cde9823b2634f8c"
+        },
+        {
+          "requested_milestone": 2000000,
+          "model_num_timesteps": 2007040,
+          "val_mean_profit": 25762.52076009528,
+          "val_median_profit": 19603.53879200893,
+          "val_std_profit": 27878.3905429432,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 14029.048491466514,
+            "large_07c": 55864.070579272564,
+            "small_05c": 1754.816127649742,
+            "fast_375c": 31402.14784199233
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 21586.57626582245,
+            "QLD1": 24868.039118413544,
+            "TAS1": 15719.513189669662,
+            "SA1": 41700.48013651807,
+            "VIC1": 24937.995090052696
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed1_2007k.zip",
+          "checkpoint_sha256": "596276bba8e9f484c6e4704f83044947c1a70e842b68260d8c5a00fbf536b04b"
+        },
+        {
+          "requested_milestone": 4000000,
+          "model_num_timesteps": 4014080,
+          "val_mean_profit": 40012.183784213885,
+          "val_median_profit": 36001.789222093605,
+          "val_std_profit": 36724.39613054527,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 21529.083460124384,
+            "large_07c": 82342.57421818585,
+            "small_05c": 2498.957656406486,
+            "fast_375c": 53678.119802138805
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 36837.63420636732,
+            "QLD1": 39087.844050337444,
+            "TAS1": 28722.96541713274,
+            "SA1": 54323.59327605297,
+            "VIC1": 41088.881971178955
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed1_4014k.zip",
+          "checkpoint_sha256": "0213e9a9c8cd539b81a533527db6039b830fb10227db5acd281ad2c2cc1566a8"
+        }
+      ]
+    },
+    "default_seed2": {
+      "seed": 2,
+      "config": "default",
+      "config_json": null,
+      "overrides": {},
+      "requested_timesteps": 4000000,
+      "actual_num_timesteps": 4014080,
+      "n_envs": 20,
+      "device": "cpu",
+      "total_wall_seconds": 3022.321391582489,
+      "final_checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed2_4014k.zip",
+      "final_checkpoint_sha256": "a2d16e6664c060ee0dd00deb08fc1e2ed0d8a12ff0d3b07095a74a58712f2926",
+      "ppo_checkpoint_metadata": {
+        "num_timesteps": 4014080,
+        "_total_timesteps": 4000000,
+        "n_envs": 20,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "policy_kwargs": {},
+        "seed": 2,
+        "_n_updates": 980,
+        "clip_range": "ConstantSchedule(val=0.2)",
+        "ent_coef": 0.0,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "gae_lambda": 0.95,
+        "target_kl": null
+      },
+      "history": [
+        {
+          "requested_milestone": 250000,
+          "model_num_timesteps": 286720,
+          "val_mean_profit": 11573.646682118278,
+          "val_median_profit": 5545.74268183491,
+          "val_std_profit": 18471.20293201872,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 6924.14049055427,
+            "large_07c": 28363.088614748627,
+            "small_05c": 830.3822063731919,
+            "fast_375c": 10176.975416797026
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 8137.9122532755555,
+            "QLD1": 10527.245573301705,
+            "TAS1": 5564.81564600755,
+            "SA1": 26253.011358561103,
+            "VIC1": 7385.248579445481
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed2_0286k.zip",
+          "checkpoint_sha256": "46f599fbdbfee7c6c327175d0d0acadda450c4daf15e4daf63131dec891b185c"
+        },
+        {
+          "requested_milestone": 500000,
+          "model_num_timesteps": 532480,
+          "val_mean_profit": 13144.95107246413,
+          "val_median_profit": 6385.168023920718,
+          "val_std_profit": 19064.833545901787,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 7403.150444175289,
+            "large_07c": 31185.893306986905,
+            "small_05c": 992.2955935737082,
+            "fast_375c": 12998.464945120617
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 9929.277355451282,
+            "QLD1": 13054.58855499344,
+            "TAS1": 5729.459768522225,
+            "SA1": 27054.4211360294,
+            "VIC1": 9957.008547324298
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed2_0532k.zip",
+          "checkpoint_sha256": "b9614a085e42d9905d87a43922ef3a7bf0cce7289e94442d56b2e169e7eaec8b"
+        },
+        {
+          "requested_milestone": 1000000,
+          "model_num_timesteps": 1024000,
+          "val_mean_profit": 20598.063341326353,
+          "val_median_profit": 13694.027830926827,
+          "val_std_profit": 26875.709300099166,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 11305.699812837409,
+            "large_07c": 44913.30192959066,
+            "small_05c": 1342.3398561428978,
+            "fast_375c": 24830.911766734436
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 15551.791699557172,
+            "QLD1": 18096.15959826412,
+            "TAS1": 10686.301181441886,
+            "SA1": 39431.5748315334,
+            "VIC1": 19224.489395835186
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed2_1024k.zip",
+          "checkpoint_sha256": "f0e9a99873fad52c856cfc435f4e0a4492aa6a5a71d06ae0fbcbd29a5ef51223"
+        },
+        {
+          "requested_milestone": 2000000,
+          "model_num_timesteps": 2007040,
+          "val_mean_profit": 28109.076135128864,
+          "val_median_profit": 21483.551849662625,
+          "val_std_profit": 31466.97829570628,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 15362.670551585627,
+            "large_07c": 58167.68638009091,
+            "small_05c": 1685.8636720565446,
+            "fast_375c": 37220.08393678236
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 23503.55590745816,
+            "QLD1": 24774.138685886963,
+            "TAS1": 16889.132670920124,
+            "SA1": 47753.16372026705,
+            "VIC1": 27625.389691112017
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed2_2007k.zip",
+          "checkpoint_sha256": "1d21df745b840c6a5334e413ecd57f9de1c64b6e2102f94bccd8a9a2b5b7653d"
+        },
+        {
+          "requested_milestone": 4000000,
+          "model_num_timesteps": 4014080,
+          "val_mean_profit": 43451.70677025811,
+          "val_median_profit": 41362.15499547809,
+          "val_std_profit": 39305.39205419212,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 23195.523933202545,
+            "large_07c": 85976.56965237085,
+            "small_05c": 2475.4917629553815,
+            "fast_375c": 62159.24173250366
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 41177.363998478984,
+            "QLD1": 42434.76375881923,
+            "TAS1": 30605.961445871988,
+            "SA1": 59354.559462602185,
+            "VIC1": 43685.88518551817
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/default_seed2_4014k.zip",
+          "checkpoint_sha256": "a2d16e6664c060ee0dd00deb08fc1e2ed0d8a12ff0d3b07095a74a58712f2926"
+        }
+      ]
+    },
+    "tuned_seed0": {
+      "seed": 0,
+      "config": "default",
+      "config_json": "models/aemo_sb3/ppo_retrain_20261125/optuna/best_params.json",
+      "overrides": {
+        "learning_rate": 0.0009197770682218488,
+        "gamma": 0.9760663067420267,
+        "clip_range": 0.21809493791874596,
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "n_steps": 512,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        }
+      },
+      "requested_timesteps": 4000000,
+      "actual_num_timesteps": 4003840,
+      "n_envs": 20,
+      "device": "cpu",
+      "total_wall_seconds": 5635.904574632645,
+      "final_checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed0_4003k.zip",
+      "final_checkpoint_sha256": "bf0d9cb284a50d562afa2f79736ec29b6a343c50ea2aedaa0ae1dda4c93094bf",
+      "ppo_checkpoint_metadata": {
+        "num_timesteps": 4003840,
+        "_total_timesteps": 4000000,
+        "n_envs": 20,
+        "n_steps": 512,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.9760663067420267,
+        "learning_rate": 0.0009197770682218488,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        },
+        "seed": 0,
+        "_n_updates": 3910,
+        "clip_range": "ConstantSchedule(val=0.21809493791874596)",
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "max_grad_norm": 0.5,
+        "gae_lambda": 0.95,
+        "target_kl": null
+      },
+      "history": [
+        {
+          "requested_milestone": 250000,
+          "model_num_timesteps": 256000,
+          "val_mean_profit": 15097.853353120849,
+          "val_median_profit": 9279.006549594063,
+          "val_std_profit": 21000.243236188642,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 8173.102213058007,
+            "large_07c": 27769.37716685488,
+            "small_05c": 772.9234449340306,
+            "fast_375c": 23676.01058763648
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 10767.73253243935,
+            "QLD1": 14168.508555242975,
+            "TAS1": 7854.154380237675,
+            "SA1": 32490.19893838896,
+            "VIC1": 10208.672359295291
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed0_0256k.zip",
+          "checkpoint_sha256": "24b519828e51219a19dbd53865ff7ec7f3cca510a38f82ee6202864c7d224182"
+        },
+        {
+          "requested_milestone": 500000,
+          "model_num_timesteps": 501760,
+          "val_mean_profit": 36318.94875051589,
+          "val_median_profit": 23534.11104070751,
+          "val_std_profit": 34443.20750037805,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 20028.773227017133,
+            "large_07c": 73174.57203641543,
+            "small_05c": 2085.6891806949684,
+            "fast_375c": 49986.76055793602
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 40785.52664485391,
+            "QLD1": 39200.6319131802,
+            "TAS1": 26529.73385232115,
+            "SA1": 51414.811553455576,
+            "VIC1": 23664.039788768576
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed0_0501k.zip",
+          "checkpoint_sha256": "fb5406578d8a184d4e6ee3475dcdf5d48c6f035846862a4ee179eb3f9158b4fa"
+        },
+        {
+          "requested_milestone": 1000000,
+          "model_num_timesteps": 1003520,
+          "val_mean_profit": 37628.99252686031,
+          "val_median_profit": 28118.026930324384,
+          "val_std_profit": 35855.077593841095,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 20929.54289632616,
+            "large_07c": 78951.07767093349,
+            "small_05c": 2422.077651326902,
+            "fast_375c": 48213.2718888547
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 33901.097176035575,
+            "QLD1": 36709.9106966885,
+            "TAS1": 34020.247659197645,
+            "SA1": 52942.363459794025,
+            "VIC1": 30571.343642585827
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed0_1003k.zip",
+          "checkpoint_sha256": "7f1b8231545fefcc651a2141619e07a04cc688535f1a858b4a892e930cf921b4"
+        },
+        {
+          "requested_milestone": 2000000,
+          "model_num_timesteps": 2007040,
+          "val_mean_profit": 39723.959638740766,
+          "val_median_profit": 23532.673029905156,
+          "val_std_profit": 36165.570414567585,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 21855.772074292297,
+            "large_07c": 79838.55375271513,
+            "small_05c": 2355.3654417685766,
+            "fast_375c": 54846.14728618704
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 40975.44572997879,
+            "QLD1": 41017.32794832214,
+            "TAS1": 34760.66768457242,
+            "SA1": 54039.911595202226,
+            "VIC1": 27826.445235628224
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed0_2007k.zip",
+          "checkpoint_sha256": "42aec2d57fa78e668758c1a62d2b102b81db1513a72eed1029c1220ad566f0ad"
+        },
+        {
+          "requested_milestone": 4000000,
+          "model_num_timesteps": 4003840,
+          "val_mean_profit": 41405.477205815645,
+          "val_median_profit": 29626.181260554724,
+          "val_std_profit": 34542.07787653914,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 22379.51692936893,
+            "large_07c": 80834.16149194121,
+            "small_05c": 2363.849443551828,
+            "fast_375c": 60044.38095840059
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 45343.212158302784,
+            "QLD1": 46303.62924735082,
+            "TAS1": 34715.72330198188,
+            "SA1": 48550.05174841391,
+            "VIC1": 32114.76957302879
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed0_4003k.zip",
+          "checkpoint_sha256": "bf0d9cb284a50d562afa2f79736ec29b6a343c50ea2aedaa0ae1dda4c93094bf"
+        }
+      ]
+    },
+    "tuned_seed1": {
+      "seed": 1,
+      "config": "default",
+      "config_json": "models/aemo_sb3/ppo_retrain_20261125/optuna/best_params.json",
+      "overrides": {
+        "learning_rate": 0.0009197770682218488,
+        "gamma": 0.9760663067420267,
+        "clip_range": 0.21809493791874596,
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "n_steps": 512,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        }
+      },
+      "requested_timesteps": 4000000,
+      "actual_num_timesteps": 4003840,
+      "n_envs": 20,
+      "device": "cpu",
+      "total_wall_seconds": 5419.719036817551,
+      "final_checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed1_4003k.zip",
+      "final_checkpoint_sha256": "a76f0150a61c65f1ab82c61092ecf25cbe0ab7cac407a6d91e24391ff2f043fa",
+      "ppo_checkpoint_metadata": {
+        "num_timesteps": 4003840,
+        "_total_timesteps": 4000000,
+        "n_envs": 20,
+        "n_steps": 512,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.9760663067420267,
+        "learning_rate": 0.0009197770682218488,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        },
+        "seed": 1,
+        "_n_updates": 3910,
+        "clip_range": "ConstantSchedule(val=0.21809493791874596)",
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "max_grad_norm": 0.5,
+        "gae_lambda": 0.95,
+        "target_kl": null
+      },
+      "history": [
+        {
+          "requested_milestone": 250000,
+          "model_num_timesteps": 256000,
+          "val_mean_profit": 21221.752695944764,
+          "val_median_profit": 14115.222160257137,
+          "val_std_profit": 25631.70474249488,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 12288.499341962708,
+            "large_07c": 46783.849558019836,
+            "small_05c": 1360.9197388057778,
+            "fast_375c": 24453.742144990745
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 17063.74875160927,
+            "QLD1": 20217.30949166417,
+            "TAS1": 12822.567941870479,
+            "SA1": 40637.02569777493,
+            "VIC1": 15368.111596804982
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed1_0256k.zip",
+          "checkpoint_sha256": "ce18fddd901bed17b53c5185286827cb55d2f34967f263fb0a006a8900789ebb"
+        },
+        {
+          "requested_milestone": 500000,
+          "model_num_timesteps": 501760,
+          "val_mean_profit": 33457.74206402304,
+          "val_median_profit": 24457.392175996618,
+          "val_std_profit": 32912.21534077663,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 19115.367986468318,
+            "large_07c": 70321.2290903482,
+            "small_05c": 2010.6801885675018,
+            "fast_375c": 42383.690990708135
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 33583.01044460521,
+            "QLD1": 36592.98838260939,
+            "TAS1": 22327.493866263,
+            "SA1": 49440.5681173928,
+            "VIC1": 25344.649509244795
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed1_0501k.zip",
+          "checkpoint_sha256": "63bbeafbbb426e211057c7c06cb96666ecfae02475c85c606c2de3ee5819fea8"
+        },
+        {
+          "requested_milestone": 1000000,
+          "model_num_timesteps": 1003520,
+          "val_mean_profit": 42855.293985742064,
+          "val_median_profit": 32769.87354624479,
+          "val_std_profit": 39983.011259608014,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 23920.10260496249,
+            "large_07c": 90763.50381919999,
+            "small_05c": 2704.8582127793634,
+            "fast_375c": 54032.711306026424
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 43364.19130180257,
+            "QLD1": 47130.83254138579,
+            "TAS1": 29586.54557699847,
+            "SA1": 57985.72952544625,
+            "VIC1": 36209.17098307723
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed1_1003k.zip",
+          "checkpoint_sha256": "d822f5a6280f68a0560e139809e7ed5f1e979fa3c67198f5f229de748bf3d065"
+        },
+        {
+          "requested_milestone": 2000000,
+          "model_num_timesteps": 2007040,
+          "val_mean_profit": 45038.773205118356,
+          "val_median_profit": 38308.9115184363,
+          "val_std_profit": 40885.37662758888,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 24364.147288869288,
+            "large_07c": 93475.12939660231,
+            "small_05c": 2880.2665229001677,
+            "fast_375c": 59435.54961210165
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 42257.75591900416,
+            "QLD1": 46082.085008549824,
+            "TAS1": 33846.68107172433,
+            "SA1": 59561.21733587982,
+            "VIC1": 43446.12669043363
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed1_2007k.zip",
+          "checkpoint_sha256": "e3971fce444eabdb21c49ab7f1a95c63f994dbb2d11c9a8d0476b0f4a062626f"
+        },
+        {
+          "requested_milestone": 4000000,
+          "model_num_timesteps": 4003840,
+          "val_mean_profit": 46668.20495798437,
+          "val_median_profit": 39393.40047223581,
+          "val_std_profit": 41174.49673601969,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 25528.84777535554,
+            "large_07c": 96483.51411805325,
+            "small_05c": 2858.2297774536955,
+            "fast_375c": 61802.228161075
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 46743.568228386735,
+            "QLD1": 51131.79641633388,
+            "TAS1": 34036.08274101622,
+            "SA1": 57167.3119461303,
+            "VIC1": 44262.26545805474
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed1_4003k.zip",
+          "checkpoint_sha256": "a76f0150a61c65f1ab82c61092ecf25cbe0ab7cac407a6d91e24391ff2f043fa"
+        }
+      ]
+    },
+    "tuned_seed2": {
+      "seed": 2,
+      "config": "default",
+      "config_json": "models/aemo_sb3/ppo_retrain_20261125/optuna/best_params.json",
+      "overrides": {
+        "learning_rate": 0.0009197770682218488,
+        "gamma": 0.9760663067420267,
+        "clip_range": 0.21809493791874596,
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "n_steps": 512,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        }
+      },
+      "requested_timesteps": 4000000,
+      "actual_num_timesteps": 4003840,
+      "n_envs": 20,
+      "device": "cpu",
+      "total_wall_seconds": 5583.410523176193,
+      "final_checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed2_4003k.zip",
+      "final_checkpoint_sha256": "24565c9abd40242775e1c8be0a1eabce5bbf8809adcd134e4ca0ef4f846e45cb",
+      "ppo_checkpoint_metadata": {
+        "num_timesteps": 4003840,
+        "_total_timesteps": 4000000,
+        "n_envs": 20,
+        "n_steps": 512,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.9760663067420267,
+        "learning_rate": 0.0009197770682218488,
+        "policy_kwargs": {
+          "net_arch": [
+            400,
+            300
+          ]
+        },
+        "seed": 2,
+        "_n_updates": 3910,
+        "clip_range": "ConstantSchedule(val=0.21809493791874596)",
+        "ent_coef": 3.271042702312801e-07,
+        "vf_coef": 0.46762666136247577,
+        "max_grad_norm": 0.5,
+        "gae_lambda": 0.95,
+        "target_kl": null
+      },
+      "history": [
+        {
+          "requested_milestone": 250000,
+          "model_num_timesteps": 256000,
+          "val_mean_profit": 25052.855655673186,
+          "val_median_profit": 19889.744150473427,
+          "val_std_profit": 22444.062140400933,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 13709.050458633807,
+            "large_07c": 51205.72207333568,
+            "small_05c": 1490.1322545382004,
+            "fast_375c": 33806.51783618504
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 31035.076031996206,
+            "QLD1": 31581.96997075882,
+            "TAS1": 23116.398471808672,
+            "SA1": 17609.641833970938,
+            "VIC1": 21921.191969831278
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed2_0256k.zip",
+          "checkpoint_sha256": "95fdf3a5e3cb9f9e80b3f264202173c16a3f176049050ba08b358f8461d01b03"
+        },
+        {
+          "requested_milestone": 500000,
+          "model_num_timesteps": 501760,
+          "val_mean_profit": 33798.89224987124,
+          "val_median_profit": 24699.920300651247,
+          "val_std_profit": 28709.298314893585,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 18258.118957070452,
+            "large_07c": 68095.31887697449,
+            "small_05c": 2064.070457892404,
+            "fast_375c": 46778.06070754766
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 40593.80643686248,
+            "QLD1": 41456.645401857866,
+            "TAS1": 30713.287129733784,
+            "SA1": 27373.55563813247,
+            "VIC1": 28857.16664276964
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed2_0501k.zip",
+          "checkpoint_sha256": "4de37bc24aa397832db5d453d954493fcac5ceca6ac607e93a623dbdaae857fa"
+        },
+        {
+          "requested_milestone": 1000000,
+          "model_num_timesteps": 1003520,
+          "val_mean_profit": 35244.701267765755,
+          "val_median_profit": 25504.83425364193,
+          "val_std_profit": 29795.476889226647,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 18769.730101136684,
+            "large_07c": 71097.71268388494,
+            "small_05c": 2388.5237054867553,
+            "fast_375c": 48722.83858055464
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 42408.7914291794,
+            "QLD1": 43405.24967610637,
+            "TAS1": 32315.02838562205,
+            "SA1": 29738.076702904335,
+            "VIC1": 28356.360145016628
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed2_1003k.zip",
+          "checkpoint_sha256": "7bb5f8541b2ce18385c907c6843a7ed564381f0d4825d2e3adad8af856571935"
+        },
+        {
+          "requested_milestone": 2000000,
+          "model_num_timesteps": 2007040,
+          "val_mean_profit": 37059.74546075915,
+          "val_median_profit": 26362.37617555962,
+          "val_std_profit": 31143.49758395619,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 19666.84890550466,
+            "large_07c": 74384.23991900815,
+            "small_05c": 2299.9579105029343,
+            "fast_375c": 51887.93510802085
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 44398.188334923914,
+            "QLD1": 45824.06026619109,
+            "TAS1": 33367.583815446866,
+            "SA1": 31608.313105357807,
+            "VIC1": 30100.581781876062
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed2_2007k.zip",
+          "checkpoint_sha256": "cf3277ce7a6d3582d5080f9cd850ba41455292465d7adb91f9ccc06d6b6c1aa5"
+        },
+        {
+          "requested_milestone": 4000000,
+          "model_num_timesteps": 4003840,
+          "val_mean_profit": 37194.58698446817,
+          "val_median_profit": 26852.36473923615,
+          "val_std_profit": 32272.286251408368,
+          "val_mean_profit_by_battery": {
+            "medium_1c": 19579.402481390836,
+            "large_07c": 69259.49912222815,
+            "small_05c": 1981.236268584328,
+            "fast_375c": 57958.21006566936
+          },
+          "val_mean_profit_by_region": {
+            "NSW1": 46732.268121131085,
+            "QLD1": 47841.95191648835,
+            "TAS1": 35365.36180663902,
+            "SA1": 27378.26659290612,
+            "VIC1": 28655.086485176274
+          },
+          "checkpoint": "models/aemo_sb3/ppo_retrain_20261125/tuned_seed2_4003k.zip",
+          "checkpoint_sha256": "24565c9abd40242775e1c8be0a1eabce5bbf8809adcd134e4ca0ef4f846e45cb"
+        }
+      ]
+    }
+  },
+  "statistics_summary": {
+    "method": "10,000-resample percentile bootstrap of the paired DT-PPO difference; paired Wilcoxon signed-rank; cell-level CI as in paper/audit/reproduce_significance.py, plus region-cluster and scenario-block cluster bootstrap sensitivities.",
+    "n_boot": 10000,
+    "seed": 42,
+    "full_statistics_file": "paper/audit/artifacts/ppo_retrain_stats_20261125.json",
+    "surfaces": {
+      "standard_year_2024": {
+        "n": 30,
+        "dt_mean": 16501.13635350861,
+        "ppo_mean": 8835.89057309366,
+        "ratio_of_means": 1.8675125293828938,
+        "ratio_of_means_ci": [
+          1.6615748411591305,
+          2.1171414048014303
+        ],
+        "diff_mean": 7665.245780414948,
+        "diff_ci": [
+          5933.927400774309,
+          9599.247438516442
+        ],
+        "win_rate": 0.9666666666666667,
+        "wilcoxon_p": 5.587935447692871e-09,
+        "primary_seed_tag": "tuned_seed0",
+        "dt_cells_source": "recomputed (identical to eval_output/physics_v2/standard_year_v2cal)",
+        "dt_dir": "eval_output/ppo_retrain_20261125/standard_year/tuned_seed0",
+        "region_cluster_diff_ci": [
+          5963.09863452889,
+          9662.107055963308
+        ],
+        "scenario_block_diff_ci": [
+          5973.562826503282,
+          9563.552036491905
+        ]
+      },
+      "dispatch_year_2024": {
+        "n": 12,
+        "dt_mean": 33790.621574875964,
+        "ppo_mean": 28113.99001745769,
+        "ratio_of_means": 1.2019148315089145,
+        "ratio_of_means_ci": [
+          0.8786484941973625,
+          1.8339176691068053
+        ],
+        "diff_mean": 5676.631557418265,
+        "diff_ci": [
+          -4955.607576078266,
+          13459.293161126046
+        ],
+        "win_rate": 0.8333333333333334,
+        "wilcoxon_p": 0.17626953125,
+        "primary_seed_tag": "tuned_seed0",
+        "dt_cells_source": "recomputed with fit_global_stats=true (identical to eval_output/physics_v2/dispatch_year_v2cal)",
+        "dt_dir": "eval_output/ppo_retrain_20261125/dispatch_year/tuned_seed0",
+        "region_cluster_diff_ci": [
+          5676.631557418265,
+          5676.631557418265
+        ],
+        "scenario_block_diff_ci": [
+          -4851.215579487373,
+          13485.463706634819
+        ]
+      },
+      "expanded_broad_2024": {
+        "n": 30,
+        "dt_mean": 29124.327433003637,
+        "ppo_mean": 13735.595112123707,
+        "ratio_of_means": 2.1203542471412167,
+        "ratio_of_means_ci": [
+          1.331687907610254,
+          3.66624635276612
+        ],
+        "diff_mean": 15388.732320879933,
+        "diff_ci": [
+          5501.191482400072,
+          30751.224226218674
+        ],
+        "win_rate": 0.9666666666666667,
+        "wilcoxon_p": 2.7623027563095093e-06,
+        "primary_seed_tag": "tuned_seed0",
+        "dt_cells_source": "shipped surface; 2-scenario spot check reproduced exactly",
+        "dt_dir": "eval_output/physics_v2/expanded_full_v2cal",
+        "region_cluster_diff_ci": [
+          5400.546049529388,
+          32037.123296440557
+        ],
+        "scenario_block_diff_ci": [
+          5132.920271237923,
+          30032.436610169418
+        ]
+      },
+      "2025_ood": {
+        "n": 6,
+        "dt_mean": 30791.3102794281,
+        "ppo_mean": 14922.126458795967,
+        "ratio_of_means": 2.0634666489693174,
+        "ratio_of_means_ci": [
+          1.165637537004314,
+          3.2653309851959986
+        ],
+        "diff_mean": 15869.183820632134,
+        "diff_ci": [
+          2490.5246722417905,
+          39453.23560535229
+        ],
+        "win_rate": 0.8333333333333334,
+        "wilcoxon_p": 0.0625,
+        "primary_seed_tag": "tuned_seed0",
+        "dt_cells_source": "recomputed (identical to eval_output/physics_v2/2025_v2cal_fresh)",
+        "dt_dir": "eval_output/ppo_retrain_20261125/fresh_2025/tuned_seed0",
+        "region_cluster_diff_ci": [
+          3285.8486021640115,
+          40864.47456948396
+        ],
+        "scenario_block_diff_ci": [
+          2325.4314567192937,
+          39661.91717714983
+        ]
+      }
+    },
+    "seed_level": {
+      "standard_year_2024": {
+        "tuned_seed0": {
+          "dt_mean": 16501.13635350861,
+          "ppo_mean": 8835.89057309366,
+          "ratio_of_means": 1.8675125293828938,
+          "diff_mean": 7665.245780414948,
+          "diff_ci": [
+            5933.927400774309,
+            9599.247438516442
+          ],
+          "win_rate": 0.9666666666666667,
+          "wilcoxon_p": 5.587935447692871e-09
+        },
+        "tuned_seed1": {
+          "dt_mean": 16501.13635350861,
+          "ppo_mean": 14179.925350011588,
+          "ratio_of_means": 1.1636969833198116,
+          "diff_mean": 2321.2110034970206,
+          "diff_ci": [
+            -1117.9236850386487,
+            5203.255504230416
+          ],
+          "win_rate": 0.8333333333333334,
+          "wilcoxon_p": 0.0007296018302440643
+        },
+        "tuned_seed2": {
+          "dt_mean": 16501.13635350861,
+          "ppo_mean": 6109.030178086242,
+          "ratio_of_means": 2.7011057193169528,
+          "diff_mean": 10392.106175422368,
+          "diff_ci": [
+            8467.12751764922,
+            12511.746258927424
+          ],
+          "win_rate": 1.0,
+          "wilcoxon_p": 1.862645149230957e-09
+        }
+      },
+      "dispatch_year_2024": {
+        "tuned_seed0": {
+          "dt_mean": 33790.621574875964,
+          "ppo_mean": 28113.99001745769,
+          "ratio_of_means": 1.2019148315089145,
+          "diff_mean": 5676.631557418265,
+          "diff_ci": [
+            -4955.607576078266,
+            13459.293161126046
+          ],
+          "win_rate": 0.8333333333333334,
+          "wilcoxon_p": 0.17626953125
+        },
+        "tuned_seed1": {
+          "dt_mean": 33790.621574875964,
+          "ppo_mean": 36777.7216680044,
+          "ratio_of_means": 0.9187796318626466,
+          "diff_mean": -2987.1000931284457,
+          "diff_ci": [
+            -19932.174243167145,
+            7482.784880577688
+          ],
+          "win_rate": 0.75,
+          "wilcoxon_p": 0.26611328125
+        },
+        "tuned_seed2": {
+          "dt_mean": 33790.621574875964,
+          "ppo_mean": 19317.992185520026,
+          "ratio_of_means": 1.7491787578319877,
+          "diff_mean": 14472.629389355936,
+          "diff_ci": [
+            11908.042389177135,
+            17416.423378048374
+          ],
+          "win_rate": 1.0,
+          "wilcoxon_p": 0.00048828125
+        }
+      },
+      "expanded_broad_2024": {
+        "tuned_seed0": {
+          "dt_mean": 29124.327433003637,
+          "ppo_mean": 13735.595112123707,
+          "ratio_of_means": 2.1203542471412167,
+          "diff_mean": 15388.732320879933,
+          "diff_ci": [
+            5501.191482400072,
+            30751.224226218674
+          ],
+          "win_rate": 0.9666666666666667,
+          "wilcoxon_p": 2.7623027563095093e-06
+        },
+        "tuned_seed1": {
+          "dt_mean": 29124.327433003637,
+          "ppo_mean": 31849.844111279534,
+          "ratio_of_means": 0.914426059080438,
+          "diff_mean": -2725.5166782758943,
+          "diff_ci": [
+            -10039.811008879582,
+            3080.8282665002916
+          ],
+          "win_rate": 0.6666666666666666,
+          "wilcoxon_p": 0.12413446232676506
+        },
+        "tuned_seed2": {
+          "dt_mean": 29124.327433003637,
+          "ppo_mean": 6056.534850877066,
+          "ratio_of_means": 4.80874429853005,
+          "diff_mean": 23067.79258212657,
+          "diff_ci": [
+            12022.351924880295,
+            39606.07440669943
+          ],
+          "win_rate": 1.0,
+          "wilcoxon_p": 1.862645149230957e-09
+        }
+      },
+      "2025_ood": {
+        "tuned_seed0": {
+          "dt_mean": 30791.3102794281,
+          "ppo_mean": 14922.126458795967,
+          "ratio_of_means": 2.0634666489693174,
+          "diff_mean": 15869.183820632134,
+          "diff_ci": [
+            2490.5246722417905,
+            39453.23560535229
+          ],
+          "win_rate": 0.8333333333333334,
+          "wilcoxon_p": 0.0625
+        },
+        "tuned_seed1": {
+          "dt_mean": 30791.3102794281,
+          "ppo_mean": 34801.54973371716,
+          "ratio_of_means": 0.884768365633908,
+          "diff_mean": -4010.23945428906,
+          "diff_ci": [
+            -9625.779560941546,
+            644.0570054618514
+          ],
+          "win_rate": 0.3333333333333333,
+          "wilcoxon_p": 0.5625
+        },
+        "tuned_seed2": {
+          "dt_mean": 30791.3102794281,
+          "ppo_mean": 7912.397012774745,
+          "ratio_of_means": 3.8915274637653834,
+          "diff_mean": 22878.91326665335,
+          "diff_ci": [
+            12638.653090419546,
+            41434.949631675256
+          ],
+          "win_rate": 1.0,
+          "wilcoxon_p": 0.03125
+        }
+      }
+    },
+    "impact_gate": {
+      "impact": "piecewise_merit_order",
+      "n_cells": 9,
+      "dt_mean": 212791.39761697245,
+      "ppo_mean": 94155.58953816752,
+      "ratio_of_means": 2.25999750690015,
+      "per_battery": {
+        "hornsdale": {
+          "ratio_of_means": 2.218048454191819,
+          "dt_mean": 266007.0999866996,
+          "ppo_mean": 119928.44407162581
+        },
+        "small": {
+          "ratio_of_means": 1.8701586573955846,
+          "dt_mean": 48098.05892261965,
+          "ppo_mean": 25718.70505874718
+        },
+        "torrens": {
+          "ratio_of_means": 2.3700477692032442,
+          "dt_mean": 324269.0339415981,
+          "ppo_mean": 136819.61948412962
+        }
+      },
+      "per_scenario_ratio_of_means": {
+        "sa1_nov_2024": 1.4395966338780688,
+        "sa1_oct_2024": 3.868641681514416,
+        "vic1_oct_2024": 2.4577838722902174
+      },
+      "diff_mean": 118635.80807880493,
+      "diff_ci": [
+        61165.761863642285,
+        183971.34933991075
+      ],
+      "ci_excludes_zero": true,
+      "win_rate": 1.0,
+      "n_cells_dt_wins": 9,
+      "wilcoxon_p": 0.00390625,
+      "scenario_cluster": {
+        "n_clusters": 3,
+        "cluster_means": {
+          "sa1_nov_2024": 63016.95211996319,
+          "sa1_oct_2024": 183178.2002361646,
+          "vic1_oct_2024": 109712.271880287
+        },
+        "diff_ci": [
+          63016.95211996319,
+          183178.2002361646
+        ],
+        "p_positive": 1.0
+      }
+    }
+  },
+  "shipped_reference_means": {
+    "old_ppo": {
+      "standard_year_2024": {
+        "mean": 4302.6788635102985,
+        "n": 30,
+        "source": "eval_output/physics_v2/standard_year_v2cal"
+      },
+      "dispatch_year_2024": {
+        "mean": 18817.57642451047,
+        "n": 12,
+        "source": "eval_output/physics_v2/dispatch_year_v2cal"
+      },
+      "expanded_broad_2024": {
+        "mean": 4349.789525512902,
+        "n": 30,
+        "source": "eval_output/physics_v2/expanded_full_v2cal"
+      },
+      "2025_ood": {
+        "mean": 4817.017667317296,
+        "n": 6,
+        "source": "eval_output/physics_v2/2025_v2cal_fresh"
+      }
+    },
+    "dt": {
+      "standard_year_2024": {
+        "mean": 16501.13635350861,
+        "n": 30,
+        "source": "eval_output/physics_v2/standard_year_v2cal"
+      },
+      "dispatch_year_2024": {
+        "mean": 33790.62157487596,
+        "n": 12,
+        "source": "eval_output/physics_v2/dispatch_year_v2cal"
+      },
+      "expanded_broad_2024": {
+        "mean": 29124.32743300364,
+        "n": 30,
+        "source": "eval_output/physics_v2/expanded_full_v2cal"
+      },
+      "2025_ood": {
+        "mean": 30791.3102794281,
+        "n": 6,
+        "source": "eval_output/physics_v2/2025_v2cal_fresh"
+      }
+    }
+  },
+  "extras": {
+    "impact_seed_summary": {
+      "seed0": {
+        "impact": "piecewise_merit_order",
+        "n_cells": 9,
+        "dt_mean": 212791.39761697245,
+        "ppo_mean": 94155.58953816752,
+        "ratio_of_means": 2.25999750690015,
+        "per_battery": {
+          "hornsdale": {
+            "ratio_of_means": 2.218048454191819,
+            "dt_mean": 266007.0999866996,
+            "ppo_mean": 119928.44407162581
+          },
+          "small": {
+            "ratio_of_means": 1.8701586573955846,
+            "dt_mean": 48098.05892261965,
+            "ppo_mean": 25718.70505874718
+          },
+          "torrens": {
+            "ratio_of_means": 2.3700477692032442,
+            "dt_mean": 324269.0339415981,
+            "ppo_mean": 136819.61948412962
+          }
+        },
+        "per_scenario_ratio_of_means": {
+          "sa1_nov_2024": 1.4395966338780688,
+          "sa1_oct_2024": 3.868641681514416,
+          "vic1_oct_2024": 2.4577838722902174
+        },
+        "diff_mean": 118635.80807880493,
+        "diff_ci": [
+          61165.761863642285,
+          183971.34933991075
+        ],
+        "ci_excludes_zero": true,
+        "win_rate": 1.0,
+        "n_cells_dt_wins": 9,
+        "wilcoxon_p": 0.00390625,
+        "scenario_cluster": {
+          "n_clusters": 3,
+          "cluster_means": {
+            "sa1_nov_2024": 63016.95211996319,
+            "sa1_oct_2024": 183178.2002361646,
+            "vic1_oct_2024": 109712.271880287
+          },
+          "diff_ci": [
+            63016.95211996319,
+            183178.2002361646
+          ],
+          "p_positive": 1.0
+        }
+      },
+      "seed1": {
+        "impact": "piecewise_merit_order",
+        "n_cells": 9,
+        "dt_mean": 212791.39761697245,
+        "ppo_mean": 233144.38381083973,
+        "ratio_of_means": 0.9127022239987537,
+        "per_battery": {
+          "hornsdale": {
+            "ratio_of_means": 0.8575914156768732,
+            "dt_mean": 266007.0999866996,
+            "ppo_mean": 310179.2941534373
+          },
+          "small": {
+            "ratio_of_means": 1.6185955737834867,
+            "dt_mean": 48098.05892261965,
+            "ppo_mean": 29715.921445521974
+          },
+          "torrens": {
+            "ratio_of_means": 0.9019049219098572,
+            "dt_mean": 324269.0339415981,
+            "ppo_mean": 359537.9358335599
+          }
+        },
+        "per_scenario_ratio_of_means": {
+          "sa1_nov_2024": 0.4927386552347207,
+          "sa1_oct_2024": 1.194982703656887,
+          "vic1_oct_2024": 2.5034200374730613
+        },
+        "diff_mean": -20352.98619386727,
+        "diff_ci": [
+          -138710.35563689662,
+          79173.81024379937
+        ],
+        "ci_excludes_zero": false,
+        "win_rate": 0.7777777777777778,
+        "n_cells_dt_wins": 7,
+        "wilcoxon_p": 0.5703125,
+        "scenario_cluster": {
+          "n_clusters": 3,
+          "cluster_means": {
+            "sa1_nov_2024": -212451.1045096557,
+            "sa1_oct_2024": 40307.92656714143,
+            "vic1_oct_2024": 111084.21936091245
+          },
+          "diff_ci": [
+            -212451.1045096557,
+            111084.21936091245
+          ],
+          "p_positive": 0.4192
+        }
+      },
+      "seed2": {
+        "impact": "piecewise_merit_order",
+        "n_cells": 9,
+        "dt_mean": 212791.39761697245,
+        "ppo_mean": 71867.48594172264,
+        "ratio_of_means": 2.960885507940615,
+        "per_battery": {
+          "hornsdale": {
+            "ratio_of_means": 2.925220568170934,
+            "dt_mean": 266007.0999866996,
+            "ppo_mean": 90935.74101081448
+          },
+          "small": {
+            "ratio_of_means": 1.992611785835661,
+            "dt_mean": 48098.05892261965,
+            "ppo_mean": 24138.198551529847
+          },
+          "torrens": {
+            "ratio_of_means": 3.2256422311311037,
+            "dt_mean": 324269.0339415981,
+            "ppo_mean": 100528.51826282356
+          }
+        },
+        "per_scenario_ratio_of_means": {
+          "sa1_nov_2024": 4.6037934473595765,
+          "sa1_oct_2024": 2.602149207346421,
+          "vic1_oct_2024": 2.438904091850818
+        },
+        "diff_mean": 140923.9116752498,
+        "diff_ci": [
+          81193.0440165172,
+          198815.62168849338
+        ],
+        "ci_excludes_zero": true,
+        "win_rate": 1.0,
+        "n_cells_dt_wins": 9,
+        "wilcoxon_p": 0.00390625,
+        "scenario_cluster": {
+          "n_clusters": 3,
+          "cluster_means": {
+            "sa1_nov_2024": 161542.91648400392,
+            "sa1_oct_2024": 152099.13834952711,
+            "vic1_oct_2024": 109129.68019221844
+          },
+          "diff_ci": [
+            109129.68019221844,
+            161542.91648400392
+          ],
+          "p_positive": 1.0
+        }
+      },
+      "seed1_cells": [
+        {
+          "battery": "hornsdale",
+          "scenario": "sa1_nov_2024",
+          "dt": 273777.7198820317,
+          "ppo_seed1": 605551.1110542082,
+          "ratio": 0.4521133144408077,
+          "dt_win": false
+        },
+        {
+          "battery": "hornsdale",
+          "scenario": "sa1_oct_2024",
+          "dt": 300767.8645561741,
+          "ppo_seed1": 238579.6273670182,
+          "ratio": 1.2606602997727414,
+          "dt_win": true
+        },
+        {
+          "battery": "hornsdale",
+          "scenario": "vic1_oct_2024",
+          "dt": 223475.715521893,
+          "ppo_seed1": 86407.14403908556,
+          "ratio": 2.586310634463345,
+          "dt_win": true
+        },
+        {
+          "battery": "small",
+          "scenario": "sa1_nov_2024",
+          "dt": 39585.213544925806,
+          "ppo_seed1": 34744.22946734984,
+          "ratio": 1.1393320315859985,
+          "dt_win": true
+        },
+        {
+          "battery": "small",
+          "scenario": "sa1_oct_2024",
+          "dt": 49276.84496439833,
+          "ppo_seed1": 27381.59228831475,
+          "ratio": 1.799634018560254,
+          "dt_win": true
+        },
+        {
+          "battery": "small",
+          "scenario": "vic1_oct_2024",
+          "dt": 55432.118258534814,
+          "ppo_seed1": 27021.94258090133,
+          "ratio": 2.051374289341927,
+          "dt_win": true
+        },
+        {
+          "battery": "torrens",
+          "scenario": "sa1_nov_2024",
+          "dt": 305743.2095080489,
+          "ppo_seed1": 616164.1159424154,
+          "ratio": 0.4962041793693526,
+          "dt_win": false
+        },
+        {
+          "battery": "torrens",
+          "scenario": "sa1_oct_2024",
+          "dt": 391056.02656471153,
+          "ppo_seed1": 354215.7367285267,
+          "ratio": 1.1040052318861808,
+          "dt_win": true
+        },
+        {
+          "battery": "torrens",
+          "scenario": "vic1_oct_2024",
+          "dt": 276007.8657520339,
+          "ppo_seed1": 108233.95482973747,
+          "ratio": 2.550104227330703,
+          "dt_win": true
+        }
+      ],
+      "default_seed0": {
+        "impact": "piecewise_merit_order",
+        "n_cells": 9,
+        "dt_mean": 212791.39761697245,
+        "ppo_mean": 48591.512578188594,
+        "ratio_of_means": 4.3791885933694665,
+        "per_battery": {
+          "hornsdale": {
+            "ratio_of_means": 4.457258702535191,
+            "dt_mean": 266007.0999866996,
+            "ppo_mean": 59679.528997363464
+          },
+          "small": {
+            "ratio_of_means": 4.047990737186133,
+            "dt_mean": 48098.05892261965,
+            "ppo_mean": 11881.95874085767
+          },
+          "torrens": {
+            "ratio_of_means": 4.369434135338324,
+            "dt_mean": 324269.0339415981,
+            "ppo_mean": 74213.04999634468
+          }
+        },
+        "per_scenario_ratio_of_means": {
+          "sa1_nov_2024": 4.874555142192561,
+          "sa1_oct_2024": 4.401180489604003,
+          "vic1_oct_2024": 3.909809657314094
+        },
+        "diff_mean": 164199.88503878386,
+        "diff_ci": [
+          98858.07994763194,
+          226651.33869498325
+        ],
+        "ci_excludes_zero": true,
+        "win_rate": 1.0,
+        "n_cells_dt_wins": 9,
+        "wilcoxon_p": 0.00390625,
+        "scenario_cluster": {
+          "n_clusters": 3,
+          "cluster_means": {
+            "sa1_nov_2024": 164032.8070766868,
+            "sa1_oct_2024": 190904.6425429393,
+            "vic1_oct_2024": 137662.20549672542
+          },
+          "diff_ci": [
+            137662.20549672542,
+            190904.6425429393
+          ],
+          "p_positive": 1.0
+        }
+      }
+    },
+    "default_config_4m_standard_surface": {
+      "mean": 13201.491258873857,
+      "n": 30,
+      "source": "eval_output/ppo_retrain_20261125/standard_year/default_seed0/heldout_metrics_by_scenario.csv"
+    }
+  }
+}
