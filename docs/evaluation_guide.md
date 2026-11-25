@@ -1,8 +1,9 @@
 # Evaluation Guide — Standardised Evaluation for AEMO Models
 
 > **Historical protocol:** the three tiers and checkpoint examples below
-> document the behaviour-cloning and fine-tuning experiments. For the shipped
-> v2cal model, use the extended configs in the [preprint reproduction guide](reproduction.md).
+> document the behaviour-cloning and fine-tuning experiments. For current v2cal
+> claims, use the [preprint reproduction guide](reproduction.md) and the seeded
+> 4M PPO audit; the old 204,800-step PPO numbers in this document are historical.
 
 This document defines a **standardised 3-tier evaluation system** so results are
 comparable apple-to-apple across any Decision Transformer model (legacy,
@@ -258,18 +259,16 @@ From actual results:
 surface** (5 regions × 6 periods, 5-min, `expanded_rtg10.json`) the modern v2
 DT earns **$4.6k/ep vs PPO's $15.0k** — the DT's "SOTA" was **surface-specific**
 (it won Oct-standard, dispatch-matched, and mild months like Jan, but lost
-broadly to PPO in FCAS-spike months due to FCAS under-bidding). **This finding
-was superseded by the Stage C standalone DT** (see `report.md §8.2.10`), which
-distilled an honest SDP-planning teacher and now beats PPO on **all 4 extended
-identity surfaces** (physics-v2 v2cal: standard 3.84×, dispatch 1.80×, expanded 6.70×, 2025
-OOD 6.39×; all four paired CIs exclude zero) and passes the impact gate (see `report.md §8.2.11`).
+broadly to PPO in FCAS-spike months due to FCAS under-bidding). Stage C
+subsequently improved FCAS capture, but the 2026-11-25 PPO retrain changes the
+ranking: tuned 4M seed-mean ratios are 1.70× / 1.20× / 1.69× / 1.60×, dispatch
+includes zero, and one PPO seed reverses three means. Impact is likewise
+seed-sensitive (0.91–2.96×).
 
-**Conclusion (updated Aug 2026):** the Stage C DT with `rtg_mode="auto"` now
-passes all required gates: standard, expanded, 2025 OOD, and impact. The
-methodology requirement (evaluate on all surfaces) remains valid — the Stage C
-DT is the first model to satisfy it. The canonical launch plan
-(`launch_aemo_training.py`) lists the broad surface in
-`recommended_evaluation_configs`.
+**Conclusion (updated Nov 2026):** evaluate every configured surface and report
+all PPO seeds. A higher point mean is not a pass/fail gate when seed and
+scenario uncertainty change the ordering. The canonical launch plan still lists
+the broad surface in `recommended_evaluation_configs`.
 
 ### RTG calibration is half the improvement
 

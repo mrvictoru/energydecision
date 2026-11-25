@@ -18,7 +18,7 @@ pipeline_tag: reinforcement-learning
 
 # AEMO SDP-Teacher Decision Transformer (planner-distilled, physics-v2)
 
-**The shipped / preferred model of the [energydecision](https://github.com/mrvictoru/energydecision) benchmark.** A standalone Decision Transformer distilled from an honest (non-clairvoyant), **degradation-aware** SDP-planning teacher — no solver in the control loop (the J_t(soc) prompt is precomputed) — that beats the PPO reference on **all four identity surfaces** and remains strong under the **market-impact** benchmark.
+**The shipped planner-distilled model of the [energydecision](https://github.com/mrvictoru/energydecision) benchmark.** A standalone Decision Transformer distilled from an honest (non-clairvoyant), **degradation-aware** SDP-planning teacher — no solver in the per-decision control loop (the J_t(soc) prompt is precomputed). Against three newly trained 4M-step PPO seeds it remains competitive, but the ranking is seed-sensitive: the corrected identity-surface seed-mean ratios are 1.70×, 1.20×, 1.69× and 1.60×, and the dispatch CI includes zero.
 
 > **2026-09 update (physics-v2):** this model was retrained on the corrected degradation/efficiency physics (round-trip efficiency 0.80, calendar aging, corrected rainflow C-rate units) and a **wear-calibrated teacher** (`--deg-calibration 0.12`, aligning the planner's per-step wear with the environment's realized per-cycle wear). See *Provenance* below. It supersedes the earlier `aemo_dt_sdp_jtsoc_fullcorpus.pt`.
 
@@ -33,15 +33,15 @@ pipeline_tag: reinforcement-learning
 
 ## Results (physics-v2 shipped model, `aemo_dt_sdp_jtsoc_v2cal.pt`, `rtg_mode="auto"`)
 
-| Surface | This model | PPO | Ratio vs PPO | n |
-|---|---:|---:|---:|---:|
-| Standard 2024 (5 regions × 6 periods) | **$16,501/ep** | $4,303 | **3.84×** | 30 |
-| Dispatch-matched (SA1 full-year) | **$33,791/ep** | $18,818 | 1.80× | 12 |
-| Expanded broad-2024 | **$29,124/ep** | $4,350 | 6.70× | 30 |
-| 2025 OOD | **$30,791/ep** | $4,817 | 6.39× | 6 |
-| Market impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.70× / torrens 4.67× | — | passes | 9 |
+| Surface | This model | Tuned 4M PPO, 3-seed mean | Ratio | Paired 95% CI on Δ | n |
+|---|---:|---:|---:|---:|---:|
+| Standard 2024 (5 regions × 6 periods) | **$16,501/ep** | $9,708 | 1.70× | [$4,996, $8,695] | 30 |
+| Dispatch-matched (SA1 full-year) | **$33,791/ep** | $28,070 | 1.20× | [−$1,769, $10,999] | 12 |
+| Expanded broad-2024 | **$29,124/ep** | $17,214 | 1.69× | [$6,787, $20,435] | 30 |
+| 2025 OOD | **$30,791/ep** | $19,212 | 1.60× | [$3,776, $24,888] | 6 |
+| Market impact (piecewise) | 8/9 seed-mean cell wins | $133,056 | 1.60× | Δ $79,736 [$29,842, $132,933] | 9 |
 
-All four identity surfaces beat PPO with paired-difference 95% CIs excluding zero. Methodology, the physics fixes, and the full experiment ladder: [report.md §8.2.10/§8.2.11](https://github.com/mrvictoru/energydecision/blob/main/report.md) and [docs/known_issues.md](https://github.com/mrvictoru/energydecision/blob/main/docs/known_issues.md).
+The seed-mean advantage is positive on the four identity means, but dispatch's CI includes zero and one PPO seed has higher surface mean on dispatch, expanded and 2025 OOD. Impact seed-specific ratios are 2.26×, 0.91× and 2.96×. Methodology and baseline audit: [the PPO retraining report](https://github.com/mrvictoru/energydecision/blob/main/paper/audit/ppo_retrain_20261125.md).
 
 ## Provenance: what changed in physics-v2
 

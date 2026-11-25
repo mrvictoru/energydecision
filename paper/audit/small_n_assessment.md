@@ -1,9 +1,9 @@
 # Small-n assessment — historical plan for expanding identity surfaces
 
 **Date:** 2026-09-22 · **Frozen release:** `preprint-v1`
-**Status (2026-09-22):** superseded. The recommended extended surfaces were run;
-current headline sample sizes are n=30 / 12 / 30 / 6 (see provenance E3 and
-`report.md` §8.2.11). The options below are retained as a planning record.
+**Status (2026-11-25):** doubly historical. The extended surfaces were run, but
+the old-PPO statistics below were later superseded by the three-seed 4M PPO
+retrain. They remain a record of the sample-size expansion, not current claims. The options below are retained as a planning record.
 **Question at the time:** the headline identity surfaces had n=5 / 6 / 27 / 6 scenario cells.
 How many more can each support from cached data, and at what cost?
 

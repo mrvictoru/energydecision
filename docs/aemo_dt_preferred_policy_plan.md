@@ -1,6 +1,12 @@
 # AEMO DT as Preferred Policy — Plan, Checklist & Session Diary — **ARCHIVED**
 
-> **STATUS:** Stages A–C are **DONE** and the shipped recommendation is now settled:
+> **2026-11-25 correction:** this archive's “preferred policy / 9/9 gate” conclusion
+> was based on a 204,800-step default PPO reference. It is superseded by the seeded
+> 4M PPO retrain; use `paper/audit/ppo_retrain_20261125.md` and
+> `ppo_retrain_seed_aggregate_20261125.json` for current claims. The historical
+> diary below is retained, not current validation.
+
+> **STATUS (historical):** Stages A–C are **DONE** and the shipped recommendation is now settled:
 > use **`rtg_mode="auto"`**. It reproduces the `j_t_soc` wins on **all 4 extended
 > identity surfaces** (physics-v2 v2cal, fresh: standard 3.84× n=30, dispatch 1.80× n=12,
 > expanded 6.70× n=30, 2025 OOD 6.39× n=6; all four paired CIs exclude zero) while

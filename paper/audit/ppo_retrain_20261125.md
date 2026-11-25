@@ -27,14 +27,27 @@ With the pre-specified primary checkpoint the DT still leads on the mean everywh
 advantage is **1.2–2.1×**, not 1.8–6.7×, and on the dispatch-matched surface the paired 95% CI
 includes zero. Across the three final seeds the ordering is **not stable**: seed 1 has a higher
 mean profit than the DT on dispatch-matched (0.92×), expanded (0.91×) and 2025 OOD (0.89×), and
-under the nine-cell market-impact gate seed 1 wins only 7/9 cells with a ratio of means of 0.913
-and a CI that includes zero.
+under the nine-cell market-impact stress test seed 1 wins only 7/9 cells with a ratio of means
+of 0.913 and a CI that includes zero.
 
-**Verdict: the manuscript's current claim is contradicted as stated ("beats PPO on all four
-identity surfaces, 1.8–6.7×") and weakened where it survives.** The claim "the standalone DT is
-the preferred policy" can still be defended on the pre-specified primary checkpoint, but not with
-the four-surface clean sweep or the impact-gate ratios printed in the preprint. A correction is
-needed before arXiv.
+For the corrected paper, PPO is averaged within each matched cell across all three tuned seeds.
+The canonical seed-aggregate results are `paper/audit/artifacts/ppo_retrain_seed_aggregate_20261125.json`:
+
+| Surface | DT A$/ep | PPO 3-seed mean | DT/PPO | paired Δ, 95% CI |
+|---|---:|---:|---:|---:|
+| Standard 2024 | 16,501 | 9,708 | 1.70× | +6,793 [4,996, 8,695] |
+| Dispatch-matched | 33,791 | 28,070 | 1.20× | +5,721 [−1,769, 10,999] |
+| Expanded broad-2024 | 29,124 | 17,214 | 1.69× | +11,910 [6,787, 20,435] |
+| 2025 OOD | 30,791 | 19,212 | 1.60× | +11,579 [3,776, 24,888] |
+
+Under impact, the corresponding seed-mean ratio is **1.60×**, with 8/9 cell wins and Δ
+A$79,736/episode [A$29,842, A$132,933]; seed-specific ratios are 2.26, 0.91 and 2.96.
+
+**Verdict (corrected 2026-11-25): the old “1.8–6.7×, all four CIs, 9/9 impact” wording is
+contradicted. The manuscript and public-facing result tables must instead report the three-seed
+spread above.** The DT remains competitive with a correctly trained PPO and leads on the
+conditional three-seed mean, but a universal preference or clean market-impact gate is not
+established.
 
 ---
 

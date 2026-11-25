@@ -223,10 +223,10 @@ code { font: inherit; overflow-wrap: anywhere; }
     <div class="wrap">
       <span class="kicker">AEMO / NEM · Grid-scale battery dispatch</span>
       <h1>Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch</h1>
-      <p>In simulations of Australia’s National Electricity Market (NEM), a Decision Transformer trained on a planner’s decisions earns more than a tuned PPO baseline on four held-out price-taking evaluations and passes a separate market-impact test.</p>
+      <p>In simulations of Australia’s National Electricity Market (NEM), a planner-distilled Decision Transformer remains competitive with a properly trained PPO baseline. A three-seed 4M-step retrain narrows the advantage and reveals material seed sensitivity; one PPO seed reverses three comparisons.</p>
       <p class="note">Simulator-based preprint by Hou Nam U (Victor) · Not peer reviewed</p>
       <div class="cta">
-        <a class="button primary" href="paper/manuscript/draft_paper_NeurIPS_2026.pdf">Read the preprint (PDF)</a>
+        <a class="button primary" href="paper/manuscript/draft_paper_NeurIPS_2026.pdf">Prior PDF — refresh pending</a>
         <a class="button" href="#results">See the evaluated results</a>
         <a class="button" href="#behavior">Explore the policy traces</a>
       </div>
@@ -380,12 +380,12 @@ code { font: inherit; overflow-wrap: anywhere; }
   <section id="results" aria-labelledby="results-title">
     <div class="wrap">
       <span class="kicker">Price-taking evaluation</span>
-      <h2 id="results-title">Higher mean simulated profit than PPO on all four surfaces</h2>
-      <p>In these “identity” tests, the battery does not change the prices it receives. We compare the Decision Transformer (DT) with tuned proximal policy optimisation (PPO). The evaluated configuration uses the state-dependent prompt, the branch selected by <code>auto</code> on these surfaces. Profit is in Australian dollars (A$) per episode, net of modelled degradation.</p>
-      <p><strong>Compare A$/episode within each row, not across rows:</strong> episode durations and battery specifications differ. <em>n</em> counts matched scenario cells, not independent regions; on the expanded and out-of-distribution (OOD) surfaces, multiple starts are averaged within each cell.</p>
+      <h2 id="results-title">Competitive means, material PPO seed sensitivity</h2>
+      <p>In these “identity” tests, the battery does not change the prices it receives. We compare the Decision Transformer (DT) with three independently seeded, validation-tuned 4M-step PPO checkpoints. The PPO column is the mean of the three checkpoints within each matched scenario cell; all seed means are also visible in the figure. The DT uses the state-dependent prompt selected by <code>auto</code> on these surfaces.</p>
+      <p><strong>Compare A$/episode within each row, not across rows:</strong> episode durations and battery specifications differ. <em>n</em> counts scenario cells, not independent regions. The intervals are conditional on the observed three PPO checkpoints and do not capture population uncertainty over seeds.</p>
       <figure class="paper-plot">
-        <a href="paper/manuscript/figures/fig1_main_results.pdf" aria-label="Open the full-size results figure (PDF)"><img src="paper/manuscript/figures/fig1_main_results.png" width="1916" height="785" loading="lazy" alt="Grouped bars compare DT and PPO within each surface. The paired difference and its confidence interval lie to the right of zero on all four surfaces. Exact values are in the table below."></a>
-        <figcaption class="note">Left: mean profit by policy with 95% bootstrap intervals on each mean. Right: confidence intervals on the paired differences, which are the primary statistical evidence. <a href="paper/manuscript/figures/fig1_main_results.pdf">Open the full-size figure (PDF)</a>.</figcaption>
+        <a href="paper/manuscript/figures/fig1_main_results.pdf" aria-label="Open the full-size results figure (PDF)"><img src="paper/manuscript/figures/fig1_main_results.png" width="1916" height="785" loading="lazy" alt="Grouped bars compare DT with the mean of three tuned PPO seeds on four surfaces. White points show seed means; the dispatch paired interval crosses zero."></a>
+        <figcaption class="note">Left: DT and three-seed PPO mean with cell-bootstrap intervals; white points are individual PPO seed means. Right: paired differences. Three intervals exclude zero; dispatch-matched includes zero. <a href="paper/manuscript/figures/fig1_main_results.pdf">Open the full-size figure (PDF)</a>.</figcaption>
       </figure>
       <figure class="identity">
         <p class="note scroll-hint">Scroll the table sideways to see every column.</p>
@@ -393,19 +393,19 @@ code { font: inherit; overflow-wrap: anywhere; }
           <!-- Provenance E3: stagec_v2cal_extended_significance.json, surface_sets.v2cal_extended.
                Ratios are computed from unrounded means. Teacher column: T1, teacher_retention.json. -->
           <table>
-            <caption>DT versus PPO by surface</caption>
+            <caption>DT versus 4M-step PPO three-seed mean by surface</caption>
             <thead>
-              <tr><th scope="col">Surface</th><th scope="col" class="num">n</th><th scope="col" class="num">DT<br>A$/episode</th><th scope="col" class="num">PPO<br>A$/episode</th><th scope="col">DT ÷ PPO</th><th scope="col" class="num">Paired difference<br>[95% CI], A$</th><th scope="col" class="num">DT as %<br>of teacher</th></tr>
+              <tr><th scope="col">Surface</th><th scope="col" class="num">n</th><th scope="col" class="num">DT<br>A$/episode</th><th scope="col" class="num">PPO mean<br>A$/episode</th><th scope="col">DT ÷ PPO</th><th scope="col" class="num">Paired difference<br>[95% CI], A$</th><th scope="col" class="num">DT as %<br>of teacher</th></tr>
             </thead>
             <tbody>
-              <tr><th scope="row">Standard 2024</th><td class="num">30</td><td class="num">16,501</td><td class="num">4,303</td><td><span class="ratio"><meter min="0" max="7" value="3.84" aria-hidden="true"></meter>3.84×</span></td><td class="num">+12,198<br>[9,181, 14,738]</td><td class="num">77%</td></tr>
-              <tr><th scope="row">Dispatch-matched</th><td class="num">12</td><td class="num">33,791</td><td class="num">18,818</td><td><span class="ratio"><meter min="0" max="7" value="1.80" aria-hidden="true"></meter>1.80×</span></td><td class="num">+14,973<br>[4,794, 22,663]</td><td class="num">70%</td></tr>
-              <tr><th scope="row">Expanded broad-2024</th><td class="num">30</td><td class="num">29,124</td><td class="num">4,350</td><td><span class="ratio"><meter min="0" max="7" value="6.70" aria-hidden="true"></meter>6.70×</span></td><td class="num">+24,775<br>[13,509, 41,434]</td><td class="num">132%</td></tr>
-              <tr><th scope="row">2025 OOD</th><td class="num">6</td><td class="num">30,791</td><td class="num">4,817</td><td><span class="ratio"><meter min="0" max="7" value="6.39" aria-hidden="true"></meter>6.39×</span></td><td class="num">+25,974<br>[12,708, 49,850]</td><td class="num">276%</td></tr>
+              <tr><th scope="row">Standard 2024</th><td class="num">30</td><td class="num">16,501</td><td class="num">9,708</td><td><span class="ratio"><meter min="0" max="3" value="1.70" aria-hidden="true"></meter>1.70×</span></td><td class="num">+6,793<br>[4,996, 8,695]</td><td class="num">77%</td></tr>
+              <tr><th scope="row">Dispatch-matched</th><td class="num">12</td><td class="num">33,791</td><td class="num">28,070</td><td><span class="ratio"><meter min="0" max="3" value="1.20" aria-hidden="true"></meter>1.20×</span></td><td class="num">+5,721<br>[−1,769, 10,999]</td><td class="num">70%</td></tr>
+              <tr><th scope="row">Expanded broad-2024</th><td class="num">30</td><td class="num">29,124</td><td class="num">17,214</td><td><span class="ratio"><meter min="0" max="3" value="1.69" aria-hidden="true"></meter>1.69×</span></td><td class="num">+11,910<br>[6,787, 20,435]</td><td class="num">132%</td></tr>
+              <tr><th scope="row">2025 OOD</th><td class="num">6</td><td class="num">30,791</td><td class="num">19,212</td><td><span class="ratio"><meter min="0" max="3" value="1.60" aria-hidden="true"></meter>1.60×</span></td><td class="num">+11,579<br>[3,776, 24,888]</td><td class="num">276%</td></tr>
             </tbody>
           </table>
         </div>
-        <figcaption class="note">All four paired-difference 95% bootstrap confidence intervals exclude zero. Bars show the ratio of unrounded mean profits, not the share of cells won. The teacher column compares aggregate student and planner profit on the same surface; the study does not isolate why this retention varies by surface.</figcaption>
+        <figcaption class="note">Three paired cell-bootstrap intervals exclude zero; dispatch-matched includes zero. Individual PPO seed means are shown in the figure, and one seed reverses three surface rankings. The teacher column is a separate comparison, not part of the PPO statistic.</figcaption>
       </figure>
       <p>Dispatch-matched also includes a replay of recorded Dalrymple North dispatch in the simulator. The mean profit favours the DT, but the paired bootstrap interval includes zero. This is supporting evidence, not a settlement backtest. <a href="#behavior">Explore the matched rollouts</a>.</p>
     </div>
@@ -461,30 +461,30 @@ code { font: inherit; overflow-wrap: anywhere; }
         <p id="trace-reading" class="trace-reading"></p>
         <p id="trace-note" class="note architecture-note"></p>
       </div>
-      <p class="note architecture-note">Source: the shipped v2cal dispatch-matched runs cited in provenance E3 and D2. <a id="trace-data" href="website-assets/dispatch-v2cal.json">Download the plotted series (JSON)</a>.</p>
+      <p class="note architecture-note">Source: the historical shipped-v2cal dispatch-matched traces cited in provenance E3 and D2. Their PPO trace is the old 204,800-step reference retained for qualitative inspection, not the corrected three-seed 4M PPO comparator used in the headline table. <a id="trace-data" href="website-assets/dispatch-v2cal.json">Download the plotted series (JSON)</a>.</p>
     </div>
   </section>
 
   <section id="impact" aria-labelledby="impact-title">
     <div class="wrap">
-      <span class="kicker">Market-impact gate</span>
-      <h2 id="impact-title">The fixed fallback beats PPO under modelled price impact</h2>
-      <p>The impact model adjusts the simulated energy price with a piecewise merit-order curve and reduces FCAS prices according to battery enablement relative to estimated market depth. It changes the battery’s settlement prices, not the dispatch of the whole market.</p>
-      <!-- Provenance C3–C5: stagec_v2cal_impact_analysis.json, v2cal_shipped_fixed_rtg0. -->
-      <p>The shipped <code>rtg0.0</code> fallback beats PPO in <strong>9/9 scenario–battery cells</strong>. The paired mean advantage is <strong>A$167,099 per episode</strong> (95% bootstrap CI [A$101,213, A$227,362]; paired Wilcoxon <var>p</var> = 0.0039).</p>
+      <span class="kicker">Market-impact stress test</span>
+      <h2 id="impact-title">Price impact is sensitive to the PPO checkpoint</h2>
+      <p>The impact model adjusts the simulated energy price with a piecewise merit-order curve and reduces FCAS prices according to battery enablement relative to estimated market depth. It is an approximation, not a full market re-clear.</p>
+      <!-- 2026-11-25: ppo_retrain_seed_aggregate_20261125.json and impact seed outputs. -->
+      <p>Against the within-cell mean of the three new PPO seeds, the shipped <code>rtg0.0</code> fallback wins <strong>8/9 scenario–battery cells</strong> by a mean <strong>A$79,736 per episode</strong> (95% bootstrap CI [A$29,842, A$132,933]). But PPO seed-specific DT/PPO ratios are <strong>2.26×, 0.91× and 2.96×</strong>, so there is no stable universal gate pass.</p>
       <figure class="impact">
         <div class="table-wrap">
           <table>
-            <caption>Fixed-fallback DT ÷ PPO profit under modelled market impact</caption>
+            <caption>Fixed-fallback DT ÷ three-seed PPO mean under modelled market impact</caption>
             <thead><tr><th scope="col">Battery</th><th scope="col">Ratio of means</th></tr></thead>
             <tbody>
-              <tr><th scope="row">Small</th><td><span class="ratio"><meter min="0" max="7" value="4.36" aria-hidden="true"></meter>4.36×</span></td></tr>
-              <tr><th scope="row">Hornsdale-class</th><td><span class="ratio"><meter min="0" max="7" value="4.70" aria-hidden="true"></meter>4.70×</span></td></tr>
-              <tr><th scope="row">Torrens Island-class</th><td><span class="ratio"><meter min="0" max="7" value="4.67" aria-hidden="true"></meter>4.67×</span></td></tr>
+              <tr><th scope="row">Small</th><td><span class="ratio"><meter min="0" max="3" value="1.81" aria-hidden="true"></meter>1.81×</span></td></tr>
+              <tr><th scope="row">Hornsdale-class</th><td><span class="ratio"><meter min="0" max="3" value="1.53" aria-hidden="true"></meter>1.53×</span></td></tr>
+              <tr><th scope="row">Torrens Island-class</th><td><span class="ratio"><meter min="0" max="3" value="1.63" aria-hidden="true"></meter>1.63×</span></td></tr>
             </tbody>
           </table>
         </div>
-        <figcaption class="note">The ratio divides the two policies’ mean profits for a battery. It is not the mean of per-cell ratios, and no prompt was chosen after seeing a cell’s result.</figcaption>
+        <figcaption class="note">These are ratios to the within-battery mean of the three tuned PPO checkpoints. Across individual seeds, the overall ratio ranges from 0.91× to 2.96×.</figcaption>
       </figure>
     </div>
   </section>
@@ -499,7 +499,7 @@ code { font: inherit; overflow-wrap: anywhere; }
         <li><strong>Uncertainty:</strong> some surfaces have few cells and cells from the same region may be correlated. The paired intervals are the primary statistical evidence; they do not imply that every cell favours the DT.</li>
         <li><strong>Open ablation and reproduction caveat:</strong> the study does not isolate whether the planner-value prompt improves on reward-derived return conditioning on the same corpus. The scaling recorded in the checkpoint sidecar is authoritative for inference but does not reproduce exactly from the available corpus.</li>
       </ul>
-      <p class="note">See §7 of the <a href="paper/manuscript/draft_paper_NeurIPS_2026.pdf">preprint</a> and the <a href="https://github.com/mrvictoru/energydecision/blob/main/docs/known_issues.md">modelling caveats</a>.</p>
+      <p class="note">See §7 of the <a href="https://github.com/mrvictoru/energydecision/blob/main/paper/manuscript/main.tex">current manuscript source</a> and the <a href="https://github.com/mrvictoru/energydecision/blob/main/docs/known_issues.md">modelling caveats</a>.</p>
     </div>
   </section>
 
@@ -509,7 +509,7 @@ code { font: inherit; overflow-wrap: anywhere; }
       <h2 id="artifacts-title">Read, inspect or reproduce</h2>
       <div class="grid">
         <a class="card" href="paper/manuscript/draft_paper_NeurIPS_2026.pdf">
-          <h3>Latest preprint (PDF)</h3><p class="note">Method, evaluation, limitations and appendices.</p>
+          <h3>Prior preprint PDF</h3><p class="note">Still needs the 2026-11-25 baseline-correction render.</p>
         </a>
         <a class="card" href="https://github.com/mrvictoru/energydecision/blob/main/paper/manuscript/main.tex">
           <h3>LaTeX source</h3><p class="note">The manuscript behind the preprint.</p>

@@ -1,7 +1,12 @@
 # Phase 0 Provenance Audit — AEMO Stage C (shipped physics-v2 v2cal)
 
+> **2026-11-25 supersession:** this audit remains valid for the historical
+> 204,800-step PPO comparison, but its identity and impact multipliers are no
+> longer current paper claims. The corrected three-seed 4M PPO evidence is in
+> `ppo_retrain_20261125.md` and `ppo_retrain_seed_aggregate_20261125.json`.
+
 **Date:** 2026-09-21
-**Auditor scope:** every AEMO headline number that would appear in the preprint
+**Auditor scope (at that date):** every AEMO headline number that would appear in the preprint
 **Repo HEAD:** `b3a2fd9` (b3a2fd91cee1ab49ec675ddbdc7fbc748e846ac2)
 **Note on provenance:** `eval_output/` is `.gitignore`d, so artifacts are pinned here by
 path + mtime + sha256 rather than git SHA.

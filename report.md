@@ -1,12 +1,21 @@
 # energydecision companion technical report
 
-This report records experiments at different stages of the AEMO and household benchmarks. It is not the preprint; historical results use different checkpoints, protocols and simulator physics. For the current AEMO paper, read [Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch](paper/manuscript/draft_paper_NeurIPS_2026.pdf), the [manuscript](paper/manuscript/main.tex) and the [provenance table](paper/audit/provenance.tsv). For the separate household benchmark, start with the [household guide](docs/household/README.md).
+This report records experiments at different stages of the AEMO and household benchmarks. It is not the preprint; historical results use different checkpoints, protocols and simulator physics. The checked-in PDF predates the 2026-11-25 baseline correction and awaits a fresh Overleaf render; the current claims are in [the manuscript source](paper/manuscript/main.tex) and [provenance table](paper/audit/provenance.tsv). For the separate household benchmark, start with the [household guide](docs/household/README.md).
+
+> **2026-11-25 baseline correction.** The original PPO comparator was a 204,800-step,
+> unseeded default checkpoint, not the tuned 4M baseline described in older sections.
+> A leakage-free retrain produced three tuned 4M PPO seeds. The corrected headline is
+> 1.70× / 1.20× / 1.69× / 1.60× DT over the within-cell PPO seed mean; dispatch includes
+> zero. Under market impact the seed-mean ratio is 1.60× (8/9 wins), but seed-specific
+> ratios span 0.91–2.96×. Sections retaining old numbers are historical audit evidence,
+> not current claims. See `paper/audit/ppo_retrain_20261125.md` and
+> `ppo_retrain_seed_aggregate_20261125.json`.
 
 ## Abstract
 
 Optimal operation of grid-scale battery energy storage (BESS) in wholesale electricity markets requires simultaneous energy arbitrage and co-optimized bidding across multiple ancillary-service markets, under non-linear degradation and strict physical constraints. This report asks whether a **decision transformer (DT)** trained purely offline from logged trajectories can match or exceed online reinforcement learning (RL) and real-world dispatch for this problem. We answer this on a unified, degradation-aware benchmark built around Australia's NEM market (AEMO), supporting both a household solar–battery environment and a utility-scale BESS trading environment with full 9-dimensional FCAS bidding.
 
-The **standalone AEMO Decision Transformer**, shipped with **surface-aware `rtg_mode="auto"`**, earns higher mean profit than tuned PPO on all four extended price-taking surfaces (§8.2.11). All four paired-difference 95% confidence intervals exclude zero. The same checkpoint passes the separate simulated market-impact gate with the fixed `rtg0.0` fallback.
+The **standalone AEMO Decision Transformer**, shipped with **surface-aware `rtg_mode="auto"`**, remains competitive with a corrected, tuned 4M-step PPO baseline. Averaging PPO within each matched cell across three seeds gives DT/PPO ratios of 1.70× / 1.20× / 1.69× / 1.60×; the dispatch interval includes zero and one PPO seed reverses three surface means. The impact seed-mean ratio is 1.60×, while seed-specific ratios span 0.91–2.96×. See §8.2.0 and the dated PPO retraining audit.
 
 Earlier runs trained on logs from reinforcement-learning policies; the tested variants did not close the FCAS-bidding gap to PPO (§8.2.1a and §8.2.10). The shipped policy distils a non-clairvoyant planning teacher and is conditioned on a state-dependent value derived from its precomputed cost-to-go, not on realised returns. The planner is not called in the online action loop. The fallback is a robustness choice, not a result about all market regimes or evidence of live-market readiness.
 
@@ -29,14 +38,14 @@ Recent review work supports this benchmark direction: Subramanya et al. [6] note
 
 This report is organized around three falsifiable questions, each answered by the experiments in Section 8:
 
-- **RQ1 — Offline vs online RL.** Can a Decision Transformer trained *offline* from behavior-cloned trajectories match or exceed *online* RL (PPO) and real-world dispatch for multi-market BESS dispatch? (Answer: yes, and not only on narrow surfaces — §8.2.1, §8.2.3; on all four canonical identity surfaces plus the impact gate via teacher distillation, §8.2.10.)
+- **RQ1 — Offline vs online RL.** Can a Decision Transformer trained *offline* from behavior-cloned trajectories match or exceed *online* RL (PPO) and real-world dispatch for multi-market BESS dispatch? (Answer: it is competitive with a correctly trained PPO on the tested surfaces, but the ranking is seed- and protocol-sensitive; one PPO seed reverses three surface means, and dispatch and impact are not decisive. See the 2026-11-25 PPO audit.)
 - **RQ2 — Does online fine-tuning help a strong offline model?** Does GRPO online RL fine-tuning further improve an already-strong offline DT? (Answer: no — §8.2.1, §8.2.7; the apparent GRPO gain is a narrow overfit.)
 - **RQ3 — Is optimal prompting architecture-dependent?** Can the profit/degradation operating point be tuned at inference time, and does the optimal return-to-go prompt transfer across architectures? (Answer: yes for tunability, no for transfer — §8.2.2.)
 - **RQ4 — Can the offline-data ceiling be broken without online RL or clairvoyant solvers?** The ceiling of §8.2.1a is a behaviour-cloning limit: skills missing from the tested logged data (FCAS spike bidding) were not cloned. (Answer: yes — distilling an honest dynamic-programming-based planning teacher into the DT breaks it, and state-dependent J_t(soc) prompting recovers energy arbitrage; §8.2.10.)
 
 ### 1.3 Contributions and Research Goals
 This work establishes a consolidated, reproducible benchmark to address these limitations. The contributions, in priority order, are:
-1.  **A best-performing offline Decision Transformer for utility-scale BESS dispatch** — a modernized 8×768 GQA transformer, distilled from an honest SDP-planning teacher and prompted with state-dependent J_t(soc) cost-to-go, beating online RL (PPO) on all four canonical identity surfaces while passing the market-impact gate (§4.2, §8.2, §8.2.10).
+1.  **A planner-distilled offline Decision Transformer for utility-scale BESS dispatch** — a modernized 8×768 GQA transformer prompted with state-dependent J_t(soc) cost-to-go. It is competitive with a corrected three-seed 4M PPO baseline, while the seed-sensitive evaluation shows why a universal superiority claim is not supported (§4.2, §8.2.0, PPO retraining audit).
 2.  **A rigorous same-asset evaluation methodology** that removes the battery-sizing confounder from dispatch-replay comparisons, plus RTG calibration and an overfitting post-mortem for narrow benchmarks (§8.2.1, §8.2.2).
 3.  **Two Gymnasium-Compatible Simulation Environments:** (a) household solar+battery under ToU pricing and (b) grid-scale AEMO/NEM trading with full FCAS and historical dispatch replay.
 4.  **Baselines as Comparators and Data Sources:** a unified interface for rule-based, SDP/MRDP, online RL (SB3), and dispatch-replay policies, also used to generate offline training data.
@@ -459,7 +468,7 @@ This section presents the empirical evaluation of the Decision Transformer (DT) 
 | Environment | Best DT Result | Key Advantage |
 |-------------|---------------|---------------|
 | Household — legacy Ausgrid (SolarBatteryEnv) | **Best mean return** (-2408) vs Oracle on the legacy benchmark | 1D action, degradation-aware cycling; the modern 2019+ rebuild reverses the Oracle ordering (§8.1.1, §8.1.2) |
-| AEMO utility-scale (AEMOBatteryTradingEnv) | **Best profit/ep on all 4 identity surfaces + impact gate** ($16.5k standard-2024 / $33.8k dispatch-matched / $29.1k expanded-2024 / $30.8k 2025 OOD vs PPO $4.3k / $18.8k / $4.4k / $4.8k; n=30/12/30/6, all four paired CIs exclude zero), via SDP-teacher distillation + J_t(soc) prompting under `rtg_mode="auto"` (§8.2.11) | 9D full-fcas bidding, planner-distilled training data, state-dependent RTG, modern architecture (GQA/RMSNorm) |
+| AEMO utility-scale (AEMOBatteryTradingEnv) | Planner-distilled v2cal DT vs corrected three-seed 4M PPO: seed-mean DT/PPO **1.70× / 1.20× / 1.69× / 1.60×** (n=30/12/30/6); dispatch CI includes zero, and seed 1 reverses three means. Impact seed-mean 1.60×, seed ratios 0.91–2.96× (§8.2.0, PPO audit). | 9D full-FCAS, solver-free-per-decision execution, planner-distilled data, state-dependent RTG, explicit baseline sensitivity |
 
 ### 8.1 Household Solar-Battery Control (Legacy Ausgrid Benchmark)
 
@@ -724,17 +733,17 @@ The AEMO environment evaluates grid-scale battery trading in Australia's Nationa
 
 #### 8.2.0 Headline Result and How to Read This Section
 
-**Current recommended policy (shipped):** the standalone physics-v2 Stage C Decision Transformer (`models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt`) run with **`rtg_mode="auto"`** — wear-calibrated SDP-teacher distillation plus state-dependent `J_t(soc)` prompting, falling back to constant RTG under market impact. It is the only verified setting that beats PPO on all four identity surfaces *and* passes the market-impact gate. (The earlier v1 checkpoint `aemo_dt_sdp_jtsoc_fullcorpus.pt` and its numbers are superseded; §8.2.11.)
+**Current evaluated policy (shipped):** the standalone physics-v2 Stage C Decision Transformer (`models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt`) run with **`rtg_mode="auto"`**. It is the planner-distilled candidate, not an unconditionally preferred policy. The corrected PPO comparison uses three Optuna-tuned checkpoints trained for 4,003,840 steps and averages their profit within each matched cell.
 
-| Surface | Stage C DT (`auto`, physics-v2) | PPO | Ratio | n |
-|---|---:|---:|---:|---:|
-| Standard 2024 (5 regions × 6 periods) | **$16,501** | $4,303 | 3.84× | 30 |
-| Dispatch-matched (SA1 full-year) | **$33,791** | $18,818 | 1.80× | 12 |
-| Expanded broad-2024 | **$29,124** | $4,350 | 6.70× | 30 |
-| 2025 OOD | **$30,791** | $4,817 | 6.39× | 6 |
-| Impact gate (piecewise merit-order, fixed `rtg0.0` fallback) | **4.36× / 4.70× / 4.67× PPO (9/9 cells)** | — | PASS | 9 |
+| Surface | Stage C DT | PPO 3-seed mean | Ratio | paired Δ [95% CI] | n |
+|---|---:|---:|---:|---:|---:|
+| Standard 2024 (5 regions × 6 periods) | **$16,501** | $9,708 | 1.70× | +$6,793 [$4,996, $8,695] | 30 |
+| Dispatch-matched (SA1 full-year) | **$33,791** | $28,070 | 1.20× | +$5,721 [−$1,769, $10,999] | 12 |
+| Expanded broad-2024 | **$29,124** | $17,214 | 1.69× | +$11,910 [$6,787, $20,435] | 30 |
+| 2025 OOD | **$30,791** | $19,212 | 1.60× | +$11,579 [$3,776, $24,888] | 6 |
+| Impact stress test (piecewise, fixed `rtg0.0`) | **$212,791** | $133,056 | 1.60× | +$79,736 [$29,842, $132,933]; 8/9 wins | 9 |
 
-On the fresh physics-v2 v2cal surfaces, **all four** identity-surface paired-difference 95% bootstrap CIs exclude zero (Δ = +$12,198 [9,181, 14,738] standard; +$14,973 [4,794, 22,663] dispatch; +$24,775 [13,509, 41,434] expanded; +$25,974 [12,708, 49,850] 2025 OOD; paired Wilcoxon p = 2.3e-6 / 0.027 / 3.7e-9 / 0.031). These extended surfaces (standard n=30, dispatch n=12, expanded n=30) supersede the earlier small-n single-month surfaces; see §8.2.11 and `paper/audit/small_n_assessment.md`. The v1 Stage C paired-statistics run is in §8.2.10. Full derivation and the impact-mode failure analysis: **§8.2.10**; the shipped physics-v2 numbers: **§8.2.11**.
+The three individual PPO seed means span $6,109–14,180 (standard), $19,318–36,778 (dispatch), $6,057–31,850 (expanded), and $7,912–34,802 (OOD). Seed 1 has the higher surface mean on dispatch, expanded and OOD. Under impact, seed-specific DT/PPO ratios are 2.26, 0.91 and 2.96. The conditional cell-bootstrap intervals quantify the observed scenario set, not population uncertainty over PPO seeds. See `paper/audit/ppo_retrain_20261125.md` and `paper/audit/artifacts/ppo_retrain_seed_aggregate_20261125.json`.
 
 **How to read this section.** The subsections are ordered chronologically, because the failed attempts and negative results are themselves evidence. The status of each:
 
@@ -847,9 +856,10 @@ lower FCAS.
 > pure behaviour-cloner. The ceiling itself was subsequently broken by abandoning
 > cloning in favour of **distillation from an honest SDP-planning teacher**
 > (breaking the FCAS-cloning limit by construction) plus **state-dependent J_t(soc)
-> prompting** (recovering the energy-arbitrage gap). The resulting standalone DT
-> beats PPO on all four surfaces — including expanded broad-2024 and 2025 OOD —
-> while passing the market-impact gate; see §8.2.10. The experiment table above
+> prompting** (recovering the energy-arbitrage gap). Against the original
+> 204,800-step PPO, that DT led all four surfaces; the 2026-11-25 three-seed 4M
+> retrain weakens this to seed-sensitive competitiveness (see §8.2.0 and the PPO
+> audit). The experiment table above
 > remains valid as evidence that *prompting, loss-weighting, data re-composition,
 > and online fine-tuning alone* cannot exceed the offline data — which is precisely
 > why the distillation route was needed.
@@ -990,9 +1000,10 @@ The following table traces the DT's progression from the original pilot model th
 
 \* Stages 6–7 use a solver at inference and are not directly comparable to
 stages 1–5 (the LP stage's $291,841 exploits perfect foresight). Stage 8 is
-the deployable shipped policy — no solver in the control loop (the `J_t(soc)`
-prompt comes from a precomputable cost-to-go table) — and beats PPO on all
-four identity surfaces plus the impact gate (§8.2.10).
+the shipped per-decision-solver-free candidate (the `J_t(soc)` prompt is
+precomputable). Against the corrected three-seed 4M PPO it has a higher mean on
+all four surfaces but is seed-sensitive, with dispatch unresolved and no stable
+impact gate; see §8.2.0 and the 2026-11-25 audit.
 
 **Key insight:** Stage 5's improvement over stage 4 comes entirely from architecture (GQA, RMSNorm, weight tying) and better training data (realistic battery configurations), not from online RL. The modern v2 architecture captures everything GRPO once provided — and generalizes better (stage 5 gets $4,630/ep on the standard surface vs stage 4's $1,533/ep). Stages 6–8 change the axis entirely: instead of cloning logged market behaviour, the DT is distilled from an honest dynamic-programming-based planning teacher — breaking the offline-data ceiling that capped stages 1–5 (§8.2.1a, §8.2.10).
 
@@ -1454,8 +1465,9 @@ The canonical impact gate was then re-run with the fix
 `stagec_fix_20260913`, **v1 checkpoint**). It **passes**: the v1 DT beats PPO on
 all 9 cells, with ratio-of-means per battery of **small 3.21×, hornsdale 2.59×,
 torrens 2.02×** (identity `j_t_soc` is RTG-invariant; piecewise uses the constant
-fallback). These are **v1 `fullcorpus` numbers**; the shipped physics-v2 v2cal gate
-is in §8.2.11 (9/9 cells at the fixed `rtg0.0` fallback). The previously reported
+fallback). These are **v1 `fullcorpus` numbers**. The old-PPO v2cal 9/9 result is
+historical (§8.2.11); the corrected 4M three-seed comparison is seed-sensitive
+(seed ratios 2.26/0.91/2.96). The previously reported
 per-battery ratios were 2.9× / 2.54× / 1.65×.
 
 **Decision (unchanged; rationale corrected):** ship `rtg_mode="auto"`. `auto`
@@ -1580,22 +1592,20 @@ per-step wear to the environment's realized per-cycle wear (B4;
 `--deg-calibration 0.12`). Corpora were regenerated and both DTs retrained.
 
 The AEMO checkpoint `aemo_dt_sdp_jtsoc_v2cal.pt` (`rtg_mode="auto"`) supersedes
-`aemo_dt_sdp_jtsoc_fullcorpus.pt`:
+`aemo_dt_sdp_jtsoc_fullcorpus.pt`. **The PPO column was corrected on 2026-11-25:**
 
-| Surface | physics-v2 (shipped, fresh) | PPO | ratio vs PPO | n |
-|---|---:|---:|---:|---:|
-| Standard 2024 (5 regions × 6 periods) | **$16,501** | $4,303 | 3.84× | 30 |
-| Dispatch-matched (SA1 full-year) | **$33,791** | $18,818 | 1.80× | 12 |
-| Expanded broad-2024 | **$29,124** | $4,350 | 6.70× | 30 |
-| 2025 OOD | **$30,791** | $4,817 | 6.39× | 6 |
-| Impact (piecewise merit-order) | **9/9 cells beat PPO**; fixed `rtg0.0` fallback small 4.36× / hornsdale 4.70× / torrens 4.67× (paired Δ +$167,099, 95% CI [$101k, $227k], p=0.0039) | — | passes | 9 |
+| Surface | physics-v2 DT | tuned 4M PPO, 3-seed mean | ratio | paired Δ [95% CI] | n |
+|---|---:|---:|---:|---:|---:|
+| Standard 2024 | **$16,501** | $9,708 | 1.70× | +$6,793 [$4,996, $8,695] | 30 |
+| Dispatch-matched | **$33,791** | $28,070 | 1.20× | +$5,721 [−$1,769, $10,999] | 12 |
+| Expanded broad-2024 | **$29,124** | $17,214 | 1.69× | +$11,910 [$6,787, $20,435] | 30 |
+| 2025 OOD | **$30,791** | $19,212 | 1.60× | +$11,579 [$3,776, $24,888] | 6 |
+| Impact (piecewise) | **$212,791** | $133,056 | 1.60× | +$79,736 [$29,842, $132,933], 8/9 wins | 9 |
 
-**All four identity-surface paired-difference 95% bootstrap CIs exclude zero**
-(standard Δ+$12,198 [9,181, 14,738] p=2.3e-6; dispatch Δ+$14,973 [4,794, 22,663]
-p=0.027; expanded Δ+$24,775 [13,509, 41,434] p=3.7e-9; 2025 OOD Δ+$25,974
-[12,708, 49,850] p=0.031; paired Wilcoxon). Artifact:
-`paper/audit/artifacts/stagec_v2cal_extended_significance.json`; full table in
-`paper/audit/small_n_assessment.md`.
+Only the dispatch interval includes zero. Seed 1 has the higher surface mean on
+dispatch, expanded and OOD; impact seed ratios are 2.26, 0.91 and 2.96. The
+old 3.84×/1.80×/6.70×/6.39× table is historical evidence against the 204,800-step
+reference and is retained in the dated audit artifacts, not as a current claim.
 
 The extended surfaces (standard 5→30, dispatch 6→12, expanded 27→30; 2025 OOD
 re-run fresh at n=6) supersede the earlier small-n single-month surfaces. The
@@ -1636,9 +1646,9 @@ H4.x re-runs are tracked in `docs/FUTURE_PLAN.md`.
 
 ### 8.3 Key Takeaways
 
-1. **The standalone AEMO Decision Transformer is the preferred shipped policy when run in surface-aware `rtg_mode="auto"`.** On the extended fresh identity surfaces (standard-2024 $16,501 vs $4,303, n=30; dispatch-matched $33,791 vs $18,818, n=12; expanded broad-2024 $29,124 vs $4,350, n=30; 2025 OOD $30,791 vs $4,817, n=6) `auto` resolves to `j_t_soc` and **all four paired-difference CIs exclude zero**; under market impact, it falls back to a conservative constant RTG and passes the impact gate on **9/9 grid-scale cells** (fixed `rtg0.0` fallback: small **4.36×**, hornsdale **4.70×**, torrens **4.67×** vs PPO; §8.2.11). Note: the earlier claim that explicit `j_t_soc` "collapses" under impact was an evaluation artifact (`return_scale` bug; §8.2.10 and `docs/known_issues.md` B8) — explicit j_t_soc is viable, but the constant fallback remains the robust default.
+1. **The standalone AEMO Decision Transformer is a competitive shipped candidate, not a universally preferred policy.** Against three tuned 4M PPO seeds, `rtg_mode="auto"` has higher seed-mean profit on all four identity surfaces (1.70×/1.20×/1.69×/1.60×), but dispatch's CI includes zero and PPO seed 1 reverses three surface means. Under impact the seed-mean ratio is 1.60× (8/9 wins), while seed-specific ratios span 0.91–2.96×. The earlier `j_t_soc` "collapse" remains a `return_scale` artifact, but that correctness fix does not establish policy superiority.
 
-2. **Teacher quality breaks cloning ceilings; architecture matters within a fixed data source.** Offline data quality (2,401-episode FCAS-rich corpus), realistic battery configurations, and modern architecture each contributed to stages 1–5. But the decisive jump — beating PPO on all four identity surfaces — came from changing the *data source* itself: distilling an honest SDP-planning teacher rather than cloning market behaviour (§8.2.10). GRPO does not help the modern model.
+2. **Teacher quality changes the training-data ceiling; architecture is secondary within a fixed source.** The 2,425-episode FCAS-rich corpus, realistic battery configurations and modern architecture contributed to stages 1–5. Distilling an honest SDP teacher produced the strong simulator candidate, but the corrected PPO audit shows that describing this as a four-surface win was too strong after proper baseline training (§8.2.10, PPO retraining audit). GRPO did not improve the modern model.
 
 3. **RTG conditioning provides zero-shot controllability that no fixed-policy baseline matches — and it is now state-dependent.** An operator can tune profit vs degradation at inference time via the prompt. The shipped default is `rtg_mode="auto"`: the J_t(soc) cost-to-go table on price-taking surfaces, constant RTG under market impact (§8.2.10). The optimal prompt is architecture-, surface-, and market-power-dependent — never transfer it blindly; the impact-mode choice is a robustness trade-off, not collapse-avoidance.
 
@@ -1702,16 +1712,18 @@ This phase drove two research lines to completion:
 2. **Planning-aware training and prompting (the decisive line).** The
    re-examination that began as "PPO is the broad-year leader" (§8.2.1a)
    escalated into the teacher-distillation campaign of PR #36, which broke the
-   offline-data ceiling outright: SDP-trajectory distillation + J_t(soc)
-   prompting produced a standalone DT that beats PPO on all four identity
-   surfaces while passing the impact gate (§8.2.10).
+   cloning-era data ceiling for the tested runs. SDP-trajectory distillation +
+   J_t(soc) prompting produced a strong standalone candidate, but the later
+   three-seed 4M PPO retrain changed the claim to conditional competitiveness
+   rather than a universal four-surface win (§8.2.0, PPO audit).
 
 **Status (Aug 2026)** — all thrusts resolved:
 
 - ✅ **Thrust 1 — SDP-trajectory-augmented offline training:** executed as
   **Stage B** of §8.2.10, but with the honest (non-clairvoyant) SDP teacher
-  rather than the originally proposed simple-action SDP — full-corpus
-  standalone DT beats PPO on all four surfaces.
+  rather than the originally proposed simple-action SDP. The candidate led the
+  old PPO on all four surfaces; the corrected three-seed retrain makes that
+  result seed-sensitive rather than decisive.
 - ✅ **Thrust 2 — Forecast-conditioned DT:** built, trained, evaluated;
   negative result (§8.2.8).
 - ✅ **Secondary — SDP-computed RTG at inference:** executed as **Stage C**
@@ -1751,7 +1763,7 @@ This repository introduces a unified framework for learning and planning in batt
 **Key empirical findings:**
 
 - **Household environment (legacy Ausgrid benchmark):** The Decision Transformer achieves the best overall performance, outperforming all baselines including the perfect-foresight Oracle. Its RTG-conditioning enables zero-shot trade-off control between returns and degradation. On the modern 2019+ real-telemetry rebuild the picture is more nuanced: the forecast arms are re-baselined under corrected physics (the pre-fix TTM > persistence advantage does not survive — the three arms are statistically indistinguishable at the shared prompt), only the unconstrained 7 d real-OOD DT is net-positive, and the DT trails an RTE-matched perfect-foresight oracle (+$293 vs +$690/yr gross) while over-cycling on long horizons; throughput budgeting and price gating do not make the long-horizon surfaces net-positive (§8.1.1, §8.1.2).
-- **AEMO utility-scale environment (preferred shipped policy):** The preferred AEMO policy is the standalone physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`) with **surface-aware `rtg_mode="auto"`**. On the extended identity surfaces — standard-2024 **$16,501/ep** (n=30), dispatch-matched **$33,791/ep** (n=12), expanded broad-2024 **$29,124/ep** (n=30), and **2025 OOD $30,791/ep** (n=6) — all ahead of PPO with **all four paired 95% CIs excluding zero**. Under merit-order impact, the same shipped setting falls back to constant RTG and keeps the DT ahead of PPO on **9/9** canonical grid-scale cells (fixed `rtg0.0` fallback: small 4.36×, hornsdale 4.70×, torrens 4.67×; paired Δ +$167,099, 95% CI [$101k, $227k]). The earlier apparent `j_t_soc` collapse was an evaluation artifact; explicit `j_t_soc` is viable after applying the checkpoint `return_scale` (B8), while `auto` remains the robust default.
+- **AEMO utility-scale environment (corrected baseline audit):** The shipped physics-v2 v2cal DT (`aemo_dt_sdp_jtsoc_v2cal.pt`, `rtg_mode="auto"`) remains competitive after PPO retraining, but is not universally preferred. Against three tuned 4M PPO seeds, seed-mean DT/PPO ratios are **1.70× / 1.20× / 1.69× / 1.60×**; dispatch includes zero and seed 1 reverses three surface means. Under merit-order impact the seed-mean ratio is 1.60× (8/9 wins; Δ A$79,736), while seed-specific ratios span 0.91–2.96×. The earlier apparent `j_t_soc` collapse was an evaluation artifact, but its correction does not establish policy superiority.
 - **AEMO utility-scale (the tested cloning ceiling, then broken):** On the tested logged-policy data sources and behaviour-cloning levers — RTG sweeps, PPO-only and FCAS-heavy data re-composition, FCAS-weighted loss, GRPO and a full-PPO value-critic fine-tune, mixed action heads, and architecture changes — the FCAS gap was not eliminated. The gap was ultimately broken by leaving cloning behind: distilling an honest SDP-planning teacher into a standalone DT (no solver in the control loop; the J_t(soc) prompt is precomputable), with J_t(soc) state-dependent prompts recovering energy arbitrage (§8.2.10).
 - **AEMO utility-scale (overfitting finding):** The legacy Phase 1 GRPO champion ($8,242 dispatch-matched) collapsed to $1,533/ep on the standard surface — confirming narrow overfitting. The modern v2 model generalizes properly.
 - **AEMO utility-scale (RTG controllability):** The DT's return-to-go prompt provides zero-shot tunability of profit vs degradation at inference time. It has evolved from a hand-tuned scalar (architecture-dependent: modern peaks at 0.0, legacy at 0.5) to a state-dependent J_t(soc) cost-to-go table — with automatic fallback to constant RTG under market impact, since optimistic prompts self-suppress at grid scale (§8.2.10).

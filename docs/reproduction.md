@@ -4,42 +4,39 @@ This guide covers **Distilling a Planner into a Decision Transformer for Multi-M
 
 ## Find the evidence
 
-- The [manuscript](../paper/manuscript/main.tex) explains the method, evaluation protocol and limitations. The [provenance table](../paper/audit/provenance.tsv) maps claims to evidence: E3 for the extended identity surfaces, C3–C5 for the impact gate, D2 for dispatch replay, and T1 for teacher retention.
-- The [tracked audit artifacts](../paper/audit/artifacts/) contain the published aggregates and impact-cell data. Use the `v2cal_extended` set in the [identity statistics](../paper/audit/artifacts/stagec_v2cal_extended_significance.json), not the `v2cal` canonical small-sample set or `v1_fullcorpus`. Use `v2cal_shipped_fixed_rtg0` in the [impact analysis](../paper/audit/artifacts/stagec_v2cal_impact_analysis.json), not the best-prompt-per-cell sweep.
-- Raw simulator rollouts, market caches and most evaluator outputs live under `data/`, `models/` and `eval_output/`; they are not staged by a fresh checkout. Some historical outputs are tracked. The [dated audit](../paper/audit/audit_findings.md) records how earlier claims were corrected; see §7 for which surfaces became the preprint headline and §8 for the scale discrepancy.
+- The [manuscript](../paper/manuscript/main.tex) explains the corrected method, evaluation protocol and limitations. The [2026-11-25 PPO retraining report](../paper/audit/ppo_retrain_20261125.md) is the source of truth for the corrected baseline comparison; the older E3/C3–C5 evidence remains historical provenance for the under-trained 204,800-step PPO comparator.
+- Use [the seed aggregate artifact](../paper/audit/artifacts/ppo_retrain_seed_aggregate_20261125.json) for the current paper table. Its PPO result is the mean of `tuned_seed0/1/2` within each matched scenario cell. The [per-seed statistics](../paper/audit/artifacts/ppo_retrain_stats_20261125.json) preserve every individual checkpoint and the [impact seed artifact](../paper/audit/artifacts/ppo_retrain_impact_seeds_20261125.json) preserves seed-specific impact results.
+- Raw simulator rollouts, market caches and most evaluator outputs live under `data/`, `models/` and `eval_output/`; they are not staged by a fresh checkout. The retraining scripts and compact summary artifacts make the aggregate auditable, but exact headline rollout reproduction still requires the external PPO checkpoints and processed AEMO caches.
 
-## Verify the market-impact headline
+## Verify the corrected three-seed headline
 
-From the repository root, recompute the paired result and the three ratios of means from the nine published cell pairs. Only NumPy and SciPy are needed (`python3 -m pip install numpy scipy` in a virtual environment); no simulator, weights, credentials or market data are required. The command reads the artifact and prints results without rewriting any files.
+This CPU-only check requires only Python's standard library. It prints the canonical three-seed aggregate saved in the audit artifact; it does not rerun the simulator.
 
 ```bash
 python3 - <<'PY'
 import json
 from pathlib import Path
-from paper.audit.analyse_v2cal_impact import paired, ratio_of_means
 
-audit = Path("paper/audit/artifacts/stagec_v2cal_impact_analysis.json")
-cells = json.loads(audit.read_text())["v2cal_shipped_fixed_rtg0"]["paired"]["cells"]
-dt = {tuple(key.split("|")): cell["dt"] for key, cell in cells.items()}
-ppo = {tuple(key.split("|")): cell["ppo"] for key, cell in cells.items()}
-result = paired(dt, ppo)
-lo, hi = result["diff_ci"]
-wins = sum(dt[key] > ppo[key] for key in dt)
-print(f"{wins}/{result['n']} wins; mean advantage A${result['diff_mean']:,.0f}/episode;")
-print(f"95% CI [A${lo:,.0f}, A${hi:,.0f}]; Wilcoxon p={result['wilcoxon_p']:.4f}")
-for battery, ratio in ratio_of_means(dt, ppo).items():
-    print(f"{battery}: {ratio:.2f}×")
+p = Path("paper/audit/artifacts/ppo_retrain_seed_aggregate_20261125.json")
+x = json.loads(p.read_text())
+for name, row in x["surfaces"].items():
+    print(name, f"n={row['n']}", f"DT/PPO={row['ratio_of_means']:.2f}x",
+          f"PPO={row['ppo_mean']:,.0f}", f"diff CI={row['diff_ci']}")
+i = x["impact"]
+print("impact", f"DT/PPO={i['ratio_of_means']:.2f}x", f"wins={i['win_rate']:.3f}",
+      f"diff={i['diff_mean']:,.0f}", f"CI={i['diff_ci']}",
+      f"seed ratios={i['ppo_seed_ratios']}")
 PY
 ```
 
-Expected: **9/9 wins**, **A$167,099/episode**, **95% CI [A$101,213, A$227,362]**, **p=0.0039**. The fixed-fallback ratios are **4.36× small**, **4.70× Hornsdale** and **4.67× Torrens**. This verifies the statistics from saved profits; it does not recreate those profits from market data.
+Expected identity ratios are **1.70×, 1.20×, 1.69× and 1.60×**. Only dispatch-matched has a paired interval containing zero. The impact seed-mean ratio is **1.60×**, with 8/9 cell wins and Δ A$79,736 [A$29,842, A$132,933]; individual PPO-seed ratios are 2.26×, 0.91× and 2.96×. This verifies the released aggregate arithmetic, not raw market rollouts.
 
 ## Rerun the simulator evaluations
 
 This is the optional, heavier route. The release state and dependencies are recorded in [Appendix C](../paper/manuscript/main.tex) and [`paper/environment.txt`](../paper/environment.txt). The evaluated code is the `preprint-v1` tag plus the same-day changes through `ea558bf`; the tag alone predates the final cache and surface changes.
 
 1. Get `aemo_dt_sdp_jtsoc_v2cal.pt`, its `.pt.meta.json` sidecar, the `*_loss_surface_manifest.json` and the seasonal price profiles from the [model repository](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp). Keep the sidecar beside the weights: its `return_scale` is authoritative for inference and does not reproduce exactly from the available corpus. The published manifest has absolute paths from the original machine. Set `--model-path` and `--loss-csv-path` explicitly rather than relying on these paths.
-2. Obtain the run inputs: the original loss CSV (the evaluator's training-summary input), the PPO reference `models/aemo_sb3/ppo_aemo_fcas_model.zip`, and the AEMO market caches for the chosen surface. These are not included in the GitHub checkout or the shipped DT model repository. The [AEMO workflow](aemo/workflow.md) explains cache preparation. Dispatch replay also needs the matched station's dispatch data; the impact gate needs the corresponding market-impact data and configuration.
+2. Obtain the run inputs: the original loss CSV, the three tuned PPO checkpoints referenced in the retraining artifact (`tuned_seed{0,1,2}_4003k.zip`), and the AEMO market caches for the chosen surface. These are not included in a fresh Git checkout. The scripts under `scripts/ppo_retrain_*.py` retrain/evaluate them from the explicit data manifest. Dispatch replay needs the matched station's dispatch data; impact needs the corresponding market-impact configuration.
 3. Use the extended configs below. The identity configs explicitly request `j_t_soc`, the branch selected by `rtg_mode="auto"` on price-taking surfaces. For example, with the original inputs staged under `models/aemo/dt/`, this runs the standard surface on CPU and writes to a new directory:
 
    ```bash

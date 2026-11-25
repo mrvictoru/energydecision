@@ -8,11 +8,12 @@
 >
 > Status key: ⬜ = open, 🟡 = in progress / partially measured, ✅ = done, 🔴 = on hold, 📝 = writing / meta.
 
-> **Physics rebaseline status (reviewed 2026-10-24):** The corrected physics
-> rebaseline is complete for household buckets A+B and the shipped AEMO v2cal
-> results. Pre-fix results remain historical; the current household caveat is
-> bucket C (live shadow, spot pass-through, broader telemetry). See
-> `docs/household/workflow.md` §H4.9 and `report.md` §8.2.11.
+> **Baseline correction (2026-11-25):** The corrected-physics DT evaluation is
+> complete, but the original PPO comparator was only 204,800 unseeded default
+> steps. Three tuned 4M PPO seeds now give seed-mean DT/PPO ratios of 1.70× /
+> 1.20× / 1.69× / 1.60×; dispatch includes zero, and impact seed ratios span
+> 0.91–2.96×. Old “all 4 + 9/9” statements below are historical, superseded by
+> `paper/audit/ppo_retrain_20261125.md`. Household bucket C remains open.
 
 ### Rebaseline status
 
@@ -24,7 +25,7 @@
 | H4.7/H4.9/H4.11 deployment + long-horizon eval | ✅ DONE (eval-only, 2026-09-18) | RTE-matched oracle + calibrated `h4_v2c` DT on real 7/30/90/14 d + 1 y/180 d synth; see `workflow.md` §H4.9 bucket-A table. |
 | H4.10/H4.12 fair DT-vs-RL + paired statistics | ✅ DONE (bucket B, 2026-09-20) | PPO/SAC/TD3 retrained on corrected env; no policy robustly net-positive under the wrapper; stats in `eval_output/household/h4_12_bucket_b/statistics.json`. |
 | AEMO simulator identity and impact evaluations | ✅ DONE (2026-09-14) | Re-run under corrected physics; see `report.md §8.2.11`. |
-| AEMO SDP-teacher / Stage C results | ✅ DONE (2026-09-14) | Corpus regenerated with `--deg-calibration 0.12`; `aemo_dt_sdp_jtsoc_v2cal.pt` beats PPO on the four extended identity surfaces and passes the impact gate. See the [reproduction guide](reproduction.md) for artifact availability. |
+| AEMO SDP-teacher / Stage C results | 🟡 REBASELINED (2026-11-25) | Corpus/checkpoint remain shipped; corrected three-seed PPO comparison is competitive but seed-sensitive. DT/PPO seed means 1.70 / 1.20 / 1.69 / 1.60×; impact 1.60× overall, seed ratios 0.91–2.96×. See the [reproduction guide](reproduction.md) and PPO audit. |
 | Household teacher wear calibration | ✅ DONE (2026-09-15) | `deg_mode="step"` + `deg_calibration=0.29`; corpora regenerated and DT retrained (`h4_v2c_*`). Real-OOD net-of-wear +$93/yr vs rule −$60 (RTE-matched oracle +$690/yr). |
 | Household H4.x re-runs + RTE-matched oracle | ✅ DONE (2026-09-20) | Bucket A (eval-only, RTE-matched oracle) + bucket B (retrained forecast arms and SB3) complete. Remaining household gaps: live shadow, spot pass-through, broader telemetry (bucket C). |
 
@@ -32,7 +33,7 @@
 
 ## 0. Context & Positioning (for PhD narrative)
 
-**What we have:** A standalone Decision Transformer (**physics-v2 Stage C**, SDP-distilled with a **wear-calibrated** teacher, `rtg_mode="auto"`) that **beats PPO on all 4 extended identity surfaces + the market-impact gate**: standard-2024 $16.5k vs $4.3k (3.84×, n=30), dispatch-matched $33.8k vs $18.8k (1.80×, n=12), expanded 2024 $29.1k vs $4.4k (6.70×, n=30), 2025 OOD $30.8k vs $4.8k (6.39×, n=6) — all four paired CIs exclude zero. Shipped as `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is re-baselined (buckets A+B, 2026-09-20):** calibrated `h4_v2c` teacher, RTE-matched oracle, retrained forecast arms and 9 SB3 checkpoints. Open household work is bucket C only (live shadow, spot pass-through, broader telemetry).
+**What we have:** A standalone planner-distilled Decision Transformer (**physics-v2 Stage C**, wear-calibrated teacher, `rtg_mode="auto"`) with seed-mean DT/PPO ratios of 1.70× / 1.20× / 1.69× / 1.60× against three tuned 4M PPO checkpoints. It leads conditionally on all four means, but dispatch's CI includes zero, PPO seed 1 reverses three means, and impact seed ratios span 0.91–2.96×. This is a credible, transparent baseline-sensitivity result, not a universal SOTA claim. The model remains `models/aemo/dt/aemo_dt_sdp_jtsoc_v2cal.pt` / HF `mrvictoru/energydecision-dt-v2-sdp`. **Household is re-baselined (buckets A+B, 2026-09-20):** calibrated `h4_v2c` teacher, RTE-matched oracle, retrained forecast arms and 9 SB3 checkpoints. Open household work is bucket C only (live shadow, spot pass-through, broader telemetry).
 
 **What we don't have (the open problems):**
 

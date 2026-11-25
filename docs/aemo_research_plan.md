@@ -1,4 +1,9 @@
-# AEMO Research Plan (Consolidated) — **STALE**
+# AEMO Research Plan
+
+> **2026-11-25 baseline correction:** this is historical planning evidence. The
+> old 3.84×/1.80×/6.70×/6.39× and 9/9 impact claims used a 204,800-step default PPO
+> and are superseded by `paper/audit/ppo_retrain_20261125.md`. Current seed-mean
+> ratios are 1.70×/1.20×/1.69×/1.60× and impact is seed-sensitive (0.91–2.96×). (Consolidated) — **STALE**
 
 > **STATUS (2026-08-25):** This file is **STALE** — it was the living plan during the 2026-07/08 research sessions and its endpoint was the Option C decision (2026-08-11). The durable findings live in `report.md §8.2.1a`, `report.md §8.2.10`, `docs/aemo_dt_preferred_policy_plan.md`, and the new forward plan at **`docs/FUTURE_PLAN.md`** (the single source of truth for forward work).
 

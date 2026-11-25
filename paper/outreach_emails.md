@@ -54,11 +54,12 @@ derived from the planner's cost-to-go. The teacher follows the SDP-with-forecast
 and degradation lineage of your work with Abdulla et al. (IEEE TSG, 2018), and the
 paper's degradation model follows Kampker et al. (Batteries, 2025).
 
-**Headline results (simulator, NEM data).** The distilled policy beats a tuned
-PPO baseline on four held-out surfaces — 3.84x, 1.80x, 6.70x, and 6.39x — with
-all four paired 95% CIs excluding zero, and it passes a piecewise-merit-order
-market-impact gate on 9/9 grid-scale cells, with no solver in the control loop
-(the value table is precomputed). The main open question is sim-to-real transfer.
+**Headline results (simulator, NEM data).** Against three tuned PPO checkpoints
+trained for 4M steps, the distilled policy's within-cell seed-mean ratios are
+1.70x, 1.20x, 1.69x, and 1.60x. Dispatch's interval includes zero, one PPO seed
+reverses three surface means, and the impact seed-specific ratios span
+0.91x–2.96x. The paper now treats baseline sensitivity as part of the result;
+there is no per-decision solver, and sim-to-real transfer remains open.
 
 **What is released.** Code, training corpora, model weights, and a provenance
 record mapping every headline number to the artifact that produced it:

@@ -34,6 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 SIG = ROOT / "paper/audit/artifacts/stagec_v2cal_extended_significance.json"
 IMPACT = ROOT / "paper/audit/artifacts/stagec_v2cal_impact_analysis.json"
+PPO = ROOT / "paper/audit/artifacts/ppo_retrain_stats_20261125.json"
+PPO_SEED_IMPACT = ROOT / "eval_output/ppo_retrain_20261125/phase3_impact"
 
 SURFACE_ORDER = ["standard_year_2024", "dispatch_year_2024", "expanded_broad_2024", "2025_ood"]
 SURFACE_LABEL = {
@@ -48,6 +50,13 @@ SURFACE_CSV = {
     "expanded_broad_2024": "eval_output/physics_v2/expanded_full_v2cal",
     "2025_ood": "eval_output/physics_v2/2025_v2cal_fresh",
 }
+PPO_SURFACE_CSV = {
+    "standard_year_2024": "eval_output/ppo_retrain_20261125/standard_year",
+    "dispatch_year_2024": "eval_output/ppo_retrain_20261125/dispatch_year",
+    "expanded_broad_2024": "eval_output/ppo_retrain_20261125/expanded_full",
+    "2025_ood": "eval_output/ppo_retrain_20261125/fresh_2025",
+}
+PPO_SEEDS = ("tuned_seed0", "tuned_seed1", "tuned_seed2")
 
 C_DT = "#1f77b4"
 C_PPO = "#d62728"
@@ -66,10 +75,41 @@ def _halfwidth(ci):
     return (ci[1] - ci[0]) / 2.0
 
 
+def _aggregate_new_ppo():
+    """Compare each DT cell with the mean of three matched PPO seed rollouts."""
+    data = json.loads(PPO.read_text())
+    rows = []
+    for surface in SURFACE_ORDER:
+        seed_sets = data["surface_seeds"][surface]
+        seed_maps = []
+        for seed in PPO_SEEDS:
+            seed_maps.append({(c["scenario_label"], c["battery_label"]): c for c in seed_sets[seed]["cells"]})
+        keys = sorted(set(seed_maps[0]))
+        if any(set(sm) != set(keys) for sm in seed_maps):
+            raise ValueError(f"PPO seed cell mismatch for {surface}")
+        dt = np.asarray([seed_maps[0][key]["dt"] for key in keys], dtype=float)
+        ppo_seed = np.asarray([[sm[key]["ppo"] for key in keys] for sm in seed_maps], dtype=float)
+        ppo = ppo_seed.mean(axis=0)
+        diff = dt - ppo
+        rng = np.random.default_rng(42)
+        boot = diff[rng.integers(0, len(diff), size=(10000, len(diff)))].mean(axis=1)
+        rows.append({
+            "surface": surface,
+            "n": len(keys),
+            "dt_mean": float(dt.mean()),
+            "dt_ci": [float(x) for x in np.percentile(dt[rng.integers(0, len(dt), size=(10000, len(dt)))].mean(axis=1), [2.5, 97.5])],
+            "ppo_mean": float(ppo.mean()),
+            "ppo_ci": [float(x) for x in np.percentile(ppo[rng.integers(0, len(ppo), size=(10000, len(ppo)))].mean(axis=1), [2.5, 97.5])],
+            "ppo_seed_means": [float(v.mean()) for v in ppo_seed],
+            "diff_mean": float(diff.mean()),
+            "diff_ci": [float(x) for x in np.percentile(boot, [2.5, 97.5])],
+            "ci_excludes_zero": bool(np.percentile(boot, 2.5) > 0),
+        })
+    return rows
+
+
 def fig1_main_results(out_dir: Path) -> None:
-    data = json.loads(SIG.read_text())["surface_sets"]["v2cal_extended"]
-    by = {s["surface"]: s for s in data}
-    rows = [by[s] for s in SURFACE_ORDER]
+    rows = _aggregate_new_ppo()
     x = np.arange(len(rows))
     w = 0.38
 
@@ -83,17 +123,19 @@ def fig1_main_results(out_dir: Path) -> None:
     pp_lo = np.array([r["ppo_mean"] - r["ppo_ci"][0] for r in rows]) / 1e3
     pp_hi = np.array([r["ppo_ci"][1] - r["ppo_mean"] for r in rows]) / 1e3
     ax1.bar(x - w / 2, dt, w, yerr=[dt_lo, dt_hi], capsize=3, color=C_DT, label="Decision Transformer")
-    ax1.bar(x + w / 2, pp, w, yerr=[pp_lo, pp_hi], capsize=3, color=C_PPO, label="PPO (online RL)")
+    ax1.bar(x + w / 2, pp, w, yerr=[pp_lo, pp_hi], capsize=3, color=C_PPO, label="4M PPO · 3-seed mean")
     for i, r in enumerate(rows):
+        seed_means = np.asarray(r["ppo_seed_means"]) / 1e3
+        ax1.scatter(np.full(3, x[i] + w / 2), seed_means, color="white", edgecolor=C_PPO, zorder=4, s=22, label="PPO seed means" if i == 0 else None)
         ann = "{:.2f}x\nn={}".format(r["dt_mean"] / r["ppo_mean"], r["n"])
-        top = max(dt[i] + dt_hi[i], pp[i] + pp_hi[i])
+        top = max(dt[i] + dt_hi[i], pp[i] + pp_hi[i], seed_means.max())
         ax1.text(i, top + 1.5, ann, ha="center", va="bottom", fontsize=8)
     ax1.set_xticks(x)
     ax1.set_xticklabels([SURFACE_LABEL[s] for s in SURFACE_ORDER])
     ax1.set_ylabel("profit per episode (k$)")
-    ax1.set_title("Identity surfaces: DT vs PPO (95% CI)")
+    ax1.set_title("Identity surfaces: DT vs tuned 4M PPO (3 seeds)")
     ax1.legend(frameon=False, fontsize=8, loc="upper left")
-    ax1.set_ylim(0, 70)
+    ax1.set_ylim(0, 60)
 
     diff = np.array([r["diff_mean"] for r in rows]) / 1e3
     dlo = np.array([r["diff_mean"] - r["diff_ci"][0] for r in rows]) / 1e3
@@ -102,45 +144,51 @@ def fig1_main_results(out_dir: Path) -> None:
     ax2.axvline(0, color="k", lw=0.8, ls="--")
     ax2.set_yticks(x)
     ax2.set_yticklabels([SURFACE_LABEL[s].replace("\n", " ") for s in SURFACE_ORDER], fontsize=8)
-    ax2.set_xlabel("paired difference (DT - PPO), k$")
-    ax2.set_title("All four CIs exclude zero")
+    ax2.set_xlabel("paired difference (DT - PPO seed mean), k$")
+    ax2.set_title("DT/PPO advantage · dispatch CI crosses zero")
     ax2.invert_yaxis()
 
     _save(fig, out_dir, "fig1_main_results")
 
 
 def fig4_impact_resilience(out_dir: Path) -> None:
-    cells = json.loads(IMPACT.read_text())["v2cal_shipped_fixed_rtg0"]["paired"]["cells"]
+    dt_rows = json.loads((PPO_SEED_IMPACT / "results.json").read_text())
+    ppo_rows = [dt_rows]
+    ppo_rows += [json.loads((PPO_SEED_IMPACT / f"results_seed{i}_ppo_only.json").read_text()) for i in (1, 2)]
+    dt = {}
+    ppo = []
+    for seed_rows in ppo_rows:
+        one = {}
+        for row in seed_rows:
+            label = row["label"]
+            if "piecewise_merit_order" not in label:
+                continue
+            if label.startswith("piecewise_merit_order_stagec_v2cal_auto_rtg0.0_"):
+                dt[label.split("rtg0.0_", 1)[1]] = row["profit"]
+            elif label.startswith("piecewise_merit_order_ppo_"):
+                one[label.split("_ppo_", 1)[1]] = row["profit"]
+        ppo.append(one)
     bat = ["small", "hornsdale", "torrens"]
-    labels = {
-        "small": "Small\n(~8 MWh)",
-        "hornsdale": "Hornsdale\n(150 MW)",
-        "torrens": "Torrens\n(250 MWh)",
-    }
-    dt = {b: [] for b in bat}
-    pp = {b: [] for b in bat}
-    for key, v in cells.items():
-        b = key.split("|")[0]
-        dt[b].append(v["dt"])
-        pp[b].append(v["ppo"])
-
+    labels = {"small": "Small\n(~8 MWh)", "hornsdale": "Hornsdale\n(150 MW)", "torrens": "Torrens\n(250 MWh)"}
     x = np.arange(len(bat))
     w = 0.38
-    dtm = np.array([np.mean(dt[b]) for b in bat]) / 1e3
-    ppm = np.array([np.mean(pp[b]) for b in bat]) / 1e3
+    dtm = np.array([np.mean([v for k, v in dt.items() if k.startswith(b + "_")]) for b in bat]) / 1e3
+    seed_means = np.array([[np.mean([v for k, v in seed.items() if k.startswith(b + "_")]) for b in bat] for seed in ppo]) / 1e3
+    ppm = seed_means.mean(axis=0)
 
     fig, ax = plt.subplots(figsize=(7.0, 3.8))
     ax.bar(x - w / 2, dtm, w, color=C_DT, label="DT (auto -> const rtg0.0)")
-    ax.bar(x + w / 2, ppm, w, color=C_PPO, label="PPO")
+    ax.bar(x + w / 2, ppm, w, color=C_PPO, label="4M PPO · 3-seed mean")
     for i, b in enumerate(bat):
-        ann = "{:.2f}x".format(np.mean(dt[b]) / np.mean(pp[b]))
-        ax.text(i, max(dtm[i], ppm[i]) * 1.02, ann, ha="center", va="bottom", fontsize=9)
+        ax.scatter(np.full(3, x[i] + w / 2), seed_means[:, i], color="white", edgecolor=C_PPO, s=22, zorder=4, label="PPO seed means" if i == 0 else None)
+        ax.text(i, max(dtm[i], ppm[i], seed_means[:, i].max()) * 1.03,
+                "{:.2f}x".format(dtm[i] / ppm[i]), ha="center", va="bottom", fontsize=9)
     ax.set_xticks(x)
     ax.set_xticklabels([labels[b] for b in bat])
     ax.set_ylabel("mean profit per episode (k$)")
-    ax.set_title("Market-impact gate (piecewise merit-order): 9/9 cells beat PPO")
-    ax.legend(frameon=False, fontsize=8)
-    ax.set_ylim(0, dtm.max() * 1.2)
+    ax.set_title("Market-impact stress test: PPO seed variance is material")
+    ax.legend(frameon=False, fontsize=7)
+    ax.set_ylim(0, max(dtm.max(), seed_means.max()) * 1.25)
     _save(fig, out_dir, "fig4_impact_resilience")
 
 
@@ -150,11 +198,22 @@ def fig5_revenue_decomposition(out_dir: Path) -> None:
     deg = {0: [], 1: []}
     for s in SURFACE_ORDER:
         df = pl.read_csv(ROOT / SURFACE_CSV[s] / "heldout_metrics_by_scenario.csv")
-        for i, pol in enumerate(["candidate_dt", "ppo_reference"]):
-            sub = df.filter(pl.col("policy_name") == pol)
-            energy[i].append(sub["avg_energy_revenue_per_episode"].mean() / 1e3)
-            fcas[i].append(sub["avg_fcas_revenue_per_episode"].mean() / 1e3)
-            deg[i].append(sub["avg_total_degradation_cost_per_episode"].mean() / 1e3)
+        dt = df.filter(pl.col("policy_name") == "candidate_dt")
+        energy[0].append(dt["avg_energy_revenue_per_episode"].mean() / 1e3)
+        fcas[0].append(dt["avg_fcas_revenue_per_episode"].mean() / 1e3)
+        deg[0].append(dt["avg_total_degradation_cost_per_episode"].mean() / 1e3)
+        ppo_means = []
+        for seed in PPO_SEEDS:
+            p = pl.read_csv(ROOT / PPO_SURFACE_CSV[s] / seed / "heldout_metrics_by_scenario.csv")
+            sub = p.filter(pl.col("policy_name") == "ppo_reference")
+            ppo_means.append((
+                sub["avg_energy_revenue_per_episode"].mean() / 1e3,
+                sub["avg_fcas_revenue_per_episode"].mean() / 1e3,
+                sub["avg_total_degradation_cost_per_episode"].mean() / 1e3,
+            ))
+        energy[1].append(float(np.mean([p[0] for p in ppo_means])))
+        fcas[1].append(float(np.mean([p[1] for p in ppo_means])))
+        deg[1].append(float(np.mean([p[2] for p in ppo_means])))
 
     x = np.arange(len(SURFACE_ORDER))
     w = 0.38
@@ -175,7 +234,7 @@ def fig5_revenue_decomposition(out_dir: Path) -> None:
     ax.set_xticks(x)
     ax.set_xticklabels([SURFACE_LABEL[s] for s in SURFACE_ORDER])
     ax.set_ylabel("per episode (k$)")
-    ax.set_title("Revenue decomposition: energy, FCAS, degradation (DT vs PPO)")
+    ax.set_title("Revenue decomposition: DT vs 4M PPO seed mean")
     ax.set_ylim(-5, 47)
     ax.legend(frameon=False, fontsize=7, ncol=3, loc="upper center")
     _save(fig, out_dir, "fig5_revenue_decomposition")

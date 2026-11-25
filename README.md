@@ -2,14 +2,14 @@
 
 energydecision is a research codebase for battery control using historical Australian data. It includes Gymnasium simulators, planning and reinforcement-learning baselines, offline Decision Transformers, and evaluation tools. The benchmarks have different objectives, data and conclusions; their results are not comparable.
 
-- **AEMO / grid-scale — the preprint.** Battery dispatch in Australia's National Electricity Market (NEM), with energy arbitrage, eight frequency control ancillary services (FCAS) and battery wear. A standalone Decision Transformer distilled from a planner outperformed a tuned PPO baseline on four held-out price-taking evaluations and passed a separate simulated market-impact test.
+- **AEMO / grid-scale — the preprint.** Battery dispatch in Australia's National Electricity Market (NEM), with energy arbitrage, eight frequency control ancillary services (FCAS) and battery wear. A standalone Decision Transformer distilled from a planner remains competitive with a properly trained PPO: against three 4M-step PPO seeds, its within-cell mean ratios are 1.70×, 1.20×, 1.69× and 1.60× across four held-out surfaces. The dispatch interval includes zero, one PPO seed reverses three surface means, and the impact result is seed-sensitive.
 - **Household / Ausgrid — a separate benchmark.** Residential solar-battery control under retail tariffs, including a legacy Ausgrid benchmark and a modern telemetry re-baseline. See the [household guide](docs/household/README.md) and [current results](docs/household/workflow.md#h49-long-horizon-pilot).
 
 ## The preprint
 
 **Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch** is a simulator-based preprint, not a peer-reviewed publication or evidence of live-market readiness.
 
-- [Latest checked-in PDF](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages](https://mrvictoru.github.io/energydecision/)
+- [Prior checked-in PDF — render refresh pending](paper/manuscript/draft_paper_NeurIPS_2026.pdf) · [Current LaTeX source](paper/manuscript/main.tex) · [Website source](index.html) · [GitHub Pages](https://mrvictoru.github.io/energydecision/)
 - [Shipped model on Hugging Face](https://huggingface.co/mrvictoru/energydecision-dt-v2-sdp): `aemo_dt_sdp_jtsoc_v2cal.pt` and its `.pt.meta.json` sidecar. Use the sidecar's scaling and the shipped `rtg_mode="auto"`.
 - [Hugging Face dataset repository](https://huggingface.co/datasets/mrvictoru/AEMO_simulated_trade_sdp): `dt_trajectories_jtsoc_v2cal_conservative.parquet` is the shipped v2cal training corpus. `dt_trajectories_jtsoc_combined.parquet` remains the historical v1 corpus.
 - [Provenance table](paper/audit/provenance.tsv) · [Audit artifacts](paper/audit/artifacts/) · [Dated audit findings](paper/audit/audit_findings.md) · [Frozen environment](paper/environment.txt)

@@ -70,13 +70,17 @@ FCAS-bidding gap to PPO. We
 therefore change the data source rather than the learner, distilling an honest,
 non-clairvoyant planning teacher built on dynamic programming into a standalone
 Decision Transformer and conditioning it on a state-dependent
-return-to-go prompt derived from the planner's cost-to-go. The resulting policy
-beats a tuned PPO baseline on four held-out surfaces (standard, dispatch-matched,
-expanded broad-2024, and 2025 out-of-distribution (OOD)) by $3.84\times$, $1.80\times$,
-$6.70\times$, and $6.39\times$, with all four paired-difference 95\% confidence
-intervals excluding zero, and passes a market-impact gate on all nine grid-scale
-cells with no solver in the control loop. Results are simulator-based; sim-to-real
-transfer is the main open question.
+return-to-go prompt derived from the planner's cost-to-go. Against three seeded, validation-tuned PPO checkpoints trained for 4M environment
+steps, the resulting policy earns $1.70\times$, $1.20\times$, $1.69\times$, and
+$1.60\times$ the per-scenario seed-mean PPO profit on four held-out surfaces
+(standard, dispatch-matched, expanded broad-2024, and 2025 out-of-distribution).
+The paired 95\% interval excludes zero on three surfaces but includes zero on
+dispatch-matched; individual PPO seeds change the ordering on three surfaces.
+Under a piecewise market-impact stress model, the DT retains a seed-mean ratio of
+$1.60\times$ and wins 8/9 cells, while the ratio across PPO seeds spans
+$0.91$--$2.96\times$. No per-decision optimization runs in the control loop, but a
+precomputed planner value table is required. Results are simulator-based;
+sim-to-real transfer is the main open question.
 \end{abstract}
 
 % =============================================================================
@@ -140,22 +144,24 @@ Our contributions are threefold:
   condition the student on a \emph{state-dependent} RTG prompt derived from the
   planner's cost-to-go $J_t(\mathrm{soc})$ (Section~\ref{sec:method}). No solver
   runs in the control loop at deployment.
-  \item \textbf{Evaluation.} We introduce a market-impact gate that re-prices
-  energy and FCAS prices in response to the battery's own dispatch using a
-  per-interval approximation, and evaluate a prompt fallback under market
-  impact: the shipped policy passes the gate on all nine grid-scale cells
+  \item \textbf{Evaluation.} We introduce a market-impact stress model that
+  re-prices energy and FCAS prices in response to the battery's own dispatch,
+  and audit the planner-distilled policy against three independently trained
+  4M-step PPO checkpoints. This seed-aware evaluation shows that the DT/PPO
+  ordering is surface-dependent and changes under one PPO seed
   (Section~\ref{sec:impact}).
 \end{itemize}
 
-On four held-out surfaces, the standalone DT beats tuned PPO by 3.84$\times$ on
-standard 2024, 1.80$\times$ on dispatch-matched, 6.70$\times$ on expanded
-broad-2024, and 6.39$\times$ on 2025 out-of-distribution data, with all four
-paired-difference 95\% confidence intervals excluding zero
-(Section~\ref{sec:experiments}); relative to its solver-in-the-loop teacher on
-the same surfaces it retains 77\% of the teacher's aggregate profit on standard
-2024 and 70\% on dispatch-matched, and \emph{exceeds} it on expanded broad-2024
-(132\%) and 2025 out-of-distribution (276\%), all while removing the solver
-from the control loop; we do not isolate the cause of this surface dependence.
+On four held-out surfaces, the standalone DT earns 1.70$\times$, 1.20$\times$,
+1.69$\times$, and 1.60$\times$ the profit of a 4M-step PPO reference averaged
+per cell across three independently trained seeds. The paired 95\% interval
+excludes zero on standard, expanded broad-2024, and 2025 OOD, but includes zero
+on dispatch-matched (Section~\ref{sec:experiments}). One PPO seed has higher mean
+profit than the DT on dispatch-matched, expanded broad-2024, and 2025 OOD, so the
+ordering is seed-sensitive. Relative to its solver-in-the-loop teacher on the
+same surfaces, the DT retains 77\% on standard and 70\% on dispatch-matched and
+exceeds it on expanded broad-2024 (132\%) and 2025 OOD (276\%), all while removing
+per-decision optimization; we do not isolate the cause of this retention pattern.
 All
 results are simulator-based and driven by historical NEM data; sim-to-real
 transfer is the main open question. Code, trajectory corpora, and model weights
@@ -593,47 +599,52 @@ coverage. Dollar-per-episode values are therefore comparable between the two
 policies within a row, but not across rows; the ratio and paired difference are
 the cross-surface statistics.
 
-We compare the Decision Transformer with a tuned PPO policy, an
-\texttt{fcas\_rule} policy, and dispatch replay (the latter only on the
-dispatch-matched surface). PPO is tuned with an Optuna search over ten trials
-and up to four million environment steps. All baselines are rolled out on the
-same scenarios as the student, with fresh reference caches so that no stale
-result enters a comparison, and the number of rollouts per cell follows the
-protocol above.
+We compare the Decision Transformer with three independently seeded PPO
+policies, an \texttt{fcas\_rule} policy, and dispatch replay (the latter only on
+the dispatch-matched surface). PPO hyperparameters were selected by a ten-trial
+Optuna search on a chronological pre-2024 validation split. Three final models
+were then trained for 4{,}003{,}840 environment steps; seed~0 is the
+pre-specified primary checkpoint because its validation score is the median of
+the three. The paper table follows the more conservative seed-aware rule of
+averaging the three PPO results within each matched scenario--battery cell.
+All three seeds remain visible in the figures and audit artifacts; no seed is
+selected per evaluation surface.
 
-For each scenario--battery cell, we evaluate DT and PPO on the same market data
-and subtract PPO profit from DT profit. We average these paired differences
-rather than comparing two separate averages. This controls for whether a cell
-is an easy or difficult market condition, making the comparison less noisy.
+For each scenario--battery cell, we evaluate DT and the three PPO checkpoints on
+the same configured market data and subtract the within-cell PPO seed mean from
+DT profit. We report the distribution of paired cell differences rather than
+comparing two unrelated averages. This controls partly for easy versus difficult
+market conditions, but the random-start protocols on expanded and 2025 OOD are
+not paired draw-for-draw across policies and seeds, so they remain a source of
+protocol noise.
 
 To show uncertainty, we resample the $n$ paired differences with replacement
 10{,}000 times, calculate the mean each time, and take the middle 95\% of those
-means (the 2.5th and 97.5th percentiles). If this interval excludes zero, the
-average advantage is stable across the resamples. Unlike a normal-theory
-interval, this does not assume the profit differences follow a bell-shaped
-distribution. We also report the paired Wilcoxon signed-rank test: it checks
-whether the paired differences tend to favour one policy, using ranks so that
-one unusually large episode has less influence. With so few cells, the test can
-only return a limited set of $p$-values; its smallest two-sided value is $0.031$
-at $n=6$ and $0.0039$ at $n=9$. We treat the bootstrap interval as the main
-evidence and the Wilcoxon test as a check.
+means (the 2.5th and 97.5th percentiles). Unlike a normal-theory interval, this
+does not assume bell-shaped profits. We also report a paired Wilcoxon check and
+treat the bootstrap interval as the main inferential summary.
 
-These methods treat cells as the resampling units, but cells within a region
-may be related, so the uncertainty estimates may overstate precision. We
-therefore report cell counts, not counts of independent regions. The DT is
-deterministic at evaluation; PPO reference rollouts vary slightly between runs.
+Cells are the resampling units. They are not independent trials across three
+seeds: each PPO seed mean is an equal-weight estimate at the cell level, while
+bootstrap resampling conditions on the observed three checkpoints. Cells within
+a region may also be related, and only three independently trained PPO seeds are
+available. The intervals therefore quantify scenario-cell variation conditional
+on this checkpoint set; they do not provide a population interval over PPO seed
+sampling. The DT is deterministic at evaluation; the visible seed dots show that
+PPO seed variance is substantial.
 
 \subsection{Headline Results}
 
-Table~\ref{tab:headline} summarises the four identity surfaces. The student
-has higher mean profit than PPO on all four, and every paired-difference 95\%
-interval excludes zero. It wins 29/30 cells on standard, 10/12 on dispatch-matched,
-29/30 on expanded, and 6/6 on 2025 OOD; the headline is therefore a paired mean,
-not per-cell dominance. Relative to the same-surface solver-in-the-loop teacher,
-it retains 77\% of aggregate profit on standard and 70\% on dispatch-matched, but
-exceeds it on expanded (132\%) and 2025 OOD (276\%). This surface dependence is
-not isolated here, and the per-cell ratios are noisier than the aggregates.
-Figure~\ref{fig:main} shows the per-surface comparison and paired differences;
+Table~\ref{tab:headline} summarises the four identity surfaces using the
+three-seed PPO mean within each matched cell. The DT has higher seed-mean profit
+on all four, but the dispatch-matched 95\% interval includes zero. It wins 27/30
+matched cells on standard, 9/12 on dispatch-matched, 29/30 on expanded, and 6/6
+on 2025 OOD. These are not seed-robust dominance claims: PPO seed~1 has higher
+surface mean profit on dispatch-matched, expanded, and 2025 OOD, while seed~2 is
+below the DT on every surface. Relative to the same-surface solver-in-the-loop
+teacher, the DT retains 77\% of aggregate profit on standard and 70\% on
+dispatch-matched, but exceeds it on expanded (132\%) and 2025 OOD (276\%).
+Figure~\ref{fig:main} shows the aggregate and seed spread;
 Figure~\ref{fig:revenue} decomposes profit into energy, FCAS, and degradation.
 
 The dispatch-matched surface also includes a fair replay of Dalrymple North
@@ -646,23 +657,24 @@ the mean and win count favour the DT, but the 12-month sample is too small for
 a strongly positive confidence statement.
 \begin{table}[H]
   \centering
-  \caption{Identity-surface results (shipped physics-v2 checkpoint,
-  \texttt{rtg\_mode="auto"}). All four paired-difference 95\% CIs exclude zero.
-  Protocol: 144 h episodes on a 10 MWh/10 MW battery for standard and an
-  8 MWh/30 MW Dalrymple North asset for dispatch-matched, versus 288 h episodes
-  on 10 MWh/5 MW for expanded and 2025 OOD. \$/ep is thus
-  comparable within a row, not across rows. Expanded and OOD average five random
-  starts per scenario; the other surfaces use one fixed start.}
+  \caption{Identity-surface results for the shipped physics-v2 checkpoint
+  (\texttt{rtg\_mode="auto"}) and the within-cell mean of three independently
+  seeded PPO checkpoints trained for 4{,}003{,}840 steps. Seed means range from
+  \$6{,}109--14{,}180, \$19{,}318--36{,}778, \$6{,}057--31{,}850, and
+  \$7{,}912--34{,}802 across the four rows. Protocol: 144 h on 10 MWh/10 MW for
+  standard and 8 MWh/30 MW for dispatch-matched; 288 h on 10 MWh/5 MW for
+  expanded and 2025 OOD. Expanded and OOD average five random starts per
+  scenario. \$/ep is comparable within a row, not across rows.}
   \label{tab:headline}
   \small
   \begin{tabular}{lrrrrr}
     \toprule
-    Surface & $n$ & DT (\$/ep) & PPO (\$/ep) & $\Delta$ (DT$-$PPO) & 95\% CI on $\Delta$ \\
+    Surface & $n$ & DT (\$/ep) & PPO seed mean & $\Delta$ (DT$-$PPO) & 95\% CI on $\Delta$ \\
     \midrule
-    Standard 2024         & 30 & 16{,}501 & 4{,}303  & $+12{,}198$ & $[9{,}181,\ 14{,}738]$ \\
-    Dispatch-matched      & 12 & 33{,}791 & 18{,}818 & $+14{,}973$ & $[4{,}794,\ 22{,}663]$ \\
-    Expanded broad-2024   & 30 & 29{,}124 & 4{,}350  & $+24{,}775$ & $[13{,}509,\ 41{,}434]$ \\
-    2025 OOD              & 6  & 30{,}791 & 4{,}817  & $+25{,}974$ & $[12{,}708,\ 49{,}850]$ \\
+    Standard 2024         & 30 & 16{,}501 & 9{,}708  & $+6{,}793$  & $[4{,}996,\ 8{,}695]$ \\
+    Dispatch-matched      & 12 & 33{,}791 & 28{,}070 & $+5{,}721$  & $[-1{,}769,\ 10{,}999]$ \\
+    Expanded broad-2024   & 30 & 29{,}124 & 17{,}214 & $+11{,}910$ & $[6{,}787,\ 20{,}435]$ \\
+    2025 OOD              & 6  & 30{,}791 & 19{,}212 & $+11{,}579$ & $[3{,}776,\ 24{,}888]$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -670,10 +682,10 @@ a strongly positive confidence statement.
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{figures/fig1_main_results.pdf}
-  \caption{Decision Transformer vs PPO across the four identity surfaces.
-  Left: per-episode profit and 95\% bootstrap CIs (protocol differences are
-  listed in Table~\ref{tab:headline}). Right: the paired DT$-$PPO difference
-  and 95\% CI; all four CIs exclude zero.}
+  \caption{Decision Transformer vs tuned 4M-step PPO across the four identity
+  surfaces. Left: per-episode profit and 95\% cell-bootstrap CIs; white dots
+  show the three individual PPO seed means. Right: paired DT minus within-cell
+  PPO seed mean. Three intervals exclude zero; dispatch-matched includes zero.}
   \label{fig:main}
 \end{figure}
 
@@ -701,17 +713,18 @@ batteries (8\,MWh/30\,MW; 194\,MWh/150\,MW, Hornsdale-class; and
 November, VIC1 October), each a 3{,}744-step (13-day) episode at five-minute
 resolution. Under market impact, \texttt{auto}
 uses the fixed \texttt{rtg0.0} prompt rather than the state-dependent
-$J_t(s)$ prompt, and we compare this shipped fallback with PPO on the same
-cells. The Decision Transformer earns more than PPO in all nine cells. Across
-the nine paired differences, its mean advantage is \$167{,}099 per episode
-(95\% bootstrap confidence interval [\$101{,}213, \$227{,}362]). At $n=9$ the
-two-sided Wilcoxon minimum is $0.0039$, which the paired test attains; the
-bootstrap interval is the primary evidence. The ratio of mean profits is
-4.36$\times$ for the small battery, 4.70$\times$ for Hornsdale, and
-4.67$\times$ for Torrens Island (the mean of the per-cell ratios is
-4.36$\times$, 4.91$\times$, and 4.83$\times$, respectively). The identity-surface results in
-Section~\ref{sec:experiments} all use the state-dependent prompt, so the two
-regimes are evaluated with the settings that the shipped mode selects.
+$J_t(s)$ prompt, and we compare this shipped fallback with the same three 4M
+PPO checkpoints on the same cells. Averaging PPO per matched cell gives DT mean
+profit of \$212{,}791 versus \$133{,}056 per episode, a ratio of $1.60\times$ and
+a paired mean advantage of \$79{,}736 (95\% cell-bootstrap interval
+[\$29{,}842, \$132{,}933]); the DT wins 8/9 cells in this aggregate comparison.
+However, the three PPO seed-specific DT/PPO ratios are 2.26, 0.91, and 2.96,
+with corresponding DT cell wins of 9/9, 7/9, and 9/9. The seed-mean ratios for
+the small, Hornsdale-class, and Torrens-class assets are 1.81, 1.53, and 1.63.
+Thus market impact remains a useful stress test, but it is not a universally
+passed PPO gate at this sample size. The identity-surface results in
+Section~\ref{sec:experiments} use the state-dependent prompt while the impact
+runs use the fallback selected by shipped \texttt{auto} mode.
 
 Section~\ref{sec:prompting} reports the direct prompt comparison on these nine
 cells: under impact the state-dependent prompt wins 2 of 9 and the constant
@@ -726,15 +739,16 @@ is approximately price-taking, and the conservative constant prompt when
 its dispatch can materially affect prices. We have not run the converse
 comparison, applying the constant prompt to the identity surfaces at this
 checkpoint, so the rule should be read as a robustness choice rather than a
-demonstrated optimum. In this sense, market power is
-a gate on value-based prompting. Figure~\ref{fig:impact} summarises the gate.
+demonstrated optimum. In this sense, market impact changes the prompting regime, but the observed
+PPO seed spread prevents a universal policy-gate claim. Figure~\ref{fig:impact}
+shows the sensitivity.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.8\linewidth]{figures/fig4_impact_resilience.pdf}
-  \caption{Market-impact gate (piecewise merit-order). Mean profit per episode
-  (3{,}744-step, 13-day episodes) for the shipped DT (fixed \texttt{rtg0.0}
-  fallback) vs PPO across three grid-scale batteries; the DT wins all 9
-  scenario$\times$battery cells.}
+  \caption{Market-impact stress test (piecewise merit order). Mean profit per
+  episode for the shipped DT fixed-\texttt{rtg0.0} fallback and three-seed PPO
+  mean across three batteries. White dots show individual PPO seed means;
+  their spread reverses the DT/PPO ordering for one seed.}
   \label{fig:impact}
 \end{figure}
 
@@ -761,11 +775,14 @@ share the simulator, so the student may inherit environment-specific behaviour.
 Held-out 2025 data and the endogenous-price impact gate mitigate this, but the
 circularity is reduced, not removed.
 
-\textbf{Baseline strength and noise.} The PPO reference is tuned (Optuna, up to
-four million steps), but its rollouts vary slightly run-to-run at long horizons
-($\sim$1\%), whereas the student is deterministic. We therefore treat the
-paired-difference confidence interval as the primary evidence and report cell
-counts honestly.
+\textbf{Baseline strength and seed variance.} The corrected PPO reference is
+chosen by ten Optuna trials on a leakage-free pre-2024 split and trained with
+three seeds for 4{,}003{,}840 steps. This replaces the earlier 204{,}800-step,
+unseeded default PPO checkpoint, which had incorrectly been described as tuned.
+With only three seeds, one PPO checkpoint exceeds the DT mean on three identity
+surfaces and reverses the impact comparison. The conditional cell intervals do
+not include between-seed sampling uncertainty; additional seeds and a formal
+hierarchical comparison are required before a robust ranking can be claimed.
 
 \textbf{Sample size.} Some surfaces have few cells (as few as six), and cells
 from the same region are correlated, so the cell count overstates the number of
@@ -818,27 +835,33 @@ bidding in the training data as the key bottleneck without isolating it.
 The ceiling gave way once the data source changed. Distilling an honest,
 non-clairvoyant dynamic-programming planner into a standalone Decision
 Transformer, and conditioning it on a state-dependent cost-to-go prompt
-$J_t(\mathrm{soc})$, produced a policy that roughly matches the teacher on the
-in-distribution surfaces and exceeds it out of distribution, with no solver in
-the control loop (C2). Under market impact the same policy, run in its
-surface-aware mode, passes a piecewise merit-order gate on all nine grid-scale
-cells (C3).
+$J_t(\mathrm{soc})$, produced a policy that remains competitive with a properly
+trained PPO reference and retains 70--77\% of teacher aggregate profit on the
+in-distribution surfaces while exceeding it on the broad and OOD surfaces.
+There is no solver in the per-decision control loop (C2). The seed-mean DT/PPO
+advantage is 1.20--1.70$\times$ on the identity surfaces, but one of three PPO
+seeds reverses three surface means, and the dispatch-matched interval includes
+zero. Under market impact the seed-mean ratio is 1.60$\times$, but the
+seed-specific ratio spans 0.91--2.96$\times$; this is evidence of sensitivity,
+not a clean policy gate (C3).
 
-Taken together, these results support offline sequence modelling as a credible
-control prior for utility-scale battery trading, provided the data source is
-chosen well: most of the planner, none of the solver in the control loop. Three
-questions remain open. The largest is sim-to-real transfer, which needs a
-shadow-mode deployment and an impact model beyond the per-interval
-approximation used here. The second is corpus composition: re-weighting and
+Taken together, these results support planner distillation as a credible offline
+control method for utility-scale battery trading, while also demonstrating how
+strongly baseline training and random seed affect the conclusion. Five
+questions remain open. The first is baseline sampling: at least two additional
+PPO seeds and a hierarchical model over seeds and scenarios are needed to test
+whether the seed-mean ordering persists. The second is sim-to-real transfer,
+which needs a shadow-mode deployment and an impact model beyond the
+per-interval approximation used here. The third is corpus composition:
+re-weighting and
 re-composition \emph{within} the cloning corpora were tested
 (Appendix~\ref{app:ceiling}), but not a mixture of teacher-generated and
 policy-generated trajectories, which could combine the teacher's FCAS bidding
-with the policies' energy behaviour. The third concerns the conditioning signal
-itself: returns-to-go computed from logged rewards, rather than from the
-planner's value table, would separate the contribution of planner imitation
-from that of the value prompt. Controlled comparisons against newer
-sequence-model architectures, holding the data and evaluation protocol fixed,
-are also outstanding; this paper does not establish that the shipped 8-block,
+with the policies' energy behaviour. The fourth concerns the conditioning signal:
+returns-to-go computed from logged rewards, rather than from the planner's
+value table, would separate the contribution of planner imitation from that of
+the value prompt. Fifth, controlled comparisons against newer sequence-model
+architectures, holding the data and evaluation protocol fixed, are outstanding; this paper does not establish that the shipped 8-block,
 768-dimensional backbone is architecture-optimal.
 
 % =============================================================================

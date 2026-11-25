@@ -5,12 +5,12 @@ where the evidence lives. Use these to pre-empt the obvious objections.
 
 ## Method and claims
 
-**Q1. DTs usually only match offline RL. Why does yours beat PPO?**
-The student is not a pure behaviour-cloner: it is trained on planner-generated
-trajectories and conditioned on a planner-derived value prompt. PPO is tuned in
-the same simulator; the DT has 210-step context plus an explicit value signal.
-The claim is empirical (four surfaces, paired CIs), not a general theory.
-[§4, §5, Table 1]
+**Q1. Does the DT robustly beat PPO?**
+Not uniformly. The corrected comparator is three seeded 4M-step PPO models tuned
+on pre-2024 validation data. The DT has higher within-cell three-seed mean on all
+four surfaces, but dispatch's CI includes zero and PPO seed 1 reverses three
+surface means. The paper's claim is empirical competitiveness plus baseline
+sensitivity, not universal superiority. [§5, Table 1, PPO retraining audit]
 
 **Q2. Is "no solver in the control loop" honest if you compute a cost-to-go table?**
 Yes. The $J_t(\mathrm{soc})$ table is a precomputed/cacheable function of the
@@ -31,14 +31,17 @@ does **not** claim uniform superiority. [§5.1, §7, `teacher_retention.json`]
 ## Baselines and statistics
 
 **Q5. Is PPO strong and tuned fairly?**
-Optuna search (10 trials), up to 4M steps, same scenarios/caches, same 5-min
-steps and 9-dim action. It varies ~1% run-to-run while the DT is deterministic;
-the paper therefore makes the paired-difference CI primary. [§5, §7]
+The old 204,800-step default checkpoint was not. The corrected study uses ten
+Optuna trials on a chronological pre-2024 validation split, then three final seeds
+for 4,003,840 steps each on the same 5-minute, 9-action environment. Seed 0 is the
+pre-specified median-validation checkpoint; the paper also reports all seeds and
+the within-cell three-seed mean. [§5, §7, ppo_retrain_20261125.md]
 
 **Q6. Small samples (n=6, n=12) — underpowered?**
-Paired bootstrap over matched cells (10k replicates); all four paired CIs
-exclude zero. Wilcoxon is reported as indicative, and cell correlation is
-flagged. [§5, Table 1]
+Yes for a robust policy ranking. The corrected table has three CIs excluding zero
+and dispatch including zero; only three PPO seeds are available, and the cell
+bootstrap is conditional on those checkpoints. This limitation, cell correlation,
+and the need for additional seeds are explicit. [§5, Table 1, §7]
 
 **Q7. Why not compare with IQL/CQL?**
 Scope: the diagnosis concerns the data source, not the learner. A direct
@@ -56,10 +59,11 @@ as shipped. The paper explicitly does not claim one prompt is best everywhere.
 Acknowledged in Limitations. Held-out 2025 data and the endogenous-price impact
 gate mitigate it, but circularity is reduced, not removed. [§7]
 
-**Q10. The market-impact model is an approximation — is the gate meaningful?**
-It is a per-interval piecewise merit-order model, not a full market re-clear. It
-tests robustness to endogenous prices; the DT wins 9/9 cells with a paired
-advantage of $167,099 (CI [101,213, 227,362]). [§3.3, §6]
+**Q10. The market-impact model is an approximation — is the result decisive?**
+No. It is a useful per-interval piecewise-merit-order stress test, not a full
+market re-clear. Against the within-cell mean of three PPO seeds, the DT wins 8/9
+cells (mean advantage $79,736), but seed-specific DT/PPO ratios range from 0.91x
+to 2.96x. The paper therefore does not call it a universal gate pass. [§3.3, §6]
 
 **Q11. Is the 8x768 architecture the reason for the result?**
 Not established. Within-cloning architecture changes did not break the ceiling,
