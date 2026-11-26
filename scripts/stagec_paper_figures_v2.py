@@ -338,7 +338,7 @@ def fig2_pipeline_schematic(out_dir: Path) -> None:
                      mutation_scale=10, linewidth=1.0, linestyle=ls, color="#4a5568"))
 
     ax.text(0.02, 0.93, "Forecast", fontsize=9, style="italic")
-    ax.text(0.02, 0.62, "Teacher (honest, hybrid)", fontsize=9, style="italic")
+    ax.text(0.02, 0.62, "Teacher (non-clairvoyant, hybrid)", fontsize=9, style="italic")
     ax.text(0.02, 0.28, "Distillation", fontsize=9, style="italic")
 
     box(0.02, 0.74, 0.24, 0.14, "cached pre-2024\nAEMO data")
