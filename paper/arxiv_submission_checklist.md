@@ -1,6 +1,6 @@
 # arXiv submission checklist — Distilling a Planner into a Decision Transformer
 
-Status: corrected three-seed PPO baseline in place; the 18:00 HKT Overleaf render was verified (16 pages, no undefined references, no Type 3 fonts, no stale old-PPO ratios, PDF abstract verbatim match at 1,854 ASCII characters). Repo-side wording, provenance, abstract and checklist fixes are applied and committed, including a trim of the `main.tex` abstract to fit arXiv's 1,920-character limit. **One more Overleaf re-render is required**: on 2026-11-26 the Figure 2 schematic label was corrected from "Teacher (honest, hybrid)" to "Teacher (non-clairvoyant, hybrid)" to match the manuscript, and the checked-in PDF still embeds the old figure. Upload the new `fig2_pipeline_schematic.pdf`, recompile, and replace the checked-in PDF. `main.tex`, `references.bib` and the other five figures are unchanged. The repo-side arXiv source package is intentionally omitted: Overleaf holds `main.bbl` and `neurips_2026.sty`, and the source package should be exported from Overleaf at submission time.
+Status: corrected three-seed PPO baseline in place; the **final Overleaf re-render (2026-11-26 22:27 HKT)** was verified: 16 pages, no undefined references, no Type 3 fonts, no stale old-PPO ratios, PDF abstract verbatim match at 1,854 ASCII characters, and Figure 2 now reads "Teacher (non-clairvoyant, hybrid)" with no "honest" anywhere. Repo-side wording, provenance, abstract, Figure 2 and checklist fixes are applied and committed, including a trim of the `main.tex` abstract to fit arXiv's 1,920-character limit. **The checked-in PDF matches `main.tex` and all six figures** — no further re-render is needed unless a source or figure file changes. The repo-side arXiv source package is intentionally omitted: Overleaf holds `main.bbl` and `neurips_2026.sty`, and the source package should be exported from Overleaf at submission time.
 
 Source of truth: `paper/manuscript/main.tex`, `paper/manuscript/references.bib`, `paper/manuscript/figures/`, and the PPO baseline audit at `paper/audit/ppo_retrain_20261125.md`.
 
@@ -32,7 +32,7 @@ Required files:
 
 ## C. Compile and policy checks
 
-> Verified on the 2026-11-26 18:00 HKT PDF render, compiled from the refreshed `main.tex`. The 2026-11-26 edits are wording/provenance/abstract only, plus a Figure 2 label correction (no new citations, references, numbers, or `main.tex` changes). Reconfirm these items on the render that includes the corrected Figure 2.
+> Verified on the final 2026-11-26 22:27 HKT PDF render, compiled from the refreshed `main.tex` and the corrected Figure 2. The 2026-11-26 edits are wording/provenance/abstract plus a Figure 2 label correction (no new citations, references or numbers). Reconfirm only if a source or figure file changes again.
 
 - [x] Compile from a **clean** Overleaf project after a baseline refresh (pdfLaTeX, BibTeX, pdfLaTeX twice).
 - [x] Confirm no undefined citations/references in the rendered PDF.
@@ -50,15 +50,15 @@ Required files:
 - [ ] **Affiliation:** GitHub URL is currently in the author block; arXiv allows an affiliation field — decide what to put there.
 - [ ] **MSC/ACM class:** optional (cs.LG needs none).
 
-### Overleaf refresh — 18:00 HKT render complete; Figure 2 label fix pending
+### Overleaf refresh — completed 2026-11-26 (22:27 HKT final render)
 
-The checked-in PDF (creation 2026-11-26 18:00:20 HKT) is the re-render from the refreshed `main.tex`. The 2026-11-26 edits changed only `main.tex` (wording, "gate" → "stress test" framing, Appendix C provenance, precision fixes, and the abstract trim to 1,854 characters); tables, citations and numerical results are unchanged. Verification: 16 pages, no undefined references or placeholders, no Type 3 fonts, abstract verbatim match, Table 1 / Section 6 numbers unchanged.
+The checked-in PDF (creation 2026-11-26 22:27:44 HKT) is the re-render from the refreshed `main.tex` and the corrected Figure 2. The 2026-11-26 edits changed `main.tex` (wording, "gate" → "stress test" framing, Appendix C provenance, precision fixes, and the abstract trim to 1,854 characters) and `fig2_pipeline_schematic.pdf`/`.png`; tables, citations and numerical results are unchanged. Final verification: 16 pages, no undefined references or placeholders, no Type 3 fonts, abstract verbatim match, Figure 2 label corrected, Table 1 / Section 6 numbers unchanged, no "honest" or "gate" wording anywhere.
 
-**Figure 2 label correction (after the 18:00 render).** The schematic's teacher row read "Teacher (honest, hybrid)"; it now reads "Teacher (non-clairvoyant, hybrid)" to match the figure caption and the manuscript's "non-clairvoyant" wording. The change was made in `scripts/stagec_paper_figures_v2.py`, and `fig2_pipeline_schematic.pdf`/`.png` were regenerated from the project distrobox environment (a control regeneration was byte-identical to the shipped PNG apart from this label; the new figure has no Type 3 fonts). The checked-in PDF still embeds the old figure, so one more re-render is needed.
+**Figure 2 label correction.** The schematic's teacher row read "Teacher (honest, hybrid)"; it now reads "Teacher (non-clairvoyant, hybrid)" to match the figure caption and the manuscript's "non-clairvoyant" wording. The change was made in `scripts/stagec_paper_figures_v2.py`, and the figure was regenerated from the project distrobox environment (a control regeneration was byte-identical to the shipped PNG apart from this label; the new figure has no Type 3 fonts).
 
-The steps below were completed for the 18:00 HKT render; repeat them with only `fig2_pipeline_schematic.pdf` changed.
+The steps below were completed for the final render and are retained as the re-render recipe.
 
-1. Replace `fig2_pipeline_schematic.pdf` in `figures/` with the regenerated version. `main.tex`, `references.bib` and the other five figures need no change. Keep the existing `neurips_2026.sty` unless deliberately updating the style.
+1. Upload the repository versions of `main.tex`, `references.bib` and every file under `figures/` (including the corrected `fig2_pipeline_schematic.pdf`). Keep the existing `neurips_2026.sty` unless deliberately updating the style.
 2. Recompile from scratch (clear cached files if available): pdfLaTeX, BibTeX, then pdfLaTeX twice.
 3. Confirm the rendered abstract matches `paper/arxiv_abstract_plaintext.txt` (1,854 ASCII characters); Figure 2 reads "Teacher (non-clairvoyant, hybrid)" (no "honest"); Table 1 still shows PPO 9,708 / 28,070 / 17,214 / 19,212; Figure 1 shows the three-seed PPO mean with white seed-mean dots; Figure 4 shows the seed-sensitive market-impact stress test; Section 6 is titled "Market-Impact Stress Test"; Appendix C lists the `ppo_retrain_*_20261125.json` artifacts as current and the `stagec_v2cal_*` artifacts as superseded.
 4. Download the rendered PDF; keep `main.bbl` and `neurips_2026.sty` in Overleaf for the arXiv source export. Copy the PDF back to `paper/manuscript/draft_paper_NeurIPS_2026.pdf` for the checked-in release. No local `main.bbl`/`neurips_2026.sty` copy is required.
@@ -67,19 +67,18 @@ The steps below were completed for the 18:00 HKT render; repeat them with only `
 
 - [x] Every corrected headline number traces to `paper/audit/provenance.tsv` and the 2026-11-25 PPO aggregate artifact (claims P4/P5 are `CURRENT`; E3/C3–C5 are `SUPERSEDED`).
 - [x] All citations verified against the source papers (claims + metadata).
-- [x] Overleaf recompile and PDF check (final 18:00 HKT render verified 2026-11-26): no unresolved refs or TODO/placeholder text in the rendered PDF.
-- [x] Figures regenerated; rendered PDF contains no Type 3 fonts.
+- [x] Overleaf recompile and PDF check (final 22:27 HKT render verified 2026-11-26): no unresolved refs or TODO/placeholder text in the rendered PDF.
+- [x] Figures regenerated (Figure 2 label corrected); final rendered PDF contains no Type 3 fonts.
 
 ## F. After announcement
 
 - [ ] Add the arXiv ID to the GitHub README and the Hugging Face model card.
-- [ ] **Freeze the exact submitted state with a new tag at submission time.** The `preprint-v2-baseline-corrected` tag marks the corrected paper release (`dcbf6ce`); the later docs cleanup (`d1b50e9`), the PDF renders (`ec4dc7b`, `120be1d`), the 2026-11-26 wording/provenance/abstract fixes, the checklist update (`a39bddb`) and the Figure 2 label fix are **not** under that tag. Tag the exact commit that contains the final PDF at submission.
+- [ ] **Freeze the exact submitted state with a new tag at submission time.** The `preprint-v2-baseline-corrected` tag marks the corrected paper release (`dcbf6ce`); the later docs cleanup (`d1b50e9`), the PDF renders (`ec4dc7b`, `120be1d`, `6e2b4d1`), the 2026-11-26 wording/provenance/abstract fixes, the checklist updates (`a39bddb`, plus the final one below) and the Figure 2 label fix (`0f991b3`) are **not** under that tag. Tag the exact commit that contains the final PDF at submission (current candidate: the HEAD after this checklist update).
 - [ ] Replace the preprint with the camera-ready if a venue accepts it (keep the arXiv v1 for priority).
 
 ## G. Outstanding external actions (not repo-side)
 
-- **Overleaf:** re-render once more with the corrected `fig2_pipeline_schematic.pdf` and replace the checked-in PDF (Section D).
-- **Overleaf:** export the arXiv source zip (`main.tex`, `references.bib`, `main.bbl`, `neurips_2026.sty`, all six figures — use the corrected Figure 2).
+- **Overleaf:** export the arXiv source zip (`main.tex`, `references.bib`, `main.bbl`, `neurips_2026.sty`, all six figures — use the corrected Figure 2). The re-render and PDF replacement are complete (Section D).
 - **arXiv form:** licence, primary/cross-list categories, author string, affiliation, abstract (1,854-char ASCII file), comments field, and endorsement if required.
 - **Optional release supplement:** publish or link the retrained PPO checkpoint hashes and scenario-level CSVs (`models/aemo_sb3/ppo_retrain_20261125/`, `eval_output/ppo_retrain_20261125/` are local/ignored) for full raw reproducibility.
 - **Optional research improvement (not an arXiv blocker):** a 5-seed PPO study to tighten the policy ranking; dispatch CI includes zero and one seed reverses three surfaces, so no SOTA/universal-win claim is made.
