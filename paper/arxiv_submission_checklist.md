@@ -1,6 +1,6 @@
 # arXiv submission checklist — Distilling a Planner into a Decision Transformer
 
-Status: corrected three-seed PPO baseline in place; the 2026-11-26 PDF render was verified (16 pages, no undefined references, no Type 3 fonts, no stale old-PPO ratios). Repo-side wording, provenance, abstract and checklist fixes applied 2026-11-26, including a trim of the `main.tex` abstract to fit arXiv's 1,920-character limit. **A final Overleaf re-render is pending**: the checked-in PDF still predates the 2026-11-26 `main.tex` edits, so the PDF must be recompiled from the refreshed `main.tex` and copied back before submission. The repo-side arXiv source package is intentionally omitted: Overleaf holds `main.bbl` and `neurips_2026.sty`, and the source package should be exported from Overleaf at submission time.
+Status: corrected three-seed PPO baseline in place; the final Overleaf re-render (2026-11-26 18:00 HKT) was verified: 16 pages, no undefined references, no Type 3 fonts, no stale old-PPO ratios, and the PDF abstract matches `paper/arxiv_abstract_plaintext.txt` verbatim (1,854 ASCII characters). Repo-side wording, provenance, abstract and checklist fixes are applied and committed, including a trim of the `main.tex` abstract to fit arXiv's 1,920-character limit. **The checked-in PDF now matches `main.tex`** — no further re-render is needed unless `main.tex` or a figure changes. The repo-side arXiv source package is intentionally omitted: Overleaf holds `main.bbl` and `neurips_2026.sty`, and the source package should be exported from Overleaf at submission time.
 
 Source of truth: `paper/manuscript/main.tex`, `paper/manuscript/references.bib`, `paper/manuscript/figures/`, and the PPO baseline audit at `paper/audit/ppo_retrain_20261125.md`.
 
@@ -32,7 +32,7 @@ Required files:
 
 ## C. Compile and policy checks
 
-> Verified on the 2026-11-26 PDF render. The 2026-11-26 `main.tex` edits are wording/provenance only (no new citations, references, figures or numbers), but **reconfirm each item after the pending Overleaf re-render**.
+> Verified on the final 2026-11-26 18:00 HKT PDF render, compiled from the refreshed `main.tex`. The 2026-11-26 edits are wording/provenance/abstract only (no new citations, references, figures or numbers). Reconfirm only if `main.tex` or a figure changes again.
 
 - [x] Compile from a **clean** Overleaf project after a baseline refresh (pdfLaTeX, BibTeX, pdfLaTeX twice).
 - [x] Confirm no undefined citations/references in the rendered PDF.
@@ -50,9 +50,11 @@ Required files:
 - [ ] **Affiliation:** GitHub URL is currently in the author block; arXiv allows an affiliation field — decide what to put there.
 - [ ] **MSC/ACM class:** optional (cs.LG needs none).
 
-### Overleaf refresh — pending after the 2026-11-26 wording fixes
+### Overleaf refresh — completed 2026-11-26 (18:00 HKT render)
 
-The checked-in PDF (render 2026-11-26) matches the **pre-edit** `main.tex`. The 2026-11-26 edits changed only `main.tex` (wording, "gate" → "stress test" framing, Appendix C provenance, precision fixes, and the abstract trim to 1,854 characters); figures, citations, tables and numerical results are unchanged.
+The checked-in PDF (creation 2026-11-26 18:00:20 HKT) is the re-render from the refreshed `main.tex`. The 2026-11-26 edits changed only `main.tex` (wording, "gate" → "stress test" framing, Appendix C provenance, precision fixes, and the abstract trim to 1,854 characters); figures, citations, tables and numerical results are unchanged. Verification: 16 pages, no undefined references or placeholders, no Type 3 fonts, abstract verbatim match, Table 1 / Section 6 numbers unchanged.
+
+The steps below were completed for the 18:00 HKT render and are retained as the re-render recipe.
 
 1. Replace `main.tex` with the refreshed repository version. `references.bib` and `figures/` need no change. Keep the existing `neurips_2026.sty` unless deliberately updating the style.
 2. Recompile from scratch (clear cached files if available): pdfLaTeX, BibTeX, then pdfLaTeX twice.
@@ -63,19 +65,18 @@ The checked-in PDF (render 2026-11-26) matches the **pre-edit** `main.tex`. The 
 
 - [x] Every corrected headline number traces to `paper/audit/provenance.tsv` and the 2026-11-25 PPO aggregate artifact (claims P4/P5 are `CURRENT`; E3/C3–C5 are `SUPERSEDED`).
 - [x] All citations verified against the source papers (claims + metadata).
-- [x] Overleaf recompile and PDF check (render verified 2026-11-26): no unresolved refs or TODO/placeholder text in the rendered PDF.
+- [x] Overleaf recompile and PDF check (final 18:00 HKT render verified 2026-11-26): no unresolved refs or TODO/placeholder text in the rendered PDF.
 - [x] Figures regenerated; rendered PDF contains no Type 3 fonts.
 
 ## F. After announcement
 
 - [ ] Add the arXiv ID to the GitHub README and the Hugging Face model card.
-- [ ] **Freeze the exact submitted state with a new tag at submission time.** The `preprint-v2-baseline-corrected` tag marks the corrected paper release (`dcbf6ce`); the later docs cleanup (`d1b50e9`), the 2026-11-26 PDF render (`ec4dc7b`) and the 2026-11-26 wording/provenance fixes are **not** under that tag. Create a submission tag once the final PDF is replaced.
+- [ ] **Freeze the exact submitted state with a new tag at submission time.** The `preprint-v2-baseline-corrected` tag marks the corrected paper release (`dcbf6ce`); the later docs cleanup (`d1b50e9`), the PDF renders (`ec4dc7b`, `120be1d`) and the 2026-11-26 wording/provenance/abstract fixes are **not** under that tag. The current candidate state is `120be1d` (plus any later doc-only commits); tag that exact commit at submission.
 - [ ] Replace the preprint with the camera-ready if a venue accepts it (keep the arXiv v1 for priority).
 
 ## G. Outstanding external actions (not repo-side)
 
-- **Overleaf:** re-render from the refreshed `main.tex` and replace the checked-in PDF (see the "Overleaf refresh" steps in Section D).
-- **Overleaf:** export the arXiv source zip (`main.tex`, `references.bib`, `main.bbl`, `neurips_2026.sty`, all six figures).
+- **Overleaf:** export the arXiv source zip (`main.tex`, `references.bib`, `main.bbl`, `neurips_2026.sty`, all six figures). The re-render and PDF replacement are already complete (Section D).
 - **arXiv form:** licence, primary/cross-list categories, author string, affiliation, abstract (1,854-char ASCII file), comments field, and endorsement if required.
 - **Optional release supplement:** publish or link the retrained PPO checkpoint hashes and scenario-level CSVs (`models/aemo_sb3/ppo_retrain_20261125/`, `eval_output/ppo_retrain_20261125/` are local/ignored) for full raw reproducibility.
 - **Optional research improvement (not an arXiv blocker):** a 5-seed PPO study to tighten the policy ranking; dispatch CI includes zero and one seed reverses three surfaces, so no SOTA/universal-win claim is made.
