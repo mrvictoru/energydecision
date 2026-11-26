@@ -1,6 +1,7 @@
 # arXiv submission checklist — Distilling a Planner into a Decision Transformer
 
-Status: baseline correction implemented and PDF render verified 2026-11-25. The repo-side arXiv source package is intentionally omitted: Overleaf holds `main.bbl` and `neurips_2026.sty`, and the source package should be exported from Overleaf at submission time.
+Status: corrected three-seed PPO baseline in place; the 2026-11-26 PDF render was verified (16 pages, no undefined references, no Type 3 fonts, no stale old-PPO ratios). Repo-side wording, provenance, abstract and checklist fixes applied 2026-11-26, including a trim of the `main.tex` abstract to fit arXiv's 1,920-character limit. **A final Overleaf re-render is pending**: the checked-in PDF still predates the 2026-11-26 `main.tex` edits, so the PDF must be recompiled from the refreshed `main.tex` and copied back before submission. The repo-side arXiv source package is intentionally omitted: Overleaf holds `main.bbl` and `neurips_2026.sty`, and the source package should be exported from Overleaf at submission time.
+
 Source of truth: `paper/manuscript/main.tex`, `paper/manuscript/references.bib`, `paper/manuscript/figures/`, and the PPO baseline audit at `paper/audit/ppo_retrain_20261125.md`.
 
 ## A. Before you start (do these first)
@@ -19,7 +20,7 @@ Upload a zip/tar.gz of **LaTeX source**, not just the PDF. arXiv rejects a PDF p
 
 Required files:
 
-- [ ] `main.tex` (renamed if arXiv requires a specific root file — it accepts any single root `.tex`)
+- [ ] `main.tex` (renamed if arXiv requires a specific root file — it accepts any single root `.tex`) — use the 2026-11-26 refreshed version
 - [ ] `references.bib`
 - [ ] **`main.bbl`** (the compiled bibliography). Generated and retained in Overleaf; export it with the arXiv source package at submission time.
 - [ ] `neurips_2026.sty` (custom style). Retained in Overleaf; export it with the arXiv source package at submission time.
@@ -31,6 +32,8 @@ Required files:
 
 ## C. Compile and policy checks
 
+> Verified on the 2026-11-26 PDF render. The 2026-11-26 `main.tex` edits are wording/provenance only (no new citations, references, figures or numbers), but **reconfirm each item after the pending Overleaf re-render**.
+
 - [x] Compile from a **clean** Overleaf project after a baseline refresh (pdfLaTeX, BibTeX, pdfLaTeX twice).
 - [x] Confirm no undefined citations/references in the rendered PDF.
 - [x] No line numbers, no watermarks obstructing text, no referee comments.
@@ -41,28 +44,38 @@ Required files:
 ## D. Metadata
 
 - [ ] **Title:** "Distilling a Planner into a Decision Transformer for Multi-Market Battery Dispatch"
-- [ ] **Abstract:** paste the corrected plain-text version from `paper/arxiv_abstract_plaintext.txt` (1,349 characters). Do **not** paste LaTeX (`$...$`, `\emph{}`). It matches the manuscript's seed-sensitive conclusion.
+- [ ] **Abstract:** paste the ASCII plain-text version from `paper/arxiv_abstract_plaintext.txt` (**1,854 characters**, verified under arXiv's **1,920-character hard limit**). It is a **verbatim plain-text rendering** of the trimmed `main.tex` abstract (no abridgement, no rewording): all headline numbers, the dispatch-CI-includes-zero caveat, the seed-ordering reversal and the impact seed spread are preserved. arXiv metadata fields accept **ASCII only** — do not paste the PDF's Unicode `×`, em/en dashes or curly quotes, and do not paste LaTeX (`$...$`, `\emph{}`).
 - [ ] **Comments field:** e.g. "16 pages, 6 figures, 3 tables. Preprint."
 - [ ] **Authors:** Hou Nam U (decide whether to include the "(Victor)" nickname).
 - [ ] **Affiliation:** GitHub URL is currently in the author block; arXiv allows an affiliation field — decide what to put there.
 - [ ] **MSC/ACM class:** optional (cs.LG needs none).
 
-### Overleaf refresh — completed 2026-11-25
+### Overleaf refresh — pending after the 2026-11-26 wording fixes
 
-1. Replace only `main.tex`, `references.bib` if changed, and every file under `figures/` with the repository versions. Keep the existing `neurips_2026.sty` unless deliberately updating the style.
+The checked-in PDF (render 2026-11-26) matches the **pre-edit** `main.tex`. The 2026-11-26 edits changed only `main.tex` (wording, "gate" → "stress test" framing, Appendix C provenance, precision fixes, and the abstract trim to 1,854 characters); figures, citations, tables and numerical results are unchanged.
+
+1. Replace `main.tex` with the refreshed repository version. `references.bib` and `figures/` need no change. Keep the existing `neurips_2026.sty` unless deliberately updating the style.
 2. Recompile from scratch (clear cached files if available): pdfLaTeX, BibTeX, then pdfLaTeX twice.
-3. Confirm Table 1 shows PPO 9,708 / 28,070 / 17,214 / 19,212; Figure 4 shows the three-seed dot spread; Figure 6 describes the impact result as seed-sensitive.
+3. Confirm the rendered abstract matches `paper/arxiv_abstract_plaintext.txt` (1,854 ASCII characters); Table 1 still shows PPO 9,708 / 28,070 / 17,214 / 19,212; Figure 1 shows the three-seed PPO mean with white seed-mean dots; Figure 4 shows the seed-sensitive market-impact stress test; Section 6 is titled "Market-Impact Stress Test"; Appendix C lists the `ppo_retrain_*_20261125.json` artifacts as current and the `stagec_v2cal_*` artifacts as superseded.
 4. Download the rendered PDF; keep `main.bbl` and `neurips_2026.sty` in Overleaf for the arXiv source export. Copy the PDF back to `paper/manuscript/draft_paper_NeurIPS_2026.pdf` for the checked-in release. No local `main.bbl`/`neurips_2026.sty` copy is required.
 
 ## E. Integrity checks already done (see `paper/audit/`)
 
-- [x] Every corrected headline number traces to `paper/audit/provenance.tsv` and the 2026-11-25 PPO aggregate artifact.
+- [x] Every corrected headline number traces to `paper/audit/provenance.tsv` and the 2026-11-25 PPO aggregate artifact (claims P4/P5 are `CURRENT`; E3/C3–C5 are `SUPERSEDED`).
 - [x] All citations verified against the source papers (claims + metadata).
-- [x] Overleaf recompile and PDF check: no unresolved refs or TODO/placeholder text in the rendered PDF.
+- [x] Overleaf recompile and PDF check (render verified 2026-11-26): no unresolved refs or TODO/placeholder text in the rendered PDF.
 - [x] Figures regenerated; rendered PDF contains no Type 3 fonts.
 
 ## F. After announcement
 
 - [ ] Add the arXiv ID to the GitHub README and the Hugging Face model card.
-- [x] Archive the exact paper state under the `preprint-v2-baseline-corrected` tag. It includes the refreshed PDF and release-hygiene changes; later documentation cleanup does not change numerical claims.
+- [ ] **Freeze the exact submitted state with a new tag at submission time.** The `preprint-v2-baseline-corrected` tag marks the corrected paper release (`dcbf6ce`); the later docs cleanup (`d1b50e9`), the 2026-11-26 PDF render (`ec4dc7b`) and the 2026-11-26 wording/provenance fixes are **not** under that tag. Create a submission tag once the final PDF is replaced.
 - [ ] Replace the preprint with the camera-ready if a venue accepts it (keep the arXiv v1 for priority).
+
+## G. Outstanding external actions (not repo-side)
+
+- **Overleaf:** re-render from the refreshed `main.tex` and replace the checked-in PDF (see the "Overleaf refresh" steps in Section D).
+- **Overleaf:** export the arXiv source zip (`main.tex`, `references.bib`, `main.bbl`, `neurips_2026.sty`, all six figures).
+- **arXiv form:** licence, primary/cross-list categories, author string, affiliation, abstract (1,854-char ASCII file), comments field, and endorsement if required.
+- **Optional release supplement:** publish or link the retrained PPO checkpoint hashes and scenario-level CSVs (`models/aemo_sb3/ppo_retrain_20261125/`, `eval_output/ppo_retrain_20261125/` are local/ignored) for full raw reproducibility.
+- **Optional research improvement (not an arXiv blocker):** a 5-seed PPO study to tighten the policy ranking; dispatch CI includes zero and one seed reverses three surfaces, so no SOTA/universal-win claim is made.

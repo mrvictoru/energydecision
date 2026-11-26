@@ -48,7 +48,7 @@ arbitrage plus eight FCAS markets, with battery wear in the reward. Training on
 trajectories from online RL policies stalls at a behaviour-cloning ceiling on the tested data sources and levers: the
 logged policies bid little into FCAS, and tested changes to data scale, prompting,
 loss re-weighting, or fine-tuning did not close the gap. I break the ceiling by
-distilling an honest, non-clairvoyant dynamic-programming-based planning teacher into a standalone
+distilling a non-clairvoyant dynamic-programming-based planning teacher into a standalone
 Decision Transformer, conditioned on a state-dependent return-to-go prompt
 derived from the planner's cost-to-go. The teacher follows the SDP-with-forecasts
 and degradation lineage of your work with Abdulla et al. (IEEE TSG, 2018), and the
