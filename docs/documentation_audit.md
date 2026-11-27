@@ -57,7 +57,7 @@ claim that the full documents were AI-authored.
 - [`FUTURE_PLAN.md`](FUTURE_PLAN.md), [`aemo_dt_preferred_policy_plan.md`](aemo_dt_preferred_policy_plan.md), [`aemo_research_plan.md`](aemo_research_plan.md), [`known_issues.md`](known_issues.md), and [`website_maintenance.md`](website_maintenance.md)
 - [`../index.html`](../index.html)
 - [`../paper/audit/audit_findings.md`](../paper/audit/audit_findings.md) and [`../paper/audit/small_n_assessment.md`](../paper/audit/small_n_assessment.md)
-- [`../paper/outreach_emails.md`](../paper/outreach_emails.md)
+- `../paper/outreach_emails.md` (local only; git-ignored)
 
 This inventory was also drafted with AI assistance; no claim is made about the
 authorship of the other indexed documents unless stated above.

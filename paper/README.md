@@ -24,7 +24,7 @@ Use [the arXiv checklist](arxiv_submission_checklist.md) for submission packagin
 | [arxiv/](arxiv/) | arXiv packaging notes and drafts |
 | [arxiv_submission_checklist.md](arxiv_submission_checklist.md) | Compile, metadata and source-package checklist |
 | [anticipated_reviewer_questions.md](anticipated_reviewer_questions.md) | Short answers to likely reviewer questions |
-| [outreach_emails.md](outreach_emails.md) | Draft emails; not evidence |
+| `outreach_emails.md` (local, git-ignored) | Personal draft emails; not published |
 | [arxiv_abstract_plaintext.txt](arxiv_abstract_plaintext.txt) | Plain-text abstract for arXiv metadata |
 | [environment.txt](environment.txt) | Frozen runtime environment |
 
